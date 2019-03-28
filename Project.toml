@@ -1,0 +1,11 @@
+name = "Luna"
+uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
+authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
+version = "0.1.0"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
