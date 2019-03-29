@@ -12,3 +12,7 @@ e(x) = @. exp(x)
 x = [1, 2, 3, 4, 5]
 @test Maths.derivative(e, 1, 5) == exp(1)
 @test Maths.derivative.(e, x, 5) == exp.(x)
+
+@test Maths.derivative(x -> exp.(2x), 1, 1) == 2*exp(2)
+@test Maths.derivative(x -> exp.(2x), 1, 2) == 4*exp(2)
+@test Maths.derivative(x -> exp.(-x.^2), 0, 1) == 0

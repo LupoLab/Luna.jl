@@ -73,7 +73,10 @@ end
 
 function χ1_fun(material::Symbol)
     χ, sell = Sellmeier(material)
-    return λ -> χ(λ.*1e6, sell...)
+    f = let χ=χ, sell=sell
+        λ -> χ(λ.*1e6, sell...)
+    end
+    return f
 end
 
 function χ1(material::Symbol, λ)
@@ -92,12 +95,14 @@ end
 
 function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
     χ, sell = Sellmeier(material)
-    n(λ) = ref_index(χ, sell, λ, pressure, temp)
+    n = let χ=χ, sell=sell, pressure=pressure, temp=temp
+        n(λ) = ref_index(χ, sell, λ, pressure, temp)
+    end
     return n
 end
 
 
-function dispersion_func(material::Symbol, order, pressure=1, temp=roomtemp)
+function dispersion_func(order, material::Symbol, pressure=1, temp=roomtemp)
     n = ref_index_fun(material, pressure, temp)
     β(ω) = @. ω/c * n(2π*c/ω)
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
@@ -105,7 +110,7 @@ function dispersion_func(material::Symbol, order, pressure=1, temp=roomtemp)
 end
 
 
-function dispersion(material::Symbol, order, λ, pressure=1, temp=roomtemp)
-    return dispersion_func(material, order, pressure, temp).(λ)
+function dispersion(order, material::Symbol, λ, pressure=1, temp=roomtemp)
+    return dispersion_func(order, material, pressure, temp).(λ)
 end
 end
