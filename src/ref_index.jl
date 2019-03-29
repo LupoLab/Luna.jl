@@ -2,7 +2,6 @@ module Refraction
 
 import PhysicalConstants
 import Unitful
-import Luna
 import Luna: Maths
 
 const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
