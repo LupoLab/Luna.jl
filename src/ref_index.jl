@@ -71,6 +71,15 @@ function Sellmeier(material::Symbol)
     end
 end
 
+function χ1_fun(material::Symbol)
+    χ, sell = Sellmeier(material)
+    return λ -> χ(λ.*1e6, sell...)
+end
+
+function χ1(material::Symbol, λ)
+    return χ1_fun(material)(λ)
+end
+
 function ref_index(χ::Function, sellmeier, λ,
                     pressure=1, temp=roomtemp)
     return @. sqrt(1 + roomtemp/temp * pressure * χ(λ*1e6, sellmeier...))

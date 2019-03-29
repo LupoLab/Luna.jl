@@ -111,6 +111,12 @@ git-tree-sha1 = "4c4d727f1b7e0092134fabfab6396b8945c1ea5b"
 uuid = "f6369f11-7733-5829-9624-2563aa707210"
 version = "0.10.3"
 
+[[FunctionZeros]]
+deps = ["Roots", "SpecialFunctions", "Test"]
+git-tree-sha1 = "a7d31aabf0fb8ec1947b93de51230d1875c0face"
+uuid = "b21f74c0-b399-568f-9643-d20f4fa2c814"
+version = "0.1.1"
+
 [[HCubature]]
 deps = ["Combinatorics", "DataStructures", "LinearAlgebra", "QuadGK", "StaticArrays", "Test"]
 git-tree-sha1 = "e8d0dc961d6b5365856c69a1573433359ba3f39b"
@@ -242,6 +248,12 @@ deps = ["Test"]
 git-tree-sha1 = "f6fbf4ba64d295e146e49e021207993b6b48c7d1"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "0.5.2"
+
+[[Roots]]
+deps = ["Compat", "Printf"]
+git-tree-sha1 = "2e7171b6f3b58b81201ba37d9e1220aff6d904a1"
+uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+version = "0.7.4"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
