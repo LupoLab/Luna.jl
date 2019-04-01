@@ -8,7 +8,7 @@ const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
 const roomtemp = 294
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
-const glass = (:SiO2, :BK7, :MgF2, :KBr, :CaF2, :BaF2, :Si)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"

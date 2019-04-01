@@ -19,7 +19,7 @@ end
 
 function α(a, ω; n=1, m=1)
     unm = besselj_zero(n-1, m)
-    ν = 1.4533172548587419  # TODO glass ref index
+    ν = Refraction.ref_index(:SiO2, 2π*c./ω)
     return @. (2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*sqrt(ν^2-1)))
 end
 
