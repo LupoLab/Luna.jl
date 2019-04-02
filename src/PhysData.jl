@@ -8,6 +8,7 @@ const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
 const atm = Unitful.ustrip(PhysicalConstants.CODATA2014.atm)
 const k_B = Unitful.ustrip(PhysicalConstants.CODATA2014.k_B)
 const ε_0 = Unitful.ustrip(PhysicalConstants.CODATA2014.ε_0)
+const electron = Unitful.ustrip(PhysicalConstants.CODATA2014.e)
 const roomtemp = 294
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 
@@ -237,6 +238,45 @@ function χ3_gas(material::Symbol; source=:Lehmeier)
     else
         error("TODO: Bishop/Shelton values for χ3")
     end
+end
+
+function χ3_gas(material::Symbol, pressure; source=:Lehmeier)
+    return χ3_gas(material, source=source) .* std_dens .* pressure
+end
+
+function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)
+    n0 = ref_index(material, λ, pressure)
+    return @. 3/4 * χ3_gas(material, pressure, source=source) / (ε_0*c*n0^2)
+end
+
+function ionisation_potential(material; unit=:SI)
+    if material in (:He, :HeJ)
+        Ip = 0.9036
+    elseif material == :Ne
+        Ip = 0.7925
+    elseif material == :Ar
+        Ip = 0.5792
+    elseif material == :Kr
+        Ip = 0.5142
+    elseif material == :Xe
+        Ip = 0.4458
+    elseif material == :H
+        Ip = 0.5
+    else
+        throw(DomainError(material, "Unknown material $material"))
+    end
+
+    if unit == :atomic
+        return Ip
+    elseif unit == :eV
+        return @. 27.21138602*Ip
+    elseif unit == :SI
+        return @. 27.21138602*electron*Ip
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
+
+
 end
 
 end

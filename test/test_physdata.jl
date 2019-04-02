@@ -14,7 +14,7 @@ end
     @test PhysData.ref_index(:SiO2, 400e-9) ≈ 1.4701161185594052
 end
 
-@testset "Function equiavalence" begin
+@testset "Function equivalence" begin
     @test PhysData.ref_index_fun(:SiO2)(800e-9) == PhysData.ref_index(:SiO2, 800e-9)
     @test PhysData.ref_index_fun(:He)(800e-9) == PhysData.ref_index(:He, 800e-9)
 end
@@ -42,6 +42,10 @@ end
 
 @testset "Nonlinear coefficients" begin
     # @test PhysData.χ3_gas(:He)*PhysData.std_dens ≈ 1.2820625447291168e-27
-    @test PhysData.χ3_gas(:He)*PhysData.std_dens ≈ 1.372e-27
-    @test PhysData.χ3_gas(:Ar)*PhysData.std_dens ≈ 3.2242e-26
+    @test PhysData.χ3_gas(:He, 1) ≈ 1.372e-27
+    @test PhysData.χ3_gas(:Ar, 1) ≈ 3.2242e-26
+    @test PhysData.n2_gas(:He, 1) ≈ 3.8763080866290524e-25
+    @test PhysData.n2_gas(:He, 2) ≈ 7.7521225583386395e-25
+    @test PhysData.n2_gas(:He, [1, 2]) ≈ [3.8763080866290524e-25, 7.7521225583386395e-25]
+    @test PhysData.n2_gas.([:He, :Ne], 1) ≈ [3.8763080866290524e-25, 6.976942473612495e-25]
 end
