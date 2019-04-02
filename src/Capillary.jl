@@ -3,12 +3,12 @@ import PhysicalConstants
 import Unitful
 import FunctionZeros: besselj_zero
 import Roots: fzero
-import Luna: Maths, Refraction
+import Luna: Maths, PhysData
 
 const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
 
 function β(a, ω; gas::Symbol=:He, pressure=0, n=1, m=1)
-    χ = pressure .* Refraction.χ1(gas, 2π*c./ω)
+    χ = pressure .* PhysData.χ1(gas, 2π*c./ω)
     unm = besselj_zero(n-1, m)
     return @. ω/c*(1 + χ/2 - c^2*unm^2/(2*ω^2*a^2))
 end
@@ -19,7 +19,7 @@ end
 
 function α(a, ω; n=1, m=1)
     unm = besselj_zero(n-1, m)
-    ν = Refraction.ref_index(:SiO2, 2π*c./ω)
+    ν = PhysData.ref_index(:SiO2, 2π*c./ω)
     return @. (2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*sqrt(ν^2-1)))
 end
 

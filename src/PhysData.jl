@@ -1,14 +1,20 @@
-module Refraction
+module PhysData
 
 import PhysicalConstants
 import Unitful
 import Luna: Maths
 
 const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
+const atm = Unitful.ustrip(PhysicalConstants.CODATA2014.atm)
+const k_B = Unitful.ustrip(PhysicalConstants.CODATA2014.k_B)
+const ε_0 = Unitful.ustrip(PhysicalConstants.CODATA2014.ε_0)
 const roomtemp = 294
+const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+
+"Linear coefficients"
 
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
@@ -28,7 +34,7 @@ function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
                            + B3 * μm^2 / (μm^2 - C3))
 end
 
-"Sellemier expansion. Return function for linear susceptibility χ which takes wavelength in
+"Sellemier expansion for gases. Return function for linear susceptibility χ which takes wavelength in
 SI units and coefficients as arguments"
 function sellmeier_gas(material::Symbol)
     if material == :He
@@ -76,10 +82,12 @@ function sellmeier_gas(material::Symbol)
         C2 = 7.434e-3
         return χ_Börzsönyi, (B1, C1, B2, C2)
     else
-        error("Unknown material $material")
+        throw(DomainError(material, "Unknown gas $material"))
     end
 end
 
+"Sellmeier for glasses. Returns function of wavelength in μm which in turn
+returns the refractive index directly"
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
@@ -128,9 +136,13 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              )
+    else
+        throw(DomainError(material, "Unknown glass $material"))
     end
 end
 
+"Get function to return χ1 as a function of wavelength in SI units.
+Gases only."
 function χ1_fun(material::Symbol)
     χ, sell = sellmeier_gas(material)
     f = let χ=χ, sell=sell
@@ -139,19 +151,23 @@ function χ1_fun(material::Symbol)
     return f
 end
 
+"Get χ1 at wavelength in SI units. Gases only."
 function χ1(material::Symbol, λ)
     return χ1_fun(material)(λ)
 end
 
+"Helper function to get refractive index from sellmeier_gas"
 function ref_index(χ::Function, sellmeier, λ,
                     pressure=1, temp=roomtemp)
     return @. sqrt(1 + roomtemp/temp * pressure * χ(λ*1e6, sellmeier...))
 end
 
+"Get refractive index for any material at wavelength given in SI units"
 function ref_index(material::Symbol, λ, pressure=1, temp=roomtemp)
     return ref_index_fun(material, pressure, temp)(λ)
 end
 
+"Get function which returns refractive index."
 function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
     if material in gas
         χ, sell = sellmeier_gas(material)
@@ -174,6 +190,7 @@ function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
     end
 end
 
+"Get a function which gives dispersion."
 function dispersion_func(order, material::Symbol, pressure=1, temp=roomtemp)
     n = ref_index_fun(material, pressure, temp)
     β(ω) = @. ω/c * n(2π*c/ω)
@@ -181,7 +198,45 @@ function dispersion_func(order, material::Symbol, pressure=1, temp=roomtemp)
     return βn
 end
 
+"Get dispersion."
 function dispersion(order, material::Symbol, λ, pressure=1, temp=roomtemp)
     return dispersion_func(order, material, pressure, temp).(λ)
 end
+
+"Nonlinear coefficients"
+
+"Calculate single-molecule third-order susceptibility of a gas
+at given wavelength(s) and at room temperature.
+If source == :Bishop:
+Uses reference values to calculate γ, the third-order hyperpolarisability,
+and changes units to susceptibility.
+If source == :Lehmeier (default):
+Uses scaling factors to calculate χ3 at 1 atmosphere and scales by density
+to get to a single molecule.
+
+References:
+[1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
+[2] Chemical Reviews, 94, 3-29 (1994)
+[3] Optics Communications, 56(1), 67–72 (1985)
+"
+function χ3_gas(material::Symbol; source=:Lehmeier)
+    if source == :Lehmeier
+        # Table 1 in [3]
+        if material in (:He, :HeJ)
+            fac = 1
+        elseif material == :Ne
+            fac = 1.8
+        elseif material == :Ar
+            fac = 23.5
+        elseif material == :Kr
+            fac = 64.0
+        elseif material == :Xe
+            fac = 188.2
+        end
+        return 4*fac*3.43e-28 / std_dens
+    else
+        error("TODO: Bishop/Shelton values for χ3")
+    end
+end
+
 end
