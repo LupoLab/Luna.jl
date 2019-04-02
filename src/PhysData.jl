@@ -4,12 +4,19 @@ import PhysicalConstants
 import Unitful
 import Luna: Maths
 
+"Speed of light"
 const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
+"Pressure in Pascal at standard conditions (atmospheric pressure)"
 const atm = Unitful.ustrip(PhysicalConstants.CODATA2014.atm)
+"Boltzmann constant"
 const k_B = Unitful.ustrip(PhysicalConstants.CODATA2014.k_B)
+"Permittivity of vacuum"
 const ε_0 = Unitful.ustrip(PhysicalConstants.CODATA2014.ε_0)
+"Electron charge"
 const electron = Unitful.ustrip(PhysicalConstants.CODATA2014.e)
+"Room temperature in Kelvin (ca 21 deg C)"
 const roomtemp = 294
+"Density of an ideal gas at atmospheric pressure and room temperature"
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
@@ -152,7 +159,7 @@ function χ1_fun(material::Symbol)
     return f
 end
 
-"Get χ1 at wavelength in SI units. Gases only."
+"Get χ1 at wavelength λ in SI units. Gases only."
 function χ1(material::Symbol, λ)
     return χ1_fun(material)(λ)
 end
@@ -275,8 +282,6 @@ function ionisation_potential(material; unit=:SI)
     else
         throw(DomainError(unit, "Unknown unit $unit"))
     end
-
-
 end
 
 end
