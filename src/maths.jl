@@ -44,5 +44,25 @@ function rms_width(x::Array{T, 1}, y; dim=1) where T
     return sqrt.(moment(x, y, 2, dim=dim) - moment(x, y, 1, dim=dim).^2)
 end
 
+function cumtrapz!(ret, x, y)
+    fill!(ret, 0)
+    for i in 2 : length(y)
+        ret[i] = ret[i-1] + (y[i-1] + y[i])*(x[i] - x[i-1])
+    end
+    ret *= 1//2
+end
+
+function cumtrapz(x, y)
+    ret = similar(y)
+    fill!(ret, 0)
+    for i in 2 : length(y)
+        ret[i] = ret[i-1] + (y[i-1] + y[i])*(x[i] - x[i-1])
+    end
+    ret *= 1//2
+end
+
+function normmax(x; dims=1)
+    return x./maximum(x; dims=dims)
+end
 
 end

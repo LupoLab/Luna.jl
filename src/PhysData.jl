@@ -1,19 +1,27 @@
 module PhysData
 
-import PhysicalConstants
-import Unitful
+import PhysicalConstants: CODATA2014
+import Unitful: ustrip
 import Luna: Maths
 
 "Speed of light"
-const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
+const c = ustrip(CODATA2014.c)
 "Pressure in Pascal at standard conditions (atmospheric pressure)"
-const atm = Unitful.ustrip(PhysicalConstants.CODATA2014.atm)
+const atm = ustrip(CODATA2014.atm)
 "Boltzmann constant"
-const k_B = Unitful.ustrip(PhysicalConstants.CODATA2014.k_B)
+const k_B = ustrip(CODATA2014.k_B)
 "Permittivity of vacuum"
-const ε_0 = Unitful.ustrip(PhysicalConstants.CODATA2014.ε_0)
+const ε_0 = ustrip(CODATA2014.ε_0)
 "Electron charge"
-const electron = Unitful.ustrip(PhysicalConstants.CODATA2014.e)
+const electron = ustrip(CODATA2014.e)
+"Electron mass"
+const m_e = ustrip(CODATA2014.m_e)
+"Ratio of electron charge squared to electron mass (for plasma)"
+const e_ratio = electron^2/m_e
+"Reduced Planck's constant"
+const ħ = ustrip(CODATA2014.ħ)
+"Atomic unit of energy"
+const au_energy = ħ*c*ustrip(CODATA2014.α)/ustrip(CODATA2014.a_0)
 "Room temperature in Kelvin (ca 21 deg C)"
 const roomtemp = 294
 "Density of an ideal gas at atmospheric pressure and room temperature"
@@ -99,11 +107,12 @@ returns the refractive index directly"
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
-        return μm -> @. sqrt(1
+        #TODO: Deal with sqrt of negative values better (somehow...)
+        return μm -> @. real(sqrt(Complex(1
              + 0.6961663/(1-(0.0684043/μm)^2)
              + 0.4079426/(1-(0.1162414/μm)^2)
              + 0.8974794/(1-(9.896161/μm)^2)
-             )
+             )))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
         return μm -> @. sqrt(1

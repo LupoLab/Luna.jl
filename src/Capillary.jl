@@ -20,7 +20,9 @@ end
 function α(a, ω; n=1, m=1)
     unm = besselj_zero(n-1, m)
     ν = PhysData.ref_index(:SiO2, 2π*c./ω)
-    return @. (2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*sqrt(ν^2-1)))
+    ret = @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
+    ret[isinf.(ret)] .= 0 # TODO FIND OUT WHY THIS IS NEEDED
+    return ret
 end
 
 function α(a; λ, n=1, m=1)

@@ -191,6 +191,7 @@ function solve(f, y0, t, dt, tmax, saveN;
     start = Dates.now()
     tic = Dates.now()
     while stepper.tn <= tmax
+        println(steps)
         ok = step!(stepper)
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
@@ -208,14 +209,9 @@ function solve(f, y0, t, dt, tmax, saveN;
         else
             repeated += 1
             if repeated > repeat_limit
-                println(stepper.err)
-                println(stepper.dt)
                 error("Reached limit for step repetition ($repeat_limit)")
             end
         end
-        # if steps>50
-        #     error("50 steps")
-        # end
     end
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
