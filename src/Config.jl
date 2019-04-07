@@ -94,14 +94,16 @@ end
 abstract type Grid end
 
 struct RealGrid <: Grid
-    λ_lims::NTuple{2, Float64}
-    tmax::Float64
-    δt::Float64
-    referenceλ::Float64
+    λ_lims::NTuple{2, Float64} # Desired wavelength limits in metres
+    tmax::Float64 # Maximum time in window (window goes from -tmax to +tmax)
+    δt::Float64 # oversampled time sampling
+    referenceλ::Float64 # reference wavelength in metres (for group velocity etc)
+    apod_width::Float64 # width/smoothness of spectral apodisation filter
 end
 
-function RealGrid(; λ_lims=(150e-9, 4000e-9), tmax=1e-12, δt=1e-12, referenceλ=800e-9)
-    return RealGrid(λ_lims, tmax, δt, referenceλ)
+function RealGrid(; λ_lims=(150e-9, 4000e-9), tmax=1e-12, δt=1e-12, referenceλ=800e-9,
+                  apod_width=2e14)
+    return RealGrid(λ_lims, tmax, δt, referenceλ, apod_width)
 end
 
 "Overall config"

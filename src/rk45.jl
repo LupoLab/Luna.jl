@@ -174,6 +174,7 @@ end
 
 function solve(f, y0, t, dt, tmax, saveN;
                tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true,
+               stepfun=donothing!,
                status_period=1, repeat_limit=10)
     stepper = Stepper(f, y0, t, dt,
                       tol=tol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
@@ -191,7 +192,7 @@ function solve(f, y0, t, dt, tmax, saveN;
     start = Dates.now()
     tic = Dates.now()
     while stepper.tn <= tmax
-        println(steps)
+        # println(steps)
         ok = step!(stepper)
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
@@ -205,6 +206,7 @@ function solve(f, y0, t, dt, tmax, saveN;
                 yout[fill(:, ndims(y0))..., saved+1] .= interpolate(stepper, ti)
                 saved += 1
             end
+            stepfun(stepper.yn)
             repeated = 0
         else
             repeated += 1
@@ -217,6 +219,9 @@ function solve(f, y0, t, dt, tmax, saveN;
                            Dates.value(Dates.now()-start)/1000, steps)
 
     return tout, yout, steps
+end
+
+function donothing!(x)
 end
 
 end

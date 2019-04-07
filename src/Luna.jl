@@ -10,15 +10,18 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 
 function make_linop(ω, refλ, cap::Configuration.Capillary{Configuration.StaticFill})
-    β = [0; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
-    α = [0; Capillary.α(cap.radius, ω[2:end])]
-    β1 = Capillary.dispersion(1, cap.radius, λ=refλ,
+    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
+    α = [1000; Capillary.α(cap.radius, ω[2:end])]
+    α[α .> 10] .= 10
+    β1 = -Capillary.dispersion(1, cap.radius, λ=refλ,
                               gas=cap.fill.gas, pressure=cap.fill.pressure)
-    return @. im*(β - β1*ω) - α/2
+    linop = @. im*(β - β1*ω) - α/2
+
+    return linop
 end
 
 function make_Pnl_prefac(ω, cap::Configuration.Capillary{Configuration.StaticFill})
-    β = [0; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
+    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
     return @. im/(2*PhysData.ε_0*PhysData.c^2)*ω^2/β
 end
 
@@ -30,7 +33,6 @@ function make_fnl(ω, ωo, Eω, Et, cropidx, conf)
     Eωo = zeros(ComplexF64, size(ωo))
     tsamples = Int((length(ωo)-1)*2)
     FT = FFTW.plan_rfft(zeros(Float64, tsamples))
-    # IFT = inv(FT)
     IFT = FFTW.plan_irfft(Eωo, tsamples)
     
     χ3 = PhysData.χ3_gas(conf.geometry.fill.gas)
@@ -46,32 +48,31 @@ function make_fnl(ω, ωo, Eω, Et, cropidx, conf)
     Pωo = similar(Eωo)
     Eto = similar(Pto)
     prefac = make_Pnl_prefac(ω, conf.geometry)
-    fnl = let Pto=Pto, Eto=Eto, FT=FT, IFT=IFT, responses=responses, Eωo=Eωo, cropidx=cropidx, Pωo=Pωo
+    fnl = let Pto=Pto, Eto=Eto, FT=FT, IFT=IFT, responses=responses, Eωo=Eωo, cropidx=cropidx, Pωo=Pωo, prefac=prefac
         function fnl(Eω, z)
             fill!(Pto, 0)
             fill!(Eωo, 0)
             fill!(Pωo, 0)
-            Eωo[1:cropidx] = Eω
-            any(isnan.(Eω)) && error("NaN in Eω")
+            Eωo[1:cropidx] .= 4 .* Eω  # !!! SCALING HARDCODED
             Eto .= IFT*Eωo
-            any(isnan.(Eto)) && error("NaN in Eto")
             for resp in responses
                 Pto .+= resp(Eto)
             end
-            any(isnan.(Pto)) && error("NaN in Pto")
-            Pωo .= dens(z).* (FT*Pto)
-            any(isnan.(Pωo)) && error("NaN in Pωo")
-            return Pωo[1:cropidx]
+            Pωo .= (FT*Pto)
+            return dens(z).*prefac.*Pωo[1:cropidx]
         end
     end
     return fnl    
 end
 
 function make_grid(grid::Configuration.Grid)
+    #TODO tidy this up!!
     # Find required sampling density
     trange = grid.tmax*2
     f_lims = PhysData.c./grid.λ_lims
-    ωmax = 2π*maximum(f_lims)
+    # TODO: somehow include the fact that not all of ω has to have accurate disp rel
+    # probably by passing grid config to everything
+    ωmax = 2π*(maximum(f_lims) + 2*grid.apod_width) # maximum ang. freq in user-desired window
     δt = min(1/(6*maximum(f_lims)), grid.δt) # 6x maximum desired freq, or user-defined
     samples = 2^(ceil(Int, log2(trange/δt))) # make it a power of 2
     δto = trange/samples # keep trange fixed, increase density to reach power of 2
@@ -91,9 +92,13 @@ function make_grid(grid::Configuration.Grid)
     Nt = collect(range(0, length=2*samples))
     t = @. (Nt-samples)*δt
 
+    ωmin = 2π*minimum(f_lims)
+    width_left = ωmin/8
+    window = Maths.errfun_window(ω, ωmin/2, ωmax-2*grid.apod_width, width_left, grid.apod_width)
+
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
-    return t, ω, to, ωo, idx2
+    return t, ω, to, ωo, idx2, window
 end
 
 function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
@@ -105,9 +110,10 @@ function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
 end
 
 function make_init(t, input::Configuration.GaussInput)
-    # TODO MODE SCALING!!!
     It = Maths.gauss(t, fwhm=input.duration)
-    energy = NumericalIntegration.integrate(t, It, NumericalIntegration.SimpsonEven())
+    Aeff = Capillary.Aeff(75e-6) #!!!! HARDCODED
+    energy = abs(NumericalIntegration.integrate(t, It, NumericalIntegration.SimpsonEven()))
+    energy *= 2*PhysData.c*PhysData.ε_0*Aeff
     It .*= input.energy/energy
 
     ω0 = 2π*PhysData.c/input.wavelength
@@ -116,28 +122,43 @@ function make_init(t, input::Configuration.GaussInput)
     return FFTW.rfft(Et)
 end
 
+import PyPlot: pygui, plt
 function run(config)
-    t, ω, to, ωo, cropidx = make_grid(config.grid)
+    pygui(true)
+    t, ω, to, ωo, cropidx, window = make_grid(config.grid)
 
     Eω = make_init(t, config.input)
-    any(isnan.(Eω)) && error("NaN in Eω in init")
-    
     Et = FFTW.irfft(Eω, length(t))
+
+    Eωo = zeros(ComplexF64, size(ωo))
+    FT = FFTW.plan_rfft(zeros(Float64, length(to)))
+    IFT = FFTW.plan_irfft(Eωo, length(to))
+
+    Eωo[1:cropidx] = Eω
 
     linop = make_linop(ω, config.grid.referenceλ, config.geometry)
     fnl = make_fnl(ω, ωo, Eω, Et, cropidx, config)
-
-    ~all(isfinite.(linop)) && error("linop broken")
-    ~all(isfinite.(fnl(Eω, 0))) && error("fnl broken")
 
     z = 0
     dz = 1e-8
     zmax = config.geometry.length
     saveN = 201
 
-    zout, Eout, steps = RK45.solve_precon(fnl, linop, Eω, z, dz, zmax, saveN)
+    window! = let window=window
+        function window!(E)
+            E .*= window
+        end
+    end
 
-    return ω, zout, Eout
+    function remnan!(E)
+        E[isnan.(E)] .= 0
+    end
+
+    zout, Eout, steps = RK45.solve_precon(fnl, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+
+    Etout = FFTW.irfft(Eout, length(t), 1)
+
+    return ω, t, zout, Eout, Etout
 end
 
 end # module

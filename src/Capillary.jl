@@ -3,6 +3,8 @@ import PhysicalConstants
 import Unitful
 import FunctionZeros: besselj_zero
 import Roots: fzero
+import Cubature: hquadrature
+import SpecialFunctions: besselj
 import Luna: Maths, PhysData
 
 const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
@@ -20,6 +22,13 @@ end
 function α(a, ω; n=1, m=1)
     unm = besselj_zero(n-1, m)
     ν = PhysData.ref_index(:SiO2, 2π*c./ω)
+    return @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
+end
+
+function α(a, ω::AbstractArray; n=1, m=1)
+    unm = besselj_zero(n-1, m)
+    ν = PhysData.ref_index(:SiO2, 2π*c./ω)
+    ν[ω .< 3e14] .= 1.4
     ret = @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
     ret[isinf.(ret)] .= 0 # TODO FIND OUT WHY THIS IS NEEDED
     return ret
@@ -67,5 +76,10 @@ function zdw(a; gas::Symbol, pressure, n=1, m=1)
     return 2π*c/ω0
 end
 
+function Aeff(a, n=1, m=1)
+    unm = besselj_zero(n-1, m)
+    return 2π*a^2*(hquadrature(r-> r*besselj(0, r*unm)^2, 0, 1)[1]^2
+                   / hquadrature(r-> r*besselj(0, r*unm)^4, 0, 1)[1])
+end
 
 end

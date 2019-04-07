@@ -1,5 +1,6 @@
 module Maths
 import ForwardDiff
+import SpecialFunctions: erf, erfc
 
 function derivative(f, x, order::Integer)
     if order == 0
@@ -61,8 +62,20 @@ function cumtrapz(x, y)
     ret *= 1//2
 end
 
-function normmax(x; dims=1)
+function normmax(x, dims)
     return x./maximum(x; dims=dims)
+end
+
+function normmax(x)
+    return x./maximum(x)
+end
+
+function errfun_window(x, xmin, xmax, width)
+    return @. 0.5*(erf((x-xmin)/width) + erfc((x-xmax)/width) - 1)
+end
+
+function errfun_window(x, xmin, xmax, width_left, width_right)
+    return @. 0.5*(erf((x-xmin)/width_left) + erfc((x-xmax)/width_right) - 1)
 end
 
 end

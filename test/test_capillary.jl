@@ -23,3 +23,5 @@ a = 125e-6
 
 @test abs(1e9*Capillary.zdw(a, gas=:He, pressure=0.4) - 379) < 1
 @test abs(1e9*Capillary.zdw(75e-6, gas=:He, pressure=5.9) - 562) < 1
+
+@test Capillary.Aeff(75e-6) ≈ 8.42157534886545e-09
