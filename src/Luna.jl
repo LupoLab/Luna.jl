@@ -9,24 +9,24 @@ include("Config.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 
-function make_linop(ω, refλ, cap::Configuration.Capillary{Configuration.StaticFill})
-    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
+function make_linop(ω, refλ, cap::Configuration.Capillary, medium::Configuration.StaticFill)
+    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=medium.gas, pressure=medium.pressure)]
     α = [1000; Capillary.α(cap.radius, ω[2:end])]
     α[α .> 10] .= 10
     β1 = -Capillary.dispersion(1, cap.radius, λ=refλ,
-                              gas=cap.fill.gas, pressure=cap.fill.pressure)
+                              gas=medium.gas, pressure=medium.pressure)
     linop = @. im*(β - β1*ω) - α/2
 
     return linop
 end
 
-function make_Pnl_prefac(ω, cap::Configuration.Capillary{Configuration.StaticFill})
-    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=cap.fill.gas, pressure=cap.fill.pressure)]
+function make_Pnl_prefac(ω, cap::Configuration.Capillary, medium::Configuration.StaticFill)
+    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=medium.gas, pressure=medium.pressure)]
     return @. im/(2*PhysData.ε_0*PhysData.c^2)*ω^2/β
 end
 
-function make_density(cap::Configuration.Capillary{Configuration.StaticFill})
-    return z -> PhysData.std_dens * cap.fill.pressure
+function make_density(medium::Configuration.StaticFill)
+    return z -> PhysData.std_dens * medium.pressure
 end
 
 function make_fnl(ω, ωo, Eω, Et, cropidx, conf)
@@ -35,21 +35,21 @@ function make_fnl(ω, ωo, Eω, Et, cropidx, conf)
     FT = FFTW.plan_rfft(zeros(Float64, tsamples))
     IFT = FFTW.plan_irfft(Eωo, tsamples)
     
-    χ3 = PhysData.χ3_gas(conf.geometry.fill.gas)
+    χ3 = PhysData.χ3_gas(conf.medium.gas)
     kerr = let χ3=χ3
         E -> Nonlinear.kerr(E, χ3)
     end
     responses = (kerr,)
 
-    dens = make_density(conf.geometry)
+    dens = make_density(conf.medium)
 
 
     Pto = zeros(Float64, tsamples)
     Pωo = similar(Eωo)
     Eto = similar(Pto)
-    prefac = make_Pnl_prefac(ω, conf.geometry)
-    fnl = let Pto=Pto, Eto=Eto, FT=FT, IFT=IFT, responses=responses, Eωo=Eωo, cropidx=cropidx, Pωo=Pωo, prefac=prefac
-        function fnl(Eω, z)
+    prefac = make_Pnl_prefac(ω, conf.geometry, conf.medium)
+    fnl! = let Pto=Pto, Eto=Eto, FT=FT, IFT=IFT, responses=responses, Eωo=Eωo, cropidx=cropidx, Pωo=Pωo, prefac=prefac
+        function fnl!(out, Eω, z)
             fill!(Pto, 0)
             fill!(Eωo, 0)
             fill!(Pωo, 0)
@@ -59,10 +59,10 @@ function make_fnl(ω, ωo, Eω, Et, cropidx, conf)
                 Pto .+= resp(Eto)
             end
             Pωo .= (FT*Pto)
-            return dens(z).*prefac.*Pωo[1:cropidx]
+            out .= dens(z).*prefac.*Pωo[1:cropidx]
         end
     end
-    return fnl    
+    return fnl!
 end
 
 function make_grid(grid::Configuration.Grid)
@@ -136,8 +136,8 @@ function run(config)
 
     Eωo[1:cropidx] = Eω
 
-    linop = make_linop(ω, config.grid.referenceλ, config.geometry)
-    fnl = make_fnl(ω, ωo, Eω, Et, cropidx, config)
+    linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
+    fnl! = make_fnl(ω, ωo, Eω, Et, cropidx, config)
 
     z = 0
     dz = 1e-8
@@ -154,7 +154,7 @@ function run(config)
         E[isnan.(E)] .= 0
     end
 
-    zout, Eout, steps = RK45.solve_precon(fnl, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
 
     Etout = FFTW.irfft(Eout, length(t), 1)
 

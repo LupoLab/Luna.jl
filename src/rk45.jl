@@ -10,7 +10,7 @@ include("dopri.jl")
 # TODO: Maybe change f() from returning to altering output array in place?
 
 mutable struct Stepper{T<:AbstractArray}
-    f::Function  # RHS function
+    f!::Function  # RHS function
     y::T  # Solution at current t
     yn::T  # Solution at t+dt
     yi::T  # Interpolant array (see interpolate())
@@ -29,9 +29,9 @@ mutable struct Stepper{T<:AbstractArray}
     err::Float64  # error metric to be compared to tol
 end
 
-function Stepper(f::Function, y0, t, dt; tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true)
+function Stepper(f!::Function, y0, t, dt; tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true)
     k1 = similar(y0)
-    k1 .= f(y0, t)
+    f!(k1, y0, t)
     ks = (k1, similar(k1), similar(k1), similar(k1), similar(k1), similar(k1), similar(k1))
     yerr = similar(y0)
     errbuf = Array{Float64, ndims(y0)}(undef, size(y0))
@@ -48,7 +48,7 @@ function Stepper(f::Function, y0, t, dt; tol=1e-6, max_dt=Inf, min_dt=0, locextr
             return maximum(abserr)/maximum(absyn)
         end
     end
-    return Stepper(f, y0, copy(y0), similar(y0), yerr, errfunc, ks,
+    return Stepper(f!, y0, copy(y0), similar(y0), yerr, errfunc, ks,
         float(t), float(t), float(dt), float(dt), tol, float(max_dt), float(min_dt), locextrap, false, 0.0)
 end
 
@@ -63,7 +63,7 @@ function step!(s::Stepper)
         for jj = 1:ii
             s.yn .+= s.dt*B[ii][jj].*s.ks[jj]
         end
-        s.ks[ii+1] .= s.f(s.yn, s.t+nodes[ii]*s.dt)
+        s.f!(s.ks[ii+1], s.yn, s.t+nodes[ii]*s.dt)
     end
 
     if s.locextrap
@@ -115,12 +115,11 @@ function interpolate(s::Stepper, ti::Float64)
     return @. s.y + s.dt.*s.yi
 end
 
-function make_fbar(f, linop::AbstractArray, y0)
-    fbar_buf = similar(y0)
-    fbar = let f=f, linop=linop, fbar_buf=fbar_buf
-        function fbar(ybar, t)
-            fbar_buf .= exp.(.-linop.*t).*f(exp.(linop.*t).*ybar, t)
-            return fbar_buf
+function make_fbar!(f!, linop::AbstractArray, y0)
+    fbar! = let f! = f!, linop=linop
+        function fbar!(out, ybar, t)
+            f!(out, exp.(linop.*t).*ybar, t)
+            @. out *= exp(-linop*t)
         end
     end
 end
@@ -133,14 +132,13 @@ function make_prop(linop::AbstractArray)
     end
 end
 
-function make_fbar(f, linop::Function, y0)
-    fbar_buf = similar(y0)
+function make_fbar!(f!, linop::Function, y0)
     linop_int = similar(y0)
-    fbar = let f=f, linop=linop, linop_int=linop_int, fbar_buf=fbar_buf
-        function fbar(ybar, t)
+    fbar! = let f! = f!, linop=linop, linop_int=linop_int
+        function fbar!(out, ybar, t)
             linop_int .= HCubature.hquadrature(linop, 0, t)[1]
-            fbar_buf .= exp.(.-linop_int).*f(exp.(linop_int).*ybar, t)
-            return fbar_buf
+            f!(out, exp.(linop_int).*ybar, t)
+            @. out *= exp(-linop_int)
         end
     end
 end
@@ -154,10 +152,10 @@ function make_prop(linop::Function)
     end
 end
 
-function solve_precon(f, linop, y0, t, dt, tmax, saveN;
+function solve_precon(f!, linop, y0, t, dt, tmax, saveN;
                       kwargs...)
 
-    fbar = make_fbar(f, linop, y0)
+    fbar = make_fbar!(f!, linop, y0)
     prop = make_prop(linop)
 
     y0bar = exp.(.-prop(t).*t).*y0
@@ -172,11 +170,11 @@ function solve_precon(f, linop, y0, t, dt, tmax, saveN;
     return tout, yout, steps
 end
 
-function solve(f, y0, t, dt, tmax, saveN;
+function solve(f!, y0, t, dt, tmax, saveN;
                tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true,
                stepfun=donothing!,
                status_period=1, repeat_limit=10)
-    stepper = Stepper(f, y0, t, dt,
+    stepper = Stepper(f!, y0, t, dt,
                       tol=tol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
 
     yout = Array{eltype(y0)}(undef, (size(y0)..., saveN))

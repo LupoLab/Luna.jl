@@ -23,12 +23,10 @@ function testinit()
     nl = zero(Aω)
     nlω = zero(Aω)
 
-    out = zero(Aω)
-
     FT = FFTW.plan_fft!(Aω)
     IFT = FFTW.plan_ifft!(Aω)
-    f = let out=out, FT=FT, IFT=IFT, ω=ω
-        function f(Aω, z)
+    f! = let FT=FT, IFT=IFT, ω=ω
+        function f!(out, Aω, z)
                 out .= Aω
                 IFT*out
                 out .= abs2.(out).*out
@@ -48,8 +46,8 @@ function testinit()
         end
     end
 
-    fnl = let out=out, FT=FT, IFT=IFT
-        function fnl(Aω, z)
+    fnl! = let FT=FT, IFT=IFT
+        function fnl!(out, Aω, z)
                 out .= Aω
                 IFT*out
                 out .= abs2.(out).*out
@@ -59,18 +57,18 @@ function testinit()
         end
     end
 
-    return t, ω, zmax, Aω, f, Lin, fnl, Linfunc
+    return t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc
 end
 
 
 function test_precon(plot=false)
-    t, ω, zmax, Aω, f, Lin, fnl, Linfunc = testinit()
+    t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc = testinit()
     z = 0
     dz = 1e-3
 
     saveN = 201
 
-    zarr, Aarr = RK45.solve_precon(fnl, Lin, Aω, z, dz, zmax, saveN, status_period=2)
+    zarr, Aarr = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, saveN, status_period=2)
 
     if plot
         Atarr = FFTW.ifft(FFTW.ifftshift(Aarr, 1), 1)
@@ -92,13 +90,13 @@ function test_precon(plot=false)
 end
 
 function test_noprecon(plot=false)
-    t, ω, zmax, Aω, f, Lin, fnl, Linfunc = testinit()
+    t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc = testinit()
     z = 0
     dz = 1e-3
 
     saveN = 201
 
-    zarr, Aarr = RK45.solve(f, Aω, z, dz, zmax, saveN)
+    zarr, Aarr = RK45.solve(f!, Aω, z, dz, zmax, saveN)
 
     if plot
         Atarr = FFTW.ifft(FFTW.ifftshift(Aarr, 1), 1)
@@ -119,13 +117,13 @@ function test_noprecon(plot=false)
     return zarr, Aarr
 end
 
-t, ω, zmax, Aω, f, Lin, fnl, Linfunc = testinit()
+t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc = testinit()
 z = 0
 dz = 1e-3
 
-zarr, Aarr = RK45.solve(f, Aω, z, dz, zmax, 501, tol=1e-8)
-zarrp, Aarrp = RK45.solve_precon(fnl, Lin, Aω, z, dz, zmax, 501, tol=1e-8)
-zarrpf, Aarrpf = RK45.solve_precon(fnl, Linfunc, Aω, z, dz, zmax, 501, tol=1e-8)
+zarr, Aarr = RK45.solve(f!, Aω, z, dz, zmax, 501, tol=1e-8)
+zarrp, Aarrp = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, 501, tol=1e-8)
+zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, Aω, z, dz, zmax, 501, tol=1e-8)
 # Is the initial spectrum restored after 2 soliton periods? (without preconditioner)
 @test isapprox(abs2.(Aarr[:, 1]), abs2.(Aarr[:, end]), rtol=1e-4)
 # Is the initial spectrum restored after 2 soliton periods? (with preconditioner)
