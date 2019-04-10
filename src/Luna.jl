@@ -57,8 +57,7 @@ function make_fnl(ω, ωo, Eω, Et, conf)
         function fnl!(out, Eω, z)
             fill!(Pto, 0)
             fill!(Eωo, 0)
-            Eωo[1:cropidx] .= Eω
-            Eωo .*= scalefac
+            Eωo[1:cropidx] .= scalefac.*Eω
             Eto .= IFT*Eωo
             for resp in responses
                 resp(Pto, Eto)
@@ -77,7 +76,6 @@ end
 function make_grid(λ_lims, trange, δt, apod_width)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
-    ωmax = 2π*(maximum(f_lims) + 2*apod_width) # maximum freq in user-desired window
     δt = min(1/(6*maximum(f_lims)), δt) # 6x maximum freq, or user-defined if finer
     samples_fine = 2^(ceil(Int, log2(trange/δt))) # samples for fine grid (power of 2)
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d", trange/δt, samples_fine)
@@ -90,7 +88,9 @@ function make_grid(λ_lims, trange, δt, apod_width)
     ω_fine = Nω_fine*δω_fine
     # Make coarse grid
     # find smallest power-of-2 section of grid that contains user-desired frequency window:
+    ωmax = 2π*(maximum(f_lims)) + 2*apod_width # maximum freq in user-desired window
     cropidx = findfirst(ω -> ω>=ωmax, ω_fine)
+    Logging.@info @sprintf("ωmax = %.2e, cropidx = %d, ω[cropidx] = %.2e", ωmax, cropidx, ω_fine[cropidx])
     cropidx = 2^(ceil(Int, log2(cropidx))) + 1 # make coarse ω grid also power of 2 + 1
     ω_coarse = ω_fine[1:cropidx]
     δt_coarse = π/maximum(ω_coarse)
