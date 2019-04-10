@@ -1,12 +1,14 @@
 import Luna
 import Luna: Configuration, Maths
+import Logging
+Logging.disable_logging(Logging.BelowMinLevel)
 
 import DSP.Unwrap: unwrap
 
 import PyPlot:pygui, plt
 
 input = Configuration.GaussInput(duration=7e-15, energy=30e-6, wavelength=800e-9)
-grid = Configuration.RealGrid(tmax=0.5e-12, λ_lims=(200e-9, 4000e-9))
+grid = Configuration.RealGrid(trange=5e-12, λ_lims=(200e-9, 4000e-9))
 geometry = Configuration.Capillary(radius=75e-6, length=50e-2)
 medium = fill=Configuration.StaticFill(:He, 6)
 nonlinear = Configuration.GasNonlinear()
@@ -27,9 +29,4 @@ plt.colorbar()
 
 plt.figure()
 plt.pcolormesh(t*1e15, zout, abs2.(transpose(Maths.hilbert(Etout))))
-
-plt.figure()
-plt.plot(t*1e15, abs2.(Maths.hilbert(Etout[:, end])))
-
-plt.figure()
-plt.plot(ω./2π.*1e-15, unwrap(angle.(Eout[:, end])))
+plt.xlim(-20, 20)
