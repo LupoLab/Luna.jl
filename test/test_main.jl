@@ -8,7 +8,7 @@ import DSP.Unwrap: unwrap
 import PyPlot:pygui, plt
 
 input = Configuration.GaussInput(duration=7e-15, energy=30e-6, wavelength=800e-9)
-grid = Configuration.RealGrid(trange=2e-12, λ_lims=(110e-9, 4000e-9))
+grid = Configuration.RealGrid(trange=1e-12, λ_lims=(190e-9, 4000e-9))
 geometry = Configuration.Capillary(radius=75e-6, length=50e-2)
 medium = fill=Configuration.StaticFill(:HeJ, 6)
 nonlinear = Configuration.GasNonlinear()
@@ -16,13 +16,6 @@ nonlinear = Configuration.GasNonlinear()
 cfg = Configuration.Config(grid, geometry, medium, nonlinear, input)
 
 ω, t, zout, Eout, Etout = Luna.run(cfg)
-
-# println(size(Eout))
-
-β = Capillary.β(75e-6, ω, gas=:He, pressure=6)
-β1 = Capillary.dispersion(1, 75e-6, λ=800e-9, gas=:He, pressure=6)
-plt.figure()
-plt.plot(ω, β-β1.*ω)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
