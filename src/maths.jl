@@ -1,6 +1,7 @@
 module Maths
 import ForwardDiff
 import SpecialFunctions: erf, erfc
+import FFTW
 
 function derivative(f, x, order::Integer)
     if order == 0
@@ -12,11 +13,11 @@ function derivative(f, x, order::Integer)
     end
 end
 
-function gauss(x, σ; x0=0, power::Integer=2)
+function gauss(x, σ; x0=0, power=2)
     return @. exp(-1//2*((x-x0)/σ)^power)
 end
 
-function gauss(x; x0=0, power::Integer=2, fwhm)
+function gauss(x; x0=0, power=2, fwhm)
     σ = fwhm/(2*(2*log(2))^(1/power))
     return gauss(x, σ, x0=x0, power=power)
 end
@@ -62,12 +63,20 @@ function cumtrapz(x, y)
     ret *= 1//2
 end
 
-function normmax(x, dims)
+function normbymax(x, dims)
     return x./maximum(x; dims=dims)
 end
 
-function normmax(x)
+function normbymax(x)
     return x./maximum(x)
+end
+
+function log10_norm(x)
+    return log10.(normbymax(x))
+end
+
+function log10_norm(x, dims)
+    return log10.(normbymax(x, dims=dims))
 end
 
 function errfun_window(x, xmin, xmax, width)
@@ -76,6 +85,14 @@ end
 
 function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5*(erf((x-xmin)/width_left) + erfc((x-xmax)/width_right) - 1)
+end
+
+function hilbert(x::Array{T, N}; dim=1) where T<:Real where N
+    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    idxlo = CartesianIndices(size(xf)[1:dim-1])
+    idxhi = CartesianIndices(size(xf)[dim+1:end])
+    xf[idxlo, 1:ceil(Int, size(xf, dim)/2), idxhi] .= 0
+    return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
 end
 
 end
