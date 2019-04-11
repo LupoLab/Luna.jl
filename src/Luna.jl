@@ -31,10 +31,12 @@ function make_density(medium::Configuration.StaticFill)
     return z -> PhysData.std_dens * medium.pressure
 end
 
-function make_fnl(ω, Eω, Et, conf)
-    tsamples = Int((length(ω)-1)*2)
-    FT = FFTW.plan_rfft(Et)
-    IFT = FFTW.plan_irfft(Eω, tsamples)
+function make_fnl(ω, ωo, Eω, Et, conf)
+    cropidx = length(ω)
+    tsamples = Int((length(ωo)-1)*2)
+    Eωo = zeros(ComplexF64, length(ωo))
+    FT = FFTW.plan_rfft(zeros(tsamples))
+    IFT = FFTW.plan_irfft(Eωo, tsamples)
     
     χ3 = PhysData.χ3_gas(conf.medium.gas)
     kerr! = Nonlinear.make_kerr!(χ3)
@@ -42,19 +44,24 @@ function make_fnl(ω, Eω, Et, conf)
 
     dens = make_density(conf.medium)
 
+    scalefac = (length(ωo)-1)/(length(ω)-1)
+
     Pt = zeros(Float64, tsamples)
-    Pω = similar(Eω)
+    Pω = similar(Eωo)
     Et = similar(Pt)
     prefac = make_Pnl_prefac(ω, conf.geometry, conf.medium)
-    fnl! = let Pt=Pt, Et=Et, FT=FT, IFT=IFT, responses=responses, Pω=Pω, prefac=prefac
+    fnl! = let Pt=Pt, Et=Et, FT=FT, IFT=IFT, responses=responses, Pω=Pω, prefac=prefac,
+                scalefac=scalefac, Eωo=Eωo, cropidx=cropidx
         function fnl!(out, Eω, z)
             fill!(Pt, 0)
-            Et .= IFT*Eω
+            fill!(Eωo, 0)
+            Eωo[1:cropidx] = scalefac*Eω
+            Et .= IFT*Eωo
             for resp in responses
                 resp(Pt, Et)
             end
             Pω .= (FT*Pt)
-            out .= dens(z).*prefac.*Pω
+            out .= dens(z).*prefac.*Pω[1:cropidx]./scalefac
         end
     end
     return fnl!
@@ -67,16 +74,25 @@ end
 function make_grid(λ_lims, trange, δt, apod_width)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
-    δt = min(1/(6*maximum(f_lims)), δt) # 6x maximum freq, or user-defined if finer
-    samples = 2^(ceil(Int, log2(trange/δt))) # samples for fine grid (power of 2)
-    Logging.@info @sprintf("Samples needed: %.2f, samples: %d", trange/δt, samples)
-    δt = trange/samples # actual spacing - keep trange fixed
-    δω = 2π/trange # frequency spacing for fine grid
+    δto = min(1/(6*maximum(f_lims)), δt) # 6x maximum freq, or user-defined if finer
+    samples = 2^(ceil(Int, log2(trange/δto))) # samples for fine grid (power of 2)
+    Logging.@info @sprintf("Samples needed: %.2f, samples: %d", trange/δto, samples)
+    δto = trange/samples # actual spacing - keep trange fixed
+    δωo = 2π/trange # frequency spacing for fine grid
     # Make fine grid
-    Nt = collect(range(0, length=samples))
-    t = @. (Nt-samples/2)*δt # center on 0
-    Nω = collect(range(0, length=Int(samples/2 +1)))
-    ω = Nω*δω
+    Nto = collect(range(0, length=samples))
+    to = @. (Nto-samples/2)*δto # center on 0
+    Nωo = collect(range(0, length=Int(samples/2 +1)))
+    ωo = Nωo*δωo
+
+    ωmax = 2π*maximum(f_lims)
+    cropidx = findfirst(x -> x>ωmax+4*apod_width, ωo)
+    cropidx = 2^(ceil(Int, log2(cropidx)))
+    ω = ωo[1:cropidx]
+    δt = π/maximum(ω)
+    tsamples = (cropidx-1)*2
+    Nt = collect(range(0, length=tsamples))
+    t = @. (Nt-tsamples/2)*δt
 
     # Make apodisation window
     ωmin = 2π*minimum(f_lims)
@@ -86,17 +102,12 @@ function make_grid(λ_lims, trange, δt, apod_width)
     width_right = apod_width
     window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
 
-    cropidx = findfirst(x -> x>ω_right+4*width_right, ω)
-    cropidx = 2^(ceil(Int, log2(cropidx)))
-    ωcrop = ω[1:cropidx]
-    δtcrop = π/maximum(ωcrop)
-    samplescrop = (cropidx-1)*2
-    Ntcrop = collect(range(0, length=samplescrop))
-    tcrop = @. (Ntcrop-samplescrop/2)*δtcrop
+    @assert δt/δto ≈ length(to)/length(t)
+    @assert δt/δto ≈ maximum(ωo)/maximum(ω)
 
-    Logging.@info @sprintf("Grid: samples %d, ωmax %.2e",
-                           length(t), maximum(ω))
-    return t, ω, window, cropidx, ωcrop, tcrop
+    Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
+                           length(t), length(to), maximum(ω), maximum(ωo))
+    return t, ω, to, ωo, window
 end
 
 function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
@@ -123,13 +134,13 @@ end
 import PyPlot: pygui, plt
 function run(config)
     pygui(true)
-    t, ω, window, cropidx, ωcrop, tcrop = make_grid(config.grid)
+    t, ω, to, ωo, window = make_grid(config.grid)
 
     Eω = make_init(t, config.input)
     Et = FFTW.irfft(Eω, length(t))
 
     linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
-    fnl! = make_fnl(ω, Eω, Et, config)
+    fnl! = make_fnl(ω, ωo, Eω, Et, config)
 
     z = 0
     dz = 1e-8
@@ -142,12 +153,11 @@ function run(config)
         end
     end
 
-    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN)
 
-    Eout = Eout[1:cropidx, :]
-    Etout = FFTW.irfft(Eout, length(tcrop), 1).*length(tcrop)./length(t)
+    Etout = FFTW.irfft(Eout, length(t), 1)
 
-    return ωcrop, tcrop, zout, Eout, Etout
+    return ω, t, zout, Eout, Etout
 end
 
 end # module
