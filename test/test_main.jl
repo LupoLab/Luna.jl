@@ -1,6 +1,7 @@
 import Luna
-import Luna: Configuration, Maths, Capillary
+import Luna: Configuration, Maths, Capillary, PhysData
 import Logging
+import NumericalIntegration
 Logging.disable_logging(Logging.BelowMinLevel)
 
 import DSP.Unwrap: unwrap
@@ -18,6 +19,12 @@ cfg = Configuration.Config(grid, geometry, medium, nonlinear, input)
 ω, t, zout, Eout, Etout = Luna.run(cfg)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
+
+Elast = Maths.hilbert(Etout[:, 1])
+Aeff = Capillary.Aeff(75e-6)
+energy = abs(NumericalIntegration.integrate(t, abs2.(Elast), NumericalIntegration.SimpsonEven()))
+energy *= PhysData.c*PhysData.ε_0*Aeff/2
+println(energy*1e6)
 
 pygui(true)
 plt.figure()

@@ -86,9 +86,17 @@ function make_grid(λ_lims, trange, δt, apod_width)
     width_right = apod_width
     window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
 
+    cropidx = findfirst(x -> x>ω_right+4*width_right, ω)
+    cropidx = 2^(ceil(Int, log2(cropidx)))
+    ωcrop = ω[1:cropidx]
+    δtcrop = π/maximum(ωcrop)
+    samplescrop = (cropidx-1)*2
+    Ntcrop = collect(range(0, length=samplescrop))
+    tcrop = @. (Ntcrop-samplescrop/2)*δtcrop
+
     Logging.@info @sprintf("Grid: samples %d, ωmax %.2e",
                            length(t), maximum(ω))
-    return t, ω, window
+    return t, ω, window, cropidx, ωcrop, tcrop
 end
 
 function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
@@ -115,7 +123,7 @@ end
 import PyPlot: pygui, plt
 function run(config)
     pygui(true)
-    t, ω, window = make_grid(config.grid)
+    t, ω, window, cropidx, ωcrop, tcrop = make_grid(config.grid)
 
     Eω = make_init(t, config.input)
     Et = FFTW.irfft(Eω, length(t))
@@ -136,9 +144,10 @@ function run(config)
 
     zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
 
-    Etout = FFTW.irfft(Eout, length(t), 1)
+    Eout = Eout[1:cropidx, :]
+    Etout = FFTW.irfft(Eout, length(tcrop), 1).*length(tcrop)./length(t)
 
-    return ω, t, zout, Eout, Etout
+    return ωcrop, tcrop, zout, Eout, Etout
 end
 
 end # module
