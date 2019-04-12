@@ -31,16 +31,21 @@ function make_density(medium::Configuration.StaticFill)
     return z -> PhysData.std_dens * medium.pressure
 end
 
-function make_fnl(ω, ωo, Eω, Et, conf)
+function make_fnl(ω, ωo, to, Eω, Et, ωwindow, twindow, conf)
     cropidx = length(ω)
     tsamples = Int((length(ωo)-1)*2)
     Eωo = zeros(ComplexF64, length(ωo))
+    Eto = zeros(Float64, length(to))
     FT = FFTW.plan_rfft(zeros(tsamples))
     IFT = FFTW.plan_irfft(Eωo, tsamples)
     
     χ3 = PhysData.χ3_gas(conf.medium.gas)
     kerr! = Nonlinear.make_kerr!(χ3)
-    responses = (kerr!,)
+
+    ionpot = PhysData.ionisation_potential(conf.medium.gas)
+    ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+    plasma! = Nonlinear.make_plasma!(to, ωo, Eto, ionrate, ionpot)
+    responses = (kerr!, plasma!)
 
     dens = make_density(conf.medium)
 
@@ -51,7 +56,7 @@ function make_fnl(ω, ωo, Eω, Et, conf)
     Et = similar(Pt)
     prefac = make_Pnl_prefac(ω, conf.geometry, conf.medium)
     fnl! = let Pt=Pt, Et=Et, FT=FT, IFT=IFT, responses=responses, Pω=Pω, prefac=prefac,
-                scalefac=scalefac, Eωo=Eωo, cropidx=cropidx
+                scalefac=scalefac, Eωo=Eωo, cropidx=cropidx, ωwindow=ωwindow, twindow=twindow
         function fnl!(out, Eω, z)
             fill!(Pt, 0)
             fill!(Eωo, 0)
@@ -60,8 +65,9 @@ function make_fnl(ω, ωo, Eω, Et, conf)
             for resp in responses
                 resp(Pt, Et)
             end
+            @. Pt *= twindow
             Pω .= (FT*Pt)
-            out .= dens(z).*prefac.*Pω[1:cropidx]./scalefac
+            out .= ωwindow.*dens(z).*prefac.*Pω[1:cropidx]./scalefac
         end
     end
     return fnl!
@@ -76,8 +82,9 @@ function make_grid(λ_lims, trange, δt, apod_width)
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
     δto = min(1/(6*maximum(f_lims)), δt) # 6x maximum freq, or user-defined if finer
     samples = 2^(ceil(Int, log2(trange/δto))) # samples for fine grid (power of 2)
-    Logging.@info @sprintf("Samples needed: %.2f, samples: %d", trange/δto, samples)
     δto = trange/samples # actual spacing - keep trange fixed
+    Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
+                            trange/δto, samples, δto*1e18)
     δωo = 2π/trange # frequency spacing for fine grid
     # Make fine grid
     Nto = collect(range(0, length=samples))
@@ -97,17 +104,22 @@ function make_grid(λ_lims, trange, δt, apod_width)
     # Make apodisation window
     ωmin = 2π*minimum(f_lims)
     ω_left = ωmin/2
-    width_left = ωmin/8
+    width_left = ωmin/16
     ω_right = 2π*maximum(f_lims)+2*apod_width
     width_right = apod_width
     window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
+    # window = Maths.hypergauss_window(ω, ω_left, ω_right, 1200)
+    # window = Maths.planck_taper(ω, ωmin, 2π*maximum(f_lims), 0.1, extend=true)
+
+    # twindow = Maths.errfun_window(to, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
+    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
 
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
-    return t, ω, to, ωo, window
+    return t, ω, to, ωo, window, twindow
 end
 
 function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
@@ -134,30 +146,41 @@ end
 import PyPlot: pygui, plt
 function run(config)
     pygui(true)
-    t, ω, to, ωo, window = make_grid(config.grid)
+    t, ω, to, ωo, window, twindow = make_grid(config.grid)
 
     Eω = make_init(t, config.input)
     Et = FFTW.irfft(Eω, length(t))
 
     linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
-    fnl! = make_fnl(ω, ωo, Eω, Et, config)
+    fnl! = make_fnl(ω, ωo, to, Eω, Et, window, twindow, config)
 
     z = 0
-    dz = 1e-8
+    dz = 1e-10
     zmax = config.geometry.length
     saveN = 201
 
-    window! = let window=window
-        function window!(E)
-            E .*= window
+    FT = FFTW.plan_rfft(Et)
+    IFT = FFTW.plan_irfft(Eω, length(t))
+
+    twindow = Maths.errfun_window(t, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
+
+    window! = let window=window, twindow=twindow, FT=FT, IFT=IFT
+        function window!(Eω)
+            Eω .*= window
+            Et = IFT*Eω .* twindow
+            Eω .= FT * Et
         end
     end
+
+    # pygui(true)
+    # plt.plot(ω.*1e-15, window)
+    # error()
 
     zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN)
 
     Etout = FFTW.irfft(Eout, length(t), 1)
 
-    return ω, t, zout, Eout, Etout
+    return ω, t, zout, Eout, Etout, window, twindow
 end
 
 end # module

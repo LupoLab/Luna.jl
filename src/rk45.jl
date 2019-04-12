@@ -83,7 +83,7 @@ function step!(s::Stepper)
         temp = 1.25*(s.err/s.tol)^(1/5)
         s.dtn = s.dt*min(5, 1/temp)
     else
-        s.dtn = s.dt * max(0.1, 0.8*(s.tol/s.err)^(1/5))
+        s.dtn = s.dt * max(0.1, 0.9*(s.tol/s.err)^(1/5))
     end
 
     if s.dtn > s.max_dt
@@ -216,7 +216,7 @@ function solve(f!, y0, t, dt, tmax, saveN;
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
 
-    return tout, yout, steps
+    return collect(tout), yout, steps
 end
 
 function donothing!(x)

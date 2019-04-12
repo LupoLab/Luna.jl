@@ -87,6 +87,36 @@ function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5*(erf((x-xmin)/width_left) + erfc((x-xmax)/width_right) - 1)
 end
 
+function planck_taper(x::AbstractArray, xmin, xmax, ε; extend=false)
+    # https://arxiv.org/pdf/1003.2939.pdf eq(7)
+    x0 = (xmax+xmin)/2
+    xc = x .- x0
+    X = (xmax-xmin)
+    if extend
+        X /= (1-2ε)
+    end
+    x1 = -X/2
+    x2 = -X/2*(1-2ε)
+    x3 = X/2*(1-2ε)
+    x4 = X/2
+    idcs12 = x1 .< xc .< x2
+    idcs23 = x2 .<= xc .<= x3
+    idcs34 = x3 .< xc .< x4
+    z12 = @. (x2-x1)/(xc[idcs12]-x1) + (x2-x1)/(xc[idcs12]-x2)
+    z34 = @. (x3-x4)/(xc[idcs34]-x3) + (x3-x4)/(xc[idcs34]-x4)
+    out = zero(x)
+    @. out[idcs12] = 1/(1+exp(z12))
+    @. out[idcs23] = 1
+    @. out[idcs34] = 1/(1+exp(z34))
+    return out
+end
+
+function hypergauss_window(x, xmin, xmax, power=10)
+    fw = xmax-xmin
+    x0 = (xmax+xmin)/2
+    return gauss(x, x0=x0, fwhm=fw, power=power)
+end
+
 function hilbert(x::Array{T, N}; dim=1) where T<:Real where N
     xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
     idxlo = CartesianIndices(size(xf)[1:dim-1])

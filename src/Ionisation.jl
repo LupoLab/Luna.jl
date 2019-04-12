@@ -13,7 +13,8 @@ function ionrate_fun!_ADK(ionpot::Float64)
 
     ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac
         function ionrate!(out, E)
-            @. out = ω_p*cn_sq*(4*ω_p/(ω_t_prefac*E))^(2*nstar-1)*exp(-4/3*ω_p/(ω_t_prefac*E))
+            @. out = ω_p*cn_sq*(4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)*exp(-4/3*ω_p/(ω_t_prefac*abs(E)))
+            out[E .< 1e6] .= 0
         end
     end
 
@@ -32,7 +33,7 @@ end
 
 function ionrate_ADK(IP_or_material, E::Number)
     out = [zero(E)]
-    ionrate_fun!_ADK(IP_or_material)(out, E)
+    ionrate_fun!_ADK(IP_or_material)(out, [E])
     return out[1]
 end
 
