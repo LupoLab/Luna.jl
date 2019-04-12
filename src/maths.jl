@@ -95,4 +95,76 @@ function hilbert(x::Array{T, N}; dim=1) where T<:Real where N
     return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
 end
 
+function oversample(t, x::Array{T, N}; factor::Integer=4, dim=1) where T<:Real where N
+    if factor == 1
+        return t, x
+    end
+    xf = FFTW.rfft(x, dim)
+
+    len = size(xf, dim)
+    newlen_t = factor*length(t)
+    if iseven(newlen_t)
+        newlen_ω = Int(newlen_t/2 + 1)
+    else
+        newlen_ω = Int((newlen_t+1)/2)
+    end
+    δt = t[2]-t[1]
+    δto = δt/factor
+    Nto = collect(0:newlen_t-1)
+    to = t[1] .+ Nto.*δto
+
+    shape = collect(size(xf))
+    shape[dim] = newlen_ω
+    xfo = zeros(eltype(xf), Tuple(shape))
+    idxlo = CartesianIndices(size(xfo)[1:dim-1])
+    idxhi = CartesianIndices(size(xfo)[dim+1:end])
+    xfo[idxlo, 1:len, idxhi] .= factor.*xf
+    return to, FFTW.irfft(xfo, newlen_t, dim)
+end
+
+function aitken_accelerate(f, x0; n0=0, rtol=1e-6, maxiter=1000)
+    n = n0
+    x0 = f(x0, n)
+    x1 = f(x0, n+1)
+    x2 = f(x1, n+2)
+    Ax = aitken(x0, x1, x2)
+    success = false
+    while ~success && n < maxiter
+        n += 1
+        Axprev = Ax
+        x0 = x1
+        x1 = x2
+        x2 = f(x2, n+2)
+        Ax = aitken(x0, x1, x2)
+
+        if 2*abs(Ax - Axprev)/abs(Ax + Axprev) < rtol
+            success = true
+        end
+    end
+    return Ax, success, n
+end
+
+function aitken(x0, x1, x2)
+    den = (x0 - x1) - (x1 - x2)
+    return x0 - (x1 - x0)^2/den
+end
+
+function converge_series(f, x0; n0=0, rtol=1e-6, maxiter=1000)
+    n = n0
+    x1 = x0
+    success = false
+    while ~success && n < maxiter
+        x1 = f(x0, n)
+
+        if 2*abs(x1 - x0)/abs(x1 + x0) < rtol
+            success = true
+        end
+
+        n += 1
+        x0 = x1
+    end
+    return x1, success, n
+end
+
+
 end

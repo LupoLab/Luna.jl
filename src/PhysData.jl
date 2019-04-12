@@ -22,6 +22,10 @@ const e_ratio = electron^2/m_e
 const ħ = ustrip(CODATA2014.ħ)
 "Atomic unit of energy"
 const au_energy = ħ*c*ustrip(CODATA2014.α)/ustrip(CODATA2014.a_0)
+"Atomic unit of time"
+const au_time = ħ/au_energy
+"Atomic unit of electric field"
+const au_Efield = au_energy/(electron*ustrip(CODATA2014.a_0))
 "Room temperature in Kelvin (ca 21 deg C)"
 const roomtemp = 294
 "Density of an ideal gas at atmospheric pressure and room temperature"
@@ -35,16 +39,16 @@ const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function χ_Börzsönyi(μm, B1, C1, B2, C2)
-    if any(μm .> 1e3)
-        throw(DomainError(μm, "Wavelength must be given in metres"))
-    end
+    # if any(μm .> 1e3)
+    #     throw(DomainError(μm, "Wavelength must be given in metres"))
+    # end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
-    if any(μm .> 1e3)
-        throw(DomainError(μm, "Wavelength must be given in metres"))
-    end
+    # if any(μm .> 1e3)
+    #     throw(DomainError(μm, "Wavelength must be given in metres"))
+    # end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1)
                            + B2 * μm^2 / (μm^2 - C2)
                            + B3 * μm^2 / (μm^2 - C3))
@@ -195,9 +199,9 @@ function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
-                if any(λ .> 1e-3)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
+                # if any(λ .> 1e-3)
+                #     throw(DomainError(λ, "Wavelength must be given in metres"))
+                # end
                 return sell(λ.*1e6)
             end
         end
@@ -293,4 +297,14 @@ function ionisation_potential(material; unit=:SI)
     end
 end
 
+function quantum_numbers(material)
+    # Returns n, l, ion Z
+    if material == :Ar
+        return 3, 1, 1
+    elseif material == :Kr
+        return 4, 1, 1
+    elseif material in (:He, :HeJ)
+        return 1, 1, 1
+    end
+end
 end

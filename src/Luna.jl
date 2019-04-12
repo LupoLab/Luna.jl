@@ -87,7 +87,7 @@ function make_grid(λ_lims, trange, δt, apod_width)
 
     ωmax = 2π*maximum(f_lims)
     cropidx = findfirst(x -> x>ωmax+4*apod_width, ωo)
-    cropidx = 2^(ceil(Int, log2(cropidx)))
+    cropidx = 2^(ceil(Int, log2(cropidx))) + 1
     ω = ωo[1:cropidx]
     δt = π/maximum(ω)
     tsamples = (cropidx-1)*2

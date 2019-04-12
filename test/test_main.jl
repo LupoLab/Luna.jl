@@ -20,6 +20,11 @@ cfg = Configuration.Config(grid, geometry, medium, nonlinear, input)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
+# idcs = @. (t < 62.5e-15) & (t >-62.7e-15)
+idcs = @. (t < 30e-15) & (t >-30e-15)
+to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=4)
+
+
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
@@ -35,8 +40,13 @@ plt.clim(-4, 0)
 plt.colorbar()
 
 plt.figure()
-plt.pcolormesh(t*1e15, zout, abs2.(transpose(Et)))
+plt.pcolormesh(to*1e15, zout, abs2.(transpose(Maths.hilbert(Eto))))
 plt.xlim(-20, 20)
 
 plt.figure()
 plt.plot(zout, energy.*1e6)
+
+plt.figure()
+plt.plot(t[idcs]*1e15, Etout[idcs, end])
+plt.plot(to*1e15, Eto[:, end])
+plt.xlim(-20, 20)

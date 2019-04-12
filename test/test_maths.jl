@@ -42,12 +42,16 @@ end
     @test all(isapprox.(xm, x0, atol=1e-5))
 end
 
-
-import PyPlot: pygui, plt
-pygui(true)
 @testset "Fourier" begin
     t = collect(range(-10, stop=10, length=513))
     Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
     EtA = Maths.hilbert(Et)
     @test maximum(abs.(EtA)) ≈ 1
+
+    t = collect(range(-10, stop=10, length=512))
+    Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
+    to, Eto = Maths.oversample(t, Et, factor=4)
+    println(size(Et))
+    println(size(Eto))
+    @test all(isapprox.(Eto[1:4:end], Et, rtol=1e-6))
 end
