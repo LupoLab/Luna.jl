@@ -47,18 +47,19 @@ end
 function make_plasma!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
     buf_ir = similar(E)
     buf_frac = similar(E)
+    buf_phase = similar(E)
     buf_P = similar(E)
     buf_out = similar(E)
-    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t,
+    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, buf_phase=buf_phase,
                   buf_ir=buf_ir, buf_P=buf_P, buf_frac=buf_frac, buf_out=buf_out
         function plasma!(out, E)
             ionrate(buf_ir, E)
             Maths.cumtrapz!(buf_frac, t, buf_ir)
             @. buf_frac = 1-exp(-buf_frac)
-            @. buf_frac = buf_frac * e_ratio * E
-            Maths.cumtrapz!(buf_P, t, buf_frac)
-            @. buf_P += ionpot * (1-buf_ir)/E
-            buf_P[abs.(E) .< 1e6] .= 0
+            @. buf_phase = buf_frac * e_ratio * E
+            Maths.cumtrapz!(buf_P, t, buf_phase)
+            @. buf_P += ionpot * buf_ir * (1-buf_frac)/E
+            buf_P[abs.(E) .< 1] .= 0
             Maths.cumtrapz!(buf_out, t, buf_P)
             @. out += buf_out
         end
@@ -66,32 +67,36 @@ function make_plasma!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real wher
     return plasma!
 end
 
-# function make_plasma!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
-#     buf_ir = similar(E)
-#     buf_frac = similar(E)
-#     buf_P = similar(E)
-#     buf_out = similar(E)
-#     FT = FFTW.plan_rfft(E)
-#     Eω = FT*E
-#     IFT = FFTW.plan_irfft(Eω, length(t))
-#     plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, ω=copy(ω), FT=FT, IFT=IFT,
-#                   buf_ir=buf_ir, buf_P=buf_P, buf_frac=buf_frac, buf_out=buf_out
-#         ω[1] = Inf
-#         function plasma!(out, E)
-#             ionrate(buf_ir, E)
-#             Maths.cumtrapz!(buf_frac, t, buf_ir)
-#             @. buf_frac = 1-exp(-buf_frac)
-#             @. buf_frac = buf_frac*e_ratio*E
-#             # Maths.cumtrapz!(buf_P, t, buf_frac)
-#             buf_P .= IFT*((FT*buf_frac)./(im.*ω))
-#             @. buf_P += ionpot * (1-buf_ir)/E
-#             buf_P[abs.(E) .< 1e6] .= 0
-#             # Maths.cumtrapz!(buf_out, t, buf_P)
-#             buf_out .= IFT*((FT*buf_P)./(im.*ω))
-#             @. out += buf_out
-#         end
-#     end
-#     return plasma!
-# end
+function make_plasma_FT!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
+    buf_ir = similar(E)
+    buf_frac = similar(E)
+    buf_phase = similar(E)
+    buf_P = similar(E)
+    buf_out = similar(E)
+    buf_FT = zeros(ComplexF64, 2*length(t)+1)
+    FT = FFTW.plan_rfft(E)
+    Eω = FT*E
+    IFT = FFTW.plan_irfft(Eω, length(t))
+    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, ω=copy(ω), FT=FT, IFT=IFT,
+                  buf_ir=buf_ir, buf_P=buf_P, buf_frac=buf_frac, buf_out=buf_out, buf_phase=buf_phase
+        ω[1] = Inf
+        function plasma!(out, E)
+            ionrate(buf_ir, E)
+            Maths.cumtrapz!(buf_frac, t, buf_ir)
+            @. buf_frac = 1-exp(-buf_frac)
+            @. buf_phase = buf_frac*e_ratio*E
+            buf_FT = FT*buf_phase
+            buf_FT ./= im.*ω
+            buf_P .= IFT*buf_FT
+            @. buf_P += ionpot * (1-buf_ir)/E
+            buf_P[abs.(E) .< 1] .= 0
+            buf_FT = FT*buf_P
+            buf_FT ./= im.*ω
+            buf_out .= IFT*buf_FT
+            @. out += buf_out
+        end
+    end
+    return plasma!
+end
 
 end
