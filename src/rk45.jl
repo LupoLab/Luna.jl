@@ -64,7 +64,7 @@ function step!(s::Stepper)
     for ii = 1:7
         @. s.yerr += s.dt*s.ks[ii]*errest[ii]
     end
-    s.err = maxnorm_ratio(s.yerr, s.y, s.yn, s.rtol, s.atol)
+    s.err = maxnorm(s.yerr, s.y, s.yn, s.rtol, s.atol)
     s.ok = s.err <= 1
     if s.ok
         s.dtn = s.dt * min(5, 0.9*(s.err)^(-1/5))
@@ -308,9 +308,6 @@ end
 
 function maxnorm_ratio(yerr, y, yn, rtol, atol)
     m = 0
-    pry = 0
-    pryn = 0
-    prerr = 0
     for ii in eachindex(yerr)
         den = atol + rtol*max(abs(y[ii]), abs(yn[ii]))
         m = max(abs(yerr[ii])/den, m)

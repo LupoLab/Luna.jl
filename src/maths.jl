@@ -47,20 +47,18 @@ function rms_width(x::Array{T, 1}, y; dim=1) where T
 end
 
 function cumtrapz!(ret, x, y)
-    fill!(ret, 0)
+    ret[1] = 0
     for i in 2 : length(y)
-        ret[i] = ret[i-1] + (y[i-1] + y[i])*(x[i] - x[i-1])
+        ret[i] = ret[i-1] + 0.5*(y[i-1] + y[i])*(x[i] - x[i-1])
     end
-    ret *= 1//2
 end
 
 function cumtrapz(x, y)
-    ret = similar(y)
-    fill!(ret, 0)
+    ret = zero(y)
     for i in 2 : length(y)
-        ret[i] = ret[i-1] + (y[i-1] + y[i])*(x[i] - x[i-1])
+        ret[i] = ret[i-1] + 0.5*(y[i-1] + y[i])*(x[i] - x[i-1])
     end
-    ret *= 1//2
+    return ret
 end
 
 function normbymax(x, dims)
@@ -95,7 +93,7 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε; extend=false)
     if extend
         X /= (1-2ε)
     end
-    x1 = -X/2
+    x1  = -X/2
     x2 = -X/2*(1-2ε)
     x3 = X/2*(1-2ε)
     x4 = X/2

@@ -71,7 +71,7 @@ function make_fnl(ω, ωo, to, Eω, Et, ωwindow, twindow, conf)
     ionpot = PhysData.ionisation_potential(conf.medium.gas)
     ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
     plasma! = Nonlinear.make_plasma!(to, ωo, Eto, ionrate, ionpot)
-    responses = (kerr!, plasma!)
+    responses = (kerr!, )
 
     dens = make_density(conf.medium)
 
@@ -139,7 +139,7 @@ function make_grid(λ_lims, trange, δt, apod_width)
     # window = Maths.planck_taper(ω, 0, 1e15+2π*maximum(f_lims), 0.05) # !!!HARDCODED
 
     # twindow = Maths.errfun_window(to, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
-    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.02)
+    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
@@ -181,8 +181,16 @@ function run(config)
     linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
     fnl!, prefac = make_fnl(ω, ωo, to, Eω, Et, window, twindow, config)
 
+    f! = let linop=linop, fnl! = fnl!
+        function f!(out, Eω, z)
+            # fnl!(out, Eω, z)
+            # out .+= linop.*Eω
+            out .= linop.*Eω
+        end
+    end
+
     z = 0
-    dz = 1e-8
+    dz = 1e-3
     zmax = config.geometry.length
     saveN = 201
 
@@ -192,15 +200,18 @@ function run(config)
     twindow = Maths.planck_taper(t, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
     # twindow = Maths.errfun_window(t, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
 
-    window! = let window=window, twindow=twindow, FT=FT, IFT=IFT
+    window! = let window=window, twindow=twindow, FT=FT, IFT=IFT, Et=Et
         function window!(Eω)
             Eω .*= window
-            Et = IFT*Eω .* twindow
+            Et .= IFT*Eω
+            Et .*= twindow
             Eω .= FT * Et
         end
     end
 
-    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+    zout, Eout, steps = RK45.solve_precon(
+        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+    # zout, Eout, steps = RK45.solve(f!, Eω, z, dz, zmax, saveN, stepfun=window!)
 
     Etout = FFTW.irfft(Eout, length(t), 1)
 

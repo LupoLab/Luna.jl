@@ -31,37 +31,61 @@ function kerr(E::Array{T, N}, χ3) where T<:Complex where N
     return kerr(E, χ3, Val(false))
 end
 
-function plasma_phase(t, E::Array{T, N}, ionfrac) where T<:Real where N
-    return e_ratio*Maths.cumtrapz(t, Maths.cumtrapz(t, ionfrac.*E))
-end
-
-function plasma_loss(t, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
-    return Maths.cumtrapz(t, ionpot.*(1 .- ionrate)./E)
-end
-
-function plasma(t, E::Array{T, N}, ionrate, ionfrac, ionpot) where T<:Real where N
-    out = Maths.cumtrapz(t, ionpot.*(1 .- ionrate)./E .+ Maths.cumtrapz(t, ionfrac.*E))
-    return out[(abs.(E) .> 1e2)] .= 0
-end
-
 function make_plasma!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
-    buf_ir = similar(E)
-    buf_frac = similar(E)
-    buf_phase = similar(E)
-    buf_P = similar(E)
-    buf_out = similar(E)
-    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, buf_phase=buf_phase,
-                  buf_ir=buf_ir, buf_P=buf_P, buf_frac=buf_frac, buf_out=buf_out
+    rate = similar(E)
+    fraction = similar(E)
+    phase = similar(E)
+    J = similar(E)
+    P = similar(E)
+    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, phase=phase,
+                  rate=rate, J=J, fraction=fraction, P=P
         function plasma!(out, E)
-            ionrate(buf_ir, E)
-            Maths.cumtrapz!(buf_frac, t, buf_ir)
-            @. buf_frac = 1-exp(-buf_frac)
-            @. buf_phase = buf_frac * e_ratio * E
-            Maths.cumtrapz!(buf_P, t, buf_phase)
-            @. buf_P += ionpot * buf_ir * (1-buf_frac)/E
-            buf_P[abs.(E) .< 1] .= 0
-            Maths.cumtrapz!(buf_out, t, buf_P)
-            @. out += buf_out
+            ionrate(rate, E)
+            Maths.cumtrapz!(fraction, t, rate)
+            @. fraction = 1-exp(-fraction)
+            @. phase = fraction * e_ratio * E
+            Maths.cumtrapz!(J, t, phase)
+            for ii in eachindex(E)
+                if abs(E[ii]) > 0
+                    J[ii] += ionpot * rate[ii] * (1-fraction[ii])/E[ii]
+                end
+            end
+            Maths.cumtrapz!(P, t, J)
+            @. out += P
+        end
+    end
+    return plasma!
+end
+
+function make_plasma_JT!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N
+    rate = similar(E)
+    cumrate = similar(E)
+    phase = similar(E)
+    frac = similar(E)
+    J = similar(E)
+    P = similar(E)
+    bufout = similar(E)
+    plasma! = let ionrate=ionrate, ionpot=ionpot, t=t, phase=phase,
+                  rate=rate, J=J, cumrate=cumrate, P=P, frac=frac, bufout=bufout
+        function plasma!(out, E)
+            ionrate(rate, E)
+            Maths.cumtrapz!(cumrate, t, rate)
+            for ii in eachindex(E)
+                frac[ii] = 1 - exp(-cumrate[ii])
+                aE = abs(E[ii])
+                if aE > 0
+                    P[ii] = rate[ii]*(1 - frac[ii])*ionpot/E[ii]
+                else
+                    P[ii] = 0
+                end
+                J[ii] = frac[ii]*E[ii]*e_ratio
+            end
+            Maths.cumtrapz!(phase, t, J)
+            for ii in eachindex(P)
+                P[ii] += phase[ii]
+            end
+            Maths.cumtrapz!(bufout, t, P)
+            @. out += bufout
         end
     end
     return plasma!
@@ -88,8 +112,8 @@ function make_plasma_FT!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real w
             buf_FT = FT*buf_phase
             buf_FT ./= im.*ω
             buf_P .= IFT*buf_FT
-            @. buf_P += ionpot * (1-buf_ir)/E
-            buf_P[abs.(E) .< 1] .= 0
+            @. buf_P += ionpot * buf_ir * (1-buf_frac)/E
+            buf_P[abs.(E) .< 1e-10] .= 0
             buf_FT = FT*buf_P
             buf_FT ./= im.*ω
             buf_out .= IFT*buf_FT

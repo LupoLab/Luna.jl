@@ -5,16 +5,28 @@ import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths
 
-function ionrate_fun!_ADK(ionpot::Float64)
+function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
     nstar = sqrt(0.5/(ionpot/au_energy))
     cn_sq = 2^(2*nstar)/(nstar*gamma(nstar+1)*gamma(nstar))
     ω_p = ionpot/ħ
     ω_t_prefac = electron/sqrt(2*m_e*ionpot)
 
-    ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac
+    if threshold
+        thr = ADK_threshold(ionpot)
+    else
+        thr = 0
+    end
+
+    ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac, thr=thr
+        function ir(E)
+            if abs(E) >= thr
+                ω_p*cn_sq*(4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)*exp(-4/3*ω_p/(ω_t_prefac*abs(E)))
+            else
+                0
+            end
+        end
         function ionrate!(out, E)
-            @. out = ω_p*cn_sq*(4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)*exp(-4/3*ω_p/(ω_t_prefac*abs(E)))
-            out[E .< 1e6] .= 0
+            out .= ir.(E)
         end
     end
 
@@ -35,6 +47,17 @@ function ionrate_ADK(IP_or_material, E::Number)
     out = [zero(E)]
     ionrate_fun!_ADK(IP_or_material)(out, [E])
     return out[1]
+end
+
+function ADK_threshold(ionpot)
+    out = [0.0]
+    ADKfun = ionrate_fun!_ADK(ionpot, false)
+    E = 1e3
+    while out[1] == 0
+        E *= 1.01
+        ADKfun(out, [E])
+    end
+    return E
 end
 
 

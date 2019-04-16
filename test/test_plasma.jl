@@ -10,14 +10,19 @@ include("test_main.jl")
 plwindow = Maths.planck_taper(ω, 0, ωmax, 0.05)
 # twindow = Maths.planck_taper(t, -400e-15, 400e-15, 0.1)
 
-Et = Etout[:, end]
+Et = Etout[:, 121]
+
+χ3 = PhysData.χ3_gas(medium.gas)
+kerr! = Nonlinear.make_kerr!(χ3)
+Pkerr = zero(Et)
+kerr!(Pkerr, Et)
 
 ionpot = PhysData.ionisation_potential(:He)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 plasma! = Nonlinear.make_plasma!(t, ω, Et, ionrate, ionpot)
 plasmaFT! = Nonlinear.make_plasma_FT!(t, ω, Et, ionrate, ionpot)
 outir = similar(Et);
-ionrate(outir, Et)
+ionrate(outir, Et);
 outP = zero(Et);
 plasma!(outP, Et);
 outP2 = zero(Et);
@@ -52,8 +57,8 @@ plt.plot(t.*1e15, Et)
 
 plt.figure()
 # plt.plot(t.*1e15, outP)
-plt.plot(t.*1e15, P2)
-plt.plot(t.*1e15, outP2)
+plt.semilogy(t.*1e15, abs2.(Pkerr))
+plt.semilogy(t.*1e15, abs2.(Pkerr.+outP))
 plt.title("polarisation")
 
 plt.figure()
@@ -66,7 +71,7 @@ plt.title("ionisation fraction")
 
 plt.figure()
 plt.semilogy(ω,abs2.(Pf))
-plt.semilogy(ω,abs2.(2*P2f))
+plt.semilogy(ω,abs2.(P2f))
 
 plt.figure()
 plt.plot(ω, window)

@@ -55,3 +55,12 @@ end
     println(size(Eto))
     @test all(isapprox.(Eto[1:4:end], Et, rtol=1e-6))
 end
+
+@testset "integration" begin
+    x = collect(range(0, stop=8π, length=2^14)).*1e-15
+    y = cos.(x.*1e15)
+    yi = sin.(x.*1e15)./1e15
+    yic = similar(yi)
+    Maths.cumtrapz!(yic, x, y)
+    @test isapprox(yi, yic, rtol=1e-6)
+end
