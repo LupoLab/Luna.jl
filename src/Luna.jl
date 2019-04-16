@@ -12,19 +12,45 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 
 function make_linop(ω, refλ, cap::Configuration.Capillary, medium::Configuration.StaticFill)
-    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=medium.gas, pressure=medium.pressure)]
-    α = [1000; Capillary.α(cap.radius, ω[2:end])]
-    α[α .> 10] .= 10
-    β1 = -Capillary.dispersion(1, cap.radius, λ=refλ,
-                              gas=medium.gas, pressure=medium.pressure)
-    linop = @. im*(β - β1*ω) - α/2
-
-    return linop
+    βfun(ω) = Capillary.β(cap.radius, ω, gas=medium.gas, pressure=medium.pressure)
+    αfun(ω) = Capillary.α(cap.radius, ω)
+    return make_linop(ω, βfun, αfun, refλ)
 end
 
-function make_Pnl_prefac(ω, cap::Configuration.Capillary, medium::Configuration.StaticFill)
-    β = .-[1; Capillary.β(cap.radius, ω[2:end], gas=medium.gas, pressure=medium.pressure)]
-    return @. im/(2*PhysData.ε_0*PhysData.c^2)*ω^2/β
+function make_linop(ω, refλ, pcf::Configuration.HCPCF, medium::Configuration.StaticFill)
+    α = log(10)/10 * pcf.dB_per_m
+    βfun(ω) = Capillary.β(pcf.radius, ω, gas=medium.gas, pressure=medium.pressure)
+    αfun(ω) = α
+    return make_linop(ω, βfun, αfun, refλ)
+end
+
+function make_linop(ω, βfun, αfun, refλ)
+    ω0 = 2π*PhysData.c/refλ
+    idx0 = (ω .== 0)
+    β = zero(ω)
+    α = zero(ω)
+    β[.~idx0] .= .-βfun(ω[.~idx0])
+    β[idx0] .= 0
+    β1 = -Maths.derivative(βfun, ω0, 1)
+    α[.~idx0] .= αfun(ω[.~idx0])
+    α[idx0] .= maximum(α[.~idx0])
+
+    return @. im*(β-β1*ω) - α/2
+end
+
+function make_Pnl_prefac(ω, cap, medium::Configuration.StaticFill)
+    βfun(ω) = Capillary.β(cap.radius, ω, gas=medium.gas, pressure=medium.pressure)
+    return make_Pnl_prefac(ω, βfun)
+end
+
+function make_Pnl_prefac(ω, βfun)
+    β = zero(ω)
+    idx0 = (ω .== 0)
+    β[.~idx0] .= .-βfun(ω[.~idx0])
+    β[idx0] .= 1
+    out = @. im/(2*PhysData.ε_0*PhysData.c^2)*ω^2/β
+    out[idx0] .= 0
+    return out
 end
 
 function make_density(medium::Configuration.StaticFill)
@@ -62,6 +88,7 @@ function make_fnl(ω, ωo, to, Eω, Et, ωwindow, twindow, conf)
             fill!(Eωo, 0)
             Eωo[1:cropidx] = scalefac*Eω
             Et .= IFT*Eωo
+            @. Et *= twindow
             for resp in responses
                 resp(Pt, Et)
             end
@@ -70,7 +97,7 @@ function make_fnl(ω, ωo, to, Eω, Et, ωwindow, twindow, conf)
             out .= ωwindow.*dens(z).*prefac.*Pω[1:cropidx]./scalefac
         end
     end
-    return fnl!
+    return fnl!, prefac
 end
 
 function make_grid(grid::Configuration.Grid)
@@ -82,10 +109,10 @@ function make_grid(λ_lims, trange, δt, apod_width)
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
     δto = min(1/(6*maximum(f_lims)), δt) # 6x maximum freq, or user-defined if finer
     samples = 2^(ceil(Int, log2(trange/δto))) # samples for fine grid (power of 2)
-    δto = trange/samples # actual spacing - keep trange fixed
+    trange_even = δto*samples # keep frequency window fixed, expand time window as necessary
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
                             trange/δto, samples, δto*1e18)
-    δωo = 2π/trange # frequency spacing for fine grid
+    δωo = 2π/trange_even # frequency spacing for fine grid
     # Make fine grid
     Nto = collect(range(0, length=samples))
     to = @. (Nto-samples/2)*δto # center on 0
@@ -109,10 +136,10 @@ function make_grid(λ_lims, trange, δt, apod_width)
     width_right = apod_width
     window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
     # window = Maths.hypergauss_window(ω, ω_left, ω_right, 1200)
-    # window = Maths.planck_taper(ω, ωmin, 2π*maximum(f_lims), 0.1, extend=true)
+    # window = Maths.planck_taper(ω, 0, 1e15+2π*maximum(f_lims), 0.05) # !!!HARDCODED
 
     # twindow = Maths.errfun_window(to, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
-    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
+    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.02)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
@@ -132,7 +159,7 @@ end
 
 function make_init(t, input::Configuration.GaussInput)
     It = Maths.gauss(t, fwhm=input.duration)
-    Aeff = Capillary.Aeff(75e-6) #!!!! HARDCODED
+    Aeff = Capillary.Aeff(13e-6) #!!!! HARDCODED
     energy = abs(NumericalIntegration.integrate(t, It, NumericalIntegration.SimpsonEven()))
     energy *= PhysData.c*PhysData.ε_0*Aeff/2
     It .*= input.energy/energy
@@ -152,17 +179,18 @@ function run(config)
     Et = FFTW.irfft(Eω, length(t))
 
     linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
-    fnl! = make_fnl(ω, ωo, to, Eω, Et, window, twindow, config)
+    fnl!, prefac = make_fnl(ω, ωo, to, Eω, Et, window, twindow, config)
 
     z = 0
-    dz = 1e-10
+    dz = 1e-8
     zmax = config.geometry.length
     saveN = 201
 
     FT = FFTW.plan_rfft(Et)
     IFT = FFTW.plan_irfft(Eω, length(t))
 
-    twindow = Maths.errfun_window(t, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
+    twindow = Maths.planck_taper(t, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
+    # twindow = Maths.errfun_window(t, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
 
     window! = let window=window, twindow=twindow, FT=FT, IFT=IFT
         function window!(Eω)
@@ -172,15 +200,11 @@ function run(config)
         end
     end
 
-    # pygui(true)
-    # plt.plot(ω.*1e-15, window)
-    # error()
-
-    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN)
+    zout, Eout, steps = RK45.solve_precon(fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
 
     Etout = FFTW.irfft(Eout, length(t), 1)
 
-    return ω, t, zout, Eout, Etout, window, twindow
+    return ω, t, zout, Eout, Etout, window, twindow, prefac
 end
 
 end # module
