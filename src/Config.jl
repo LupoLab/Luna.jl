@@ -50,7 +50,11 @@ end
 struct HCPCF <: Geometry
     radius::Float64
     length::Float64
-    loss::Float64
+    dB_per_m::Float64
+end
+
+function HCPCF(; radius, length, dB_per_m=0)
+    return HCPCF(radius, length, dB_per_m)
 end
 
 "Medium configuration"
@@ -116,7 +120,7 @@ struct EnvGrid <: Grid
 end
 
 function EnvGrid(; λ_lims=(150e-9, 4000e-9), trange=1e-12, δt=1e-12, referenceλ=800e-9,
-                  apod_width=2e14)
+                  apod_width=2e15)
     return EnvGrid(λ_lims, trange, δt, referenceλ, apod_width)
 end
 
