@@ -1,6 +1,6 @@
 import FFTW
 import Luna: RK45
-import PyPlot
+import PyPlot: pygui, plt
 import Test: @test
 
 function testinit()
@@ -66,24 +66,24 @@ function test_precon(plot=false)
     z = 0
     dz = 1e-3
 
-    saveN = 201
+    saveN = 501
 
-    zarr, Aarr = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, saveN, status_period=2)
+    zarr, Aarr = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, saveN, rtol=1e-6, status_period=2)
 
     if plot
         Atarr = FFTW.ifft(FFTW.ifftshift(Aarr, 1), 1)
         energy = dropdims(sum(abs2.(Atarr), dims=1), dims=1)
-        PyPlot.pygui(true)
-        PyPlot.figure()
-        PyPlot.pcolormesh(t, zarr, abs2.(transpose(Atarr)))
-        PyPlot.colorbar()
-        PyPlot.figure()
-        PyPlot.pcolormesh(ω, zarr, abs2.(transpose(Aarr)))
-        PyPlot.figure()
-        PyPlot.plot(zarr, 1 .- energy/energy[1])
-        PyPlot.figure()
-        PyPlot.plot(t, abs2.(Atarr[:, 1]))
-        PyPlot.plot(t, abs2.(Atarr[:, end]))
+        pygui(true)
+        plt.figure()
+        plt.pcolormesh(t, zarr, abs2.(transpose(Atarr)))
+        plt.colorbar()
+        plt.figure()
+        plt.pcolormesh(ω, zarr, abs2.(transpose(Aarr)))
+        plt.figure()
+        plt.plot(zarr, 1 .- energy/energy[1])
+        plt.figure()
+        plt.plot(t, abs2.(Atarr[:, 1]))
+        plt.plot(t, abs2.(Atarr[:, end]))
     end
 
     return zarr, Aarr
@@ -101,17 +101,17 @@ function test_noprecon(plot=false)
     if plot
         Atarr = FFTW.ifft(FFTW.ifftshift(Aarr, 1), 1)
         energy = dropdims(sum(abs2.(Atarr), dims=1), dims=1)
-        PyPlot.pygui(true)
-        PyPlot.figure()
-        PyPlot.pcolormesh(t, zarr, abs2.(transpose(Atarr)))
-        PyPlot.colorbar()
-        PyPlot.figure()
-        PyPlot.pcolormesh(ω, zarr, abs2.(transpose(Aarr)))
-        PyPlot.figure()
-        PyPlot.plot(zarr, 1 .- energy/energy[1])
-        PyPlot.figure()
-        PyPlot.plot(t, abs2.(Atarr[:, 1]))
-        PyPlot.plot(t, abs2.(Atarr[:, end]))
+        pygui(true)
+        plt.figure()
+        plt.pcolormesh(t, zarr, abs2.(transpose(Atarr)))
+        plt.colorbar()
+        plt.figure()
+        plt.pcolormesh(ω, zarr, abs2.(transpose(Aarr)))
+        plt.figure()
+        plt.plot(zarr, 1 .- energy/energy[1])
+        plt.figure()
+        plt.plot(t, abs2.(Atarr[:, 1]))
+        plt.plot(t, abs2.(Atarr[:, end]))
     end
 
     return zarr, Aarr
@@ -121,16 +121,16 @@ t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc = testinit()
 z = 0
 dz = 1e-3
 
-zarr, Aarr = RK45.solve(f!, Aω, z, dz, zmax, 501, tol=1e-8)
-zarrp, Aarrp = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, 501, tol=1e-8)
-zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, Aω, z, dz, zmax, 501, tol=1e-8)
+zarr, Aarr = RK45.solve(f!, Aω, z, dz, zmax, 501, rtol=1e-8)
+zarrp, Aarrp = RK45.solve_precon(fnl!, Lin, Aω, z, dz, zmax, 501, rtol=1e-8)
+zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, Aω, z, dz, zmax, 501, rtol=1e-8)
 # Is the initial spectrum restored after 2 soliton periods? (without preconditioner)
 @test isapprox(abs2.(Aarr[:, 1]), abs2.(Aarr[:, end]), rtol=1e-4)
 # Is the initial spectrum restored after 2 soliton periods? (with preconditioner)
-@test isapprox(abs2.(Aarrp[:, 1]), abs2.(Aarrp[:, end]), rtol=1e-4)
+@test isapprox(abs2.(Aarrp[:, 1]), abs2.(Aarrp[:, end]), rtol=1e-3)
 # Is the initial spectrum restored after 2 soliton periods?
 # (with preconditioner and z-dependent linear part)
-@test isapprox(abs2.(Aarrpf[:, 1]), abs2.(Aarrpf[:, end]), rtol=1e-4)
+@test isapprox(abs2.(Aarrpf[:, 1]), abs2.(Aarrpf[:, end]), rtol=1e-3)
 # Is there a difference if the linear part is a function (but constant)?
-@test isapprox(abs2.(Aarrp[:, end]), abs2.(Aarrpf[:, end]), rtol=1e-4)
+@test isapprox(abs2.(Aarrp[:, end]), abs2.(Aarrpf[:, end]), rtol=1e-3)
 
