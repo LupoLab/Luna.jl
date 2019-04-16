@@ -3,6 +3,7 @@ import HCubature
 import Dates
 import Logging
 import Printf: @sprintf
+import PyPlot: pygui, plt
 
 #Get Butcher tableau etc from separate file (for convenience of changing if wanted)
 include("dopri.jl")
@@ -14,13 +15,13 @@ mutable struct Stepper{T<:AbstractArray}
     yn::T  # Solution at t+dt
     yi::T  # Interpolant array (see interpolate())
     yerr::T  # solution error estimate (from embedded RK)
-    errfunc::Function  # function to calculate err from yerr, y, and yn
     ks::NTuple{7, T}  # k values (intermediate solutions for Runge-Kutta method)
     t::Float64  # current time (propagation variable)
     tn::Float64  # next time
     dt::Float64  # time step
     dtn::Float64  # time step for next step
-    tol::Float64  # relative tolerance on error
+    rtol::Float64  # relative tolerance on error
+    atol::Float64
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
@@ -28,27 +29,14 @@ mutable struct Stepper{T<:AbstractArray}
     err::Float64  # error metric to be compared to tol
 end
 
-function Stepper(f!::Function, y0, t, dt; tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true)
+function Stepper(f!::Function, y0, t, dt; rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true)
     k1 = similar(y0)
     f!(k1, y0, t)
     ks = (k1, similar(k1), similar(k1), similar(k1), similar(k1), similar(k1), similar(k1))
     yerr = similar(y0)
-    errbuf = Array{Float64, ndims(y0)}(undef, size(y0))
-
-    # Create errfunc with buffers for speed
-    # This is necessary for complex-valued y since Julia can't take the maximum of a
-    # complex-valued array without allocating a real-valued array
-    errfunc = let abserr=similar(errbuf), absy=similar(errbuf), absyn=similar(errbuf)
-        function maxnorm(yerr, y, yn)
-            abserr .= abs.(yerr)
-            absy .= abs.(y)
-            absyn .= abs.(yn)
-            absyn .= max.(absy, absyn)
-            return maximum(abserr)/maximum(absyn)
-        end
-    end
-    return Stepper(f!, copy(y0), copy(y0), similar(y0), yerr, errfunc, ks,
-        float(t), float(t), float(dt), float(dt), tol, float(max_dt), float(min_dt), locextrap, false, 0.0)
+    return Stepper(f!, copy(y0), copy(y0), similar(y0), yerr, ks,
+        float(t), float(t), float(dt), float(dt),
+        rtol, atol, float(max_dt), float(min_dt), locextrap, false, 0.0)
 end
 
 function step!(s::Stepper)
@@ -76,13 +64,12 @@ function step!(s::Stepper)
     for ii = 1:7
         @. s.yerr += s.dt*s.ks[ii]*errest[ii]
     end
-    s.err = s.errfunc(s.yerr, s.y, s.yn)
-    s.ok = s.err <= s.tol
+    s.err = maxnorm_ratio(s.yerr, s.y, s.yn, s.rtol, s.atol)
+    s.ok = s.err <= 1
     if s.ok
-        temp = 1.25*(s.err/s.tol)^(1/5)
-        s.dtn = s.dt*min(5, 1/temp)
+        s.dtn = s.dt * min(5, 0.9*(s.err)^(-1/5))
     else
-        s.dtn = s.dt * max(0.1, 0.9*(s.tol/s.err)^(1/5))
+        s.dtn = s.dt * max(0.1, 0.9*(s.err)^(-1/5))
     end
 
     if s.dtn > s.max_dt
@@ -122,13 +109,13 @@ mutable struct PreconStepper{T<:AbstractArray}
     yn::T  # Solution at t+dt
     yi::T  # Interpolant array (see interpolate())
     yerr::T  # solution error estimate (from embedded RK)
-    errfunc::Function  # function to calculate err from yerr, y, and yn
     ks::NTuple{7, T}  # k values (intermediate solutions for Runge-Kutta method)
     t::Float64  # current time (propagation variable)
     tn::Float64  # next time
     dt::Float64  # time step
     dtn::Float64  # time step for next step
-    tol::Float64  # relative tolerance on error
+    rtol::Float64  # relative tolerance on error
+    atol::Float64
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
@@ -137,29 +124,17 @@ mutable struct PreconStepper{T<:AbstractArray}
 end
 
 function PreconStepper(f!::Function, linop, y0, t, dt;
-                       tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true)
+                       rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true)
     prop! = make_prop!(linop, y0)
     fbar! = make_fbar!(f!, prop!, y0)
     k1 = similar(y0)
     fbar!(k1, y0, t, t)
     ks = (k1, similar(k1), similar(k1), similar(k1), similar(k1), similar(k1), similar(k1))
     yerr = similar(y0)
-    errbuf = Array{Float64, ndims(y0)}(undef, size(y0))
 
-    # Create errfunc with buffers for speed
-    # This is necessary for complex-valued y since Julia can't take the maximum of a
-    # complex-valued array without allocating a real-valued array
-    errfunc = let abserr=similar(errbuf), absy=similar(errbuf), absyn=similar(errbuf)
-        function maxnorm(yerr, y, yn)
-            abserr .= abs.(yerr)
-            absy .= abs.(y)
-            absyn .= abs.(yn)
-            absyn .= max.(absy, absyn)
-            return maximum(abserr)/maximum(absyn)
-        end
-    end
-    return PreconStepper(fbar!, prop!, copy(y0), copy(y0), similar(y0), yerr, errfunc, ks,
-        float(t), float(t), float(dt), float(dt), tol, float(max_dt), float(min_dt), locextrap, false, 0.0)
+    return PreconStepper(fbar!, prop!, copy(y0), copy(y0), similar(y0), yerr, ks,
+        float(t), float(t), float(dt), float(dt), rtol, atol,
+        float(max_dt), float(min_dt), locextrap, false, 0.0)
 end
 
 function make_prop!(linop::AbstractArray, y0)
@@ -220,13 +195,12 @@ function step!(s::PreconStepper)
     for ii = 1:7
         @. s.yerr += s.dt*s.ks[ii]*errest[ii]
     end
-    s.err = s.errfunc(s.yerr, s.y, s.yn)
-    s.ok = s.err <= s.tol
+    s.err = maxnorm(s.yerr, s.y, s.yn, s.rtol, s.atol)
+    s.ok = s.err <= 1
     if s.ok
-        temp = 1.25*(s.err/s.tol)^(1/5)
-        s.dtn = s.dt*min(5, 1/temp)
+        s.dtn = s.dt * min(5, 0.9*(s.err)^(-0.2))
     else
-        s.dtn = s.dt * max(0.1, 0.9*(s.tol/s.err)^(1/5))
+        s.dtn = s.dt * max(0.1, 0.9*(s.err)^(-0.2))
     end
 
     if s.dtn > s.max_dt
@@ -239,6 +213,7 @@ function step!(s::PreconStepper)
         s.tn = s.t + s.dt
         s.ks[1] .= s.ks[end]
     else
+        s.tn = s.t
         s.yn .= s.y
     end
     return s.ok
@@ -261,18 +236,18 @@ function interpolate(s::PreconStepper, ti::Float64)
 end
 
 function solve_precon(f!, linop, y0, t, dt, tmax, saveN;
-                    tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true,
+                    rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true,
                     kwargs...)
     stepper = PreconStepper(f!, linop, y0, t, dt,
-                      tol=tol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
+                      rtol=rtol, atol=atol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
     return solve(stepper, tmax, saveN; kwargs...)
 end
 
 function solve(f!, y0, t, dt, tmax, saveN;
-               tol=1e-6, max_dt=Inf, min_dt=0, locextrap=true,
+               rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true,
                kwargs...)
     stepper = Stepper(f!, y0, t, dt,
-                      tol=tol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
+                      rtol=rtol, atol=atol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
     return solve(stepper, tmax, saveN; kwargs...)
 end
 
@@ -285,6 +260,7 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
     steps = 0
     saved = 1
     repeated = 0
+    repeated_tot = 0
 
     Logging.@info "Starting propagation"
     start = Dates.now()
@@ -294,8 +270,8 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
         ok = step!(s)
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
-                Logging.@info @sprintf("%.2f %%, stepsize %.2e, err %.2e",
-                    s.tn/tmax*100, s.dt, s.err)
+                Logging.@info @sprintf("%.2f %%, stepsize %.2e, err %.2f, repeated %d",
+                    s.tn/tmax*100, s.dt, s.err, repeated_tot)
                 tic = Dates.now()
         end
         if ok
@@ -308,6 +284,7 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
             repeated = 0
         else
             repeated += 1
+            repeated_tot += 1
             if repeated > repeat_limit
                 error("Reached limit for step repetition ($repeat_limit)")
             end
@@ -317,6 +294,41 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
                            Dates.value(Dates.now()-start)/1000, steps)
 
     return collect(tout), yout, steps
+end
+
+function maxnorm(yerr, y, yn, rtol, atol)
+    maxerr = 0
+    maxy = 0
+    for ii in eachindex(yerr)
+        maxerr = max(maxerr, abs(yerr[ii]))
+        maxy = max(maxy, max(abs(y[ii]), abs(yn[ii])))
+    end
+    return maxerr/(atol + rtol*maxy)
+end
+
+function maxnorm_ratio(yerr, y, yn, rtol, atol)
+    m = 0
+    pry = 0
+    pryn = 0
+    prerr = 0
+    for ii in eachindex(yerr)
+        den = atol + rtol*max(abs(y[ii]), abs(yn[ii]))
+        m = max(abs(yerr[ii])/den, m)
+    end
+    return m
+end
+
+function weaknorm(yerr, y, yn, rtol, atol)
+    sy = 0
+    syn = 0
+    syerr = 0
+    for ii in eachindex(yerr)
+        sy += abs(y[ii])
+        syn += abs(yn[ii])
+        syerr += abs(yerr[ii])
+    end
+    errwt = max(max(sy, syn), atol)
+    return syerr/rtol/errwt
 end
 
 function donothing!(x)
