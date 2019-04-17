@@ -71,7 +71,7 @@ function make_fnl(ω, ωo, to, Eω, Et, ωwindow, twindow, conf)
     ionpot = PhysData.ionisation_potential(conf.medium.gas)
     ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
     plasma! = Nonlinear.make_plasma!(to, ωo, Eto, ionrate, ionpot)
-    responses = (kerr!, )
+    responses = (kerr!, plasma!)
 
     dens = make_density(conf.medium)
 
@@ -183,9 +183,9 @@ function run(config)
 
     f! = let linop=linop, fnl! = fnl!
         function f!(out, Eω, z)
-            # fnl!(out, Eω, z)
-            # out .+= linop.*Eω
-            out .= linop.*Eω
+            fnl!(out, Eω, z)
+            out .+= linop.*Eω
+            # out .= linop.*Eω
         end
     end
 
@@ -211,7 +211,6 @@ function run(config)
 
     zout, Eout, steps = RK45.solve_precon(
         fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
-    # zout, Eout, steps = RK45.solve(f!, Eω, z, dz, zmax, saveN, stepfun=window!)
 
     Etout = FFTW.irfft(Eout, length(t), 1)
 
