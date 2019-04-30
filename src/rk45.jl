@@ -56,7 +56,7 @@ function step!(s::Stepper)
     if s.locextrap
         s.yn .= s.y
         for jj = 1:7
-                s.yn .+= s.dt*b5[jj].*s.ks[jj]
+            s.yn .+= s.dt*b5[jj].*s.ks[jj]
         end
     end
     
@@ -187,7 +187,7 @@ function step!(s::PreconStepper)
     if s.locextrap
         s.yn .= s.y
         for jj = 1:7
-                s.yn .+= s.dt*b5[jj].*s.ks[jj]
+            s.yn .+= s.dt*b5[jj].*s.ks[jj]
         end
     end
     
