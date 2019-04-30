@@ -130,23 +130,23 @@ function make_grid(λ_lims, trange, δt, apod_width)
 
     # Make apodisation window
     ωmin = 2π*minimum(f_lims)
-    ω_left = ωmin/2
-    width_left = ωmin/16
-    ω_right = 2π*maximum(f_lims)+2*apod_width
-    width_right = apod_width
-    window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
-    # window = Maths.hypergauss_window(ω, ω_left, ω_right, 1200)
-    # window = Maths.planck_taper(ω, 0, 1e15+2π*maximum(f_lims), 0.05) # !!!HARDCODED
+    # ω_left = ωmin/2
+    # width_left = ωmin/16
+    # ω_right = 2π*maximum(f_lims)+2*apod_width
+    # width_right = apod_width
+    # window = Maths.errfun_window(ω, ω_left, ω_right, width_left, width_right)
+    ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax+3*ωmin) 
 
     # twindow = Maths.errfun_window(to, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
-    twindow = Maths.planck_taper(to, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
+    twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
+    towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
 
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
-    return t, ω, to, ωo, window, twindow
+    return t, ω, to, ωo, ωwindow, twindow, towindow
 end
 
 function make_init(t, inputs::NTuple{N, T}) where N where T<:Configuration.Input
@@ -173,13 +173,13 @@ end
 import PyPlot: pygui, plt
 function run(config)
     pygui(true)
-    t, ω, to, ωo, window, twindow = make_grid(config.grid)
+    t, ω, to, ωo, window, twindow, towindow = make_grid(config.grid)
 
     Eω = make_init(t, config.input)
     Et = FFTW.irfft(Eω, length(t))
 
     linop = make_linop(ω, config.grid.referenceλ, config.geometry, config.medium)
-    fnl!, prefac = make_fnl(ω, ωo, to, Eω, Et, window, twindow, config)
+    fnl!, prefac = make_fnl(ω, ωo, to, Eω, Et, window, towindow, config)
 
     f! = let linop=linop, fnl! = fnl!
         function f!(out, Eω, z)
@@ -197,9 +197,6 @@ function run(config)
     FT = FFTW.plan_rfft(Et)
     IFT = FFTW.plan_irfft(Eω, length(t))
 
-    twindow = Maths.planck_taper(t, minimum(t) + 50e-15, maximum(t) - 50e-15, 0.1)
-    # twindow = Maths.errfun_window(t, minimum(t)+50e-15, maximum(t)-50e-15, 10e-15)
-
     window! = let window=window, twindow=twindow, FT=FT, IFT=IFT, Et=Et
         function window!(Eω)
             Eω .*= window
@@ -216,5 +213,15 @@ function run(config)
 
     return ω, t, zout, Eout, Etout, window, twindow, prefac
 end
+
+"""
+Functions/callables needed
+β(ω, m, n)
+α(ω, m, n) what about α(x, y)?
+energy(t, Et, m, n)
+Et0(t) shape only, input given as list of tuples: (Et0fun, energy, m, n)
+Pnl(t, Et)
+density(z) possibly density(x, z, y) or density(ρ, θ, z)?
+"""
 
 end # module

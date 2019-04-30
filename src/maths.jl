@@ -46,6 +46,16 @@ function rms_width(x::Array{T, 1}, y; dim=1) where T
     return sqrt.(moment(x, y, 2, dim=dim) - moment(x, y, 1, dim=dim).^2)
 end
 
+function cumtrapz!(y, dx::Number)
+    tmp = y[1]
+    y[1] = 0
+    for i in 2:length(y)
+        tmp2 = y[i]
+        y[i] = y[i-1] + 0.5*dx*(tmp + tmp2)
+        tmp = tmp2
+    end
+end
+
 function cumtrapz!(ret, x, y)
     ret[1] = 0
     for i in 2 : length(y)
@@ -85,29 +95,44 @@ function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5*(erf((x-xmin)/width_left) + erfc((x-xmax)/width_right) - 1)
 end
 
-function planck_taper(x::AbstractArray, xmin, xmax, ε; extend=false)
+function planck_taper(x::AbstractArray, xmin, xmax, ε)
     # https://arxiv.org/pdf/1003.2939.pdf eq(7)
     x0 = (xmax+xmin)/2
     xc = x .- x0
     X = (xmax-xmin)
-    if extend
-        X /= (1-2ε)
-    end
     x1  = -X/2
     x2 = -X/2*(1-2ε)
     x3 = X/2*(1-2ε)
     x4 = X/2
+    return planck(xc, x1, x2, x3, x4)
+end
+
+function planck_taper(x::AbstractArray, left0, left1, right1, right0)
+    x0 = (right0 + left0)/2
+    xc = x .- x0
+    X = right0 - left0
+    εleft = abs(left1-left0)/X
+    εright = abs(right0-right1)/X
+    x1  = -X/2
+    x2 = -X/2*(1-2εleft)
+    x3 = X/2*(1-2εright)
+    x4 = X/2
+    return planck(xc, x1, x2, x3, x4)
+end
+
+function planck(xc, x1, x2, x3, x4)
     idcs12 = x1 .< xc .< x2
     idcs23 = x2 .<= xc .<= x3
     idcs34 = x3 .< xc .< x4
     z12 = @. (x2-x1)/(xc[idcs12]-x1) + (x2-x1)/(xc[idcs12]-x2)
     z34 = @. (x3-x4)/(xc[idcs34]-x3) + (x3-x4)/(xc[idcs34]-x4)
-    out = zero(x)
+    out = zero(xc)
     @. out[idcs12] = 1/(1+exp(z12))
     @. out[idcs23] = 1
     @. out[idcs34] = 1/(1+exp(z34))
     return out
 end
+
 
 function hypergauss_window(x, xmin, xmax, power=10)
     fw = xmax-xmin
