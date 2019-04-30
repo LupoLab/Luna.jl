@@ -3,12 +3,14 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths
 import FFTW
 
+abstract type Response end
+
 function kerr(E::Array{T, N}, χ3) where T<:Real where N
     return @. ε_0*χ3 * E^3
 end
 
 function kerr!(out, E::Array{T, N}, χ3) where T<:Real where N
-    @. out = ε_0*χ3 * E^3
+    @. out += ε_0*χ3 * E^3
 end
 
 function make_kerr!(χ3)
@@ -29,6 +31,14 @@ end
 
 function kerr(E::Array{T, N}, χ3) where T<:Complex where N
     return kerr(E, χ3, Val(false))
+end
+
+struct Kerr <: Response
+    χ3::Float64
+end
+
+function (K::Kerr)(out, E)
+    @. out += ε_0*K.χ3 * E^3
 end
 
 function make_plasma!(t, ω, E::Array{T, N}, ionrate, ionpot) where T<:Real where N

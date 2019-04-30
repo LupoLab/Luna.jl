@@ -9,9 +9,9 @@ import DSP.Unwrap: unwrap
 import PyPlot:pygui, plt
 
 input = Configuration.GaussInput(duration=30e-15, energy=1e-6, wavelength=800e-9)
-grid = Configuration.RealGrid(trange=1e-12, λ_lims=(160e-9, 4000e-9), δt=30.5e-18)
+grid = Configuration.RealGrid(trange=1e-12, λ_lims=(160e-9, 3000e-9))
 # geometry = Configuration.Capillary(radius=13e-6, length=15e-2)
-geometry = Configuration.HCPCF(radius=13e-6, length=30e-2)
+geometry = Configuration.HCPCF(radius=13e-6, length=15e-2)
 medium = fill=Configuration.StaticFill(:Ar, 5)
 nonlinear = Configuration.GasNonlinear()
 

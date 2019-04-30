@@ -61,6 +61,9 @@ end
     y = cos.(x.*1e15)
     yi = sin.(x.*1e15)./1e15
     yic = similar(yi)
+    yic2 = copy(y)
     Maths.cumtrapz!(yic, x, y)
+    Maths.cumtrapz!(yic2, x[2]-x[1])
     @test isapprox(yi, yic, rtol=1e-6)
+    @test isapprox(yi, yic2, rtol=1e-6)
 end
