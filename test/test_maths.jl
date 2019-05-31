@@ -51,8 +51,7 @@ end
     t = collect(range(-10, stop=10, length=512))
     Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
     to, Eto = Maths.oversample(t, Et, factor=4)
-    println(size(Et))
-    println(size(Eto))
+    @test 4*size(Et)[1] == size(Eto)[1]
     @test all(isapprox.(Eto[1:4:end], Et, rtol=1e-6))
 end
 
@@ -66,4 +65,18 @@ end
     Maths.cumtrapz!(yic2, x[2]-x[1])
     @test isapprox(yi, yic, rtol=1e-6)
     @test isapprox(yi, yic2, rtol=1e-6)
+end
+
+@testset "series" begin
+    sumfunc(x, n) = x + 1/factorial(n)
+    e, succ, steps = Maths.aitken_accelerate(sumfunc, 0, rtol=1e-10)
+    e2, succ, steps = Maths.converge_series(sumfunc, 0, rtol=1e-10)
+    @test isapprox(e, exp(1), rtol=1e-10)
+    @test isapprox(e, e2, rtol=1e-10)
+    sumfunc(x, n) = x + 1/2^n
+    o, succ, steps = Maths.aitken_accelerate(sumfunc, 0, n0=1, rtol=1e-10)
+    @test isapprox(o, 1, rtol=1e-10)
+    serfunc(x, n) = (x + 2/x)/2
+    sqrt2, succ, steps = Maths.aitken_accelerate(serfunc, 1, rtol=1e-10)
+    @test isapprox(sqrt2, sqrt(2), rtol=1e-10)
 end
