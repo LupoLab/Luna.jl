@@ -39,16 +39,16 @@ const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function χ_Börzsönyi(μm, B1, C1, B2, C2)
-    # if any(μm .> 1e3)
-    #     throw(DomainError(μm, "Wavelength must be given in metres"))
-    # end
+    if any(μm .> 1e3)
+        throw(DomainError(μm, "Wavelength must be given in metres"))
+    end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
-    # if any(μm .> 1e3)
-    #     throw(DomainError(μm, "Wavelength must be given in metres"))
-    # end
+    if any(μm .> 1e3)
+        throw(DomainError(μm, "Wavelength must be given in metres"))
+    end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1)
                            + B2 * μm^2 / (μm^2 - C2)
                            + B3 * μm^2 / (μm^2 - C3))
@@ -112,11 +112,11 @@ function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
         #TODO: Deal with sqrt of negative values better (somehow...)
-        return μm -> @. real(sqrt(Complex(1
+        return μm -> @. sqrt(1
              + 0.6961663/(1-(0.0684043/μm)^2)
              + 0.4079426/(1-(0.1162414/μm)^2)
              + 0.8974794/(1-(9.896161/μm)^2)
-             )))
+             )
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
         return μm -> @. sqrt(1
@@ -199,9 +199,9 @@ function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
-                # if any(λ .> 1e-3)
-                #     throw(DomainError(λ, "Wavelength must be given in metres"))
-                # end
+                if any(λ .> 1e-3)
+                    throw(DomainError(λ, "Wavelength must be given in metres"))
+                end
                 return sell(λ.*1e6)
             end
         end
