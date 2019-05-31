@@ -20,7 +20,9 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
     ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac, thr=thr
         function ir(E)
             if abs(E) >= thr
-                ω_p*cn_sq*(4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)*exp(-4/3*ω_p/(ω_t_prefac*abs(E)))
+                (ω_p*cn_sq*
+                (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
+                *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
             else
                 0
             end
@@ -102,7 +104,10 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
                         return x + exp(-α*diff)*φ(m, sqrt(β*diff))
                     end
                 end
-                s, success, steps = Maths.aitken_accelerate(sumfunc, 0, n0=n0, rtol=sum_tol)
+                # s, success, steps = Maths.aitken_accelerate(
+                #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
+                s, success, steps = Maths.converge_series(
+                    sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
                 lret *= s
                 ret += lret
             end

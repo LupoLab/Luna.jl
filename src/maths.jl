@@ -95,6 +95,10 @@ function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5*(erf((x-xmin)/width_left) + erfc((x-xmax)/width_right) - 1)
 end
 
+"Planck taper window as defined in the paper:
+    xmin: lower limit (window is 0 here)
+    xmax: upper limit (window is 0 here)
+    ε: fraction of window width over which to increase from 0 to 1"
 function planck_taper(x::AbstractArray, xmin, xmax, ε)
     # https://arxiv.org/pdf/1003.2939.pdf eq(7)
     x0 = (xmax+xmin)/2
@@ -107,6 +111,9 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
     return planck(xc, x1, x2, x3, x4)
 end
 
+"Planck taper window, but finding the taper width by defining 4 points:
+The window increases from 0 to 1 between left0 and left1, and then drops again
+to 0 between right1 and right0"
 function planck_taper(x::AbstractArray, left0, left1, right1, right0)
     x0 = (right0 + left0)/2
     xc = x .- x0
@@ -117,10 +124,11 @@ function planck_taper(x::AbstractArray, left0, left1, right1, right0)
     x2 = -X/2*(1-2εleft)
     x3 = X/2*(1-2εright)
     x4 = X/2
-    return planck(xc, x1, x2, x3, x4)
+    return _taper(xc, x1, x2, x3, x4)
 end
 
-function planck(xc, x1, x2, x3, x4)
+"Planck taper helper function, common to both versions of planck_taper"
+function _taper(xc, x1, x2, x3, x4)
     idcs12 = x1 .< xc .< x2
     idcs23 = x2 .<= xc .<= x3
     idcs34 = x3 .< xc .< x4
@@ -133,13 +141,14 @@ function planck(xc, x1, x2, x3, x4)
     return out
 end
 
-
+"Hypergaussian window"
 function hypergauss_window(x, xmin, xmax, power=10)
     fw = xmax-xmin
     x0 = (xmax+xmin)/2
     return gauss(x, x0=x0, fwhm=fw, power=power)
 end
 
+"Hilbert transform - find analytic signal from real signal"
 function hilbert(x::Array{T, N}; dim=1) where T<:Real where N
     xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
     idxlo = CartesianIndices(size(xf)[1:dim-1])
@@ -148,6 +157,7 @@ function hilbert(x::Array{T, N}; dim=1) where T<:Real where N
     return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
 end
 
+"Oversample (smooth) an array by 0-padding in the frequency domain"
 function oversample(t, x::Array{T, N}; factor::Integer=4, dim=1) where T<:Real where N
     if factor == 1
         return t, x
@@ -175,7 +185,7 @@ function oversample(t, x::Array{T, N}; factor::Integer=4, dim=1) where T<:Real w
     return to, FFTW.irfft(xfo, newlen_t, dim)
 end
 
-function aitken_accelerate(f, x0; n0=0, rtol=1e-6, maxiter=1000)
+function aitken_accelerate(f, x0; n0=0, rtol=1e-6, maxiter=10000)
     n = n0
     x0 = f(x0, n)
     x1 = f(x0, n+1)
@@ -202,7 +212,7 @@ function aitken(x0, x1, x2)
     return x0 - (x1 - x0)^2/den
 end
 
-function converge_series(f, x0; n0=0, rtol=1e-6, maxiter=1000)
+function converge_series(f, x0; n0=0, rtol=1e-6, maxiter=10000)
     n = n0
     x1 = x0
     success = false
