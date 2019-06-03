@@ -46,35 +46,63 @@ function rms_width(x::Array{T,1}, y; dim = 1) where T
     return sqrt.(moment(x, y, 2, dim = dim) - moment(x, y, 1, dim = dim).^2)
 end
 
-function cumtrapz!(y, dx::Number; dim = 1)
-    idxlo = CartesianIndices(size(y)[1:dim - 1])
-    idxhi = CartesianIndices(size(y)[dim + 1:end])
-    tmp = y[idxlo, 1, idxhi]
-    y[idxlo, 1, idxhi] .= 0
-    for i in 2:size(y, dim)
-        tmp2 = y[idxlo, i, idxhi]
-        @. y[idxlo, i, idxhi] = y[idxlo, i - 1, idxhi] + 0.5 * dx * (tmp + tmp2)
+function cumtrapz!(y, x; dim=1)
+    idxlo = CartesianIndices(size(y)[1:dim-1])
+    idxhi = CartesianIndices(size(y)[dim+1:end])
+    _cumtrapz!(y, x, idxlo, idxhi)
+end
+
+function _cumtrapz!(y, x, idxlo, idxhi)
+    for lo in idxlo
+        for hi in idxhi
+            cumtrapz!(view(y, lo, :, hi), x)
+        end
+    end
+end
+
+function cumtrapz!(y::T, x) where T <: Union{SubArray, Vector}
+    tmp = y[1]
+    y[1] = 0
+    for i in 2:length(y)
+        tmp2 = y[i]
+        y[i] = y[i-1] + 1//2 * (tmp + tmp2) * _dx(x, i)
         tmp = tmp2
     end
 end
 
-function cumtrapz!(out, x, y; dim = 1)
-    idxlo = CartesianIndices(size(y)[1:dim - 1])
-    idxhi = CartesianIndices(size(y)[dim + 1:end])
-    out[idxlo, 1, idxhi] .= 0
-    for i in 2:size(y, dim)
-        @. out[idxlo, i, idxhi] = (out[idxlo, i - 1, idxhi]
-            + 0.5 * (y[idxlo, i - 1, idxhi] + y[idxlo, i, idxhi])
-                  * (x[i] - x[i - 1]))
+function cumtrapz!(out, y, x; dim=1)
+    idxlo = CartesianIndices(size(y)[1:dim-1])
+    idxhi = CartesianIndices(size(y)[dim+1:end])
+    _cumtrapz!(out, y, x, idxlo, idxhi)
+end
+
+function _cumtrapz!(out, y, x, idxlo, idxhi)
+    for lo in idxlo
+        for hi in idxhi
+            cumtrapz!(view(out, lo, :, hi), view(y, lo, :, hi), x)
+        end
     end
 end
 
-function cumtrapz(x, y)
-    ret = zero(y)
+function cumtrapz!(out, y::Union{SubArray, Vector}, x)
+    out[1] = 0
     for i in 2:length(y)
-        ret[i] = ret[i - 1] + 0.5 * (y[i - 1] + y[i]) * (x[i] - x[i - 1])
+        out[i] = out[i-1]+ 1//2*(y[i-1] + y[i])*_dx(x, i)
     end
-    return ret
+end
+
+function _dx(x, i)
+    x[i] - x[i-1]
+end
+
+function _dx(x::Number, i)
+    x
+end
+
+function cumtrapz(y, x; dim=1)
+    out = similar(y)
+    cumtrapz!(out, y, x; dim=dim) 
+    return out
 end
 
 function normbymax(x, dims)

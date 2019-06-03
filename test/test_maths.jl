@@ -61,7 +61,17 @@ end
     yi = sin.(x.*1e15)./1e15
     yic = similar(yi)
     yic2 = copy(y)
-    Maths.cumtrapz!(yic, x, y)
+    Maths.cumtrapz!(yic, y, x)
+    Maths.cumtrapz!(yic2, x[2]-x[1])
+    @test isapprox(yi, yic, rtol=1e-6)
+    @test isapprox(yi, yic2, rtol=1e-6)
+
+    ω = [1e15, 2e15]'
+    y = cos.(x.*ω)
+    yi =  sin.(x.*ω)./ω
+    yic = similar(y)
+    yic2 = copy(y)
+    Maths.cumtrapz!(yic, y, x)
     Maths.cumtrapz!(yic2, x[2]-x[1])
     @test isapprox(yi, yic, rtol=1e-6)
     @test isapprox(yi, yic2, rtol=1e-6)
