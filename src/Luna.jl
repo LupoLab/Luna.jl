@@ -13,7 +13,6 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
 
-
 function make_linop(grid, βfun, αfun, frame_vel)
     β = .-βfun(grid.ω, 1, 1, 0)
     α = αfun(grid.ω, 1, 1, 0)
@@ -29,7 +28,6 @@ function make_fnl(grid, transform, densityfun, normfun, responses)
     end
     return fnl!
 end
-
 
 function make_init(grid, inputs, energyfun)
     out = fill(0.0 + 0.0im, length(grid.ω))
