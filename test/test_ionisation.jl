@@ -21,7 +21,7 @@ adk = Ionisation.ionrate_ADK(:He, E)
 # dat = CSV.read("C:\\Users\\cbrahms\\Documents\\GitHub\\luna\\test\\Ilkov_PPT_He.csv")
 # dat = convert(Matrix, dat) # ionrate [1/s] vs field [V/cm]
 
-plt.figure()
-plt.loglog(E, ppt, "--")
-plt.loglog(E, adk)
+# plt.figure()
+# plt.loglog(E, ppt, "--")
+# plt.loglog(E, adk)
 # plt.loglog(dat[:, 1].*100, dat[:, 2], "--")

@@ -17,13 +17,7 @@ pres = 5
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-Aeff = Capillary.Aeff(a)
-function energyfun(t, Et, m, n)
-    Eta = Maths.hilbert(Et)
-    intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-    return intg * PhysData.c*PhysData.ε_0*Aeff/2
-    # return intg
-end
+energyfun = Modes.energy_mode_avg(a)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -60,12 +54,12 @@ zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, 
 t = grid.t
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
-It = abs2.(Maths.hilbert(Etout))
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 Itlog = log10.(Maths.normbymax(It))
 
-idcs = @. (t < 100e-15) & (t >-100e-15)
-to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=4)
+idcs = @. (t < 30e-15) & (t >-30e-15)
+to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
+It = abs2.(Maths.hilbert(Eto))
 
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
@@ -80,7 +74,7 @@ plt.clim(-4, 0)
 plt.colorbar()
 
 plt.figure()
-plt.pcolormesh(t*1e15, zout, transpose(It))
+plt.pcolormesh(to*1e15, zout, transpose(It))
 plt.colorbar()
 plt.xlim(-30, 30)
 
