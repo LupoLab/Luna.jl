@@ -5,12 +5,10 @@ import FunctionZeros: besselj_zero
 import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
-import Luna: Maths, PhysData
-
-const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
+import Luna.PhysData: c, ε_0, χ1, ref_index
 
 function β(a, ω; gas::Symbol=:He, pressure=0, n=1, m=1)
-    χ = pressure .* PhysData.χ1(gas, 2π*c./ω)
+    χ = pressure .* χ1(gas, 2π*c./ω)
     unm = besselj_zero(n-1, m)
     return @. ω/c*(1 + χ/2 - c^2*unm^2/(2*ω^2*a^2))
 end
@@ -21,13 +19,13 @@ end
 
 function α(a, ω; n=1, m=1)
     unm = besselj_zero(n-1, m)
-    ν = PhysData.ref_index(:SiO2, 2π*c./ω)
+    ν = ref_index(:SiO2, 2π*c./ω)
     return @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
 end
 
 function α(a, ω::AbstractArray; n=1, m=1)
     unm = besselj_zero(n-1, m)
-    ν = PhysData.ref_index(:SiO2, 2π*c./ω)
+    ν = ref_index(:SiO2, 2π*c./ω)
     ν[ω .< 3e14] .= 1.4
     ret = @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
     ret[isinf.(ret)] .= 0 # TODO FIND OUT WHY THIS IS NEEDED
@@ -80,6 +78,18 @@ function Aeff(a, n=1, m=1)
     unm = besselj_zero(n-1, m)
     return 2π*a^2*(hquadrature(r-> r*besselj(0, r*unm)^2, 0, 1)[1]^2
                    / hquadrature(r-> r*besselj(0, r*unm)^4, 0, 1)[1])
+end
+
+function modefield(a, n=1, m=1)
+    unm = besselj_zero(n-1, m)
+    norm = c*ε_0*π*hquadrature(r-> r*besselj(0, r*unm/a)^2, 0, a)[1]
+    return r -> @. besselj(0, r*unm/a)/sqrt(norm)
+end
+
+function mode_average(a, n=1, m=1)
+    mode = modefield(a, n, m)
+    integrand = r -> r.*mode(r).^4
+    return 2π*hquadrature(integrand, 0, a)[1]
 end
 
 end
