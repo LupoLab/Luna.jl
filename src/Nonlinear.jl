@@ -39,6 +39,7 @@ struct PlasmaCumtrapz{R, EType, tType}
     J::EType
     P::EType
     t::tType
+    δt::Float64
 end
 
 function PlasmaCumtrapz(t, E, ratefunc, ionpot)
@@ -47,7 +48,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     phase = similar(E)
     J = similar(E)
     P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t)
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
 end
 
 function (Plas::PlasmaCumtrapz)(out, E)
@@ -55,13 +56,13 @@ function (Plas::PlasmaCumtrapz)(out, E)
     Maths.cumtrapz!(Plas.fraction, Plas.t, Plas.rate)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
-    Maths.cumtrapz!(Plas.J, Plas.t, Plas.phase)
+    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     for ii in eachindex(E)
         if abs(E[ii]) > 0
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
-    Maths.cumtrapz!(Plas.P, Plas.t, Plas.J)
+    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
     @. out += Plas.P
 end
 
