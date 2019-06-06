@@ -3,6 +3,7 @@ import FFTW
 import NumericalIntegration
 import Logging
 import Printf: @sprintf
+import LinearAlgebra: mul!
 include("Maths.jl")
 include("PhysData.jl")
 include("Grid.jl")
@@ -11,6 +12,7 @@ include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
+include("Transforms.jl")
 
 
 function make_linop(grid, βfun, αfun, frame_vel)
@@ -20,44 +22,13 @@ function make_linop(grid, βfun, αfun, frame_vel)
     return @. im*(β-β1*grid.ω) - α/2
 end
 
-function make_fnl(grid, densityfun, normfun, responses)
-    cropidx = length(grid.ω)
-    tsamples = length(grid.to)
-    Eωo = zeros(ComplexF64, length(grid.ωo))
-    Eto = zeros(Float64, length(grid.to))
-    FT = FFTW.plan_rfft(zeros(tsamples))
-    IFT = FFTW.plan_irfft(Eωo, tsamples)
-
-    scalefac = (length(grid.ωo)-1)/(length(grid.ω)-1)
-
-    Pto = zeros(Float64, tsamples)
-    Pωo = similar(Eωo)
-    function fnl!(Pω, Eω, z)
-        fill!(Pto, 0)
-        to_time!(Eto, Eω, Eωo, IFT)
-        for resp in responses
-            resp(Pto, Eto)
-        end
-        @. Pto *= grid.towin
-        to_freq!(Pω, Pωo, Pto, FT)
-        Pω .*= grid.ωwin.*densityfun(z).*(-im.*grid.ω./2)./normfun(z)
+function make_fnl(grid, transform, densityfun, normfun, responses)
+    Pω! = transform
+    function fnl!(nl, Eω, z)
+        Pω!(nl, Eω, z, responses)
+        nl .*= grid.ωwin.*densityfun(z).*(-im.*grid.ω./2)./normfun(z)
     end
     return fnl!
-end
-
-function to_time!(Eto, Eω, Eωo, IFT)
-    N = size(Eω, 1)
-    No = size(Eωo, 1)
-    fill!(Eωo, 0)
-    Eωo[1:N] = Eω * (No-1)/(N-1)
-    Eto .= IFT*Eωo
-end
-
-function to_freq!(Pω, Pωo, Pto, FT)
-    N = size(Pω, 1)
-    No = size(Pωo, 1)
-    Pωo .= FT*Pto
-    Pω .= Pωo[1:N] .* (N-1)/(No-1)
 end
 
 
@@ -77,13 +48,14 @@ function scaled_input(grid, input, energyfun)
 end
 
 function run(grid,
-             βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses)
+             βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses,
+             transform)
 
     Eω = make_init(grid, inputs, energyfun)
     Et = FFTW.irfft(Eω, length(grid.t))
 
     linop = make_linop(grid, βfun, αfun, frame_vel)
-    fnl! = make_fnl(grid, densityfun, normfun, responses)
+    fnl! = make_fnl(grid, transform, densityfun, normfun, responses)
 
     z = 0
     dz = 1e-3
@@ -96,9 +68,9 @@ function run(grid,
     window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, IFT=IFT, Et=Et
         function window!(Eω)
             Eω .*= window
-            Et .= IFT*Eω
+            mul!(Et, IFT, Eω)
             Et .*= twindow
-            Eω .= FT * Et
+            mul!(Eω, FT, Et)
         end
     end
 

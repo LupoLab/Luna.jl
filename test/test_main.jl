@@ -43,6 +43,8 @@ densityfun(z) = PhysData.std_dens * pres
 
 normfun = Modes.norm_mode_average(grid.ω, βfun)
 
+transform = Modes.trans_mode_avg(grid)
+
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
@@ -52,7 +54,7 @@ responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)),
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses)
+zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses, transform)
 
 ω = grid.ω
 t = grid.t
