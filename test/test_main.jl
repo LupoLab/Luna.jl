@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes
 import Logging
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
@@ -22,6 +22,7 @@ function energyfun(t, Et, m, n)
     Eta = Maths.hilbert(Et)
     intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
     return intg * PhysData.c*PhysData.ε_0*Aeff/2
+    # return intg
 end
 
 function gausspulse(t)
@@ -30,21 +31,28 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-βfun(ω) = Capillary.β(a, ω, gas=gas, pressure=pres)
-αfun(ω) = log(10)/10 * 2
+β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
+βconst = zero(grid.ω)
+βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres)
+βconst[1] = 1
+βfun(ω, m, n, z) = βconst
+frame_vel(z) = 1/β1const
+αfun(ω, m, n, z) = log(10)/10 * 2
 
 densityfun(z) = PhysData.std_dens * pres
 
+normfun = Modes.norm_mode_average(grid.ω, βfun)
+
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
-plasma! = Nonlinear.make_plasma!(grid.to, grid.ωo, grid.to, ionrate, ionpot)
 
-responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)), plasma!)
+responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-zout, Eout, Etout = Luna.run(grid, βfun, αfun, energyfun, densityfun, inputs, responses)
+zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses)
 
 ω = grid.ω
 t = grid.t
@@ -71,9 +79,8 @@ plt.colorbar()
 
 plt.figure()
 plt.pcolormesh(t*1e15, zout, transpose(It))
-# plt.clim(-4, 0)
 plt.colorbar()
-# plt.xlim(-20, 20)
+plt.xlim(-30, 30)
 
 plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)

@@ -14,7 +14,7 @@ a = 125e-6
 @test Capillary.dB_per_m(a, λ=800e-9) ≈ 8*Capillary.dB_per_m(2*a, λ=800e-9)
 
 λ = 1e-9 .* collect(range(70, stop=8000, length=128))
-ω = ω = 2π*c./λ
+ω = 2π*c./λ
 @test all(isfinite.(Capillary.β(a, ω)))
 @test all(isreal.(Capillary.β(a, ω)))
 @test all(isreal.(Capillary.β(a, ω, gas=:He, pressure=1)))

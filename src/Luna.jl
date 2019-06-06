@@ -10,35 +10,19 @@ include("RK45.jl")
 include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
+include("Modes.jl")
 
 
-function make_linop(grid, βfun, αfun)
-    ω0 = 2π*PhysData.c/grid.referenceλ
-    idx0 = (grid.ω .== 0)
-    β = zero(grid.ω)
-    α = zero(grid.ω)
-    β[.~idx0] .= .-βfun(grid.ω[.~idx0])
-    β[idx0] .= 0
-    β1 = -Maths.derivative(βfun, ω0, 1)
-    α[.~idx0] .= αfun(grid.ω[.~idx0])
-    α[idx0] .= maximum(α[.~idx0])
-
+function make_linop(grid, βfun, αfun, frame_vel)
+    β = .-βfun(grid.ω, 1, 1, 0)
+    α = αfun(grid.ω, 1, 1, 0)
+    β1 = -1/frame_vel(0)
     return @. im*(β-β1*grid.ω) - α/2
 end
 
-function make_Pnl_prefac(ω, βfun)
-    β = zero(ω)
-    idx0 = (ω .== 0)
-    β[.~idx0] .= .-βfun(ω[.~idx0])
-    β[idx0] .= 1
-    out = @. im/(2*PhysData.ε_0*PhysData.c^2)*ω^2/β
-    out[idx0] .= 0
-    return out
-end
-
-function make_fnl(grid, βfun, densityfun, Pnl_prefac, responses)
+function make_fnl(grid, densityfun, normfun, responses)
     cropidx = length(grid.ω)
-    tsamples = Int((length(grid.ωo)-1)*2)
+    tsamples = length(grid.to)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(Float64, length(grid.to))
     FT = FFTW.plan_rfft(zeros(tsamples))
@@ -46,27 +30,36 @@ function make_fnl(grid, βfun, densityfun, Pnl_prefac, responses)
 
     scalefac = (length(grid.ωo)-1)/(length(grid.ω)-1)
 
-    Pt = zeros(Float64, tsamples)
-    Pω = similar(Eωo)
-    Et = similar(Pt)
-    fnl! = let Pt=Pt, Et=Et, FT=FT, IFT=IFT, responses=responses, Pω=Pω, prefac=Pnl_prefac,
-                scalefac=scalefac, Eωo=Eωo, cropidx=cropidx, ωwindow=grid.ωwin, twindow=grid.towin
-        function fnl!(out, Eω, z)
-            fill!(Pt, 0)
-            fill!(Eωo, 0)
-            Eωo[1:cropidx] = scalefac*Eω
-            Et .= IFT*Eωo
-            @. Et *= twindow
-            for resp in responses
-                resp(Pt, Et)
-            end
-            @. Pt *= twindow
-            Pω .= (FT*Pt)
-            out .= ωwindow.*densityfun(z).*prefac.*Pω[1:cropidx]./scalefac
+    Pto = zeros(Float64, tsamples)
+    Pωo = similar(Eωo)
+    function fnl!(Pω, Eω, z)
+        fill!(Pto, 0)
+        to_time!(Eto, Eω, Eωo, IFT)
+        for resp in responses
+            resp(Pto, Eto)
         end
+        @. Pto *= grid.towin
+        to_freq!(Pω, Pωo, Pto, FT)
+        Pω .*= grid.ωwin.*densityfun(z).*(-im.*grid.ω./2)./normfun(z)
     end
     return fnl!
 end
+
+function to_time!(Eto, Eω, Eωo, IFT)
+    N = size(Eω, 1)
+    No = size(Eωo, 1)
+    fill!(Eωo, 0)
+    Eωo[1:N] = Eω * (No-1)/(N-1)
+    Eto .= IFT*Eωo
+end
+
+function to_freq!(Pω, Pωo, Pto, FT)
+    N = size(Pω, 1)
+    No = size(Pωo, 1)
+    Pωo .= FT*Pto
+    Pω .= Pωo[1:N] .* (N-1)/(No-1)
+end
+
 
 function make_init(grid, inputs, energyfun)
     out = fill(0.0 + 0.0im, length(grid.ω))
@@ -83,17 +76,14 @@ function scaled_input(grid, input, energyfun)
     return FFTW.rfft(Et_sc)
 end
 
-
 function run(grid,
-             βfun, αfun, energyfun, densityfun, inputs, responses)
+             βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses)
 
     Eω = make_init(grid, inputs, energyfun)
     Et = FFTW.irfft(Eω, length(grid.t))
 
-    Pnl_prefac = make_Pnl_prefac(grid.ω, βfun)
-
-    linop = make_linop(grid, βfun, αfun)
-    fnl! = make_fnl(grid, βfun, densityfun, Pnl_prefac, responses)
+    linop = make_linop(grid, βfun, αfun, frame_vel)
+    fnl! = make_fnl(grid, densityfun, normfun, responses)
 
     z = 0
     dz = 1e-3
