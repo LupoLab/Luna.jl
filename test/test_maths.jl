@@ -90,3 +90,11 @@ end
     sqrt2, succ, steps = Maths.aitken_accelerate(serfunc, 1, rtol=1e-10)
     @test isapprox(sqrt2, sqrt(2), rtol=1e-10)
 end
+
+@testset "windows" begin
+    x = collect(range(-10, stop=10, length=2048))
+    pl = Maths.planck_taper(x, -5, -4, 7, 8)
+    @test all(pl[x .< -5] .== 0)
+    @test all(pl[-4 .< x .< 7] .== 1)
+    @test all(pl[8 .< x] .== 0)
+end

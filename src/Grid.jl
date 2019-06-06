@@ -34,9 +34,10 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
 
     ωmin = 2π*minimum(f_lims)
     ωmax = 2π*maximum(f_lims)
+    ωmax_win = 1.1*ωmax
 
-    cropidx = findfirst(x -> x>ωmax+3*ωmin, ωo)
-    cropidx = 2^(ceil(Int, log2(cropidx))) + 1
+    cropidx = findfirst(x -> x>ωmax_win, ωo)
+    cropidx = 2^(ceil(Int, log2(cropidx))) + 1 # make coarse grid power of 2 as well
     ω = ωo[1:cropidx]
     δt = π/maximum(ω)
     tsamples = (cropidx-1)*2
@@ -44,7 +45,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     t = @. (Nt-tsamples/2)*δt
 
     # Make apodisation windows
-    ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax+3*ωmin) 
+    ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax_win) 
 
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
