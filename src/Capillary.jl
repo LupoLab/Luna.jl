@@ -5,6 +5,7 @@ import FunctionZeros: besselj_zero
 import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
+import Luna: Maths
 import Luna.PhysData: c, ε_0, χ1, ref_index
 
 function β(a, ω; gas::Symbol=:He, pressure=0, n=1, m=1)
