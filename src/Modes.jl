@@ -2,6 +2,7 @@
 
     1. Mode normalisation
     2. Modal decomposition of Pₙₗ
+    3. Calculation of (modal) energy
 
 Wishlist of types of decomposition we want to use:
 
@@ -15,7 +16,8 @@ Wishlist of types of decomposition we want to use:
 module Modes
 import FFTW
 import LinearAlgebra: mul!
-import Luna:PhysData
+import NumericalIntegration: integrate, SimpsonEven
+import Luna: PhysData, Capillary, Maths
 
 "Transform A(ω) to A(t) on oversampled time grid."
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -77,8 +79,8 @@ function trans_mode_avg(grid)
     Pto = similar(Eto)
     Pωo = similar(Eωo)
 
-    FT = FFTW.plan_rfft(Eto)
-    IFT = FFTW.plan_irfft(Eωo, Nto)
+    FT = FFTW.plan_rfft(Eto, flags=FFTW.PATIENT)
+    IFT = FFTW.plan_irfft(Eωo, Nto, flags=FFTW.PATIENT)
 
     function Pω!(Pω, Eω, z, responses)
         fill!(Pto, 0)
@@ -91,6 +93,17 @@ function trans_mode_avg(grid)
     end
 
     return Pω!
+end
+
+"Calculate energy from field E(t) for mode-averaged field"
+function energy_mode_avg(a)
+    Aeff = Capillary.Aeff(a)
+    function energyfun(t, Et, m, n)
+        Eta = Maths.hilbert(Et)
+        intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
+        return intg * PhysData.c*PhysData.ε_0*Aeff/2
+    end
+    return energyfun
 end
 
 end

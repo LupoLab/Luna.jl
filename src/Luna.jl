@@ -12,7 +12,6 @@ include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
-include("Transforms.jl")
 
 
 function make_linop(grid, βfun, αfun, frame_vel)
@@ -81,15 +80,5 @@ function run(grid,
 
     return zout, Eout, Etout
 end
-
-"""
-Functions/callables needed
-β(ω, m, n)
-α(ω, m, n) what about α(x, y)?
-energy(t, Et, m, n)
-Et0(t) shape only, input given as list of _named_ tuples: (func, energy, m, n)
-Pnl(t, Et)
-density(z) possibly density(x, z, y) or density(ρ, θ, z)?
-"""
 
 end # module
