@@ -54,12 +54,12 @@ zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, 
 t = grid.t
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
-zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
-Itlog = log10.(Maths.normbymax(It))
 
 idcs = @. (t < 30e-15) & (t >-30e-15)
 to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
 It = abs2.(Maths.hilbert(Eto))
+Itlog = log10.(Maths.normbymax(It))
+zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
