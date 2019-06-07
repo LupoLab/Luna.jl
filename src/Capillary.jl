@@ -77,13 +77,13 @@ end
 
 function Aeff(a, n=1, m=1)
     unm = besselj_zero(n-1, m)
-    return 2π*a^2*(hquadrature(r-> r*besselj(0, r*unm)^2, 0, 1)[1]^2
-                   / hquadrature(r-> r*besselj(0, r*unm)^4, 0, 1)[1])
+    return 2π*a^2*(hquadrature(r-> r*besselj(n-1, r*unm)^2, 0, 1)[1]^2
+                   / hquadrature(r-> r*besselj(n-1, r*unm)^4, 0, 1)[1])
 end
 
 function modefield(a, n=1, m=1)
     unm = besselj_zero(n-1, m)
-    norm = c*ε_0*π*hquadrature(r-> r*besselj(0, r*unm/a)^2, 0, a)[1]
+    norm = c*ε_0*π*hquadrature(r-> r*besselj(n-1, r*unm/a)^2, 0, a)[1]
     return r -> @. besselj(0, r*unm/a)/sqrt(norm)
 end
 
