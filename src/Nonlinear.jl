@@ -3,6 +3,7 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths
 import FFTW
 
+"Kerr response for real field"
 function Kerr_field(χ3)
     Kerr = let χ3 = χ3
         function Kerr(out, E)
@@ -11,6 +12,7 @@ function Kerr_field(χ3)
     end
 end
 
+"Kerr response for real field but without THG"
 function Kerr_field_nothg(χ3, n)
     E2 = Array{Complex{Float64}}(undef, n)
     Kerr = let χ3 = χ3, E2 = E2
@@ -24,6 +26,7 @@ function Kerr_field_nothg(χ3, n)
     end
 end
 
+"Kerr response for envelope"
 function Kerr_env(χ3)
     Kerr = let χ3 = χ3
         function Kerr(out, E)
@@ -32,6 +35,7 @@ function Kerr_env(χ3)
     end
 end
 
+"Kerr response for envelope but with THG"
 function Kerr_env_thg(χ3)
     Kerr = let χ3 = χ3
         function Kerr(out, E)
