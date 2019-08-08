@@ -3,29 +3,41 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths
 import FFTW
 
-"Response type for Kerr effect"
-struct Kerr
-    χ3::Float64
+function Kerr_field(χ3)
+    Kerr = let χ3 = χ3
+        function Kerr(out, E)
+            @. out += ε_0*χ3*E^3
+        end
+    end
 end
 
-"Kerr response for real field"
-function (K::Kerr)(out, E)
-    @. out += ε_0*K.χ3 * E^3
+function Kerr_field_nothg(χ3, n)
+    E2 = Array{Complex{Float64}}(undef, n)
+    Kerr = let χ3 = χ3, E2 = E2
+        function Kerr(out, E)
+            @. E2 = E
+            FFTW.fft!(E2)
+            E2[div(length(E2),2):end] .= 0.0
+            FFTW.ifft!(E2)
+            @. out += 3/4*ε_0*χ3*abs2(2*E2)*E
+        end
+    end
 end
 
-"Kerr response for envelope field without THG"
-function (K::Kerr)(out, E::Array{T, N}, THG::Val{false}) where T<:Complex where N
-    @. out += ε_0*K.χ3/4 * 3*abs2(E)*E
+function Kerr_env(χ3)
+    Kerr = let χ3 = χ3
+        function Kerr(out, E)
+            @. out += 3/4*ε_0*χ3*abs2(E)*E
+        end
+    end
 end
 
-"Kerr response for envelope with THG"
-function (K::Kerr)(out, E::Array{T, N}, THG::Val{true}) where T<:Complex where N
-    @. out += ε_0*K.χ3/4 * (3*abs2(E) + E^2)*E
-end
-
-"Kerr reponse for envelope, default case (no THG)"
-function (K::Kerr)(out, E::Array{T, N}) where T<:Complex where N
-    K(out, E, Val(false))
+function Kerr_env_thg(χ3)
+    Kerr = let χ3 = χ3
+        function Kerr(out, E)
+            @. out += ε_0*χ3/4*(3*abs2(E)*E + E^2)*E
+        end
+    end
 end
 
 "Response type for cumtrapz-based plasma polarisation, adapted from:
