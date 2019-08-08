@@ -21,7 +21,7 @@ function Kerr_field_nothg(χ3, n)
             FFTW.fft!(E2)
             E2[div(length(E2),2):end] .= 0.0
             FFTW.ifft!(E2)
-            @. out += 3/4*ε_0*χ3*abs2(2*E2)*E
+            @. out += 3*ε_0*χ3*abs2(E2)*E
         end
     end
 end
@@ -36,10 +36,12 @@ function Kerr_env(χ3)
 end
 
 "Kerr response for envelope but with THG"
-function Kerr_env_thg(χ3)
-    Kerr = let χ3 = χ3
+# see Eq. 4, Genty et al., Opt. Express 15 5382 (2007)
+function Kerr_env_thg(χ3, ω0, t)
+    C = exp.(-2im*ω0.*t)
+    Kerr = let χ3 = χ3, C = C
         function Kerr(out, E)
-            @. out += ε_0*χ3/4*(3*abs2(E)*E + E^2)*E
+            @. out += ε_0*χ3/4*(3*abs2(E)*E + C*E^2)*E
         end
     end
 end
