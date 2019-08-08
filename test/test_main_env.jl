@@ -49,14 +49,12 @@ responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-#fft = (x) -> FFTW.fft(x, 1)
+fft = (x) -> FFTW.fft(x, 1)
 ifft = (x) -> FFTW.ifft(x, 1)
-x = Array{ComplexF64}(undef, length(grid.t))
-FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
 
 linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0) .- β0const)
 zout, Eout, Etout = Luna.run(grid, linop, normfun, energyfun, densityfun,
-                             inputs, responses, transform, FT, ifft)
+                             inputs, responses, transform, fft, ifft)
 
 ω = grid.ω
 t = grid.t
