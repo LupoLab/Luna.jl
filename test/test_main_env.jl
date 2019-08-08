@@ -16,48 +16,45 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = Modes.energy_mode_avg(a)
+energyfun = Modes.energy_env_mode_avg(a)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
     ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
+    Et = @. sqrt(It)
 end
 
 β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
+β0const = Capillary.β(a; λ=λ0, gas=gas, pressure=pres)
 βconst = zero(grid.ω)
-βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres)
-βconst[1] = 1
+βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres)
+βconst[.!grid.sidx] .= 1
 βfun(ω, m, n, z) = βconst
-frame_vel(z) = 1/β1const
 αfun(ω, m, n, z) = log(10)/10 * 2
 
 densityfun(z) = PhysData.std_dens * pres
 
 normfun = Modes.norm_mode_average(grid.ω, βfun)
 
-transform = Modes.trans_mode_avg(grid)
+transform = Modes.trans_env_mode_avg(grid)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr(PhysData.χ3_gas(gas)),)
+            # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-fft = fft = (x) -> FFTW.rfft(x, 1)
-ifft = let d = length(grid.t)
-    function ifft(x)
-        FFTW.irfft(x, d, 1)
-    end
-end
+fft = (x) -> FFTW.fft(x, 1)
+ifft = (x) -> FFTW.ifft(x, 1)
 
-linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-zout, Eout, Etout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, fft, ifft)
+linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0) .- β0const)
+zout, Eout, Etout = Luna.run(grid, linop, normfun, energyfun, densityfun,
+                             inputs, responses, transform, fft, ifft)
 
 ω = grid.ω
 t = grid.t
@@ -65,12 +62,11 @@ t = grid.t
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
 idcs = @. (t < 30e-15) & (t >-30e-15)
-to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
-It = abs2.(Maths.hilbert(Eto))
+It = abs2.(Etout)
 Itlog = log10.(Maths.normbymax(It))
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
-Et = Maths.hilbert(Etout)
+Et = Etout
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
     energy[ii] = energyfun(t, Etout[:, ii], 1, 1)
@@ -78,12 +74,13 @@ end
 
 pygui(true)
 plt.figure()
-plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
+plt.pcolormesh(FFTW.fftshift(ω, 1)./2π.*1e-15, zout, transpose(FFTW.fftshift(Ilog, 1)))
 plt.clim(-6, 0)
+plt.xlim(0.19, 1.9)
 plt.colorbar()
 
 plt.figure()
-plt.pcolormesh(to*1e15, zout, transpose(It))
+plt.pcolormesh(t*1e15, zout, transpose(It))
 plt.colorbar()
 plt.xlim(-30, 30)
 
@@ -93,5 +90,5 @@ plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
 plt.figure()
-plt.plot(to*1e15, Eto[:, 121])
+plt.plot(t*1e15, abs2.(Et[:, 121]))
 plt.xlim(-20, 20)
