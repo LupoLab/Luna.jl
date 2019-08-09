@@ -1,7 +1,6 @@
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes
 import Logging
-import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
 
@@ -43,22 +42,16 @@ transform = Modes.trans_mode_avg(grid)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.χ3_gas(gas)),
+responses = (Nonlinear.Kerr_field_nothg(PhysData.χ3_gas(gas),length(grid.to)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-x = Array{Float64}(undef, length(grid.t))
-FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
-
-linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, FT)
+zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses, transform)
 
 ω = grid.ω
 t = grid.t
-
-Etout = FFTW.irfft(Eout, length(grid.t), 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
