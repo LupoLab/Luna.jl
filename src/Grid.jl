@@ -66,16 +66,16 @@ struct EnvGrid{T} <: AbstractGrid
     t::Array{Float64, 1}
     ω::Array{Float64, 1}
     sidx::T
-    v::Array{Float64, 1}
     ωwin::Array{Float64, 1}
     twin::Array{Float64, 1}
 end
 
-function EnvGrid(zmax, referenceλ, λ_lims, trange, δt=1)
+function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
     rf_lims = f_lims .- PhysData.c/referenceλ
-    δt = min(1/(2*maximum(rf_lims)), δt) # 2x maximum freq, or user-defined if finer
+    ffac = thg ? 6 : 2
+    δt = min(1/(ffac*maximum(rf_lims)), δt) # 2x maximum freq, or user-defined if finer
     samples = 2^(ceil(Int, log2(trange/δt))) # samples for grid (power of 2)
     trange_even = δt*samples # keep frequency window fixed, expand time window as necessary
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
@@ -83,11 +83,11 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     δω = 2π/trange_even # frequency spacing for grid
     # Make grid 
     N = collect(range(0, length=samples))
-    t = @. (N-samples/2)*δt # centre on 0
-    v = @. (N-samples/2)*δω
+    t = @. (N-samples/2)*δt # time grid, centre on 0
+    v = @. (N-samples/2)*δω # freq grid relative to ω0
     v = FFTW.fftshift(v)
-    ω0 = 2π*PhysData.c/referenceλ
-    ω = v .+ ω0
+    ω0 = 2π*PhysData.c/referenceλ # central frequency
+    ω = v .+ ω0 # true frequency grid
 
     sidx = ω .> 0
  
@@ -99,7 +99,7 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax_win) 
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
 
-    return EnvGrid(zmax, referenceλ, ω0, t, ω, sidx, v, ωwindow, twindow)
+    return EnvGrid(zmax, referenceλ, ω0, t, ω, sidx, ωwindow, twindow)
 end
 
 end

@@ -51,18 +51,14 @@ inputs = (in1, )
 
 x = Array{Float64}(undef, length(grid.t))
 FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
-fft = fft = (x) -> FFTW.rfft(x, 1)
-ifft = let d = length(grid.t)
-    function ifft(x)
-        FFTW.irfft(x, d, 1)
-    end
-end
 
 linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-zout, Eout, Etout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, FT, ifft)
+zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, FT)
 
 ω = grid.ω
 t = grid.t
+
+Etout = FFTW.irfft(Eout, length(grid.t), 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 

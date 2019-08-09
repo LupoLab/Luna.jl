@@ -46,7 +46,7 @@ end
 
 function run(grid,
              linop, normfun, energyfun, densityfun, inputs, responses,
-             transform, FT, ifft; max_dz=Inf)
+             transform, FT; max_dz=Inf)
 
     Eω = make_init(grid, inputs, energyfun, FT)
     Et = FT \ Eω
@@ -62,19 +62,15 @@ function run(grid,
         function window!(Eω)
             Eω .*= window
             ldiv!(Et, FT, Eω)
-            #Et = ifft(Eω)
             Et .*= twindow
             mul!(Eω, FT, Et)
-            #Eω = fft(Et)
         end
     end
 
     zout, Eout, steps = RK45.solve_precon(
         fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
 
-    Etout = ifft(Eout) # TODO: cannot make use of generic FT here as ndims is incorrect
-
-    return zout, Eout, Etout
+    return zout, Eout
 end
 
 end # module
