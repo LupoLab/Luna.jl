@@ -64,11 +64,10 @@ Etout = FFTW.ifft(Eout, 1)
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
 idcs = @. (t < 30e-15) & (t >-30e-15)
-It = abs2.(Etout)
-Itlog = log10.(Maths.normbymax(It))
+to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=3, dim=1)
+It = abs2.(Eto)
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
-Et = Etout
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
     energy[ii] = energyfun(t, Etout[:, ii], 1, 1)
@@ -82,7 +81,7 @@ plt.xlim(0.19, 1.9)
 plt.colorbar()
 
 plt.figure()
-plt.pcolormesh(t*1e15, zout, transpose(It))
+plt.pcolormesh(to*1e15, zout, transpose(It))
 plt.colorbar()
 plt.xlim(-30, 30)
 
@@ -92,5 +91,10 @@ plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
 plt.figure()
-plt.plot(t*1e15, abs2.(Et[:, 121]))
+plt.plot(to*1e15, abs2.(Eto[:, 121]))
+plt.xlim(-20, 20)
+
+plt.figure()
+plt.plot(to*1e15, real.(exp.(1im*grid.ω0.*to).*Eto[:, 121]))
+plt.plot(t*1e15, real.(exp.(1im*grid.ω0.*t).*Etout[:, 121]))
 plt.xlim(-20, 20)

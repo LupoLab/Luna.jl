@@ -231,6 +231,46 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: R
     return to, FFTW.irfft(xfo, newlen_t, dim)
 end
 
+function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Complex where N
+    if factor == 1
+        return t, x
+    end
+    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+
+    len = size(xf, dim)
+    newlen = factor * length(t)
+    δt = t[2] - t[1]
+    δto = δt / factor
+    Nto = collect(0:newlen - 1)
+    to = t[1] .+ Nto .* δto
+
+    # TODO simplify this bit - shouldn't have to generate the axes to find startidx!
+    Nu = collect(range(0, length=len))
+    No = collect(range(0, length=newlen))
+    δω = 2π/(len*δt)
+    if iseven(len)
+        ω = @. (Nu-len/2)*δω
+    else
+        ω = @. (Nu-len/2 + 1/2)*δω
+    end
+    if iseven(newlen)
+        ωo = @. (No-newlen/2)*δω
+    else
+        ωo = @. (No-newlen/2 + 1/2)*δω
+    end
+
+    startidx = findall(x->x==ω[1], ωo)[1]
+    endidx = startidx+len-1
+
+    shape = collect(size(xf))
+    shape[dim] = newlen
+    xfo = zeros(eltype(xf), Tuple(shape))
+    idxlo = CartesianIndices(size(xfo)[1:dim - 1])
+    idxhi = CartesianIndices(size(xfo)[dim + 1:end])
+    xfo[idxlo, startidx:endidx, idxhi] .= factor .* xf
+    return to, FFTW.ifft(FFTW.ifftshift(xfo, dim), dim)
+end
+
 function aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
     x0 = f(x0, n)
