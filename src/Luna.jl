@@ -3,7 +3,7 @@ import FFTW
 import NumericalIntegration
 import Logging
 import Printf: @sprintf
-import LinearAlgebra: mul!
+import LinearAlgebra: mul!, ldiv!
 include("Maths.jl")
 include("PhysData.jl")
 include("Grid.jl")
@@ -29,29 +29,28 @@ function make_fnl(grid, transform, densityfun, normfun, responses)
     return fnl!
 end
 
-function make_init(grid, inputs, energyfun)
+function make_init(grid, inputs, energyfun, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
     for input in inputs
-        out .+= scaled_input(grid, input, energyfun)
+        out .+= scaled_input(grid, input, energyfun, FT)
     end
     return out
 end
 
-function scaled_input(grid, input, energyfun)
+function scaled_input(grid, input, energyfun, FT)
     Et = input.func(grid.t)
     energy = energyfun(grid.t, Et, input.m, input.n)
     Et_sc = sqrt(input.energy)/sqrt(energy) .* Et
-    return FFTW.rfft(Et_sc)
+    return FT * Et_sc
 end
 
 function run(grid,
-             βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses,
-             transform)
+             linop, normfun, energyfun, densityfun, inputs, responses,
+             transform, FT; max_dz=Inf)
 
-    Eω = make_init(grid, inputs, energyfun)
-    Et = FFTW.irfft(Eω, length(grid.t))
+    Eω = make_init(grid, inputs, energyfun, FT)
+    Et = FT \ Eω
 
-    linop = make_linop(grid, βfun, αfun, frame_vel)
     fnl! = make_fnl(grid, transform, densityfun, normfun, responses)
 
     z = 0
@@ -59,24 +58,19 @@ function run(grid,
     zmax = grid.zmax
     saveN = 201
 
-    FT = FFTW.plan_rfft(Et)
-    IFT = FFTW.plan_irfft(Eω, length(grid.t))
-
-    window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, IFT=IFT, Et=Et
+    window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
         function window!(Eω)
             Eω .*= window
-            mul!(Et, IFT, Eω)
+            ldiv!(Et, FT, Eω)
             Et .*= twindow
             mul!(Eω, FT, Et)
         end
     end
 
     zout, Eout, steps = RK45.solve_precon(
-        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!)
+        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
 
-    Etout = FFTW.irfft(Eout, length(grid.t), 1)
-
-    return zout, Eout, Etout
+    return zout, Eout
 end
 
 end # module

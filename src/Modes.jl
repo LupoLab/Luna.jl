@@ -95,12 +95,45 @@ function trans_mode_avg(grid)
     return Pω!
 end
 
+"Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
+function trans_env_mode_avg(grid)
+    Nt = length(grid.t)
+
+    Et = zeros(ComplexF64, length(grid.t))
+    Pt = similar(Et)
+
+    FT = FFTW.plan_fft(Et, flags=FFTW.PATIENT)
+    IFT = FFTW.plan_ifft(Et, flags=FFTW.PATIENT)
+
+    function Pω!(Pω, Eω, z, responses)
+        fill!(Pt, 0)
+        mul!(Et, IFT, Eω)
+        for resp in responses
+            resp(Pt, Et)
+        end
+        @. Pt *= grid.twin
+        mul!(Pω, FT, Pt)
+    end
+
+    return Pω!
+end
+
 "Calculate energy from field E(t) for mode-averaged field"
 function energy_mode_avg(a)
     Aeff = Capillary.Aeff(a)
     function energyfun(t, Et, m, n)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
+        return intg * PhysData.c*PhysData.ε_0*Aeff/2
+    end
+    return energyfun
+end
+
+"Calculate energy from envelope field E(t) for mode-averaged field"
+function energy_env_mode_avg(a)
+    Aeff = Capillary.Aeff(a)
+    function energyfun(t, Et, m, n)
+        intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*Aeff/2
     end
     return energyfun
