@@ -73,7 +73,7 @@ end
 function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
-    rf_lims = f_lims .- PhysData.c/referenceλ
+    rf_lims = f_lims .- PhysData.c/referenceλ # Relative frequency limits
     ffac = thg ? 6 : 2
     δt = min(1/(ffac*maximum(rf_lims)), δt) # 2x maximum freq, or user-defined if finer
     samples = 2^(ceil(Int, log2(trange/δt))) # samples for grid (power of 2)
