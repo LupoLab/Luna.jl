@@ -16,7 +16,7 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
 
 energyfun = Modes.energy_env_mode_avg(a)
 
@@ -43,7 +43,7 @@ transform = Modes.trans_env_mode_avg(grid)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_env(PhysData.χ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env_thg(PhysData.χ3_gas(gas), 2π*PhysData.c/λ0, grid.t),)
             # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
@@ -52,7 +52,7 @@ inputs = (in1, )
 x = Array{ComplexF64}(undef, length(grid.t))
 FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
 
-linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0) .- β0const)
+linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0))
 zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun,
                              inputs, responses, transform, FT)
 
