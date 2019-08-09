@@ -5,7 +5,7 @@ import Unitful: ustrip
 import Luna: Maths
 
 "Speed of light"
-const c = ustrip(CODATA2014.c)
+const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
 "Pressure in Pascal at standard conditions (atmospheric pressure)"
 const atm = ustrip(CODATA2014.atm)
 "Boltzmann constant"

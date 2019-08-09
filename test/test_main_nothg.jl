@@ -48,10 +48,16 @@ responses = (Nonlinear.Kerr_field_nothg(PhysData.χ3_gas(gas),length(grid.to)),
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-zout, Eout, Etout = Luna.run(grid, βfun, αfun, frame_vel, normfun, energyfun, densityfun, inputs, responses, transform)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
+
+linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
+zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, FT)
 
 ω = grid.ω
 t = grid.t
+
+Etout = FFTW.irfft(Eout, length(grid.t), 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
