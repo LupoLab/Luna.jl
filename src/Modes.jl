@@ -69,6 +69,12 @@ function norm_mode_average(ω, βfun)
     return norm
 end
 
+function Et_to_Pt!(Pt, Et, responses)
+    for resp in responses
+        resp(Pt, Et)
+    end
+end
+
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
 function trans_mode_avg(grid)
     Nto = length(grid.to)
@@ -85,9 +91,7 @@ function trans_mode_avg(grid)
     function Pω!(Pω, Eω, z, responses)
         fill!(Pto, 0)
         to_time!(Eto, Eω, Eωo, IFT)
-        for resp in responses
-            resp(Pto, Eto)
-        end
+        Et_to_Pt!(Pto, Eto, responses)
         @. Pto *= grid.towin
         to_freq!(Pω, Pωo, Pto, FT)
     end
@@ -108,9 +112,7 @@ function trans_env_mode_avg(grid)
     function Pω!(Pω, Eω, z, responses)
         fill!(Pt, 0)
         mul!(Et, IFT, Eω)
-        for resp in responses
-            resp(Pt, Et)
-        end
+        Et_to_Pt!(Pt, Et, responses)
         @. Pt *= grid.twin
         mul!(Pω, FT, Pt)
     end
@@ -119,22 +121,20 @@ function trans_env_mode_avg(grid)
 end
 
 "Calculate energy from field E(t) for mode-averaged field"
-function energy_mode_avg(a)
-    Aeff = Capillary.Aeff(a)
+function energy_mode_avg(aeff)
     function energyfun(t, Et, m, n)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*Aeff/2
+        return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
     return energyfun
 end
 
 "Calculate energy from envelope field E(t) for mode-averaged field"
-function energy_env_mode_avg(a)
-    Aeff = Capillary.Aeff(a)
+function energy_env_mode_avg(aeff)
     function energyfun(t, Et, m, n)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*Aeff/2
+        return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
     return energyfun
 end

@@ -18,7 +18,7 @@ pres = 5
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
 
-energyfun = Modes.energy_env_mode_avg(a)
+energyfun = Modes.energy_env_mode_avg(Capillary.Aeff(a, 1, 1, :HE))
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)

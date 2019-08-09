@@ -12,6 +12,8 @@ const atm = ustrip(CODATA2014.atm)
 const k_B = ustrip(CODATA2014.k_B)
 "Permittivity of vacuum"
 const ε_0 = ustrip(CODATA2014.ε_0)
+"Permiability of vacuum"
+const μ_0 = ustrip(CODATA2014.μ_0)
 "Electron charge"
 const electron = ustrip(CODATA2014.e)
 "Electron mass"
