@@ -76,7 +76,7 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
-struct TransModalRadial{ET, FTT, rT, gT, dT}
+mutable struct TransModalRadial{ET, FTT, rT, gT, dT}
     nm::Int
     R::Float64
     Ets::ET
@@ -92,6 +92,10 @@ struct TransModalRadial{ET, FTT, rT, gT, dT}
     resp::rT
     grid::gT
     densityfun::dT
+    nc::Int
+    rtol::Float64
+    atol::Float64
+    mfcn::Int
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
@@ -100,7 +104,7 @@ end
 # Ets - array of functions giving normalised Ex, Ey fields 
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
-function TransModalRadial(grid, R, Ets, FT, resp, densityfun)
+function TransModalRadial(grid, R, Ets, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
     nm = length(Ets)
     Ems = Array{Float64,1}(undef, nm)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nm)
@@ -112,14 +116,16 @@ function TransModalRadial(grid, R, Ets, FT, resp, densityfun)
     Prωo = Array{ComplexF64,1}(undef, length(grid.ωo))
     IFT = inv(FT)
     TransModalRadial(nm, R, Ets, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, FT,
-                     resp, grid, densityfun)
+                     resp, grid, densityfun,0,rtol,atol,mfcn)
 end
 
 function setEmω!(t::TransModalRadial, Emω::Array{ComplexF64,2})
     t.Emω .= Emω
+    t.nc = 0
 end
 
 function (t::TransModalRadial)(rs, fval)
+    t.nc += length(rs)
     # rs is a 1d Float64 array of length n of radial points at which to evaluate the integrands
     # fval is a 2d Float64 array of size fdim×n in which to store the values v[:,i]
     # TODO: parallelize this in Julia 1.3
@@ -162,7 +168,7 @@ end
 function (t::TransModalRadial)(nl, Eω, z)
     setEmω!(t, Eω)
     val, err = Cubature.pquadrature_v(length(Eω)*2, (rs, fval) -> t(rs, fval), 0.0, t.R, 
-                                reltol=1e-3, abstol=0.0, maxevals=100,
+                                reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
                                 error_norm=Cubature.L2)
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end

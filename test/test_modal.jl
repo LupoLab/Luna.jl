@@ -17,7 +17,7 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-modes = ((1,1,:HE), (1,2,:HE))
+modes = ((1,1,:HE), (1,2,:HE), (1,3,:HE), (1,4,:HE))
 nmodes = length(modes)
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
@@ -30,20 +30,21 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-function get_linop(grid, a, n, m, kind)
-    β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres, n=n, m=m)
+function get_linop(grid, a, n, m, kind, vel)
+    #β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres, n=n, m=m)
     βconst = zero(grid.ω)
-    βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres)
+    βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres, n=n, m=m)
     βconst[1] = 1
     βfun(ω, m, n, z) = βconst
-    frame_vel(z) = 1/β1const
+    frame_vel(z) = vel
     αfun(ω, m, n, z) = 0.0
     Luna.make_linop(grid, βfun, αfun, frame_vel)
 end
 
+β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres, n=1, m=1)
 linops = zeros(ComplexF64, length(grid.ω), nmodes)
 for i = 1:nmodes
-    linops[:,i] = get_linop(grid, a, modes[i][1], modes[i][2], modes[i][3])
+    linops[:,i] = get_linop(grid, a, modes[i][1], modes[i][2], modes[i][3], 1/β1const)
 end
 
 
@@ -103,6 +104,7 @@ zout, Eout, steps = RK45.solve_precon(
 t = grid.t
 
 Etout = FFTW.irfft(Eout, length(grid.t), 1)
+It = abs2.(Maths.hilbert(Etout))
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
@@ -110,7 +112,13 @@ pygui(true)
 
 for i = 1:nmodes
     plt.figure()
+    plt.subplot(121)
     plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
     plt.clim(-6, 0)
+    plt.xlim(0,2.0)
+    plt.colorbar()
+    plt.subplot(122)
+    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
+    plt.xlim(-30.0,100.0)
     plt.colorbar()
 end
