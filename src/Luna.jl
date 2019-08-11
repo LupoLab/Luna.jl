@@ -39,16 +39,15 @@ end
 
 function scaled_input(grid, input, energyfun, FT)
     Et = input.func(grid.t)
-    energy = energyfun(grid.t, Et, input.m, input.n)
+    energy = energyfun(grid.t, Et)
     Et_sc = sqrt(input.energy)/sqrt(energy) .* Et
     return FT * Et_sc
 end
 
-function run(grid,
-             linop, normfun, energyfun, densityfun, inputs, responses,
+function run(Eω, grid,
+             linop, normfun, densityfun, inputs, responses,
              transform, FT; max_dz=Inf)
 
-    Eω = make_init(grid, inputs, energyfun, FT)
     Et = FT \ Eω
 
     fnl! = make_fnl(grid, transform, densityfun, normfun, responses)

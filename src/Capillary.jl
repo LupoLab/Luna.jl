@@ -144,6 +144,15 @@ function emagh(a, n, m, kind; ϕ=0.0)
     end
 end
 
+"Create function that returns normalised (r,θ) -> (Ex, Ey)"
+function getExy(a, n, m, kind; ϕ=0.0)
+    func = let sN = sqrt(N(a, n, m, kind, ϕ=ϕ)), f = field(a, n, m, kind, ϕ=ϕ)
+        function func(r,θ)
+            f(r,θ) ./ sN
+        end
+    end
+end
+
 "Get effective area of mode"
 function Aeff(a, n, m, kind; ϕ=0.0)
     em = emagh(a, n, m, kind, ϕ=ϕ)

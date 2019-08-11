@@ -17,6 +17,7 @@ module Modes
 import FFTW
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
+import Cubature
 import Luna: PhysData, Capillary, Maths
 
 "Transform A(ω) to A(t) on oversampled time grid."
@@ -75,6 +76,97 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
+struct TransModalRadial{ET, FTT, rT, gT, dT}
+    nm::Int
+    R::Float64
+    Ets::ET
+    Ems::Array{Float64,1}
+    Emω::Array{ComplexF64,2}
+    Erω::Array{ComplexF64,1}
+    Erωo::Array{ComplexF64,1}
+    Er::Array{Float64,1}
+    Pr::Array{Float64,1}
+    Prω::Array{ComplexF64,1}
+    Prωo::Array{ComplexF64,1}
+    FT::FTT
+    resp::rT
+    grid::gT
+    densityfun::dT
+end
+
+"Transform E(ω) -> Pₙₗ(ω) for modal field."
+# get this working, then re-write for style/performance
+# R - max radial extrent
+# Ets - array of functions giving normalised Ex, Ey fields 
+# FT - forward FFT for the grid
+# resp - tuple of nonlinear responses
+function TransModalRadial(grid, R, Ets, FT, resp, densityfun)
+    nm = length(Ets)
+    Ems = Array{Float64,1}(undef, nm)
+    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nm)
+    Erω = Array{ComplexF64,1}(undef, length(grid.ω))
+    Erωo = Array{ComplexF64,1}(undef, length(grid.ωo))
+    Er = Array{Float64,1}(undef, length(grid.to))
+    Pr = Array{Float64,1}(undef, length(grid.to))
+    Prω = Array{ComplexF64,1}(undef, length(grid.ω))
+    Prωo = Array{ComplexF64,1}(undef, length(grid.ωo))
+    IFT = inv(FT)
+    TransModalRadial(nm, R, Ets, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, FT,
+                     resp, grid, densityfun)
+end
+
+function setEmω!(t::TransModalRadial, Emω::Array{ComplexF64,2})
+    t.Emω .= Emω
+end
+
+function (t::TransModalRadial)(rs, fval)
+    # rs is a 1d Float64 array of length n of radial points at which to evaluate the integrands
+    # fval is a 2d Float64 array of size fdim×n in which to store the values v[:,i]
+    # TODO: parallelize this in Julia 1.3
+    for i in 1:length(rs)
+        # boundaries r <= 0, r >= R are zero
+        if rs[i] <= 0.0 || rs[i] >=  t.R
+            fval[:,i] .= 0.0
+            continue
+        end
+        # get the field at r
+        # We assume (since this is non polarized) that
+        # each mode has only one polarization, and we silently ignore
+        # inconsistencies
+        fill!(t.Erω, 0.0)
+        for j in 1:t.nm
+            Ex, Ey = t.Ets[j](rs[i], 0.0)
+            t.Ems[j] = abs(Ex) > abs(Ey) ? Ex : Ey
+            for k in 1:length(t.Erω)
+                t.Erω[k] += t.Ems[j]*t.Emω[k,j]
+            end
+        end
+        to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
+        # get nonlinear pol at r
+        fill!(t.Pr, 0.0)
+        Et_to_Pt!(t.Pr, t.Er, t.resp)
+        @. t.Pr *= t.grid.towin
+        to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
+        t.Prω .*= t.grid.ωwin.*(-im.*t.grid.ω./4)
+        # now project back to each mode
+        for j in 1:t.nm # loop of each mode
+            for k in 1:length(t.Prω)
+                l = (j-1)*length(t.Prω)*2 + (k-1)*2
+                fval[l + 1, i] = 2π*rs[i]*t.Ems[j]*real(t.Prω[k])
+                fval[l + 2, i] = 2π*rs[i]*t.Ems[j]*imag(t.Prω[k])
+            end
+        end
+    end
+end
+
+function (t::TransModalRadial)(nl, Eω, z)
+    setEmω!(t, Eω)
+    val, err = Cubature.pquadrature_v(length(Eω)*2, (rs, fval) -> t(rs, fval), 0.0, t.R, 
+                                reltol=1e-3, abstol=0.0, maxevals=100,
+                                error_norm=Cubature.L2)
+    nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
+end
+
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
 function trans_mode_avg(grid)
     Nto = length(grid.to)
@@ -120,9 +212,18 @@ function trans_env_mode_avg(grid)
     return Pω!
 end
 
+"Calculate energy from modal field E(t)"
+function energy_modal()
+    function energyfun(t, Et)
+        Eta = Maths.hilbert(Et)
+        return abs(integrate(t, abs2.(Eta), SimpsonEven()))
+    end
+    return energyfun
+end
+
 "Calculate energy from field E(t) for mode-averaged field"
 function energy_mode_avg(aeff)
-    function energyfun(t, Et, m, n)
+    function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*aeff/2
@@ -132,7 +233,7 @@ end
 
 "Calculate energy from envelope field E(t) for mode-averaged field"
 function energy_env_mode_avg(aeff)
-    function energyfun(t, Et, m, n)
+    function energyfun(t, Et)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
