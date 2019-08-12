@@ -4,44 +4,44 @@ import Luna: Maths
 import FFTW
 
 "Kerr response for real field"
-function Kerr_field(χ3)
-    Kerr = let χ3 = χ3
+function Kerr_field(γ3)
+    Kerr = let γ3 = γ3
         function Kerr(out, E)
-            @. out += ε_0*χ3*E^3
+            @. out += ε_0*γ3*E^3
         end
     end
 end
 
 "Kerr response for real field but without THG"
-function Kerr_field_nothg(χ3, n)
+function Kerr_field_nothg(γ3, n)
     E2 = Array{Complex{Float64}}(undef, n)
-    Kerr = let χ3 = χ3, E2 = E2
+    Kerr = let γ3 = γ3, E2 = E2
         function Kerr(out, E)
             @. E2 = E
             FFTW.fft!(E2)
             E2[div(length(E2),2):end] .= 0.0
             FFTW.ifft!(E2)
-            @. out += 3*ε_0*χ3*abs2(E2)*E
+            @. out += 3*ε_0*γ3*abs2(E2)*E
         end
     end
 end
 
 "Kerr response for envelope"
-function Kerr_env(χ3)
-    Kerr = let χ3 = χ3
+function Kerr_env(γ3)
+    Kerr = let γ3 = γ3
         function Kerr(out, E)
-            @. out += 3/4*ε_0*χ3*abs2(E)*E
+            @. out += 3/4*ε_0*γ3*abs2(E)*E
         end
     end
 end
 
 "Kerr response for envelope but with THG"
 # see Eq. 4, Genty et al., Opt. Express 15 5382 (2007)
-function Kerr_env_thg(χ3, ω0, t)
+function Kerr_env_thg(γ3, ω0, t)
     C = exp.(-2im*ω0.*t)
-    Kerr = let χ3 = χ3, C = C
+    Kerr = let γ3 = γ3, C = C
         function Kerr(out, E)
-            @. out += ε_0*χ3/4*(3*abs2(E)*E + C*E^2)*E
+            @. out += ε_0*γ3/4*(3*abs2(E)*E + C*E^2)*E
         end
     end
 end
