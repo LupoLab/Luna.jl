@@ -55,8 +55,9 @@ end
 """
 Trapezoidal integration for multi-dimensional arrays, in-place or with output array.
 In all of these functions, x can be an array (the x axis) or a number (the x axis spacing)
+
+In-place integration for multi-dimensional arrays
 """
-"In-place integration for multi-dimensional arrays"
 function cumtrapz!(y, x; dim=1)
     idxlo = CartesianIndices(size(y)[1:dim-1])
     idxhi = CartesianIndices(size(y)[dim+1:end])

@@ -39,14 +39,14 @@ const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function χ_Börzsönyi(μm, B1, C1, B2, C2)
-    if any(μm .> 1e3)
+    if any(μm .> 1e4)
         throw(DomainError(μm, "Wavelength must be given in metres"))
     end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
-    if any(μm .> 1e3)
+    if any(μm .> 1e4)
         throw(DomainError(μm, "Wavelength must be given in metres"))
     end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1)
