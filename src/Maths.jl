@@ -130,13 +130,12 @@ function errfun_window(x, xmin, xmax, width_left, width_right)
 end
 
 """
-Planck taper window as defined in the paper:
+Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)):
     xmin: lower limit (window is 0 here)
     xmax: upper limit (window is 0 here)
     ε: fraction of window width over which to increase from 0 to 1
 """
 function planck_taper(x::AbstractArray, xmin, xmax, ε)
-    # https://arxiv.org/pdf/1003.2939.pdf eq(7)
     x0 = (xmax + xmin) / 2
     xc = x .- x0
     X = (xmax - xmin)
@@ -144,7 +143,7 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
     x2 = -X / 2 * (1 - 2ε)
     x3 = X / 2 * (1 - 2ε)
     x4 = X / 2
-    return planck(xc, x1, x2, x3, x4)
+    return _taper(xc, x1, x2, x3, x4)
 end
 
 """
@@ -244,22 +243,10 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: C
     Nto = collect(0:newlen - 1)
     to = t[1] .+ Nto .* δto
 
-    # TODO simplify this bit - shouldn't have to generate the axes to find startidx!
-    Nu = collect(range(0, length=len))
-    No = collect(range(0, length=newlen))
-    δω = 2π/(len*δt)
-    if iseven(len)
-        ω = @. (Nu-len/2)*δω
-    else
-        ω = @. (Nu-len/2 + 1/2)*δω
-    end
-    if iseven(newlen)
-        ωo = @. (No-newlen/2)*δω
-    else
-        ωo = @. (No-newlen/2 + 1/2)*δω
-    end
-
-    startidx = findall(x->x==ω[1], ωo)[1]
+    sidx  = (newlen - len)//2 + 1
+    iseven(newlen) || (sidx -= 1//2)
+    iseven(len) || (sidx += 1//2)
+    startidx = Int(sidx)
     endidx = startidx+len-1
 
     shape = collect(size(xf))
