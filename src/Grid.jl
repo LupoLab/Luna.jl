@@ -109,6 +109,7 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     to = @. (No-samples/2)*δto # time grid, centre on 0
     vo = @. (No-samples/2)*δωo # freq grid relative to ω0
     vo = FFTW.fftshift(vo)
+    ωo = vo .+ ω0
     
     ωmin = 2π*fmin
     ωmax = 2π*fmax
@@ -129,20 +130,21 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     t = @. (Nt - tsamples/2)*δt
     
     ω = v .+ ω0 # True frequency grid
-    ωo = vo .+ ω0
-    
-    sidx = ω .> 0
+    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
     
     # Make apodisation windows
     ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax_win)
-    
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
     
+    # Check that grids are correct
     @assert δt/δto ≈ length(to)/length(t)
-    @assert δt/δto ≈ minimum(vo)/minimum(v)
+    @assert δt/δto ≈ minimum(vo)/minimum(v) # FFT grid -> sample at -fs/2 but not +fs/2
     factor = Int(length(to)/length(t))
-    @assert all(to[1:factor:end] .== t)
+    zeroidx = findfirst(x -> x==0, to)
+    # Starting at zero, time samples should be exactly the same (except fewer in t)
+    @assert all(to[zeroidx:factor:end] .== t[t .>= 0])
+    @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
 
     return EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
