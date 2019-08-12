@@ -17,7 +17,7 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-modes = ((1,1,:HE), (1,2,:HE), (1,3,:HE), (1,4,:HE))
+modes = ((1,1,:HE), (1,2,:HE))#, (1,3,:HE), (1,4,:HE))
 nmodes = length(modes)
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)

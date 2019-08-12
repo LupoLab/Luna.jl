@@ -101,7 +101,7 @@ end
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # get this working, then re-write for style/performance
 # R - max radial extrent
-# Ets - array of functions giving normalised Ex, Ey fields 
+# Ets - array of functions giving normalised Ex and Ey fields 
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 function TransModalRadial(grid, R, Ets, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
@@ -136,13 +136,13 @@ function (t::TransModalRadial)(rs, fval)
             continue
         end
         # get the field at r
-        # We assume (since this is non polarized) that
-        # each mode has only one polarization, and we silently ignore
-        # inconsistencies
+        # We assume (since this is non polarized) that we want Ey (the default
+        # for \phi = 0). Better would be to ask user to pass in only one field
+        # function. We assume each mode has only one polarization, and we silently ignore
+        # inconsistencies.
         fill!(t.Erω, 0.0)
         for j in 1:t.nm
-            Ex, Ey = t.Ets[j](rs[i], 0.0)
-            t.Ems[j] = abs(Ex) > abs(Ey) ? Ex : Ey
+            t.Ems[j] = t.Ets[j](rs[i], 0.0)[2]
             for k in 1:length(t.Erω)
                 t.Erω[k] += t.Ems[j]*t.Emω[k,j]
             end
