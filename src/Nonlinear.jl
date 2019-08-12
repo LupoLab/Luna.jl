@@ -38,10 +38,10 @@ end
 "Kerr response for envelope but with THG"
 # see Eq. 4, Genty et al., Opt. Express 15 5382 (2007)
 function Kerr_env_thg(χ3, ω0, t)
-    C = exp.(-2im*ω0.*t)
+    C = exp.(2im*ω0.*t)
     Kerr = let χ3 = χ3, C = C
         function Kerr(out, E)
-            @. out += ε_0*χ3/4*(3*abs2(E)*E + C*E^2)*E
+            @. out += ε_0*χ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
 end
