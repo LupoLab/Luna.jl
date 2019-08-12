@@ -89,6 +89,25 @@ function _cpsc_core(dest, source, scale, idcs)
     end
 end
 
+"copy_scale_both! for multi-dim arrays. Works along first axis"
+function copy_scale_both!(dest, source, N, scale)
+    (size(dest)[2:end] == size(source)[2:end] 
+     || error("dest and source must be same size except along first dimension"))
+    idcs = CartesianIndices(size(dest)[2:end])
+    _cpscb_core(dest, source, N, scale, idcs)
+end
+
+function _cpscb_core(dest, source, N, scale, idcs)
+    for i in idcs
+        for j = 1:N
+            dest[j, i] = scale * source[j, i]
+        end
+        for j = 1:N
+            dest[end-j+1, i] = scale * source[end-j+1, i]
+        end
+    end
+end
+
 "Normalisation factor for mode-averaged field."
 function norm_mode_average(ω, βfun)
     out = zero(ω)
