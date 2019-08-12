@@ -226,21 +226,20 @@ end
 
 "Nonlinear coefficients"
 
-"Calculate single-molecule third-order susceptibility of a gas
+"Calculate single-molecule third-order hyperpolarisability of a gas
 at given wavelength(s) and at room temperature.
 If source == :Bishop:
-Uses reference values to calculate γ, the third-order hyperpolarisability,
-and changes units to susceptibility.
+Uses reference values to calculate γ
 If source == :Lehmeier (default):
 Uses scaling factors to calculate χ3 at 1 atmosphere and scales by density
-to get to a single molecule.
+to get to a single molecule i.e. the hyperpolarisability
 
 References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
 "
-function χ3_gas(material::Symbol; source=:Lehmeier)
+function γ3_gas(material::Symbol; source=:Lehmeier)
     if source == :Lehmeier
         # Table 1 in [3]
         if material in (:He, :HeJ)
@@ -256,7 +255,7 @@ function χ3_gas(material::Symbol; source=:Lehmeier)
         end
         return 4*fac*3.43e-28 / std_dens
     else
-        error("TODO: Bishop/Shelton values for χ3")
+        error("TODO: Bishop/Shelton values for γ3")
     end
 end
 
