@@ -1,5 +1,6 @@
 module Output
 import HDF5
+import Base: open, close
 
 "Output handler for writing to an HDF5 file"
 mutable struct HDF5Output{sT, N}
@@ -9,6 +10,7 @@ mutable struct HDF5Output{sT, N}
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
+    file::HDF5.HDF5File  # File object
 end
 
 "Simple constructor"
@@ -25,15 +27,27 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname)
     if isfile(fpath)
         error("Output file already exists!")
     end
-    HDF5.h5open(fpath, "cw") do file
+    file = HDF5.h5open(fpath, "cw")
+    try
         HDF5.d_create(file, yname*"_real", HDF5.datatype(Float64), (dims, maxdims),
-                      "chunk", dims)
+                        "chunk", dims)
         HDF5.d_create(file, yname*"_imag", HDF5.datatype(Float64), (dims, maxdims),
-                      "chunk", dims)
+                        "chunk", dims)
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((1,), (-1,)),
-                      "chunk", (1,))
+                        "chunk", (1,))
+        close(file)
+    catch
+        close(file)
     end
-    HDF5Output(fpath, save_cond, ydims, yname, tname, 0)
+    HDF5Output(fpath, save_cond, ydims, yname, tname, 0, file)
+end
+
+function open(o::HDF5Output)
+    o.file = HDF5.h5open(o.fpath, "cw")
+end
+
+function close(o::HDF5Output)
+    close(o.file)
 end
 
 """Calling the output handler writes data to the file
@@ -47,25 +61,23 @@ end
 function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     while save
-        HDF5.h5open(o.fpath, "r+") do file
-            idcs = fill(:, length(o.ydims))
-            s = collect(size(file[o.yname*"_real"]))
-            if s[end] < o.saved+1
-                s[end] += 1
-                HDF5.set_dims!(file[o.yname*"_real"], Tuple(s))
-                HDF5.set_dims!(file[o.yname*"_imag"], Tuple(s))
-            end
-            yi = yfun(ts)
-            file[o.yname*"_real"][idcs..., o.saved+1] = real(yi)
-            file[o.yname*"_imag"][idcs..., o.saved+1] = imag(yi)
-            s = collect(size(file[o.tname]))
-            if s[end] < o.saved+1
-                s[end] += 1
-                HDF5.set_dims!(file[o.tname], Tuple(s))
-            end
-            file[o.tname][o.saved+1] = ts
-            o.saved += 1
+        idcs = fill(:, length(o.ydims))
+        s = collect(size(o.file[o.yname*"_real"]))
+        if s[end] < o.saved+1
+            s[end] += 1
+            HDF5.set_dims!(o.file[o.yname*"_real"], Tuple(s))
+            HDF5.set_dims!(o.file[o.yname*"_imag"], Tuple(s))
         end
+        yi = yfun(ts)
+        o.file[o.yname*"_real"][idcs..., o.saved+1] = real(yi)
+        o.file[o.yname*"_imag"][idcs..., o.saved+1] = imag(yi)
+        s = collect(size(o.file[o.tname]))
+        if s[end] < o.saved+1
+            s[end] += 1
+            HDF5.set_dims!(o.file[o.tname], Tuple(s))
+        end
+        o.file[o.tname][o.saved+1] = ts
+        o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
     end
 
