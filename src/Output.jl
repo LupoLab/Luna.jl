@@ -22,6 +22,9 @@ end
 function HDF5Output(fpath, save_cond, ydims, yname, tname)
     dims = (ydims..., 1)
     maxdims = (ydims..., -1)
+    if isfile(fpath)
+        error("Output file already exists!")
+    end
     HDF5.h5open(fpath, "cw") do file
         HDF5.d_create(file, yname*"_real", HDF5.datatype(Float64), (dims, maxdims),
                       "chunk", dims)
@@ -52,8 +55,9 @@ function (o::HDF5Output)(y, t, dt, yfun)
                 HDF5.set_dims!(file[o.yname*"_real"], Tuple(s))
                 HDF5.set_dims!(file[o.yname*"_imag"], Tuple(s))
             end
-            file[o.yname*"_real"][idcs..., o.saved+1] = real(yfun(ts))
-            file[o.yname*"_imag"][idcs..., o.saved+1] = imag(yfun(ts))
+            yi = yfun(ts)
+            file[o.yname*"_real"][idcs..., o.saved+1] = real(yi)
+            file[o.yname*"_imag"][idcs..., o.saved+1] = imag(yi)
             s = collect(size(file[o.tname]))
             if s[end] < o.saved+1
                 s[end] += 1
@@ -79,7 +83,11 @@ end
 
 function (cond::GridCondition)(y, t, dt, saved)
     save = (saved < cond.saveN) && cond.grid[saved+1] < t
-    return save, cond.grid[saved+1]
+    if save
+        return save, cond.grid[saved+1]
+    else
+        return save, 0
+    end
 end
 
 "Condition which saves every native point of the propagation"

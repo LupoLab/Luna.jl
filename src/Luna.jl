@@ -50,7 +50,7 @@ end
 
 function run(grid,
              linop, normfun, energyfun, densityfun, inputs, responses,
-             transform, FT; max_dz=Inf)
+             transform, FT, output; max_dz=Inf)
 
     Eω = make_init(grid, inputs, energyfun, FT)
     Et = FT \ Eω
@@ -71,8 +71,13 @@ function run(grid,
         end
     end
 
+    function stepfun(Eω, z, dz, interpolant)
+        window!(Eω)
+        output(Eω, z, dz, interpolant)
+    end
+
     zout, Eout, steps = RK45.solve_precon(
-        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
+        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=stepfun, max_dt=max_dz)
 
     return zout, Eout
 end

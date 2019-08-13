@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, Output
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -55,8 +55,11 @@ inputs = (in1, )
 x = Array{Float64}(undef, length(grid.t))
 FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
 
+output = Output.HDF5Output("test.h5", 0, grid.zmax, 201, (length(grid.ω),))
+
 linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs, responses, transform, FT)
+zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
+                      responses, transform, FT, output)
 
 ω = grid.ω
 t = grid.t

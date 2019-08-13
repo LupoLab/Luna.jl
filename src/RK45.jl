@@ -53,7 +53,7 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
                 yout[fill(:, ndims(s.y))..., saved+1] .= interpolate(s, ti)
                 saved += 1
             end
-            stepfun(s.yn)
+            stepfun(s.yn, s.tn, s.dt, t -> interpolate(s, t))
             repeated = 0
         else
             repeated += 1
