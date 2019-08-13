@@ -71,7 +71,7 @@ end
 
 function (Plas::PlasmaCumtrapz)(out, E)
     Plas.ratefunc(Plas.rate, E)
-    Maths.cumtrapz!(Plas.fraction, Plas.t, Plas.rate)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
