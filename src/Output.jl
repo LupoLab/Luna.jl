@@ -1,21 +1,24 @@
 module Output
 import HDF5
 
+"Output handler for writing to an HDF5 file"
 mutable struct HDF5Output{sT, N}
     fpath::AbstractString  # Path to output file
-    save_cond::sT  # Condition callable for saving
+    save_cond::sT  # callable, determines when data is saved and where it is interpolated
     ydims::NTuple{N, Int64}  # Dimensions of one array to be saved
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
 end
 
+"Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims;
                     yname="Eω", tname="z")
     save_cond = GridCondition(tmin, tmax, saveN)
     HDF5Output(fpath, save_cond, ydims, yname, tname)
 end
 
+"Internal constructor - creates datasets in the file"
 function HDF5Output(fpath, save_cond, ydims, yname, tname)
     dims = (ydims..., 1)
     maxdims = (ydims..., -1)
@@ -30,6 +33,14 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname)
     HDF5Output(fpath, save_cond, ydims, yname, tname, 0)
 end
 
+"""Calling the output handler writes data to the file
+    Arguments:
+        y: current function value
+        t: current propagation point
+        dt: current stepsize
+        yfun: callable which returns interpolated function value at different t
+    Note that from RK45.jl, this will be called with yn and tn as arguments.
+"""
 function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     while save
@@ -56,6 +67,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
 
 end
 
+"Condition callable that distributes save points evenly on a grid"
 struct GridCondition
     grid::Vector{Float64}
     saveN::Integer
