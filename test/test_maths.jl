@@ -53,6 +53,11 @@ end
     to, Eto = Maths.oversample(t, Et, factor=4)
     @test 4*size(Et)[1] == size(Eto)[1]
     @test all(isapprox.(Eto[1:4:end], Et, rtol=1e-6))
+
+    Etc = Maths.gauss(t, fwhm=4).*exp.(1im*4*t)
+    to, Etco = Maths.oversample(t, Etc, factor=4)
+    @test 4*size(Etc)[1] == size(Etco)[1]
+    @test all(isapprox.(Etco[1:4:end], Etc, rtol=1e-6))
 end
 
 @testset "integration" begin

@@ -19,7 +19,7 @@ import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Capillary, Maths
 
-"Transform A(ω) to A(t) on oversampled time grid."
+"Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
@@ -29,13 +29,32 @@ function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     mul!(Ato, IFTplan, Aωo)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid."
+"Transform A(ω) to A(t) on oversampled time grid - envelope"
+function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
+    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
+    fill!(Aωo, 0)
+    copy_scale_both!(Aωo, Aω, N÷2, scale)
+    mul!(Ato, IFTplan, Aωo)
+end
+
+"Transform oversampled A(t) to A(ω) on normal grid - real field"
 function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
     mul!(Aωo, FTplan, Ato)
     copy_scale!(Aω, Aωo, N, scale)
+end
+
+"Transform oversampled A(t) to A(ω) on normal grid - envelope"
+function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
+    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
+    mul!(Aωo, FTplan, Ato)
+    copy_scale_both!(Aω, Aωo, N÷2, scale)
 end
 
 "Copy first N elements from source to dest and simultaneously multiply by scale factor"
@@ -45,17 +64,49 @@ function copy_scale!(dest::Vector, source::Vector, N, scale)
     end
 end
 
+"""Copy first and last N elements from source to first and last N elements in dest
+and simultaneously multiply by scale factor"""
+function copy_scale_both!(dest::Vector, source::Vector, N, scale)
+    for i = 1:N
+        dest[i] = scale * source[i]
+    end
+    for i = 1:N
+        dest[end-i+1] = scale * source[end-i+1]
+    end
+end
+
 "copy_scale! for multi-dim arrays. Works along first axis"
 function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
-    idcs = CartesianIndices((N, size(dest)[2:end]...))
-    _cpsc_core(dest, source, scale, idcs)
+    idcs = CartesianIndices(size(dest)[2:end])
+    _cpsc_core(dest, source, scale, N, idcs)
 end
 
-function _cpsc_core(dest, source, scale, idcs)
+function _cpsc_core(dest, source, N, scale, idcs)
     for i in idcs
-        dest[i] = scale * source[i]
+        for j = 1:N
+            dest[j, i] = scale * source[j, i]
+        end
+    end
+end
+
+"copy_scale_both! for multi-dim arrays. Works along first axis"
+function copy_scale_both!(dest, source, N, scale)
+    (size(dest)[2:end] == size(source)[2:end] 
+     || error("dest and source must be same size except along first dimension"))
+    idcs = CartesianIndices(size(dest)[2:end])
+    _cpscb_core(dest, source, N, scale, idcs)
+end
+
+function _cpscb_core(dest, source, N, scale, idcs)
+    for i in idcs
+        for j = 1:N
+            dest[j, i] = scale * source[j, i]
+        end
+        for j = 1:N
+            dest[end-j+1, i] = scale * source[end-j+1, i]
+        end
     end
 end
 
@@ -97,22 +148,25 @@ end
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
 function trans_env_mode_avg(grid)
+    Nto = length(grid.to)
     Nt = length(grid.t)
 
-    Et = zeros(ComplexF64, length(grid.t))
-    Pt = similar(Et)
+    Eωo = zeros(ComplexF64, length(grid.ωo))
+    Eto = similar(Eωo)
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
 
-    FT = FFTW.plan_fft(Et, flags=FFTW.PATIENT)
-    IFT = FFTW.plan_ifft(Et, flags=FFTW.PATIENT)
+    FT = FFTW.plan_fft(Eto, flags=FFTW.PATIENT)
+    IFT = FFTW.plan_ifft(Eωo, flags=FFTW.PATIENT)
 
     function Pω!(Pω, Eω, z, responses)
-        fill!(Pt, 0)
-        mul!(Et, IFT, Eω)
+        fill!(Pto, 0)
+        to_time!(Eto, Eω, Eωo, IFT)
         for resp in responses
-            resp(Pt, Et)
+            resp(Pto, Eto)
         end
-        @. Pt *= grid.twin
-        mul!(Pω, FT, Pt)
+        @. Pto *= grid.towin
+        to_freq!(Pω, Pωo, Pto, FT)
     end
 
     return Pω!
