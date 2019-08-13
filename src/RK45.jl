@@ -208,6 +208,11 @@ function interpolate(s::Stepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
     end
+    if ti == s.t
+        return s.y
+    elseif ti == s.tn
+        return s.yn
+    end
     σ = (ti - s.t)/s.dt
     σp = map(p -> σ^p, range(1, stop=4))
     b = sum(σp.*interpC, dims=1)
@@ -221,6 +226,11 @@ end
 function interpolate(s::PreconStepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
+    end
+    if ti == s.t
+        return s.y
+    elseif ti == s.tn
+        return s.yn
     end
     σ = (ti - s.t)/s.dt
     σp = map(p -> σ^p, range(1, stop=4))

@@ -82,4 +82,26 @@ function (cond::GridCondition)(y, t, dt, saved)
     return save, cond.grid[saved+1]
 end
 
+"Condition which saves every native point of the propagation"
+function always(y, t, dt, saved)
+    return true, t
+end
+
+"Condition which saves every nth native point"
+function every_nth(n)
+    i = 0
+    cond = let i = i, n = n
+        function condition(y, t, dt, saved)
+            if i % n == 0
+                return true, t
+            else
+                return false, t
+            end
+            i += 1
+        end
+    end
+    return cond
+end
+            
+
 end
