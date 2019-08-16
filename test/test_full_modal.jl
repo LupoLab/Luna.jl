@@ -73,7 +73,7 @@ FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
 xo1 = Array{Float64}(undef, length(grid.to), 1)
 FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
 
-transform = Modes.TransModalRadialMat(grid, a, Exy, FTo1, responses, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
+transform = Modes.TransModalRadialMat(grid, a, Exy, FTo1, responses, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=true)
 
 Et = FT \ Eω
 

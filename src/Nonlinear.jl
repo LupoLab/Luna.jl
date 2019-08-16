@@ -3,11 +3,30 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths
 import FFTW
 
+function KerrScalar(out, E, fac)
+    @. out += fac*E^3
+end
+
+function KerrVector(out, E, fac)
+    for i = 1:size(E,1)
+        Ex = E[i,1]
+        Ey = E[i,2]
+        Ex2 = Ex^2
+        Ey2 = Ey^2
+        out[i,1] = fac*(Ex2 + Ey2)*Ex
+        out[i,2] = fac*(Ex2 + Ey2)*Ey
+    end
+end
+
 "Kerr response for real field"
 function Kerr_field(χ3)
     Kerr = let χ3 = χ3
         function Kerr(out, E)
-            @. out += ε_0*χ3*E^3
+            if size(E,2) == 1
+                KerrScalar(out, E, ε_0*χ3)
+            else
+                KerrVector(out, E, ε_0*χ3)
+            end
         end
     end
 end

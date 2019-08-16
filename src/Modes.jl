@@ -46,6 +46,15 @@ function copy_scale!(dest::Vector, source::Vector, N, scale)
     end
 end
 
+"copy_scale! for 2-dim arrays. Works along first axis"
+function copy_scale!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
+    for i in 1:size(dest,2)
+        for j in 1:N
+            dest[j,i] = scale * source[j,i]
+        end
+    end
+end
+
 "copy_scale! for multi-dim arrays. Works along first axis"
 function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
@@ -76,23 +85,26 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
-mutable struct TransModalRadial{ET, FTT, rT, gT, dT}
-    nm::Int
+# ndim is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
+mutable struct TransModalRadialMat{ET, FTT, rT, gT, dT}
+    nmodes::Int
+    full::Bool
     R::Float64
     Ets::ET
-    Ems::Array{Float64,1}
+    Ems::Array{Float64,2}
     Emω::Array{ComplexF64,2}
-    Erω::Array{ComplexF64,1}
-    Erωo::Array{ComplexF64,1}
-    Er::Array{Float64,1}
-    Pr::Array{Float64,1}
-    Prω::Array{ComplexF64,1}
-    Prωo::Array{ComplexF64,1}
+    Erω::Array{ComplexF64,2}
+    Erωo::Array{ComplexF64,2}
+    Er::Array{Float64,2}
+    Pr::Array{Float64,2}
+    Prω::Array{ComplexF64,2}
+    Prωo::Array{ComplexF64,2}
+    Prmω::Array{ComplexF64,2}
     FT::FTT
     resp::rT
     grid::gT
     densityfun::dT
-    nc::Int
+    ncalls::Int
     rtol::Float64
     atol::Float64
     mfcn::Int
@@ -101,52 +113,52 @@ end
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # get this working, then re-write for style/performance
 # R - max radial extrent
-# Ets - array of functions giving normalised Ex and Ey fields 
+# Ets - function returning matrix nm x ndim describing normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
-function TransModalRadial(grid, R, Ets, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
-    nm = length(Ets)
-    Ems = Array{Float64,1}(undef, nm)
-    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nm)
-    Erω = Array{ComplexF64,1}(undef, length(grid.ω))
-    Erωo = Array{ComplexF64,1}(undef, length(grid.ωo))
-    Er = Array{Float64,1}(undef, length(grid.to))
-    Pr = Array{Float64,1}(undef, length(grid.to))
-    Prω = Array{ComplexF64,1}(undef, length(grid.ω))
-    Prωo = Array{ComplexF64,1}(undef, length(grid.ωo))
+# if full is true, we integrate over whole cross section
+function TransModalRadialMat(grid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    nmodes, ndim = size(Exy(0.0, 0.0))
+    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
+    Ems = Array{Float64,2}(undef, nmodes, ndim)
+    Erω = Array{ComplexF64,2}(undef, length(grid.ω), ndim)
+    Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ndim)
+    Er = Array{Float64,2}(undef, length(grid.to), ndim)
+    Pr = Array{Float64,2}(undef, length(grid.to), ndim)
+    Prω = Array{ComplexF64,2}(undef, length(grid.ω), ndim)
+    Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), ndim)
+    Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
-    TransModalRadial(nm, R, Ets, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, FT,
-                     resp, grid, densityfun,0,rtol,atol,mfcn)
+    TransModalRadialMat(nmodes, full, R, Exy, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
+                     resp, grid, densityfun, 0, rtol, atol, mfcn)
 end
 
-function setEmω!(t::TransModalRadial, Emω::Array{ComplexF64,2})
+function reset!(t::TransModalRadialMat, Emω::Array{ComplexF64,2})
     t.Emω .= Emω
-    t.nc = 0
+    t.ncalls = 0
 end
 
-function (t::TransModalRadial)(rs, fval)
-    t.nc += length(rs)
-    # rs is a 1d Float64 array of length n of radial points at which to evaluate the integrands
-    # fval is a 2d Float64 array of size fdim×n in which to store the values v[:,i]
+function (t::TransModalRadialMat)(x, fval)
+    #t.ncalls += size(rs,2)
     # TODO: parallelize this in Julia 1.3
-    for i in 1:length(rs)
+    #for i in 1:length(rs)
+        r = x[1]
+        #r = rs[i]
+        if ndims(x) > 1
+            θ = x[2]
+            pre = r
+        else
+            θ = 0.0
+            pre = 2π*r
+        end
         # boundaries r <= 0, r >= R are zero
-        if rs[i] <= 0.0 || rs[i] >=  t.R
-            fval[:,i] .= 0.0
-            continue
+        if r <= 0.0 || r >=  t.R
+            fval .= 0.0
+            #continue
         end
-        # get the field at r
-        # We assume (since this is non polarized) that we want Ey (the default
-        # for \phi = 0). Better would be to ask user to pass in only one field
-        # function. We assume each mode has only one polarization, and we silently ignore
-        # inconsistencies.
-        fill!(t.Erω, 0.0)
-        for j in 1:t.nm
-            t.Ems[j] = t.Ets[j](rs[i], 0.0)[2]
-            for k in 1:length(t.Erω)
-                t.Erω[k] += t.Ems[j]*t.Emω[k,j]
-            end
-        end
+        # get the field at r,θ
+        t.Ems = t.Ets(r, θ) # field matrix
+        mul!(t.Erω, t.Emω, t.Ems) # matrix product (nω x nmodes) * (nmodes x ndim) -> (nω x ndim)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r
         fill!(t.Pr, 0.0)
@@ -155,22 +167,41 @@ function (t::TransModalRadial)(rs, fval)
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
         t.Prω .*= t.grid.ωwin.*(-im.*t.grid.ω./4)
         # now project back to each mode
-        for j in 1:t.nm # loop of each mode
-            for k in 1:length(t.Prω)
-                l = (j-1)*length(t.Prω)*2 + (k-1)*2
-                fval[l + 1, i] = 2π*rs[i]*t.Ems[j]*real(t.Prω[k])
-                fval[l + 2, i] = 2π*rs[i]*t.Ems[j]*imag(t.Prω[k])
-            end
-        end
-    end
+        mul!(t.Prmω, t.Prω, transpose(t.Ems))
+        fval .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
+        # Loop below is twice as fast, why? this is a shame! as line above is neater
+        # also, equivalent line going the other way is an order of magnitude faster!
+        #for j in 1:t.nmodes # loop over each mode
+        #    for k in 1:length(t.Prω)
+        #        l = (j-1)*length(t.Prω)*2 + (k-1)*2
+        #        m = (j-1)*length(t.Prω) + k
+        #        tp = 2π*r*t.Prmω[m]
+        #        fval[l + 1, i] = real(tp)
+        #        fval[l + 2, i] = imag(tp)
+        #    end
+        #end
+    #end
 end
 
-function (t::TransModalRadial)(nl, Eω, z)
-    setEmω!(t, Eω)
-    val, err = Cubature.pquadrature_v(length(Eω)*2, (rs, fval) -> t(rs, fval), 0.0, t.R, 
-                                reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
-                                error_norm=Cubature.L2)
+function (t::TransModalRadialMat)(nl, Eω, z)
+    reset!(t, Eω)
+    if t.full
+        val, err = Cubature.pcubature(length(Eω)*2, (x, fval) -> t(x, fval), (0.0,0.0), (t.R,2π), 
+                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
+                                    error_norm=Cubature.L2)
+    else
+        val, err = Cubature.pcubature(length(Eω)*2, (x, fval) -> t(x, fval), (0.0,), (t.R,), 
+                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
+                                    error_norm=Cubature.L2)
+    end
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
+    #d = t.densityfun(z)
+    #for i in 1:size(nl,2)
+    #    for j in 1:size(nl, 1)
+    #        l = (i-1)*size(nl, 1)*2 + (j-1)*2
+    #        nl[j,i] = d * ComplexF64(val[l+1], val[l+2])
+    #    end
+    #end
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."

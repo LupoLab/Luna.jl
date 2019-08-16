@@ -174,4 +174,32 @@ function Aeff(a, n, m, kind; ϕ=0.0)
     return ret / val
 end
 
+"Create function that returns (r,θ) -> ((Ex, Ey),(Ex,Ey),...) for each mode"
+function fields(a, modes; components=:Ey)
+    if components == :Ey
+        indices = 2
+    elseif components == :Ex
+        indices = 1
+    elseif components == :Exy
+        indices = 1:2
+    else
+        error("components must be one of :Ex, :Ey or :Exy")
+    end
+    Ets = []
+    for i = 1:length(modes)
+        push!(Ets, Capillary.getExy(a, modes[i][1], modes[i][2], modes[i][3]))
+    end
+    Exy = Array{Float64,2}(undef,size(modes,1),length(indices))
+    
+    ret = let Exy=Exy
+        function ret(r,θ)
+            for i = 1:length(modes)
+                Exy[i,:] .= Ets[i](r,θ)[indices]
+            end
+            Exy
+        end
+    end
+    ret
+end
+
 end
