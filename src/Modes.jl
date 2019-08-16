@@ -144,7 +144,7 @@ function (t::TransModalRadialMat)(x, fval)
     #for i in 1:length(rs)
         r = x[1]
         #r = rs[i]
-        if ndims(x) > 1
+        if length(x) > 1
             θ = x[2]
             pre = r
         else
