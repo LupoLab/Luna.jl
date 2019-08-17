@@ -1,6 +1,5 @@
 import Test: @test, @testset
 import Luna: Ionisation
-import CSV
 import PyPlot: plt, pygui
 
 @test Ionisation.ionrate_ADK(:He, 1e10) ≈ 1.2416371415312408e-18
@@ -21,6 +20,7 @@ adk = Ionisation.ionrate_ADK(:He, E)
 # dat = CSV.read("C:\\Users\\cbrahms\\Documents\\GitHub\\luna\\test\\Ilkov_PPT_He.csv")
 # dat = convert(Matrix, dat) # ionrate [1/s] vs field [V/cm]
 
+# import CSV
 # plt.figure()
 # plt.loglog(E, ppt, "--")
 # plt.loglog(E, adk)

@@ -2,6 +2,7 @@ import Test: @test, @test_throws, @testset
 
 testdir = dirname(@__FILE__)
 
+@testset "All" begin
 @testset "Maths" begin
     include(joinpath(testdir, "test_maths.jl"))
 end
@@ -24,4 +25,5 @@ end
 
 @testset "Output" begin
     include(joinpath(testdir, "test_output.jl"))
+end
 end

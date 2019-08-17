@@ -1,6 +1,7 @@
 import Test: @test
-import Luna: Capillary
-import Luna.PhysData: c
+import Luna: Capillary, PhysData
+
+const c = PhysData.c
 
 λ = 800e-9
 ω = 2π*c/λ
