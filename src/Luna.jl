@@ -76,10 +76,8 @@ function run(grid,
         output(Eω, z, dz, interpolant)
     end
 
-    open(output)
     zout, Eout, steps = RK45.solve_precon(
         fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=stepfun, max_dt=max_dz)
-    close(output)
 
     return zout, Eout
 end

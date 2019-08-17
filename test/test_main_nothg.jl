@@ -1,7 +1,6 @@
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, Output
 import Logging
-import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
 
