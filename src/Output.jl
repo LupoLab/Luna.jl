@@ -1,5 +1,6 @@
 module Output
 import HDF5
+import Logging
 
 "Output handler for writing to an HDF5 file"
 mutable struct HDF5Output{sT, N}
@@ -20,15 +21,16 @@ end
 
 "Internal constructor - creates datasets in the file"
 function HDF5Output(fpath, save_cond, ydims, yname, tname)
-    dims = (ydims..., 1)
-    maxdims = (ydims..., -1)
+    ydims_c = collect(ydims)
+    ydims_c[1] *= 2 # Allow for interleaving of real, imag, real, imag...
+    dims = (ydims_c..., 1)
+    maxdims = (ydims_c..., -1)
     if isfile(fpath)
-        error("Output file already exists!")
+        Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
+        rm(fpath)
     end
     HDF5.h5open(fpath, "cw") do file
-        HDF5.d_create(file, yname*"_real", HDF5.datatype(Float64), (dims, maxdims),
-                      "chunk", dims)
-        HDF5.d_create(file, yname*"_imag", HDF5.datatype(Float64), (dims, maxdims),
+        HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
                       "chunk", dims)
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((1,), (-1,)),
                       "chunk", (1,))
@@ -49,15 +51,13 @@ function (o::HDF5Output)(y, t, dt, yfun)
     while save
         HDF5.h5open(o.fpath, "r+") do file
             idcs = fill(:, length(o.ydims))
-            s = collect(size(file[o.yname*"_real"]))
+            s = collect(size(file[o.yname]))
             if s[end] < o.saved+1
                 s[end] += 1
-                HDF5.set_dims!(file[o.yname*"_real"], Tuple(s))
-                HDF5.set_dims!(file[o.yname*"_imag"], Tuple(s))
+                HDF5.set_dims!(file[o.yname], Tuple(s))
             end
             yi = yfun(ts)
-            file[o.yname*"_real"][idcs..., o.saved+1] = real(yi)
-            file[o.yname*"_imag"][idcs..., o.saved+1] = imag(yi)
+            file[o.yname][idcs..., o.saved+1] = reinterpret(Float64, yi)
             s = collect(size(file[o.tname]))
             if s[end] < o.saved+1
                 s[end] += 1
@@ -71,6 +71,18 @@ function (o::HDF5Output)(y, t, dt, yfun)
 
 end
 
+"Calling the output on a dictionary simply writes the items to the file"
+function (o::HDF5Output)(d::Dict)
+    HDF5.h5open(o.fpath, "r+") do file
+        for (k, v) in pairs(d)
+            if HDF5.exists(file, k)
+                error("File $(o.fpath) already has dataset $(k)!")
+            end
+            file[k] = v
+        end
+    end
+end
+
 "Condition callable that distributes save points evenly on a grid"
 struct GridCondition
     grid::Vector{Float64}
@@ -82,12 +94,8 @@ function GridCondition(tmin, tmax, saveN)
 end
 
 function (cond::GridCondition)(y, t, dt, saved)
-    save = (saved < cond.saveN) && cond.grid[saved+1] < t
-    if save
-        return save, cond.grid[saved+1]
-    else
-        return save, 0
-    end
+    save = (saved < cond.saveN) && cond.grid[saved+1] <= t
+    return save, save ? cond.grid[saved+1] : 0
 end
 
 "Condition which saves every native point of the propagation"
@@ -100,11 +108,7 @@ function every_nth(n)
     i = 0
     cond = let i = i, n = n
         function condition(y, t, dt, saved)
-            if i % n == 0
-                return true, t
-            else
-                return false, t
-            end
+            return i % n == 0, t
             i += 1
         end
     end
