@@ -260,7 +260,7 @@ function γ3_gas(material::Symbol; source=:Lehmeier)
 end
 
 function χ3_gas(material::Symbol, pressure; source=:Lehmeier)
-    return χ3_gas(material, source=source) .* std_dens .* pressure
+    return γ3_gas(material, source=source) .* std_dens .* pressure
 end
 
 function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)
