@@ -307,7 +307,7 @@ function weaknorm(yerr, y, yn, rtol, atol)
     return syerr/rtol/errwt
 end
 
-function donothing!(x)
+function donothing!(y, z, dz, interpolant)
 end
 
 end

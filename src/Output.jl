@@ -146,18 +146,6 @@ function (o::HDF5Output)(d::Dict)
     end
 end
 
-"""Making initial array dimensions.
-For a GridCondition, we know in advance how many points there will be.
-"""
-function init_dims(ydims, save_cond::GridCondition)
-    return (ydims..., save_cond.saveN)
-end
-
-"For other conditions, we do not know in advance."
-function init_dims(ydims, save_cond)
-    return (ydims..., 1)
-end
-
 "Condition callable that distributes save points evenly on a grid"
 struct GridCondition
     grid::Vector{Float64}
@@ -189,6 +177,17 @@ function every_nth(n)
     end
     return cond
 end
-            
 
+"""Making initial array dimensions.
+For a GridCondition, we know in advance how many points there will be.
+"""
+function init_dims(ydims, save_cond::GridCondition)
+    return (ydims..., save_cond.saveN)
+end
+
+"For other conditions, we do not know in advance."
+function init_dims(ydims, save_cond)
+    return (ydims..., 1)
+end
+            
 end
