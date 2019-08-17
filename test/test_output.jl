@@ -31,3 +31,29 @@ import Luna: Output
     @test_throws ErrorException o(extra)
     rm("test.h5")
 end
+
+@testset "Memory" begin
+    shape = (1024, 4, 2)
+    n = 11
+    t0 = 0
+    t1 = 10
+    t = collect(range(t0, stop=t1, length=n))
+    ω = randn((1024,))
+    wd = dirname(@__FILE__)
+    gitc = read(`git -C $wd rev-parse --short HEAD`, String)
+    o = Output.MemoryOutput(t0, t1, n, shape, yname="y", tname="t")
+    extra = Dict()
+    extra["ω"] = ω
+    extra["git_commit"] = gitc
+    o(extra)
+    y0 = randn(ComplexF64, shape)
+    y(t) = y0
+    for (ii, ti) in enumerate(t)
+        o(y0, ti, 0, y)
+    end
+    @test all(o.data["t"] == t)
+    @test all([all(o.data["y"][:, :, :, ii] == y0) for ii=1:n])
+    @test all(ω == o.data["ω"])
+    @test gitc == o.data["git_commit"]
+    @test_throws ErrorException o(extra)
+end
