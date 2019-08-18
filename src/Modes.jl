@@ -18,7 +18,7 @@ import FFTW
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
 import Cubature
-import Luna: PhysData, Capillary, Maths
+import Luna: PhysData, Capillary, Maths, Grid
 
 "Transform A(ω) to A(t) on oversampled time grid."
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -32,6 +32,25 @@ end
 
 "Transform oversampled A(t) to A(ω) on normal grid."
 function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
+    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
+    mul!(Aωo, FTplan, Ato)
+    copy_scale!(Aω, Aωo, N, scale)
+end
+
+"Transform A(ω) to A(t) on oversampled complex time grid."
+function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
+    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
+    fill!(Aωo, 0)
+    copy_scale!(Aωo, Aω, N, scale)
+    mul!(Ato, IFTplan, Aωo)
+end
+
+"Transform oversampled A(t) to A(ω) on normal grid."
+function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
@@ -86,7 +105,7 @@ function Et_to_Pt!(Pt, Et, responses)
 end
 
 # npol is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
-mutable struct TransModalRadialMat{ET, FTT, rT, gT, dT}
+mutable struct TransModalRadialMat{ET, TT, FTT, rT, gT, dT}
     nmodes::Int
     full::Bool
     R::Float64
@@ -95,8 +114,8 @@ mutable struct TransModalRadialMat{ET, FTT, rT, gT, dT}
     Emω::Array{ComplexF64,2}
     Erω::Array{ComplexF64,2}
     Erωo::Array{ComplexF64,2}
-    Er::Array{Float64,2}
-    Pr::Array{Float64,2}
+    Er::Array{TT,2}
+    Pr::Array{TT,2}
     Prω::Array{ComplexF64,2}
     Prωo::Array{ComplexF64,2}
     Prmω::Array{ComplexF64,2}
@@ -117,7 +136,7 @@ end
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModalRadialMat(grid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+function TransModalRadialMat(grid::Grid.RealGrid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
     nmodes, npol = size(Exy(0.0, 0.0))
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     Ems = Array{Float64,2}(undef, nmodes, npol)
@@ -127,6 +146,22 @@ function TransModalRadialMat(grid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol
     Pr = Array{Float64,2}(undef, length(grid.to), npol)
     Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
+    Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
+    IFT = inv(FT)
+    TransModalRadialMat(nmodes, full, R, Exy, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
+                     resp, grid, densityfun, 0, rtol, atol, mfcn)
+end
+
+function TransModalRadialMat(grid::Grid.EnvGrid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    nmodes, npol = size(Exy(0.0, 0.0))
+    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
+    Ems = Array{Float64,2}(undef, nmodes, npol)
+    Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
+    Erωo = Array{ComplexF64,2}(undef, length(grid.ω), npol)
+    Er = Array{ComplexF64,2}(undef, length(grid.t), npol)
+    Pr = Array{ComplexF64,2}(undef, length(grid.t), npol)
+    Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
+    Prωo = Array{ComplexF64,2}(undef, length(grid.ω), npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
     TransModalRadialMat(nmodes, full, R, Exy, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
@@ -235,6 +270,14 @@ function energy_modal()
     function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         return abs(integrate(t, abs2.(Eta), SimpsonEven()))
+    end
+    return energyfun
+end
+
+"Calculate energy from modal envelope field E(t)"
+function energy_env_modal()
+    function energyfun(t, Et)
+        return abs(integrate(t, abs2.(Et), SimpsonEven()))
     end
     return energyfun
 end
