@@ -41,14 +41,14 @@ const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function χ_Börzsönyi(μm, B1, C1, B2, C2)
-    if any(μm .> 1e3)
+    if any(μm .> 1e4)
         throw(DomainError(μm, "Wavelength must be given in metres"))
     end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
-    if any(μm .> 1e3)
+    if any(μm .> 1e4)
         throw(DomainError(μm, "Wavelength must be given in metres"))
     end
     return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1)
@@ -228,21 +228,20 @@ end
 
 "Nonlinear coefficients"
 
-"Calculate single-molecule third-order susceptibility of a gas
+"Calculate single-molecule third-order hyperpolarisability of a gas
 at given wavelength(s) and at room temperature.
 If source == :Bishop:
-Uses reference values to calculate γ, the third-order hyperpolarisability,
-and changes units to susceptibility.
+Uses reference values to calculate γ
 If source == :Lehmeier (default):
 Uses scaling factors to calculate χ3 at 1 atmosphere and scales by density
-to get to a single molecule.
+to get to a single molecule i.e. the hyperpolarisability
 
 References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
 "
-function χ3_gas(material::Symbol; source=:Lehmeier)
+function γ3_gas(material::Symbol; source=:Lehmeier)
     if source == :Lehmeier
         # Table 1 in [3]
         if material in (:He, :HeJ)
@@ -258,12 +257,12 @@ function χ3_gas(material::Symbol; source=:Lehmeier)
         end
         return 4*fac*3.43e-28 / std_dens
     else
-        error("TODO: Bishop/Shelton values for χ3")
+        error("TODO: Bishop/Shelton values for γ3")
     end
 end
 
 function χ3_gas(material::Symbol, pressure; source=:Lehmeier)
-    return χ3_gas(material, source=source) .* std_dens .* pressure
+    return γ3_gas(material, source=source) .* std_dens .* pressure
 end
 
 function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)

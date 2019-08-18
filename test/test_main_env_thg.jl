@@ -7,7 +7,7 @@ Logging.disable_logging(Logging.BelowMinLevel)
 
 import DSP.Unwrap: unwrap
 
-import PyPlot:pygui, plt
+import PyPlot: pygui, plt
 
 a = 13e-6
 gas = :Ar
@@ -16,7 +16,7 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
+grid = Grid.EnvGrid(0.5e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
 
 energyfun = Modes.energy_env_mode_avg(Capillary.Aeff(a, 1, 1, :HE))
 
@@ -43,14 +43,13 @@ transform = Modes.trans_env_mode_avg(grid)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_env_thg(PhysData.χ3_gas(gas), 2π*PhysData.c/λ0, grid.t),)
-            # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_env_thg(PhysData.χ3_gas(gas), 2π*PhysData.c/λ0, grid.to),)
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
 x = Array{ComplexF64}(undef, length(grid.t))
-FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+FT = FFTW.plan_fft(x, 1)
 
 linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0))
 zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun,
@@ -77,7 +76,7 @@ end
 pygui(true)
 plt.figure()
 plt.pcolormesh(FFTW.fftshift(ω, 1)./2π.*1e-15, zout, transpose(FFTW.fftshift(Ilog, 1)))
-plt.clim(-6, 0)
+plt.clim(-15, 0)
 plt.xlim(0.19, 1.9)
 plt.colorbar()
 

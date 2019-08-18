@@ -3,6 +3,7 @@ import ForwardDiff
 import SpecialFunctions: erf, erfc
 import FFTW
 
+"Recursively calculate the nth derivative of some function at some input"
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
@@ -13,23 +14,27 @@ function derivative(f, x, order::Integer)
     end
 end
 
+"Gaussian or hypergaussian function (with std dev σ as input)"
 function gauss(x, σ; x0 = 0, power = 2)
     return @. exp(-1//2 * ((x-x0)/σ)^power)
 end
 
+"Gaussian or hypergaussian function (with FWHM as input)"
 function gauss(x; x0 = 0, power = 2, fwhm)
     σ = fwhm / (2 * (2 * log(2))^(1 / power))
     return gauss(x, σ, x0 = x0, power=power)
 end
 
-function moment(x::Vector, y::Vector, n = 1) where T
+"nth moment of the vector y"
+function moment(x::Vector, y::Vector, n = 1)
     if length(x) ≠ length(y)
         throw(DomainError(x, "x and y must have same length"))
     end
     return sum(x.^n .* y) / sum(y)
 end
 
-function moment(x::Vector, y, n = 1; dim = 1) where T
+"nth moment of multi-dimensional array y along dimension dim"
+function moment(x::Vector, y, n = 1; dim = 1)
     if size(y, dim) ≠ length(x)
         throw(DomainError(y, "y must be of same length as x along dim"))
     end
@@ -38,20 +43,28 @@ function moment(x::Vector, y, n = 1; dim = 1) where T
     return sum(reshape(x, Tuple(xshape)).^n .* y, dims=dim) ./ sum(y, dims=dim)
 end
 
-function rms_width(x::Vector, y::Vector; dim = 1) where T
+"RMS width of distribution y on axis x"
+function rms_width(x::Vector, y::Vector; dim = 1)
     return sqrt(moment(x, y, 2) - moment(x, y, 1)^2)
 end
 
-function rms_width(x::Vector, y; dim = 1) where T
+function rms_width(x::Vector, y; dim = 1)
     return sqrt.(moment(x, y, 2, dim = dim) - moment(x, y, 1, dim = dim).^2)
 end
 
+"""
+Trapezoidal integration for multi-dimensional arrays, in-place or with output array.
+In all of these functions, x can be an array (the x axis) or a number (the x axis spacing)
+
+In-place integration for multi-dimensional arrays
+"""
 function cumtrapz!(y, x; dim=1)
     idxlo = CartesianIndices(size(y)[1:dim-1])
     idxhi = CartesianIndices(size(y)[dim+1:end])
     _cumtrapz!(y, x, idxlo, idxhi)
 end
 
+"Inner function for multi-dimensional arrays - uses 1-D routine internally"
 function _cumtrapz!(y, x, idxlo, idxhi)
     for lo in idxlo
         for hi in idxhi
@@ -60,6 +73,7 @@ function _cumtrapz!(y, x, idxlo, idxhi)
     end
 end
 
+"In-place integration for 1-D arrays"
 function cumtrapz!(y::T, x) where T <: Union{SubArray, Vector}
     tmp = y[1]
     y[1] = 0
@@ -70,12 +84,14 @@ function cumtrapz!(y::T, x) where T <: Union{SubArray, Vector}
     end
 end
 
+"Integration into output array for multi-dimensional arrays"
 function cumtrapz!(out, y, x; dim=1)
     idxlo = CartesianIndices(size(y)[1:dim-1])
     idxhi = CartesianIndices(size(y)[dim+1:end])
     _cumtrapz!(out, y, x, idxlo, idxhi)
 end
 
+"Inner function for multi-dimensional arrays - uses 1-D routine internally"
 function _cumtrapz!(out, y, x, idxlo, idxhi)
     for lo in idxlo
         for hi in idxhi
@@ -84,6 +100,7 @@ function _cumtrapz!(out, y, x, idxlo, idxhi)
     end
 end
 
+"Integration into output array for 1-D array"
 function cumtrapz!(out, y::Union{SubArray, Vector}, x)
     out[1] = 0
     for i in 2:length(y)
@@ -91,10 +108,12 @@ function cumtrapz!(out, y::Union{SubArray, Vector}, x)
     end
 end
 
+"x axis spacing if x is given as an array"
 function _dx(x, i)
     x[i] - x[i-1]
 end
 
+"x axis spacing if x is given as a number (i.e. dx)"
 function _dx(x::Number, i)
     x
 end
@@ -105,6 +124,7 @@ function cumtrapz(y, x; dim=1)
     return out
 end
 
+"Normalise an array by its maximum value"
 function normbymax(x, dims)
     return x ./ maximum(x; dims = dims)
 end
@@ -113,6 +133,7 @@ function normbymax(x)
     return x ./ maximum(x)
 end
 
+"Normalised log10 i.e. maximum of output is 0"
 function log10_norm(x)
     return log10.(normbymax(x))
 end
@@ -121,22 +142,23 @@ function log10_norm(x, dims)
     return log10.(normbymax(x, dims = dims))
 end
 
+"Window based on the error function"
 function errfun_window(x, xmin, xmax, width)
     return @. 0.5 * (erf((x - xmin) / width) + erfc((x - xmax) / width) - 1)
 end
 
+"Error function window but with different widths on each side"
 function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5 * (erf((x - xmin) / width_left) + erfc((x - xmax) / width_right) - 1)
 end
 
 """
-Planck taper window as defined in the paper:
+Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)):
     xmin: lower limit (window is 0 here)
     xmax: upper limit (window is 0 here)
     ε: fraction of window width over which to increase from 0 to 1
 """
 function planck_taper(x::AbstractArray, xmin, xmax, ε)
-    # https://arxiv.org/pdf/1003.2939.pdf eq(7)
     x0 = (xmax + xmin) / 2
     xc = x .- x0
     X = (xmax - xmin)
@@ -144,7 +166,7 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
     x2 = -X / 2 * (1 - 2ε)
     x3 = X / 2 * (1 - 2ε)
     x4 = X / 2
-    return planck(xc, x1, x2, x3, x4)
+    return _taper(xc, x1, x2, x3, x4)
 end
 
 """
@@ -231,6 +253,41 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: R
     return to, FFTW.irfft(xfo, newlen_t, dim)
 end
 
+"""
+Oversampling for complex-valued arryas (e.g. envelope fields)
+"""
+function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Complex where N
+    if factor == 1
+        return t, x
+    end
+    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+
+    len = size(xf, dim)
+    newlen = factor * length(t)
+    δt = t[2] - t[1]
+    δto = δt / factor
+    Nto = collect(0:newlen - 1)
+    to = t[1] .+ Nto .* δto
+
+    sidx  = (newlen - len)//2 + 1
+    iseven(newlen) || (sidx -= 1//2)
+    iseven(len) || (sidx += 1//2)
+    startidx = Int(sidx)
+    endidx = startidx+len-1
+
+    shape = collect(size(xf))
+    shape[dim] = newlen
+    xfo = zeros(eltype(xf), Tuple(shape))
+    idxlo = CartesianIndices(size(xfo)[1:dim - 1])
+    idxhi = CartesianIndices(size(xfo)[dim + 1:end])
+    xfo[idxlo, startidx:endidx, idxhi] .= factor .* xf
+    return to, FFTW.ifft(FFTW.ifftshift(xfo, dim), dim)
+end
+
+
+"""
+Find limit of a series by Aitken acceleration
+"""
 function aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
     x0 = f(x0, n)
@@ -258,6 +315,9 @@ function aitken(x0, x1, x2)
     return x0 - (x1 - x0)^2 / den
 end
 
+"""
+Find limit of series by brute force
+"""
 function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
     x1 = x0
