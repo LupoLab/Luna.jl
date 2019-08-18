@@ -45,11 +45,30 @@ function Kerr_field_nothg(γ3, n)
     end
 end
 
+function KerrScalarEnv(out, E, fac)
+    @. out += 3/4*fac*abs2(E)*E
+end
+
+function KerrVector(out, E, fac)
+    for i = 1:size(E,1)
+        Ex = E[i,1]
+        Ey = E[i,2]
+        Ex2 = abs2(Ex)^2
+        Ey2 = abs2(Ey)^2
+        out[i,1] = 3/4*fac*(Ex2 + Ey2)*Ex
+        out[i,2] = 3/4*fac*(Ex2 + Ey2)*Ey
+    end
+end
+
 "Kerr response for envelope"
 function Kerr_env(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E)
-            @. out += 3/4*ε_0*γ3*abs2(E)*E
+            if size(E,2) == 1
+                KerrScalarEnv(out, E, ε_0*γ3)
+            else
+                KerrVectorEnv(out, E, ε_0*γ3)
+            end
         end
     end
 end

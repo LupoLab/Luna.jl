@@ -32,7 +32,7 @@ end
 
 function get_linop(grid, a, n, m, kind, vel, β0ref)
     βconst = zero(grid.ω)
-    βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres)
+    βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres, n=n, m=m)
     βconst[.!grid.sidx] .= 1
     -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- β0ref)
 end
@@ -49,7 +49,7 @@ densityfun(z) = PhysData.std_dens * pres
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.χ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
@@ -90,13 +90,13 @@ end
 zout, Eout, steps = RK45.solve_precon(
         transform, linops, Eω, z, dz, zmax, saveN, stepfun=window!)
 
-ω = grid.ω
+ω = FFTW.fftshift(grid.ω)
 t = grid.t
 
-Etout = FFTW.ifft(Eout, length(grid.t), 1)
+Etout = FFTW.ifft(Eout, 1)
 It = abs2.(Etout)
 
-Ilog = log10.(Maths.normbymax(abs2.(Eout)))
+Ilog = FFTW.fftshift(log10.(Maths.normbymax(abs2.(Eout))), 1)
 
 pygui(true)
 
