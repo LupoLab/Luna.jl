@@ -49,12 +49,12 @@ function KerrScalarEnv(out, E, fac)
     @. out += 3/4*fac*abs2(E)*E
 end
 
-function KerrVector(out, E, fac)
+function KerrVectorEnv(out, E, fac)
     for i = 1:size(E,1)
         Ex = E[i,1]
         Ey = E[i,2]
-        Ex2 = abs2(Ex)^2
-        Ey2 = abs2(Ey)^2
+        Ex2 = abs2(Ex)
+        Ey2 = abs2(Ey)
         out[i,1] = 3/4*fac*(Ex2 + Ey2)*Ex
         out[i,2] = 3/4*fac*(Ex2 + Ey2)*Ey
     end

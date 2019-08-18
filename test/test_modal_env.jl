@@ -61,12 +61,12 @@ FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
 Eω = zeros(ComplexF64, length(grid.ω), nmodes)
 Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
 
-Exy = Capillary.fields(a, modes; components=:Ey)
+Exy = Capillary.fields(a, modes; components=:Exy)
 
 x = Array{Float64}(undef, length(grid.t), nmodes)
 FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
 
-xo1 = Array{Float64}(undef, length(grid.t), 1)
+xo1 = Array{Float64}(undef, length(grid.t), 2)
 FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
 
 transform = Modes.TransModalRadialMat(grid, a, Exy, FTo1, responses, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
