@@ -6,10 +6,12 @@
 
 Wishlist of types of decomposition we want to use:
 
+Done:
     1. Mode-averaged waveguide
     2. Multi-mode waveguide (with or without polarisation)
         a. Azimuthal symmetry (radial integral only)
         b. Full 2-D integral
+To Do:
     3. Free space
         a. Azimuthal symmetry (Hankel transform)
         b. Full 2-D (Fourier transform)"
@@ -82,6 +84,18 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     end
     for i = 1:N
         dest[end-i+1] = scale * source[end-i+1]
+    end
+end
+
+"copy_scale_both! for 2-dim arrays. Works along first axis"
+function copy_scale_both!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
+    for i in 1:size(dest,2)
+        for j = 1:N
+            dest[j,i] = scale * source[j,i]
+        end
+        for j = 1:N
+            dest[end-j+1,i] = scale * source[end-j+1,i]
+        end
     end
 end
 
@@ -163,7 +177,6 @@ mutable struct TransModalRadialMat{IT, ET, TT, FTT, rT, gT, dT}
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
-# get this working, then re-write for style/performance
 # R - max radial extent
 # Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
@@ -210,7 +223,7 @@ function reset!(t::TransModalRadialMat, Emω::Array{ComplexF64,2})
     t.ncalls = 0
 end
 
-function (t::TransModalRadialMat)(xs, fval)
+function pointcalc!(t::TransModalRadialMat, xs, fval)
     # TODO: parallelize this in Julia 1.3
     for i in 1:size(xs, 2)
         r = xs[1, i]
@@ -248,11 +261,11 @@ end
 function (t::TransModalRadialMat)(nl, Eω, z)
     reset!(t, Eω)
     if t.full
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> t(x, fval), (0.0,0.0), (t.R,2π), 
+        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(t, x, fval), (0.0,0.0), (t.R,2π), 
                                     reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
                                     error_norm=Cubature.L2)
     else
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> t(x, fval), (0.0,), (t.R,), 
+        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(t, x, fval), (0.0,), (t.R,), 
                                     reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
                                     error_norm=Cubature.L2)
     end
