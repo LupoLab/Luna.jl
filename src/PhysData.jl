@@ -1,5 +1,6 @@
 module PhysData
 
+import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import Luna: Maths
@@ -30,6 +31,8 @@ const au_Efield = au_energy/(electron*ustrip(CODATA2014.a_0))
 const roomtemp = 294
 "Density of an ideal gas at atmospheric pressure and room temperature"
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
+"Avogadro constant"
+const N_A = ustrip(CODATA2014.N_A)
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
@@ -253,20 +256,28 @@ function γ3_gas(material::Symbol; source=:Lehmeier)
         elseif material == :Xe
             fac = 188.2
         end
-        return 4*fac*3.43e-28 / std_dens
+        return 4*fac*3.43e-28 / density(material, 1)
     else
         error("TODO: Bishop/Shelton values for γ3")
     end
 end
 
 function χ3_gas(material::Symbol, pressure; source=:Lehmeier)
-    return γ3_gas(material, source=source) .* std_dens .* pressure
+    return γ3_gas(material, source=source) .* density(material, pressure)
 end
 
 function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)
     n0 = ref_index(material, λ, pressure)
     return @. 3/4 * χ3_gas(material, pressure, source=source) / (ε_0*c*n0^2)
 end
+
+function density(gas::Symbol, pressure, temperature=roomtemp)
+    if gas in (:He, :HeJ)
+        gas_str = "He"
+    else
+        gas_str = str(gas)
+    end
+    CoolProp.PropsSI("DMOLAR", "T", temperature, "P", atm*pressure, gas_str)*N_A
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)

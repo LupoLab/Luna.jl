@@ -99,6 +99,14 @@ git-tree-sha1 = "9a11d428dcdc425072af4aea19ab1e8c3e01c032"
 uuid = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 version = "1.3.0"
 
+[[CoolProp]]
+deps = ["Compat", "JSON", "LibGit2", "Libdl"]
+git-tree-sha1 = "65c10ee8b6bc2422a1b11a182eb037803cad9a44"
+repo-rev = "master"
+repo-url = "https://github.com/CoolProp/CoolProp.jl"
+uuid = "e084ae63-2819-5025-826e-f8e611a84251"
+version = "0.0.0"
+
 [[Cubature]]
 deps = ["BinaryProvider", "Libdl"]
 git-tree-sha1 = "2f585e7fa03721ba58796368718e709b015e37ef"
@@ -448,18 +456,18 @@ version = "1.0.0"
 
 [[Tables]]
 deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "TableTraits", "Test"]
-git-tree-sha1 = "951b5be359e92703f886881b175ecfe924d8bd91"
+git-tree-sha1 = "aaed7b3b00248ff6a794375ad6adf30f30ca5591"
 uuid = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
-version = "0.2.10"
+version = "0.2.11"
 
 [[Test]]
 deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[Tokenize]]
-git-tree-sha1 = "c8a8b00ae44a94950814ff77850470711a360225"
+git-tree-sha1 = "dfcdbbfb2d0370716c815cbd6f8a364efb6f42cf"
 uuid = "0796e94c-ce3b-5d07-9a54-7f471281c624"
-version = "0.5.5"
+version = "0.5.6"
 
 [[URIParser]]
 deps = ["Test", "Unicode"]
