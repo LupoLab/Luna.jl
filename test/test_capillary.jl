@@ -1,9 +1,6 @@
-import PhysicalConstants
-import Unitful
 import Test: @test
 import Luna: Capillary
-
-const c = Unitful.ustrip(PhysicalConstants.CODATA2014.c)
+import Luna.PhysData: c
 
 λ = 800e-9
 ω = 2π*c/λ
