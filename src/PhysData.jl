@@ -35,6 +35,15 @@ const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 const N_A = ustrip(CODATA2014.N_A)
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
+const gas_str = Dict(
+    :He => "He",
+    :HeJ => "He",
+    :Ar => "Ar",
+    :Ne => "Neon",
+    :Kr => "Krypton",
+    :Xe => "Xenon",
+    :Air => "Air"
+)
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 
 "Linear coefficients"
@@ -272,12 +281,7 @@ function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)
 end
 
 function density(gas::Symbol, pressure, temperature=roomtemp)
-    if gas in (:He, :HeJ)
-        gas_str = "He"
-    else
-        gas_str = str(gas)
-    end
-    CoolProp.PropsSI("DMOLAR", "T", temperature, "P", atm*pressure, gas_str)*N_A
+    CoolProp.PropsSI("DMOLAR", "T", temperature, "P", atm*pressure, gas_str[gas])*N_A
 end
 
 function ionisation_potential(material; unit=:SI)
