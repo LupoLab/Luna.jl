@@ -10,7 +10,7 @@ import Base: *, \
     [2]M. Guizar-Sicairos and J. C. Gutiérrez-Vega, JOSA A 21, 53 (2004)
     but with some alterations (see block comment below).
 
-    Follows AbstractFFT approach of applying fwd and inv transform with mul (*) and ldiv (\)
+    Follows AbstractFFT approach of applying fwd and inv transform with mul and ldiv
 """
 mutable struct QDHT
     N::Int64 # Number of samples
