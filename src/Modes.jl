@@ -34,8 +34,8 @@ end
 
 "Transform A(ω) to A(t) on oversampled time grid - envelope"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
-    N = size(Aω, 2)
-    No = size(Aωo, 2)
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
     scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
     fill!(Aωo, 0)
     copy_scale_both!(Aωo, Aω, N÷2, scale)
@@ -53,8 +53,8 @@ end
 
 "Transform oversampled A(t) to A(ω) on normal grid - envelope"
 function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
-    N = size(Aω, 2)
-    No = size(Aωo, 2)
+    N = size(Aω, 1)
+    No = size(Aωo, 1)
     scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
     mul!(Aωo, FTplan, Ato)
     copy_scale_both!(Aω, Aωo, N÷2, scale)
@@ -67,14 +67,13 @@ function copy_scale!(dest::Vector, source::Vector, N, scale)
     end
 end
 
-"copy_scale! for 2-dim arrays. Works along second axis"
+"copy_scale! for 2-dim arrays. Works along first axis"
 function copy_scale!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
-    
+    for i in 1:size(dest,2)
         for j in 1:N
-            for i in 1:size(dest,1)
-            dest[i,j] = scale * source[i,j]
-            end
+            dest[j,i] = scale * source[j,i]
         end
+    end
 end
 
 """Copy first and last N elements from source to first and last N elements in dest
@@ -88,19 +87,16 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     end
 end
 
-"copy_scale_both! for 2-dim arrays. Works along second axis"
+"copy_scale_both! for 2-dim arrays. Works along first axis"
 function copy_scale_both!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
-    
+    for i in 1:size(dest,2)
         for j = 1:N
-            for i in 1:size(dest,1)
-            dest[i,j] = scale * source[i,j]
-            end
+            dest[j,i] = scale * source[j,i]
         end
         for j = 1:N
-            for i in 1:size(dest,1)
-            dest[i,end-j+1] = scale * source[i,end-j+1]
-            end
+            dest[end-j+1,i] = scale * source[end-j+1,i]
         end
+    end
 end
 
 "copy_scale! for multi-dim arrays. Works along first axis"
@@ -149,8 +145,8 @@ function norm_mode_average(ω, βfun)
 end
 
 function Et_to_Pt!(Pt, Et, responses)
-    for resp! in responses
-        resp!(Pt, Et)
+    for resp in responses
+        resp(Pt, Et)
     end
 end
 
@@ -201,13 +197,13 @@ function TransModalRadialMat(tT, grid, R, Exys, FT, resp, densityfun, components
     end
     nmodes = length(Exys)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
-    Ems = Array{Float64,2}(undef, npol, nmodes)
-    Erω = Array{ComplexF64,2}(undef, npol, length(grid.ω))
-    Erωo = Array{ComplexF64,2}(undef, npol, length(grid.ωo))
-    Er = Array{tT,2}(undef, npol, length(grid.to))
-    Pr = Array{tT,2}(undef, npol, length(grid.to))
-    Prω = Array{ComplexF64,2}(undef, npol, length(grid.ω))
-    Prωo = Array{ComplexF64,2}(undef, npol, length(grid.ωo))
+    Ems = Array{Float64,2}(undef, nmodes, npol)
+    Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
+    Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
+    Er = Array{tT,2}(undef, length(grid.to), npol)
+    Pr = Array{tT,2}(undef, length(grid.to), npol)
+    Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
+    Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
     TransModalRadialMat(nmodes, indices, full, R, Exys, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
@@ -245,19 +241,19 @@ function pointcalc!(t::TransModalRadialMat, xs, fval)
         end
         # get the field at r,θ
         for i = 1:t.nmodes
-            t.Ems[:,i] .= t.Exys[i](r,θ)[t.indices] # field matrix (npol x nmodes)
+            t.Ems[i,:] .= t.Exys[i](r,θ)[t.indices] # field matrix (nmodes x npol)
         end
-        mul!(t.Erω, t.Ems, transpose(t.Emω)) # matrix product (npol x nmodes) * (nmodes x nω) -> (npol x nω)
+        mul!(t.Erω, t.Emω, t.Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
         fill!(t.Pr, 0.0)
         Et_to_Pt!(t.Pr, t.Er, t.resp)
-        t.Pr .*= transpose(t.grid.towin)
+        @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
-        t.Prω .*= transpose(t.grid.ωwin.*(-im.*t.grid.ω./4))
+        t.Prω .*= t.grid.ωwin.*(-im.*t.grid.ω./4)
         # now project back to each mode
         # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
-        mul!(t.Prmω, transpose(t.Prω), t.Ems)
+        mul!(t.Prmω, t.Prω, transpose(t.Ems))
         fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
     end
 end
