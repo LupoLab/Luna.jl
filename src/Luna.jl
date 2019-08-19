@@ -15,6 +15,7 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
 include("Output.jl")
+include("Stats.jl")
 
 
 function make_linop(grid, βfun, αfun, frame_vel)

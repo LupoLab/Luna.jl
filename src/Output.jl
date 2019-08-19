@@ -64,24 +64,26 @@ function (o::MemoryOutput)(d::Dict)
 end
 
 "Output handler for writing to an HDF5 file"
-mutable struct HDF5Output{sT, N}
+mutable struct HDF5Output{sT, N, S}
     fpath::AbstractString  # Path to output file
     save_cond::sT  # callable, determines when data is saved and where it is interpolated
     ydims::NTuple{N, Int64}  # Dimensions of one array to be saved
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
+    statsfun::S  # Callable, returns dictionary of statistics
+    stats_tmp::Vector{Dict{String, Any}}  # Temporary storage for statistics between saves
 end
 
 "Simple constructor"
-function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims;
+function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun;
                     yname="Eω", tname="z")
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, ydims, yname, tname)
+    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
 end
 
 "Internal constructor - creates datasets in the file"
-function HDF5Output(fpath, save_cond, ydims, yname, tname)
+function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
     idims = init_dims(ydims, save_cond)
     cdims = collect(idims)
     cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
@@ -98,8 +100,10 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname)
                       "chunk", dims)
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
+        HDF5.g_create(file, "stats")
     end
-    HDF5Output(fpath, save_cond, ydims, yname, tname, 0)
+    stats0 = Vector{Dict{String, Any}}()
+    HDF5Output(fpath, save_cond, ydims, yname, tname, 0, statsfun, stats0)
 end
 
 """Calling the output handler writes data to the file
@@ -112,6 +116,7 @@ end
 """
 function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
+    o.stats_tmp = vcat(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         HDF5.h5open(o.fpath, "r+") do file
             while save
@@ -131,8 +136,46 @@ function (o::HDF5Output)(y, t, dt, yfun)
                 o.saved += 1
                 save, ts = o.save_cond(y, t, dt, o.saved)
             end
+            append_datasets(file["stats"], o.stats_tmp)
+            o.stats_tmp = Vector{Dict{String, Any}}()
         end
     end
+
+end
+
+function append_datasets(parent, a::Array{Dict{String,Any},1})
+    N = length(a)
+    names = HDF5.names(parent)
+    for (k, v) in pairs(a[1])
+        if ~(k in names)
+            create_dataset(parent, k, v)
+        end
+        s = collect(size(parent[k]))
+        curN = s[end]
+        if ~(k in names)
+            curN -= 1 # new dataset - overwrite initial value
+        end
+        s[end] += N
+        if ~(k in names)
+            s[end] -= 1 # new dataset - overwrite initial value
+        end
+        HDF5.set_dims!(parent[k], Tuple(s))
+        for ii = 1:N
+            parent[k][curN+ii] = a[ii][k]
+        end
+    end
+end
+
+function create_dataset(parent, name, x::Number)
+    HDF5.d_create(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
+                  "chunk", (1,))
+end
+
+function create_dataset(parent, name, x::AbstractArray)
+    dims = (size(x)..., 1)
+    maxdims = (size(x)..., -1)
+    HDF5.d_create(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
+                  "chunk", dims)
 
 end
 
