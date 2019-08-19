@@ -14,13 +14,13 @@ a = 125e-6
 ω = 2π*c./λ
 @test all(isfinite.(Capillary.β(a, ω)))
 @test all(isreal.(Capillary.β(a, ω)))
-@test all(isreal.(Capillary.β(a, ω, gas=:He, pressure=1)))
-@test all(isreal.(Capillary.β(a, ω, gas=:He, pressure=10)))
-@test all(isreal.(Capillary.β(a, ω, gas=:He, pressure=50)))
+@test all(isreal.(Capillary.β(a, ω, gas=:He, P=1)))
+@test all(isreal.(Capillary.β(a, ω, gas=:He, P=10)))
+@test all(isreal.(Capillary.β(a, ω, gas=:He, P=50)))
 @test all(isfinite.(Capillary.α(a, ω)))
 @test all(isreal.(Capillary.α(a, ω)))
 
-@test abs(1e9*Capillary.zdw(a, gas=:He, pressure=0.4) - 379) < 1
-@test abs(1e9*Capillary.zdw(75e-6, gas=:He, pressure=5.9) - 562) < 1
+@test abs(1e9*Capillary.zdw(a, gas=:He, P=0.4) - 379) < 1
+@test abs(1e9*Capillary.zdw(75e-6, gas=:He, P=5.9) - 562) < 1
 
 @test Capillary.Aeff(75e-6) ≈ 8.42157534886545e-09
