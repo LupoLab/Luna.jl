@@ -45,7 +45,10 @@ end
     @test PhysData.χ3_gas(:He, 1) ≈ 1.372e-27
     @test PhysData.χ3_gas(:Ar, 1) ≈ 3.2242e-26
     @test PhysData.n2_gas(:He, 1) ≈ 3.8763080866290524e-25
-    @test PhysData.n2_gas(:He, 2) ≈ 7.7521225583386395e-25
-    @test PhysData.n2_gas(:He, [1, 2]) ≈ [3.8763080866290524e-25, 7.7521225583386395e-25]
+    @test PhysData.n2_gas(:He, 2) ≈ 7.748315149574082e-25
+    @test PhysData.n2_gas(:He, [1, 2]) ≈ [3.8763080866290524e-25, 7.748315149574082e-25]
     @test PhysData.n2_gas.([:He, :Ne], 1) ≈ [3.8763080866290524e-25, 6.976942473612495e-25]
+    for gas in PhysData.gas[2:end] # Don't have γ3 for Air
+        @test isreal(PhysData.n2_gas(gas, 1))
+    end
 end
