@@ -22,7 +22,7 @@ end
 function Kerr_field(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E)
-            if size(E,2) == 1
+            if size(E,1) == 1
                 KerrScalar(out, E, ε_0*γ3)
             else
                 KerrVector(out, E, ε_0*γ3)
@@ -50,13 +50,13 @@ function KerrScalarEnv(out, E, fac)
 end
 
 function KerrVectorEnv(out, E, fac)
-    for i = 1:size(E,1)
-        Ex = E[i,1]
-        Ey = E[i,2]
+    for i = 1:size(E,2)
+        Ex = E[1,i]
+        Ey = E[2,i]
         Ex2 = abs2(Ex)
         Ey2 = abs2(Ey)
-        out[i,1] = 3/4*fac*(Ex2 + Ey2)*Ex
-        out[i,2] = 3/4*fac*(Ex2 + Ey2)*Ey
+        out[1,i] = 3/4*fac*(Ex2 + Ey2)*Ex
+        out[2,i] = 3/4*fac*(Ex2 + Ey2)*Ey
     end
 end
 
@@ -64,7 +64,7 @@ end
 function Kerr_env(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E)
-            if size(E,2) == 1
+            if size(E,1) == 1
                 KerrScalarEnv(out, E, ε_0*γ3)
             else
                 KerrVectorEnv(out, E, ε_0*γ3)

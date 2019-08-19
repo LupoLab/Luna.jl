@@ -69,8 +69,8 @@ Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
 x = Array{Float64}(undef, length(grid.t), nmodes)
 FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
 
-xo1 = Array{Float64}(undef, length(grid.t), 2)
-FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
+xo1 = Array{Float64}(undef, 2, length(grid.t))
+FTo1 = FFTW.plan_fft(xo1, 2, flags=FFTW.MEASURE)
 
 transform = Modes.TransModalRadialMat(grid, a, Exys, FTo1, responses, densityfun, :Exy; rtol=1e-3, atol=0.0, mfcn=300, full=true)
 
