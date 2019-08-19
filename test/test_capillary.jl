@@ -1,5 +1,5 @@
 import Test: @test
-import Luna: Capillary, PhysData
+import Luna: Capillary
 import Luna.PhysData: c
 
 λ = 800e-9
