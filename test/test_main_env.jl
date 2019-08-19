@@ -34,7 +34,8 @@ end
 βfun(ω, m, n, z) = βconst
 αfun(ω, m, n, z) = log(10)/10 * 2
 
-densityfun(z) = PhysData.std_dens * pres
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 normfun = Modes.norm_mode_average(grid.ω, βfun)
 
