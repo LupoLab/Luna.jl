@@ -5,7 +5,7 @@ import Logging
 import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
 include("Maths.jl")
-include("QDHT.jl")
+include("Hankel.jl")
 include("PhysData.jl")
 include("Grid.jl")
 include("RK45.jl")
