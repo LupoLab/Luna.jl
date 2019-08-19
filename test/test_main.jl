@@ -26,9 +26,9 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
+β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, P=pres)
 βconst = zero(grid.ω)
-βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres)
+βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, P=pres)
 βconst[1] = 1
 βfun(ω, m, n, z) = βconst
 frame_vel(z) = 1/β1const
