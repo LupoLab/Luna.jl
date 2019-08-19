@@ -278,6 +278,7 @@ function density(gas::Symbol, pressure, temperature=roomtemp)
         gas_str = str(gas)
     end
     CoolProp.PropsSI("DMOLAR", "T", temperature, "P", atm*pressure, gas_str)*N_A
+end
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
