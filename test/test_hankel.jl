@@ -38,4 +38,9 @@ end
     Er = Hankel.integrateR(v.^2, q)
     Ek = Hankel.integrateK(vk.^2, q)
     @test Er ≈ Ek
+
+    v2d = repeat(v, outer=(1, 16))'
+    q2d = Hankel.QDHT(1, 128, dim=2)
+    v2dk = q2d * v2d
+    @test all([all(v2dk[ii, :] ≈ vk) for ii = 1:size(v2dk, 1)])
 end
