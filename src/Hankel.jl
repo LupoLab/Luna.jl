@@ -80,6 +80,7 @@ function integrateK(A, Q)
     return dimdot(Q.scaleK, A)
 end
 
+"Matrix-vector multiplication along specific dimension of array V"
 function dot!(out, M, V; dim=1)
     size(V, dim) == size(M, 1) || throw(DomainError(
         "Size of V along dim must be same as size of M"))
@@ -96,6 +97,7 @@ function _dot!(out, M, V, idxlo, idxhi)
     end
 end
 
+"Dot product between vector and one dimension of array A"
 function dimdot(v, A; dim=1)
     dims = collect(size(A))
     dims[dim] = 1
