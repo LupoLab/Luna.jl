@@ -112,24 +112,26 @@ end
 """
 function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
-    while save
+    if save
         HDF5.h5open(o.fpath, "r+") do file
-            idcs = fill(:, length(o.ydims))
-            s = collect(size(file[o.yname]))
-            if s[end] < o.saved+1
-                s[end] += 1
-                HDF5.set_dims!(file[o.yname], Tuple(s))
+            while save
+                idcs = fill(:, length(o.ydims))
+                s = collect(size(file[o.yname]))
+                if s[end] < o.saved+1
+                    s[end] += 1
+                    HDF5.set_dims!(file[o.yname], Tuple(s))
+                end
+                file[o.yname][idcs..., o.saved+1] = reinterpret(Float64, yfun(ts))
+                s = collect(size(file[o.tname]))
+                if s[end] < o.saved+1
+                    s[end] += 1
+                    HDF5.set_dims!(file[o.tname], Tuple(s))
+                end
+                file[o.tname][o.saved+1] = ts
+                o.saved += 1
+                save, ts = o.save_cond(y, t, dt, o.saved)
             end
-            file[o.yname][idcs..., o.saved+1] = reinterpret(Float64, yfun(ts))
-            s = collect(size(file[o.tname]))
-            if s[end] < o.saved+1
-                s[end] += 1
-                HDF5.set_dims!(file[o.tname], Tuple(s))
-            end
-            file[o.tname][o.saved+1] = ts
-            o.saved += 1
         end
-        save, ts = o.save_cond(y, t, dt, o.saved)
     end
 
 end
