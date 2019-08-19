@@ -36,7 +36,7 @@ end
 function α(a, ω; n=1, m=1, kind=:HE)
     unm = getunm(n, m, kind)
     ν = ref_index(:SiO2, 2π*c./ω)
-    if kind == :He
+    if kind == :HE
         vp = @. (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
     elseif kind == :TE
         vp = @. 1/(real(sqrt(Complex(ν^2-1))))
@@ -53,7 +53,7 @@ function α(a, ω::AbstractArray; n=1, m=1, kind=:HE)
     unm = getunm(n, m, kind)
     ν = ref_index(:SiO2, 2π*c./ω)
     ν[ω .< 3e14] .= 1.4
-    if kind == :He
+    if kind == :HE
         vp = @. (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
     elseif kind == :TE
         vp = @. 1/(real(sqrt(Complex(ν^2-1))))
@@ -68,7 +68,7 @@ function α(a, ω::AbstractArray; n=1, m=1, kind=:HE)
 end
 
 function α(a; λ, n=1, m=1, kind=:HE)
-    return α(a, 2π*c./λ, n=n, m=m, kind=:He)
+    return α(a, 2π*c./λ, n=n, m=m, kind=:HE)
 end
 
 function losslength(a, ω; n=1, m=1, kind=:HE)
@@ -172,34 +172,6 @@ function Aeff(a, n, m, kind; ϕ=0.0)
     end
     val, err = hcubature(Aeffb, (0.0, 0.0), (a, 2π))
     return ret / val
-end
-
-"Create function that returns (r,θ) -> ((Ex, Ey),(Ex,Ey),...) for each mode"
-function fields(a, modes; components=:Ey)
-    if components == :Ey
-        indices = 2
-    elseif components == :Ex
-        indices = 1
-    elseif components == :Exy
-        indices = 1:2
-    else
-        error("components must be one of :Ex, :Ey or :Exy")
-    end
-    Ets = []
-    for i = 1:length(modes)
-        push!(Ets, Capillary.getExy(a, modes[i][1], modes[i][2], modes[i][3]))
-    end
-    Exy = Array{Float64,2}(undef,size(modes,1),length(indices))
-    
-    ret = let Exy=Exy
-        function ret(r,θ)
-            for i = 1:length(modes)
-                Exy[i,:] .= Ets[i](r,θ)[indices]
-            end
-            Exy
-        end
-    end
-    ret
 end
 
 end

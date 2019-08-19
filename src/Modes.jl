@@ -137,11 +137,12 @@ function Et_to_Pt!(Pt, Et, responses)
 end
 
 # npol is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
-mutable struct TransModalRadialMat{ET, TT, FTT, rT, gT, dT}
+mutable struct TransModalRadialMat{IT, ET, TT, FTT, rT, gT, dT}
     nmodes::Int
+    indices::IT
     full::Bool
     R::Float64
-    Ets::ET
+    Exys::ET
     Ems::Array{Float64,2}
     Emω::Array{ComplexF64,2}
     Erω::Array{ComplexF64,2}
@@ -164,40 +165,44 @@ end
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # get this working, then re-write for style/performance
 # R - max radial extent
-# Ets - function returning matrix nm x npol describing normalised Ex,Ey field given r,θ  
+# Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModalRadialMat(grid::Grid.RealGrid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    nmodes, npol = size(Exy(0.0, 0.0))
+function TransModalRadialMat(tT, grid, R, Exys, FT, resp, densityfun, components; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    if components == :Ey
+        indices = 2
+        npol = 1
+    elseif components == :Ex
+        indices = 1
+        npol = 1
+    elseif components == :Exy
+        indices = 1:2
+        npol = 2
+    else
+        error("components must be one of :Ex, :Ey or :Exy")
+    end
+    nmodes = length(Exys)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     Ems = Array{Float64,2}(undef, nmodes, npol)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
     Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
-    Er = Array{Float64,2}(undef, length(grid.to), npol)
-    Pr = Array{Float64,2}(undef, length(grid.to), npol)
+    Er = Array{tT,2}(undef, length(grid.to), npol)
+    Pr = Array{tT,2}(undef, length(grid.to), npol)
     Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
-    TransModalRadialMat(nmodes, full, R, Exy, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
+    TransModalRadialMat(nmodes, indices, full, R, Exys, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
                      resp, grid, densityfun, 0, rtol, atol, mfcn)
 end
 
-function TransModalRadialMat(grid::Grid.EnvGrid, R, Exy, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    nmodes, npol = size(Exy(0.0, 0.0))
-    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
-    Ems = Array{Float64,2}(undef, nmodes, npol)
-    Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
-    Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
-    Er = Array{ComplexF64,2}(undef, length(grid.to), npol)
-    Pr = Array{ComplexF64,2}(undef, length(grid.to), npol)
-    Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
-    Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
-    Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
-    IFT = inv(FT)
-    TransModalRadialMat(nmodes, full, R, Exy, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
-                     resp, grid, densityfun, 0, rtol, atol, mfcn)
+function TransModalRadialMat(grid::Grid.RealGrid, R, Exys, FT, resp, densityfun, components; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    TransModalRadialMat(Float64, grid, R, Exys, FT, resp, densityfun, components, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+end
+
+function TransModalRadialMat(grid::Grid.EnvGrid, R, Exys, FT, resp, densityfun, components; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    TransModalRadialMat(ComplexF64, grid, R, Exys, FT, resp, densityfun, components, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
 end
 
 function reset!(t::TransModalRadialMat, Emω::Array{ComplexF64,2})
@@ -222,7 +227,9 @@ function (t::TransModalRadialMat)(xs, fval)
             continue
         end
         # get the field at r,θ
-        t.Ems = t.Ets(r, θ) # field matrix (nmodes x npol)
+        for i = 1:t.nmodes
+            t.Ems[i,:] .= t.Exys[i](r,θ)[t.indices] # field matrix (nmodes x npol)
+        end
         mul!(t.Erω, t.Emω, t.Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ

@@ -47,13 +47,17 @@ for i = 1:nmodes
     linops[:,i] = get_linop(grid, a, modes[i][1], modes[i][2], modes[i][3], 1/β1const)
 end
 
+Exys = []
+for i = 1:nmodes
+    push!(Exys, Capillary.getExy(a, modes[i][1], modes[i][2], modes[i][3]))
+end
 
 densityfun(z) = PhysData.std_dens * pres
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.χ3_gas(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
@@ -65,15 +69,13 @@ FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
 Eω = zeros(ComplexF64, length(grid.ω), nmodes)
 Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
 
-Exy = Capillary.fields(a, modes; components=:Ey)
-
 x = Array{Float64}(undef, length(grid.t), nmodes)
 FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
 
 xo1 = Array{Float64}(undef, length(grid.to), 1)
 FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
 
-transform = Modes.TransModalRadialMat(grid, a, Exy, FTo1, responses, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
+transform = Modes.TransModalRadialMat(grid, a, Exys, FTo1, responses, densityfun, :Ey; rtol=1e-3, atol=0.0, mfcn=300)
 
 Et = FT \ Eω
 

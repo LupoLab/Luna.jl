@@ -44,6 +44,11 @@ for i = 1:nmodes
     linops[:,i] = get_linop(grid, a, modes[i][1], modes[i][2], modes[i][3], 1/β1const, β0const)
 end
 
+Exys = []
+for i = 1:nmodes
+    push!(Exys, Capillary.getExy(a, modes[i][1], modes[i][2], modes[i][3]))
+end
+
 densityfun(z) = PhysData.std_dens * pres
 
 ionpot = PhysData.ionisation_potential(gas)
@@ -61,15 +66,13 @@ FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
 Eω = zeros(ComplexF64, length(grid.ω), nmodes)
 Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
 
-Exy = Capillary.fields(a, modes; components=:Exy)
-
 x = Array{Float64}(undef, length(grid.t), nmodes)
 FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
 
 xo1 = Array{Float64}(undef, length(grid.t), 2)
 FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
 
-transform = Modes.TransModalRadialMat(grid, a, Exy, FTo1, responses, densityfun; rtol=1e-3, atol=0.0, mfcn=300)
+transform = Modes.TransModalRadialMat(grid, a, Exys, FTo1, responses, densityfun, :Exy; rtol=1e-3, atol=0.0, mfcn=300, full=true)
 
 Et = FT \ Eω
 
