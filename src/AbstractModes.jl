@@ -1,7 +1,10 @@
 module AbstractModes
 import Roots: fzero
+import Cubature: hcubature
+import StaticArrays: SVector
+import LinearAlgebra: dot, norm
 import Luna: Maths
-import Luna.PhysData: c, ε_0
+import Luna.PhysData: c, ε_0, μ_0
 
 abstract type AbstractMode end
 
@@ -14,13 +17,49 @@ function β(m::M, ω) where {M <: AbstractMode}
     error("abstract method called")
 end
 
+function β(m::M; λ) where {M <: AbstractMode}
+    return β(m, 2π*c./λ)
+end
+
 function α(m::M, ω) where {M <: AbstractMode}
     error("abstract method called")
+end
+
+function α(m::M; λ) where {M <: AbstractMode}
+    return α(m, 2π*c./λ)
+end
+
+function losslength(m::M, ω) where {M <: AbstractMode}
+    return 1 ./ α(m, ω)
+end
+
+function losslength(m::M; λ) where {M <: AbstractMode}
+    return losslength(m::M, 2π*c./λ) 
+end
+
+function transmission(m::M, L; λ) where {M <: AbstractMode}
+    return @. exp(-α(m, λ=λ)*L)
+end
+
+function dB_per_m(m::M, ω) where {M <: AbstractMode}
+    return 10/log(10).*α(m, ω)
+end
+
+function dB_per_m(m::M; λ) where {M <: AbstractMode}
+    return return 10/log(10) .* α(m, λ=λ)
 end
 
 function dispersion_func(m::M, order) where {M <: AbstractMode}
     βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
     return βn
+end
+
+function dispersion(m::M, order, ω) where {M <: AbstractMode}
+    return dispersion_func(m, order).(ω)
+end
+
+function dispersion(m::M, order; λ) where {M <: AbstractMode}
+    return dispersion(m, order, 2π*c./λ)
 end
 
 function zdw(m::M) where {M <: AbstractMode}
