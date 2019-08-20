@@ -6,7 +6,7 @@ import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
 import Luna: Maths
-import Luna.PhysData: c, ε_0, χ1, ref_index
+import Luna.PhysData: c, χ1, ref_index
 import Luna.AbstractModes: AbstractMode, maxR, β, α, field
 
 # TODO factor out gas properties to some kind of medium/gas type
