@@ -6,7 +6,7 @@ import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
 import Luna: Maths
-import Luna.PhysData: c, χ1, ref_index
+import Luna.PhysData: c, ref_index, roomtemp
 import Luna.AbstractModes: AbstractMode, maxR, β, α, field
 
 # core and clad are function-like objects which return the
@@ -37,13 +37,13 @@ function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
 "convenience constructor assunming single gas filling and silica clad"
-function MarcatilliMode(a, n, m, kind, ϕ, gas, pressure)
-    coren = ω -> ref_index(gas, 2π*c./ω, pressure=pressure)
+function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp)
+    coren = ω -> ref_index(gas, 2π*c./ω, P=P, T=T)
     cladn = ω -> ref_index(:SiO2, 2π*c./ω)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
-maxR(m) = m.a
+dimlimits(m) = ((0.0, 0.0), (m.a, 2π))
 
 function β(m::MarcatilliMode, ω)
     χ = m.coren.(ω).^2 - 1
