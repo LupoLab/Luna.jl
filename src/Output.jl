@@ -195,7 +195,8 @@ function (o::HDF5Output)(d::Dict; force=false)
             if HDF5.exists(file, k)
                 if force
                     Logging.@warn("Dataset $k already present in file $(o.fpath)"*
-                                  "and will be overwritten")
+                                  " and will be overwritten")
+                    HDF5.o_delete(file, k)
                 else
                     error("File $(o.fpath) already has dataset $(k)")
                 end
@@ -211,7 +212,8 @@ function (o::HDF5Output)(key::AbstractString, val; force=false)
         if HDF5.exists(file, key)
             if force
                 Logging.@warn("Dataset $key already present in file $(o.fpath)"*
-                                "and will be overwritten")
+                                " and will be overwritten")
+                HDF5.o_delete(file, key)
             else
                 error("File $(o.fpath) already has dataset $(key)")
             end

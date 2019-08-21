@@ -23,6 +23,9 @@ import Luna: Output
     for (ii, ti) in enumerate(t)
         o(y0, ti, 0, y)
     end
+    @test_throws ErrorException o(extra)
+    @test o(extra, force=true) === nothing
+    @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open("test.h5", "r") do file
         @test all(read(file["t"]) == t)
         yr = reinterpret(ComplexF64, read(file["y"]))
@@ -31,7 +34,6 @@ import Luna: Output
         @test gitc == read(file["git_commit"])
         @test all(read(file["stats"]["stat"]) .== stat)
     end
-    @test_throws ErrorException o(extra)
     rm("test.h5")
 end
 
@@ -59,4 +61,5 @@ end
     @test all(ω == o.data["ω"])
     @test gitc == o.data["git_commit"]
     @test_throws ErrorException o(extra)
+    @test o(extra, force=true) === nothing
 end
