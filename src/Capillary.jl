@@ -6,16 +6,16 @@ import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
 import Luna: Maths
-import Luna.PhysData: c, ε_0, χ1, ref_index
+import Luna.PhysData: c, ε_0, χ1, ref_index, roomtemp
 
-function β(a, ω; gas::Symbol=:He, pressure=0, n=1, m=1)
-    χ = pressure .* χ1(gas, 2π*c./ω)
+function β(a, ω; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
+    χ = χ1(gas, 2π*c./ω, P, T)
     unm = besselj_zero(n-1, m)
     return @. ω/c*(1 + χ/2 - c^2*unm^2/(2*ω^2*a^2))
 end
 
-function β(a; λ, gas::Symbol=:He, pressure=0, n=1, m=1)
-    return β(a, 2π*c./λ, gas=gas, pressure=pressure, n=n, m=m)
+function β(a; λ, gas::Symbol=:He, P=0, n=1, m=1)
+    return β(a, 2π*c./λ, gas=gas, P=P, n=n, m=m)
 end
 
 function α(a, ω; n=1, m=1)
@@ -57,21 +57,21 @@ function dB_per_m(a; n=1, m=1, λ)
     return return 10/log(10) .* α(a, n=n, m=m, λ=λ)
 end
 
-function dispersion_func(order, a; gas::Symbol=:He, pressure=0, n=1, m=1)
-    βn(ω) = Maths.derivative(ω -> β(a, ω, gas=gas, pressure=pressure, n=n, m=m), ω, order)
+function dispersion_func(order, a; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
+    βn(ω) = Maths.derivative(ω -> β(a, ω, gas=gas, P=P, T=T, n=n, m=m), ω, order)
     return βn
 end
 
-function dispersion(order, a, ω; gas::Symbol=:He, pressure=0, n=1, m=1)
-    return dispersion_func(order, a, gas=gas, pressure=pressure, n=n, m=m).(ω)
+function dispersion(order, a, ω; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
+    return dispersion_func(order, a, gas=gas, P=P, T=T, n=n, m=m).(ω)
 end
 
-function dispersion(order, a; λ, gas::Symbol=:He, pressure=0, n=1, m=1)
-    return dispersion(order, a, 2π*c./λ, gas=gas, pressure=pressure, n=n, m=m)
+function dispersion(order, a; λ, gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
+    return dispersion(order, a, 2π*c./λ, gas=gas, P=P, T=T, n=n, m=m)
 end
 
-function zdw(a; gas::Symbol, pressure, n=1, m=1)
-    ω0 = fzero(dispersion_func(2, a, gas=gas, pressure=pressure, n=n, m=m), 1e14, 2e16)
+function zdw(a; gas::Symbol, P, T=roomtemp, n=1, m=1)
+    ω0 = fzero(dispersion_func(2, a, gas=gas, P=P, T=T, n=n, m=m), 1e14, 2e16)
     return 2π*c/ω0
 end
 
