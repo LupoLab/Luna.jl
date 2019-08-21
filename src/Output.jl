@@ -53,14 +53,23 @@ function (o::MemoryOutput)(y, t, dt, yfun)
 
 end
 
-"Calling the output on a dictionary simply writes the items to the file"
-function (o::MemoryOutput)(d::Dict)
+"Calling the output on a dictionary writes the items to the array"
+function (o::MemoryOutput)(d::Dict; force=false)
     for (k, v) in pairs(d)
-        if haskey(o.data, k)
-            error("Key $k already present in dataset!")
-        end
-        o.data[k] = v
+        o(k, v; force=force)
     end
+end
+
+"Calling the output with a key, value pair writes the value to the array."
+function (o::MemoryOutput)(key::AbstractString, val; force=false)
+    if haskey(o.data, key)
+            if force
+                Logging.@warn("Key $key already exists and will be overwritten.")
+            else
+                error("Key $key already present in dataset.")
+        end
+    end
+    o.data[key] = val
 end
 
 "Output handler for writing to an HDF5 file"
@@ -179,15 +188,35 @@ function create_dataset(parent, name, x::AbstractArray)
 
 end
 
-"Calling the output on a dictionary simply writes the items to the file"
-function (o::HDF5Output)(d::Dict)
+"Calling the output on a dictionary writes the items to the file"
+function (o::HDF5Output)(d::Dict; force=false)
     HDF5.h5open(o.fpath, "r+") do file
         for (k, v) in pairs(d)
             if HDF5.exists(file, k)
-                error("File $(o.fpath) already has dataset $(k)!")
+                if force
+                    Logging.@warn("Dataset $k already present in file $(o.fpath)"*
+                                  "and will be overwritten")
+                else
+                    error("File $(o.fpath) already has dataset $(k)")
+                end
             end
             file[k] = v
         end
+    end
+end
+
+"Calling the output on a key, value pair writes the value to the file"
+function (o::HDF5Output)(key::AbstractString, val; force=false)
+    HDF5.h5open(o.fpath, "r+") do file
+        if HDF5.exists(file, key)
+            if force
+                Logging.@warn("Dataset $key already present in file $(o.fpath)"*
+                                "and will be overwritten")
+            else
+                error("File $(o.fpath) already has dataset $(key)")
+            end
+        end
+        file[key] = val
     end
 end
 
