@@ -9,20 +9,20 @@ import Luna: Maths
 import Luna.PhysData: c, χ1, ref_index
 import Luna.AbstractModes: AbstractMode, maxR, β, α, field
 
-# TODO factor out gas properties to some kind of medium/gas type
-# and make this immutable
-mutable struct MarcatilliMode <: AbstractMode
+# core and clad are function-like objects which return the
+# refractive index as function of freq
+struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
     a::Float64
     n::Int
     m::Int
     kind::Symbol
-    unm::FLoat64
+    unm::Float64
     ϕ::Float64
-    gas::Symbol
-    pressure::Float64
+    coren::Tcore
+    cladn::Tclad
 end
 
-function MarcatilliMode(a, n, m, kind, ϕ, gas, pressure)
+function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
     if (kind == :TE) || (kind == :TM)
         if (n != 0) || (m != 1)
             error("n=0, m=1 for TE or TM modes")
@@ -33,18 +33,25 @@ function MarcatilliMode(a, n, m, kind, ϕ, gas, pressure)
     else
         error("kind must be :TE, :TM or :HE")
     end
-    MarcatilliMode(a, n, m, kind, unm, ϕ, gas, pressure)
+    MarcatilliMode(a, n, m, kind, unm, ϕ, coren, cladn)
+end
+
+"convenience constructor assunming single gas filling and silica clad"
+function MarcatilliMode(a, n, m, kind, ϕ, gas, pressure)
+    coren = ω -> ref_index(gas, 2π*c./ω, pressure=pressure)
+    cladn = ω -> ref_index(:SiO2, 2π*c./ω)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
 maxR(m) = m.a
 
 function β(m::MarcatilliMode, ω)
-    χ = m.pressure .* χ1(m.gas, 2π*c./ω)
+    χ = m.coren.(ω).^2 - 1
     return @. ω/c*(1 + χ/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
 end
 
 function α(m::MarcatilliMode, ω)
-    ν = ref_index(:SiO2, 2π*c./ω)
+    ν = m.cladn.(ω)
     if m.kind == :HE
         vp = @. (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
     elseif m.kind == :TE
