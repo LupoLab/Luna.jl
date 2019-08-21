@@ -7,7 +7,7 @@ import Cubature: hquadrature
 import SpecialFunctions: besselj
 import Luna: Maths
 import Luna.PhysData: c, ref_index, roomtemp
-import Luna.AbstractModes: AbstractMode, maxR, β, α, field
+import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
 
 # core and clad are function-like objects which return the
 # refractive index as function of freq
