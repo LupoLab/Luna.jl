@@ -8,8 +8,8 @@ import Luna.PhysData: c, ε_0, μ_0
 
 abstract type AbstractMode end
 
-"Maximum radius valid for this mode"
-function maxR(m::M) where {M <: AbstractMode}
+"Maximum dimensional limits of validity for this mode"
+function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")
 end
 
@@ -81,7 +81,7 @@ function N(m::M) where {M <: AbstractMode}
         E = f(r, θ)
         r*sqrt(ε_0/μ_0)*dot(E, E)
     end
-    val, err = hcubature(Nfunc, (0.0, 0.0), (maxR(m), 2π))
+    val, err = hcubature(Nfunc, dimlimits(m)[1], dimlimits(m)[2])
     0.5*abs(val)
 end
 
@@ -112,7 +112,7 @@ function Aeff(m) where {M <: AbstractMode}
         e = em(r, θ)
         r*e^2
     end
-    val, err = hcubature(Aefft, (0.0, 0.0), (maxR(m), 2π))
+    val, err = hcubature(Aefft, dimlimits(m)[1], dimlimits(m)[2])
     ret = val^2
     function Aeffb(x)
         r = x[1]
@@ -120,7 +120,7 @@ function Aeff(m) where {M <: AbstractMode}
         e = em(r, θ)
         r*e^4
     end
-    val, err = hcubature(Aeffb, (0.0, 0.0), (maxR(m), 2π))
+    val, err = hcubature(Aeffb, dimlimits(m)[1], dimlimits(m)[2])
     return ret / val
 end
 
