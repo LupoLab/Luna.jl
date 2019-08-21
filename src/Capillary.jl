@@ -5,6 +5,7 @@ import FunctionZeros: besselj_zero
 import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
+import StaticArrays: SVector
 import Luna: Maths
 import Luna.PhysData: c, ref_index, roomtemp
 import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
@@ -38,15 +39,15 @@ end
 
 "convenience constructor assunming single gas filling and silica clad"
 function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp)
-    coren = ω -> ref_index(gas, 2π*c./ω, P=P, T=T)
+    coren = ω -> ref_index(gas, 2π*c./ω, P, T)
     cladn = ω -> ref_index(:SiO2, 2π*c./ω)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
-dimlimits(m) = ((0.0, 0.0), (m.a, 2π))
+dimlimits(m::MarcatilliMode) = ((0.0, 0.0), (m.a, 2π))
 
 function β(m::MarcatilliMode, ω)
-    χ = m.coren.(ω).^2 - 1
+    χ = m.coren.(ω).^2 .- 1
     return @. ω/c*(1 + χ/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
 end
 

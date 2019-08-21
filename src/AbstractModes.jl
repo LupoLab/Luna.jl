@@ -1,7 +1,6 @@
 module AbstractModes
 import Roots: fzero
 import Cubature: hcubature
-import StaticArrays: SVector
 import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
