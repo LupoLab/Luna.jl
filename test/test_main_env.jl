@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes
+import Luna: Grid, Maths, Capillary, AbstractModes, PhysData, Nonlinear, Ionisation, Modes
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -18,7 +18,9 @@ pres = 5
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = Modes.energy_env_mode_avg(a)
+m = Capillary.MarcatilliMode(a, gas, pres)
+
+energyfun = Modes.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -26,10 +28,10 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
-β0const = Capillary.β(a; λ=λ0, gas=gas, pressure=pres)
+β1const = AbstractModes.dispersion(m, 1, λ=λ0)
+β0const = AbstractModes.β(m, λ=λ0)
 βconst = zero(grid.ω)
-βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres)
+βconst[grid.sidx] = AbstractModes.β(m, grid.ω[grid.sidx])
 βconst[.!grid.sidx] .= 1
 βfun(ω, m, n, z) = βconst
 αfun(ω, m, n, z) = log(10)/10 * 2
