@@ -17,7 +17,8 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-modes = ((1,1,:HE), (1,2,:HE))#, (1,3,:HE), (1,4,:HE))
+modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
+         Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0))
 nmodes = length(modes)
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
@@ -30,23 +31,23 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-function get_linop(grid, a, n, m, kind, vel, β0ref)
+function get_linop(grid, m, vel, β0ref)
     βconst = zero(grid.ω)
-    βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres, n=n, m=m)
+    βconst[grid.sidx] = Capillary.β(m, grid.ω[grid.sidx])
     βconst[.!grid.sidx] .= 1
     -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- β0ref)
 end
 
-β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres, n=1, m=1)
-β0const = Capillary.β(a; λ=λ0, gas=gas, pressure=pres, n=1, m=1)
+β0const = Capillary.β(modes[1], λ=λ0)
+vel = 1/Capillary.dispersion(modes[1], 1, λ=λ0)
 linops = zeros(ComplexF64, length(grid.ω), nmodes)
 for i = 1:nmodes
-    linops[:,i] = get_linop(grid, a, modes[i][1], modes[i][2], modes[i][3], 1/β1const, β0const)
+    linops[:,i] = get_linop(grid, modes[i], vel, β0const)
 end
 
 Exys = []
 for i = 1:nmodes
-    push!(Exys, Capillary.getExy(a, modes[i][1], modes[i][2], modes[i][3]))
+    push!(Exys, Capillary.Exy(modes[i]))
 end
 
 densityfun(z) = PhysData.std_dens * pres

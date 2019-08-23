@@ -17,9 +17,10 @@ To Do:
         b. Full 2-D (Fourier transform)"
 module Modes
 import FFTW
+import Cubature
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, AbstractModes, Maths
+import Luna: PhysData, AbstractModes, Maths, Grid
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
