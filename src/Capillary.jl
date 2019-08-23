@@ -6,9 +6,13 @@ import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
 import StaticArrays: SVector
+using Reexport
+@reexport using Luna.AbstractModes
 import Luna: Maths
 import Luna.PhysData: c, ref_index, roomtemp
 import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
+
+export MarcatilliMode, dimlimits, β, α, field
 
 # core and clad are function-like objects which return the
 # refractive index as function of freq

@@ -5,6 +5,8 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
+export dimlimits, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+
 abstract type AbstractMode end
 
 "Maximum dimensional limits of validity for this mode"
