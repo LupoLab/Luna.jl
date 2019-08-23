@@ -115,7 +115,7 @@ function Aeff(m) where {M <: AbstractMode}
         r*e^2
     end
     val, err = hcubature(Aeff_num, dimlimits(m)[1], dimlimits(m)[2])
-    ret = val^2
+    num = val^2
     function Aeffb(x)
         r = x[1]
         θ = x[2]
