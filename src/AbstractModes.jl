@@ -116,7 +116,8 @@ function Aeff(m) where {M <: AbstractMode}
     end
     val, err = hcubature(Aeff_num, dimlimits(m)[1], dimlimits(m)[2])
     num = val^2
-    function Aeffb(x)
+    # Denominator
+    function Aeff_den(x)
         r = x[1]
         θ = x[2]
         e = em(r, θ)
