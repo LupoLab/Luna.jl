@@ -9,7 +9,7 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.AbstractModes
 import Luna: Maths
-import Luna.PhysData: c, ref_index, roomtemp
+import Luna.PhysData: c, ref_index_fun, roomtemp
 import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
 
 export MarcatilliMode, dimlimits, β, α, field
@@ -43,8 +43,10 @@ end
 
 "convenience constructor assunming single gas filling and silica clad"
 function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp)
-    coren = ω -> ref_index(gas, 2π*c./ω, P, T)
-    cladn = ω -> ref_index(:SiO2, 2π*c./ω)
+    rfg = ref_index_fun(gas, P, T)
+    rfs = ref_index_fun(:SiO2)
+    coren = ω -> rfg(2π*c./ω)
+    cladn = ω -> rfs(2π*c./ω)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
