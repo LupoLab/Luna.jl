@@ -107,7 +107,8 @@ end
 "Get effective area of mode"
 function Aeff(m) where {M <: AbstractMode}
     em = absE(m)
-    function Aefft(x)
+    # Numerator
+    function Aeff_num(x)
         r = x[1]
         θ = x[2]
         e = em(r, θ)
