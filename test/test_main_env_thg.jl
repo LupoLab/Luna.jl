@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, AbstractModes, PhysData, Nonlinear, Ionisation, Modes
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -28,10 +28,10 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-β1const = AbstractModes.dispersion(m, 1, λ=λ0)
-β0const = AbstractModes.β(m, λ=λ0)
+β1const = Capillary.dispersion(m, 1, λ=λ0)
+β0const = Capillary.β(m, λ=λ0)
 βconst = zero(grid.ω)
-βconst[grid.sidx] = AbstractModes.β(m, grid.ω[grid.sidx])
+βconst[grid.sidx] = Capillary.β(m, grid.ω[grid.sidx])
 βconst[.!grid.sidx] .= 1
 βfun(ω, m, n, z) = βconst
 αfun(ω, m, n, z) = log(10)/10 * 2
