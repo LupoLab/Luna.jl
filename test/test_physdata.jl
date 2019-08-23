@@ -1,6 +1,7 @@
 import Test: @test, @test_throws, @testset
 import Luna: PhysData
 
+@testset "All" begin
 @testset "Exceptions" begin
     @test_throws DomainError PhysData.ref_index(:He, 800)
     @test_throws DomainError PhysData.ref_index(:SiO2, 800)
@@ -9,7 +10,7 @@ end
 
 @testset "refractive indices" begin
     @test PhysData.ref_index(:He, 800e-9) ≈ 1.000031838924767
-    @test PhysData.ref_index(:He, 800e-9, 10) ≈ 1.0003183436449188
+    @test PhysData.ref_index(:He, 800e-9, 10) ≈ 1.000316956731852
     @test PhysData.ref_index(:SiO2, 800e-9) ≈ 1.4533172548587419
     @test PhysData.ref_index(:SiO2, 400e-9) ≈ 1.4701161185594052
 end
@@ -21,8 +22,8 @@ end
 
 @testset "Dispersion" begin
     @test PhysData.dispersion(2, :SiO2, 800e-9) ≈ 3.61619983e-26
-    @test isapprox(PhysData.dispersion(2, :He, 800e-9), 9.34130789e-31, rtol=1e-5)
-    @test isapprox(PhysData.dispersion(2, :He, 800e-9, 10), 9.33867358e-30, rtol=1e-5)
+    @test isapprox(PhysData.dispersion(2, :He, 800e-9), 9.341731241826773e-31, rtol=1e-5)
+    @test isapprox(PhysData.dispersion(2, :He, 800e-9, 10), 9.29798136665208e-30, rtol=1e-5)
 end
 
 @testset "glasses" begin
@@ -42,10 +43,14 @@ end
 
 @testset "Nonlinear coefficients" begin
     # @test PhysData.χ3_gas(:He)*PhysData.std_dens ≈ 1.2820625447291168e-27
-    @test PhysData.χ3_gas(:He, 1) ≈ 1.372e-27
-    @test PhysData.χ3_gas(:Ar, 1) ≈ 3.2242e-26
-    @test PhysData.n2_gas(:He, 1) ≈ 3.8763080866290524e-25
-    @test PhysData.n2_gas(:He, 2) ≈ 7.7521225583386395e-25
-    @test PhysData.n2_gas(:He, [1, 2]) ≈ [3.8763080866290524e-25, 7.7521225583386395e-25]
-    @test PhysData.n2_gas.([:He, :Ne], 1) ≈ [3.8763080866290524e-25, 6.976942473612495e-25]
+    @test PhysData.χ3_gas(:He, 1) ≈ 1.2747527567432276e-27
+    @test PhysData.χ3_gas(:Ar, 1) ≈ 2.99474912011304e-26
+    @test PhysData.n2_gas(:He, 1) ≈ 3.6015556897183797e-25
+    @test PhysData.n2_gas(:He, 2) ≈ 7.199115643112888e-25
+    @test PhysData.n2_gas.(:He, [1, 2]) ≈ [3.6015556897183797e-25, 7.199115643112888e-25]
+    @test PhysData.n2_gas.([:He, :Ne], 1) ≈ [3.6015556897183797e-25, 6.482245292051824e-25]
+    for gas in PhysData.gas[2:end] # Don't have γ3 for Air
+        @test isreal(PhysData.n2_gas(gas, 1))
+    end
+end
 end

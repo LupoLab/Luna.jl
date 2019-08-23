@@ -18,7 +18,9 @@ pres = 5
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = Modes.energy_mode_avg(Capillary.Aeff(a, 1, 1, :HE))
+m = Capillary.MarcatilliMode(a, gas, pres)
+
+energyfun = Modes.energy_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -26,15 +28,16 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
+β1const = Capillary.dispersion(m, 1; λ=λ0)
 βconst = zero(grid.ω)
-βconst[2:end] = Capillary.β(a, grid.ω[2:end], gas=gas, pressure=pres)
+βconst[2:end] = Capillary.β(m, grid.ω[2:end])
 βconst[1] = 1
 βfun(ω, m, n, z) = βconst
 frame_vel(z) = 1/β1const
 αfun(ω, m, n, z) = log(10)/10 * 2
 
-densityfun(z) = PhysData.std_dens * pres
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 normfun = Modes.norm_mode_average(grid.ω, βfun)
 

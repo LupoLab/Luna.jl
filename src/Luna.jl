@@ -5,13 +5,16 @@ import Logging
 import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
 include("Maths.jl")
+include("Hankel.jl")
 include("PhysData.jl")
 include("Grid.jl")
 include("RK45.jl")
+include("AbstractModes.jl")
 include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
+
 
 function make_linop(grid, βfun, αfun, frame_vel)
     β = .-βfun(grid.ω, 1, 1, 0)

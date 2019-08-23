@@ -1,5 +1,6 @@
 module PhysData
 
+import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import Luna: Maths
@@ -12,7 +13,7 @@ const atm = ustrip(CODATA2014.atm)
 const k_B = ustrip(CODATA2014.k_B)
 "Permittivity of vacuum"
 const ε_0 = ustrip(CODATA2014.ε_0)
-"Permiability of vacuum"
+"Permeability of vacuum"
 const μ_0 = ustrip(CODATA2014.μ_0)
 "Electron charge"
 const electron = ustrip(CODATA2014.e)
@@ -32,39 +33,45 @@ const au_Efield = au_energy/(electron*ustrip(CODATA2014.a_0))
 const roomtemp = 294
 "Density of an ideal gas at atmospheric pressure and room temperature"
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
+"Avogadro constant"
+const N_A = ustrip(CODATA2014.N_A)
 
 const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
+const gas_str = Dict(
+    :He => "He",
+    :HeJ => "He",
+    :Ar => "Ar",
+    :Ne => "Neon",
+    :Kr => "Krypton",
+    :Xe => "Xenon",
+    :Air => "Air"
+)
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 
 "Linear coefficients"
 
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
-function χ_Börzsönyi(μm, B1, C1, B2, C2)
-    if any(μm .> 1e4)
-        throw(DomainError(μm, "Wavelength must be given in metres"))
-    end
-    return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
+function γ_Börzsönyi(B1, C1, B2, C2)
+    return μm -> @. (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
-function χ_JCT(μm, B1, C1, B2, C2, B3, C3)
-    if any(μm .> 1e4)
-        throw(DomainError(μm, "Wavelength must be given in metres"))
-    end
-    return @. 273/roomtemp*(B1 * μm^2 / (μm^2 - C1)
-                           + B2 * μm^2 / (μm^2 - C2)
-                           + B3 * μm^2 / (μm^2 - C3))
+function γ_JCT(B1, C1, B2, C2, B3, C3)
+    return @. μm -> @. (B1 * μm^2 / (μm^2 - C1)
+                        + B2 * μm^2 / (μm^2 - C2)
+                        + B3 * μm^2 / (μm^2 - C3))
 end
 
-"Sellemier expansion for gases. Return function for linear susceptibility χ which takes wavelength in
-SI units and coefficients as arguments"
+"Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
+susceptibility of a single particle."
 function sellmeier_gas(material::Symbol)
+    dens = density(material, 1, 273)
     if material == :He
         B1 = 4977.77e-8
         C1 = 28.54e-6
         B2 = 1856.94e-8
         C2 = 7.76e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :HeJ
         B1 = 2.16463842e-05
         C1 = -6.80769781e-04
@@ -72,37 +79,37 @@ function sellmeier_gas(material::Symbol)
         C2 = 5.13251289e-03
         B3 = 4.75092720e-05
         C3 = 3.18621354e-03
-        return χ_JCT, (B1, C1, B2, C2, B3, C3)
+        return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
     elseif material == :Ne
         B1 = 9154.48e-8
         C1 = 656.97e-6
         B2 = 4018.63e-8
         C2 = 5.728e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Ar
         B1 = 20332.29e-8
         C1 = 206.12e-6
         B2 = 34458.31e-8
         C2 = 8.066e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Kr
         B1 = 26102.88e-8
         C1 = 2.01e-6
         B2 = 56946.82e-8
         C2 = 10.043e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Xe
         B1 = 103701.61e-8
         C1 = 12750e-6
         B2 = 31228.61e-8
         C2 = 0.561e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Air
         B1 = 14926.44e-8
         C1 = 19.36e-6
         B2 = 41807.57e-8
         C2 = 7.434e-3
-        return χ_Börzsönyi, (B1, C1, B2, C2)
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -164,44 +171,50 @@ function sellmeier_glass(material::Symbol)
     end
 end
 
-"Get function to return χ1 as a function of wavelength in SI units.
+"Get function to return χ1 as a function of:
+    wavelength in SI units
+    pressure in bar
+    temperature in Kelvin
 Gases only."
-function χ1_fun(material::Symbol)
-    χ, sell = sellmeier_gas(material)
-    f = let χ=χ, sell=sell
-        λ -> χ(λ.*1e6, sell...)
+function χ1_fun(gas::Symbol)
+    γ = sellmeier_gas(gas)
+    f = let γ=γ, gas=gas
+        function χ1(λ, P, T)
+            γ(λ.*1e6)*density(gas, P, T)
+        end
     end
     return f
 end
 
-"Get χ1 at wavelength λ in SI units. Gases only."
-function χ1(material::Symbol, λ)
-    return χ1_fun(material)(λ)
+"Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
+Gases only."
+function χ1(gas::Symbol, λ, P=1, T=roomtemp)
+    return χ1_fun(gas)(λ, P, T)
 end
 
-"Helper function to get refractive index from sellmeier_gas"
-function ref_index(χ::Function, sellmeier, λ,
-                    pressure=1, temp=roomtemp)
-    return @. sqrt(1 + roomtemp/temp * pressure * χ(λ*1e6, sellmeier...))
-end
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, pressure=1, temp=roomtemp)
-    return ref_index_fun(material, pressure, temp)(λ)
+function ref_index(material::Symbol, λ, P=1, T=roomtemp)
+    return ref_index_fun(material, P, T)(λ)
 end
 
 "Get function which returns refractive index."
-function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
+function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     if material in gas
-        χ, sell = sellmeier_gas(material)
-        ngas = let χ=χ, sell=sell, pressure=pressure, temp=temp
-            ngas(λ) = ref_index(χ, sell, λ, pressure, temp)
+        χ1 = χ1_fun(material)
+        ngas = let χ1=χ1, P=P, T=T
+            function ngas(λ)
+                if any(λ .> 1.0)
+                    throw(DomainError(λ, "Wavelength must be given in metres"))
+                end
+                return sqrt(1 + χ1(λ, P, T))
+            end
         end
         return ngas
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
-                if any(λ .> 1e-3)
+                if any(λ .> 1.0)
                     throw(DomainError(λ, "Wavelength must be given in metres"))
                 end
                 return sell(λ.*1e6)
@@ -214,16 +227,16 @@ function ref_index_fun(material::Symbol, pressure=1, temp=roomtemp)::Function
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, pressure=1, temp=roomtemp)
-    n = ref_index_fun(material, pressure, temp)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
+    n = ref_index_fun(material, P, T)
     β(ω) = @. ω/c * n(2π*c/ω)
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
     return βn
 end
 
 "Get dispersion."
-function dispersion(order, material::Symbol, λ, pressure=1, temp=roomtemp)
-    return dispersion_func(order, material, pressure, temp).(λ)
+function dispersion(order, material::Symbol, λ, P=1, T=roomtemp)
+    return dispersion_func(order, material, P, T).(λ)
 end
 
 "Nonlinear coefficients"
@@ -255,19 +268,23 @@ function γ3_gas(material::Symbol; source=:Lehmeier)
         elseif material == :Xe
             fac = 188.2
         end
-        return 4*fac*3.43e-28 / std_dens
+        return 4*fac*3.43e-28 / density(material, 1, 273.15)
     else
         error("TODO: Bishop/Shelton values for γ3")
     end
 end
 
-function χ3_gas(material::Symbol, pressure; source=:Lehmeier)
-    return γ3_gas(material, source=source) .* std_dens .* pressure
+function χ3_gas(material::Symbol, P, T=roomtemp; source=:Lehmeier)
+    return γ3_gas(material, source=source) .* density.(material, P, T)
 end
 
-function n2_gas(material::Symbol, pressure, λ=800e-9; source=:Lehmeier)
-    n0 = ref_index(material, λ, pressure)
-    return @. 3/4 * χ3_gas(material, pressure, source=source) / (ε_0*c*n0^2)
+function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=:Lehmeier)
+    n0 = ref_index(material, λ, P, T)
+    return @. 3/4 * χ3_gas(material, P, T, source=source) / (ε_0*c*n0^2)
+end
+
+function density(gas::Symbol, P, T=roomtemp)
+    P == 0 ? 0 : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
 end
 
 function ionisation_potential(material; unit=:SI)
