@@ -17,7 +17,7 @@ module Modes
 import FFTW
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, Capillary, Maths
+import Luna: PhysData, AbstractModes, Maths
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -173,8 +173,8 @@ function trans_env_mode_avg(grid)
 end
 
 "Calculate energy from field E(t) for mode-averaged field"
-function energy_mode_avg(a)
-    Aeff = Capillary.Aeff(a)
+function energy_mode_avg(m)
+    Aeff = AbstractModes.Aeff(m)
     function energyfun(t, Et, m, n)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
@@ -184,8 +184,8 @@ function energy_mode_avg(a)
 end
 
 "Calculate energy from envelope field E(t) for mode-averaged field"
-function energy_env_mode_avg(a)
-    Aeff = Capillary.Aeff(a)
+function energy_env_mode_avg(m)
+    Aeff = AbstractModes.Aeff(m)
     function energyfun(t, Et, m, n)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*Aeff/2

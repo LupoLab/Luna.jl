@@ -5,94 +5,81 @@ import FunctionZeros: besselj_zero
 import Roots: fzero
 import Cubature: hquadrature
 import SpecialFunctions: besselj
+import StaticArrays: SVector
+using Reexport
+@reexport using Luna.AbstractModes
 import Luna: Maths
-import Luna.PhysData: c, ε_0, χ1, ref_index, roomtemp
+import Luna.PhysData: c, ref_index_fun, roomtemp
+import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
 
-function β(a, ω; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
-    χ = χ1(gas, 2π*c./ω, P, T)
-    unm = besselj_zero(n-1, m)
-    return @. ω/c*(1 + χ/2 - c^2*unm^2/(2*ω^2*a^2))
+export MarcatilliMode, dimlimits, β, α, field
+
+# core and clad are function-like objects which return the
+# refractive index as function of freq
+struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
+    a::Float64
+    n::Int
+    m::Int
+    kind::Symbol
+    unm::Float64
+    ϕ::Float64
+    coren::Tcore
+    cladn::Tclad
 end
 
-function β(a; λ, gas::Symbol=:He, P=0, n=1, m=1)
-    return β(a, 2π*c./λ, gas=gas, P=P, n=n, m=m)
+function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
+    if (kind == :TE) || (kind == :TM)
+        if (n != 0) || (m != 1)
+            error("n=0, m=1 for TE or TM modes")
+        end
+        unm = besselj_zero(1, 1)
+    elseif kind == :HE
+        unm = besselj_zero(n-1, m)
+    else
+        error("kind must be :TE, :TM or :HE")
+    end
+    MarcatilliMode(a, n, m, kind, unm, ϕ, coren, cladn)
 end
 
-function α(a, ω; n=1, m=1)
-    unm = besselj_zero(n-1, m)
-    ν = ref_index(:SiO2, 2π*c./ω)
-    return @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
+"convenience constructor assunming single gas filling and silica clad"
+function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp)
+    rfg = ref_index_fun(gas, P, T)
+    rfs = ref_index_fun(:SiO2)
+    coren = ω -> rfg(2π*c./ω)
+    cladn = ω -> rfs(2π*c./ω)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
-function α(a, ω::AbstractArray; n=1, m=1)
-    unm = besselj_zero(n-1, m)
-    ν = ref_index(:SiO2, 2π*c./ω)
-    ν[ω .< 3e14] .= 1.4
-    ret = @. 2*(c^2 * unm^2)/(a^3 * ω^2) * (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
-    ret[isinf.(ret)] .= 0 # TODO FIND OUT WHY THIS IS NEEDED
-    return ret
+dimlimits(m::MarcatilliMode) = ((0.0, 0.0), (m.a, 2π))
+
+function β(m::MarcatilliMode, ω)
+    χ = m.coren.(ω).^2 .- 1
+    return @. ω/c*(1 + χ/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
 end
 
-function α(a; λ, n=1, m=1)
-    return α(a, 2π*c./λ, n=n, m=m)
+function α(m::MarcatilliMode, ω)
+    ν = m.cladn.(ω)
+    if m.kind == :HE
+        vp = @. (ν^2 + 1)/(2*real(sqrt(Complex(ν^2-1))))
+    elseif m.kind == :TE
+        vp = @. 1/(real(sqrt(Complex(ν^2-1))))
+    elseif m.kind == :TM
+        vp = @. ν^2/(real(sqrt(Complex(ν^2-1))))
+    else
+        error("kind must be :TE, :TM or :HE")
+    end
+    return @. 2*(c^2 * m.unm^2)/(m.a^3 * ω^2) * vp
 end
 
-function losslength(a, ω; n=1, m=1)
-    return 1 ./ α(a, ω, n=n, m=m)
-end
-
-function losslength(a; λ, n=1, m=1)
-    return 1 ./ α(a, n=n, m=m, λ=λ)
-end
-
-function transmission(a, L; λ, n=1, m=1)
-    return @. exp(-α(a, λ=λ, n=n, m=m)*L)
-end
-
-function dB_per_m(a, ω; n=1, m=1)
-    return 10/log(10).*α(a, ω, n=n, m=m)
-end
-
-function dB_per_m(a; n=1, m=1, λ)
-    return return 10/log(10) .* α(a, n=n, m=m, λ=λ)
-end
-
-function dispersion_func(order, a; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
-    βn(ω) = Maths.derivative(ω -> β(a, ω, gas=gas, P=P, T=T, n=n, m=m), ω, order)
-    return βn
-end
-
-function dispersion(order, a, ω; gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
-    return dispersion_func(order, a, gas=gas, P=P, T=T, n=n, m=m).(ω)
-end
-
-function dispersion(order, a; λ, gas::Symbol=:He, P=0, T=roomtemp, n=1, m=1)
-    return dispersion(order, a, 2π*c./λ, gas=gas, P=P, T=T, n=n, m=m)
-end
-
-function zdw(a; gas::Symbol, P, T=roomtemp, n=1, m=1)
-    ω0 = fzero(dispersion_func(2, a, gas=gas, P=P, T=T, n=n, m=m), 1e14, 2e16)
-    return 2π*c/ω0
-end
-
-function Aeff(a, n=1, m=1)
-    nJ = n > 0 ? n-1 : 2 # n=0 -> TE/TM modes so n-1 should be 1
-    unm = besselj_zero(nJ, m)
-    return 2π*a^2*(hquadrature(r-> r*besselj(nJ, r*unm)^2, 0, 1)[1]^2
-    / hquadrature(r-> r*besselj(nJ, r*unm)^4, 0, 1)[1])
-end
-
-function modefield(a, n=1, m=1)
-    nJ = n > 0 ? n-1 : 2 # n=0 -> TE/TM modes so n-1 should be 1
-    unm = besselj_zero(nJ, m)
-    norm = c*ε_0*π*hquadrature(r-> r*besselj(nJ, r*unm/a)^2, 0, a)[1]
-    return r -> @. besselj(nJ, r*unm/a)/sqrt(norm)
-end
-
-function mode_average(a, n=1, m=1)
-    mode = modefield(a, n, m)
-    integrand = r -> r.*mode(r).^4
-    return 2π*hquadrature(integrand, 0, a)[1]
+function field(m::MarcatilliMode)
+    if m.kind == :HE
+        return (r, θ) -> besselj(m.n-1, r*m.unm/m.a) .* SVector(cos(θ)*sin(m.n*(θ + m.ϕ)) - sin(θ)*cos(m.n*(θ + m.ϕ)),
+                                                          sin(θ)*sin(m.n*(θ + m.ϕ)) + cos(θ)*cos(m.n*(θ + m.ϕ)))
+    elseif m.kind == :TE
+        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(-sin(θ), cos(θ))
+    elseif m.kind == :TM
+        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(cos(θ), sin(θ))
+    end
 end
 
 end

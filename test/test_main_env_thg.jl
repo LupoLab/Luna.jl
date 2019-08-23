@@ -18,7 +18,9 @@ pres = 5
 
 grid = Grid.EnvGrid(0.5e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
 
-energyfun = Modes.energy_env_mode_avg(a)
+m = Capillary.MarcatilliMode(a, gas, pres)
+
+energyfun = Modes.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -26,10 +28,10 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-β1const = Capillary.dispersion(1, a; λ=λ0, gas=gas, pressure=pres)
-β0const = Capillary.β(a; λ=λ0, gas=gas, pressure=pres)
+β1const = Capillary.dispersion(m, 1, λ=λ0)
+β0const = Capillary.β(m, λ=λ0)
 βconst = zero(grid.ω)
-βconst[grid.sidx] = Capillary.β(a, grid.ω[grid.sidx], gas=gas, pressure=pres)
+βconst[grid.sidx] = Capillary.β(m, grid.ω[grid.sidx])
 βconst[.!grid.sidx] .= 1
 βfun(ω, m, n, z) = βconst
 αfun(ω, m, n, z) = log(10)/10 * 2
@@ -44,7 +46,7 @@ transform = Modes.trans_env_mode_avg(grid)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_env_thg(PhysData.χ3_gas(gas), 2π*PhysData.c/λ0, grid.to),)
+responses = (Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), 2π*PhysData.c/λ0, grid.to),)
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
