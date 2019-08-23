@@ -124,7 +124,7 @@ function Aeff(m) where {M <: AbstractMode}
         r*e^4
     end
     den, err = hcubature(Aeff_den, dimlimits(m)[1], dimlimits(m)[2])
-    return ret / val
+    return num / den
 end
 
 end
