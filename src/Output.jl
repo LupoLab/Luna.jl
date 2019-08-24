@@ -3,27 +3,29 @@ import HDF5
 import Logging
 
 "Output handler for writing only to memory"
-mutable struct MemoryOutput{sT, N}
+mutable struct MemoryOutput{sT, N, S}
     save_cond::sT
     ydims::NTuple{N, Int64}  # Dimensions of one array to be saved
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
     data::Dict{String, Any}  # The actual data
+    statsfun::S  # Callable, returns dictionary of statistics
 end
 
-function MemoryOutput(tmin, tmax, saveN::Integer, ydims;
+function MemoryOutput(tmin, tmax, saveN::Integer, ydims, statsfun;
                       yname="Eω", tname="z")
     save_cond = GridCondition(tmin, tmax, saveN)
-    MemoryOutput(save_cond, ydims, yname, tname)
+    MemoryOutput(save_cond, ydims, yname, tname, statsfun)
 end
 
-function MemoryOutput(save_cond, ydims, yname, tname)
+function MemoryOutput(save_cond, ydims, yname, tname, statsfun)
     dims = init_dims(ydims, save_cond)
     data = Dict{String, Any}()
     data[yname] = Array{ComplexF64}(undef, dims)
     data[tname] = Array{Float64}(undef, (dims[end],))
-    MemoryOutput(save_cond, ydims, yname, tname, 0, data)
+    data["stats"] = Dict{String, Any}()
+    MemoryOutput(save_cond, ydims, yname, tname, 0, data, statsfun)
 end
 
 """Calling the output handler saves data in the arrays
@@ -36,12 +38,12 @@ end
 """
 function (o::MemoryOutput)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
+    append_stats!(o, o.statsfun(y, t, dt))
     while save
         s = size(o.data[o.yname])
         if s[end] < o.saved+1
-            o.data[o.yname] = cat(o.data[o.yname], yfun(ts),
-                                   dims=ndims(o.data[o.yname]))
-            o.data[o.tname] = vcat(o.data[o.tname], ts)
+            o.data[o.yname] = fastcat(o.data[o.yname], yfun(ts))
+            push!(o.data[o.tname], ts)
         else
             idcs = fill(:, length(o.ydims))
             o.data[o.yname][idcs..., o.saved+1] = yfun(ts)
@@ -50,7 +52,29 @@ function (o::MemoryOutput)(y, t, dt, yfun)
         o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
     end
+end
 
+function append_stats!(o::MemoryOutput, d)
+    for (k, v) in pairs(d)
+        append_stat!(o, k, v)
+    end
+end
+
+function append_stat!(o::MemoryOutput, name, value::Number)
+    if ~haskey(o.data["stats"], name)
+        o.data["stats"][name] = [value]
+    else
+        push!(o.data["stats"][name], value)
+    end
+end
+
+function append_stat!(o::MemoryOutput, name, value::AbstractArray)
+    if ~haskey(o.data["stats"], name)
+        dims = size(value)
+        o.data["stats"][name] = reshape(value, (size(value)..., 1))
+    else
+        o.data["stats"][name] = fastcat(o.data["stats"][name], value)
+    end
 end
 
 "Calling the output on a dictionary writes the items to the array"
@@ -70,6 +94,13 @@ function (o::MemoryOutput)(key::AbstractString, val; force=false)
         end
     end
     o.data[key] = val
+end
+
+function fastcat(A, v)
+    Av = vec(A)
+    append!(Av, vec(v))
+    dims = size(A)
+    return reshape(Av, (dims[1:end-1]..., dims[end]+1))
 end
 
 "Output handler for writing to an HDF5 file"
@@ -125,7 +156,7 @@ end
 """
 function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
-    o.stats_tmp = vcat(o.stats_tmp, o.statsfun(y, t, dt))
+    push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         HDF5.h5open(o.fpath, "r+") do file
             while save
@@ -145,14 +176,14 @@ function (o::HDF5Output)(y, t, dt, yfun)
                 o.saved += 1
                 save, ts = o.save_cond(y, t, dt, o.saved)
             end
-            append_datasets(file["stats"], o.stats_tmp)
+            append_stats!(file["stats"], o.stats_tmp)
             o.stats_tmp = Vector{Dict{String, Any}}()
         end
     end
 
 end
 
-function append_datasets(parent, a::Array{Dict{String,Any},1})
+function append_stats!(parent, a::Array{Dict{String,Any},1})
     N = length(a)
     names = HDF5.names(parent)
     for (k, v) in pairs(a[1])

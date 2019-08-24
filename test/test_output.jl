@@ -40,13 +40,15 @@ end
 @testset "Memory" begin
     shape = (1024, 4, 2)
     n = 11
+    stat = randn()
+    statsfun(y, t, dt) = Dict("stat" => stat)
     t0 = 0
     t1 = 10
     t = collect(range(t0, stop=t1, length=n))
     ω = randn((1024,))
     wd = dirname(@__FILE__)
     gitc = read(`git -C $wd rev-parse --short HEAD`, String)
-    o = Output.MemoryOutput(t0, t1, n, shape, yname="y", tname="t")
+    o = Output.MemoryOutput(t0, t1, n, shape, statsfun, yname="y", tname="t")
     extra = Dict()
     extra["ω"] = ω
     extra["git_commit"] = gitc
@@ -62,4 +64,5 @@ end
     @test gitc == o.data["git_commit"]
     @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
+    @test all(o.data["stats"]["stat"] .== stat)
 end
