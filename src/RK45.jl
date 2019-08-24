@@ -148,13 +148,13 @@ function step!(s)
     if s.locextrap
         s.yn .= s.y
         for jj = 1:7
-            s.yn .+= s.dt*b5[jj].*s.ks[jj]
+            b5[jj] == 0 || (s.yn .+= s.dt*b5[jj].*s.ks[jj])
         end
     end
     
     fill!(s.yerr, 0)
     for ii = 1:7
-        @. s.yerr += s.dt*s.ks[ii]*errest[ii]
+        errest[ii] == 0 || (@. s.yerr += s.dt*s.ks[ii]*errest[ii])
     end
     s.err = maxnorm(s.yerr, s.y, s.yn, s.rtol, s.atol)
     s.ok = s.err <= 1
@@ -188,7 +188,7 @@ function evaluate!(s::Stepper)
     for ii = 1:6
         s.yn .= s.y
         for jj = 1:ii
-            s.yn .+= s.dt*B[ii][jj].*s.ks[jj]
+            B[ii][jj] == 0 || (s.yn .+= s.dt*B[ii][jj].*s.ks[jj])
         end
         s.f!(s.ks[ii+1], s.yn, s.t+nodes[ii]*s.dt)
     end
@@ -205,7 +205,7 @@ function evaluate!(s::PreconStepper)
     for ii = 1:6
         s.yn .= s.y
         for jj = 1:ii
-            s.yn .+= s.dt*B[ii][jj].*s.ks[jj]
+            B[ii][jj] == 0 || (s.yn .+= s.dt*B[ii][jj].*s.ks[jj])
         end
         s.fbar!(s.ks[ii+1], s.yn, s.t, s.t+nodes[ii]*s.dt)
     end
