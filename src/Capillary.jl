@@ -15,7 +15,7 @@ import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
 export MarcatilliMode, dimlimits, β, α, field
 
 # core and clad are function-like objects which return the
-# refractive index as function of freq
+# refractive index as a function of freq
 struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
     a::Float64
     n::Int
@@ -50,7 +50,7 @@ function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
 end
 
-dimlimits(m::MarcatilliMode) = ((0.0, 0.0), (m.a, 2π))
+dimlimits(m::MarcatilliMode) = (:polar, (0.0, 0.0), (m.a, 2π))
 
 function β(m::MarcatilliMode, ω)
     χ = m.coren.(ω).^2 .- 1
@@ -71,14 +71,15 @@ function α(m::MarcatilliMode, ω)
     return @. 2*(c^2 * m.unm^2)/(m.a^3 * ω^2) * vp
 end
 
+# we use polar coords, so xs = (r, θ)
 function field(m::MarcatilliMode)
     if m.kind == :HE
-        return (r, θ) -> besselj(m.n-1, r*m.unm/m.a) .* SVector(cos(θ)*sin(m.n*(θ + m.ϕ)) - sin(θ)*cos(m.n*(θ + m.ϕ)),
-                                                          sin(θ)*sin(m.n*(θ + m.ϕ)) + cos(θ)*cos(m.n*(θ + m.ϕ)))
+        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
+                                                          sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ)))
     elseif m.kind == :TE
-        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(-sin(θ), cos(θ))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(-sin(xs[2]), cos(xs[2]))
     elseif m.kind == :TM
-        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(cos(θ), sin(θ))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2]), sin(xs[2]))
     end
 end
 

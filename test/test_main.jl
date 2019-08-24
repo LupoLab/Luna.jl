@@ -39,27 +39,27 @@ frame_vel(z) = 1/β1const
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-normfun = Modes.norm_mode_average(grid.ω, βfun)
-
-transform = Modes.trans_mode_avg(grid)
-
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+            # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+
+normfun = Modes.norm_mode_average(grid.ω, βfun)
+
+xo1 = Array{Float64}(undef, length(grid.to))
+FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
+transform = Modes.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-
 x = Array{Float64}(undef, length(grid.t))
-FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
-
+FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
 Eω = Luna.make_init(grid, inputs, energyfun, FT)
 
 linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-zout, Eout = Luna.run(Eω, grid, linop, normfun, densityfun, inputs, responses, transform, FT)
+zout, Eout = Luna.run(Eω, grid, linop, transform, FT)
 
 ω = grid.ω
 t = grid.t
@@ -77,7 +77,7 @@ zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii], 1, 1)
+    energy[ii] = energyfun(t, Etout[:, ii])
 end
 
 pygui(true)

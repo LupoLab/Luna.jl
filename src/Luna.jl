@@ -48,12 +48,9 @@ function scaled_input(grid, input, energyfun, FT)
 end
 
 function run(Eω, grid,
-             linop, normfun, densityfun, inputs, responses,
-             transform, FT; max_dz=Inf)
+             linop, transform, FT; max_dz=Inf)
 
     Et = FT \ Eω
-
-    fnl! = make_fnl(grid, transform, densityfun, normfun, responses)
 
     z = 0
     dz = 1e-3
@@ -70,7 +67,7 @@ function run(Eω, grid,
     end
 
     zout, Eout, steps = RK45.solve_precon(
-        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
+        transform, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
 
     return zout, Eout
 end

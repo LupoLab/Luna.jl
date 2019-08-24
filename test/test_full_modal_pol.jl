@@ -24,6 +24,7 @@ nmodes = length(modes)
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 energyfun = Modes.energy_modal()
+normfun = Modes.norm_modal(grid.ω)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -75,7 +76,7 @@ FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
 xo1 = Array{Float64}(undef, length(grid.to), 2)
 FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
 
-transform = Modes.TransModalRadialMat(grid, a, Exys, FTo1, responses, densityfun, :Exy; rtol=1e-3, atol=0.0, mfcn=300, full=true)
+transform = Modes.TransModal(grid, Capillary.dimlimits(modes[1]), Exys, FTo1, responses, densityfun, :Exy, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=true)
 
 Et = FT \ Eω
 

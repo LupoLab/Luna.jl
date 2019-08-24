@@ -68,7 +68,7 @@ function zdw(m::M) where {M <: AbstractMode}
     return 2π*c/ω0
 end
 
-"Create function that returns (r,θ) -> (Ex, Ey)"
+"Create function of coords that returns (xs) -> (Ex, Ey)"
 function field(m::M) where {M <: AbstractMode}
     error("abstract method called")
 end
@@ -76,30 +76,30 @@ end
 "Get mode normalization constant"
 function N(m::M) where {M <: AbstractMode}
     f = field(m)
-    function Nfunc(x)
-        r = x[1]
-        θ = x[2]
-        E = f(r, θ)
-        r*sqrt(ε_0/μ_0)*dot(E, E)
+    dl = dimlimits(m)
+    function Nfunc(xs)
+        E = f(xs)
+        ret = sqrt(ε_0/μ_0)*dot(E, E)
+        dl[1] == :polar ? xs[1]*ret : ret
     end
-    val, err = hcubature(Nfunc, dimlimits(m)[1], dimlimits(m)[2])
+    val, err = hcubature(Nfunc, dl[2], dl[3])
     0.5*abs(val)
 end
 
-"Create function that returns normalised (r,θ) -> |E|"
+"Create function that returns normalised (xs) -> |E|"
 function absE(m::M) where {M <: AbstractMode}
     func = let sN = sqrt(N(m)), f = field(m)
-        function func(r,θ)
-            norm(f(r,θ) ./ sN)
+        function func(xs)
+            norm(f(xs) ./ sN)
         end
     end
 end
 
-"Create function that returns normalised (r,θ) -> (Ex, Ey)"
+"Create function that returns normalised (xs) -> (Ex, Ey)"
 function Exy(m) where {M <: AbstractMode}
     func = let sN = sqrt(N(m)), f = field(m)
-        function func(r,θ)
-            f(r,θ) ./ sN
+        function func(xs)
+            f(xs) ./ sN
         end
     end
 end
@@ -107,23 +107,20 @@ end
 "Get effective area of mode"
 function Aeff(m) where {M <: AbstractMode}
     em = absE(m)
+    dl = dimlimits(m)
     # Numerator
-    function Aeff_num(x)
-        r = x[1]
-        θ = x[2]
-        e = em(r, θ)
-        r*e^2
+    function Aeff_num(xs)
+        e = em(xs)
+        dl[1] == :polar ? xs[1]*e^2 : e^2
     end
-    val, err = hcubature(Aeff_num, dimlimits(m)[1], dimlimits(m)[2])
+    val, err = hcubature(Aeff_num, dl[2], dl[3])
     num = val^2
     # Denominator
-    function Aeff_den(x)
-        r = x[1]
-        θ = x[2]
-        e = em(r, θ)
-        r*e^4
+    function Aeff_den(xs)
+        e = em(xs)
+        dl[1] == :polar ? xs[1]*e^4 : e^4
     end
-    den, err = hcubature(Aeff_den, dimlimits(m)[1], dimlimits(m)[2])
+    den, err = hcubature(Aeff_den, dl[2], dl[3])
     return num / den
 end
 
