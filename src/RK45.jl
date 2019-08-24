@@ -8,30 +8,32 @@ import PyPlot: pygui, plt
 #Get Butcher tableau etc from separate file (for convenience of changing if wanted)
 include("dopri.jl")
 
-function solve(f!, y0, t, dt, tmax, saveN;
+function solve(f!, y0, t, dt, tmax;
                rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true,
                kwargs...)
     stepper = Stepper(f!, y0, t, dt,
                       rtol=rtol, atol=atol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
-    return solve(stepper, tmax, saveN; kwargs...)
+    return solve(stepper, tmax; kwargs...)
 end
 
-function solve_precon(f!, linop, y0, t, dt, tmax, saveN;
+function solve_precon(f!, linop, y0, t, dt, tmax;
                     rtol=1e-6, atol=1e-10, max_dt=Inf, min_dt=0, locextrap=true,
                     kwargs...)
     stepper = PreconStepper(f!, linop, y0, t, dt,
                       rtol=rtol, atol=atol, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
-    return solve(stepper, tmax, saveN; kwargs...)
+    return solve(stepper, tmax; kwargs...)
 end
 
-function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit=10)
-    yout = Array{eltype(s.y)}(undef, (size(s.y)..., saveN))
-    tout = range(s.t, stop=tmax, length=saveN)
-
-    yout[fill(:, ndims(s.y))..., 1] = s.y
+function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
+                        status_period=1, repeat_limit=10)
+    if output
+        yout = Array{eltype(s.y)}(undef, (size(s.y)..., outputN))
+        tout = range(s.t, stop=tmax, length=outputN)
+        saved = 1
+        yout[fill(:, ndims(s.y))..., 1] = s.y
+    end
 
     steps = 0
-    saved = 1
     repeated = 0
     repeated_tot = 0
 
@@ -39,7 +41,6 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
     start = Dates.now()
     tic = Dates.now()
     while s.tn <= tmax
-        # println(steps)
         ok = step!(s)
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
@@ -48,12 +49,14 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
                 tic = Dates.now()
         end
         if ok
-            while (saved<saveN) && tout[saved+1] < s.tn
-                ti = tout[saved+1]
-                yout[fill(:, ndims(s.y))..., saved+1] .= interpolate(s, ti)
-                saved += 1
+            if output
+                while (saved<outputN) && tout[saved+1] < s.tn
+                    ti = tout[saved+1]
+                    yout[fill(:, ndims(s.y))..., saved+1] .= interpolate(s, ti)
+                    saved += 1
+                end
             end
-            stepfun(s.yn)
+            stepfun(s.yn, s.tn, s.dt, t -> interpolate(s, t))
             repeated = 0
         else
             repeated += 1
@@ -66,7 +69,11 @@ function solve(s, tmax, saveN; stepfun=donothing!, status_period=1, repeat_limit
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
 
-    return collect(tout), yout, steps
+    if output
+        return collect(tout), yout, steps
+    else      
+        return nothing
+    end
 end
 
 
@@ -208,6 +215,11 @@ function interpolate(s::Stepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
     end
+    if ti == s.t
+        return s.y
+    elseif ti == s.tn
+        return s.yn
+    end
     σ = (ti - s.t)/s.dt
     σp = map(p -> σ^p, range(1, stop=4))
     b = sum(σp.*interpC, dims=1)
@@ -221,6 +233,11 @@ end
 function interpolate(s::PreconStepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
+    end
+    if ti == s.t
+        return s.y
+    elseif ti == s.tn
+        return s.yn
     end
     σ = (ti - s.t)/s.dt
     σp = map(p -> σ^p, range(1, stop=4))
@@ -297,7 +314,7 @@ function weaknorm(yerr, y, yn, rtol, atol)
     return syerr/rtol/errwt
 end
 
-function donothing!(x)
+function donothing!(y, z, dz, interpolant)
 end
 
 end
