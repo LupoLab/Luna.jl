@@ -13,13 +13,13 @@ mutable struct MemoryOutput{sT, N, S}
     statsfun::S  # Callable, returns dictionary of statistics
 end
 
-function MemoryOutput(tmin, tmax, saveN::Integer, ydims, statsfun;
+function MemoryOutput(tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
                       yname="Eω", tname="z")
     save_cond = GridCondition(tmin, tmax, saveN)
     MemoryOutput(save_cond, ydims, yname, tname, statsfun)
 end
 
-function MemoryOutput(save_cond, ydims, yname, tname, statsfun)
+function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats)
     dims = init_dims(ydims, save_cond)
     data = Dict{String, Any}()
     data[yname] = Array{ComplexF64}(undef, dims)
@@ -116,7 +116,7 @@ mutable struct HDF5Output{sT, N, S}
 end
 
 "Simple constructor"
-function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun;
+function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
                     yname="Eω", tname="z")
     save_cond = GridCondition(tmin, tmax, saveN)
     HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
@@ -295,6 +295,10 @@ end
 "For other conditions, we do not know in advance."
 function init_dims(ydims, save_cond)
     return (ydims..., 1)
+end
+
+function nostats(args...)
+    return Dict{String, Any}()
 end
             
 end
