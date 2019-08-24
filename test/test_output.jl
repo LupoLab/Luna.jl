@@ -115,8 +115,8 @@ end
         o("τ", τ)
     end
     linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-    zout, Eout = Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
-                        responses, transform, FT, output)
+    Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
+             responses, transform, FT, output)
     HDF5.h5open(hdf5.fpath, "r") do file
         @test read(file["ω"]) == mem.data["ω"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))

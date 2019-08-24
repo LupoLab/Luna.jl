@@ -60,8 +60,6 @@ function run(grid,
 
     z = 0
     dz = 1e-3
-    zmax = grid.zmax
-    saveN = 201
 
     window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
         function window!(Eω)
@@ -77,10 +75,8 @@ function run(grid,
         output(Eω, z, dz, interpolant)
     end
 
-    zout, Eout, steps = RK45.solve_precon(
-        fnl!, linop, Eω, z, dz, zmax, saveN, stepfun=stepfun, max_dt=max_dz)
-
-    return zout, Eout
+    RK45.solve_precon(
+        fnl!, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
 end
 
 end # module
