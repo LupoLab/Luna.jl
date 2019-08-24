@@ -11,9 +11,9 @@ function ω0(grid)
 end
 
 function collect_stats(funcs)
-    d = Dict{String, Any}()
-    f = let d=d, funcs=funcs
+    f = let funcs=funcs
         function collect_stats(Eω, z, dz)
+            d = Dict{String, Any}()
             for func in funcs
                 func(d, Eω, z, dz)
             end
