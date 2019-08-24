@@ -1,6 +1,5 @@
 import FFTW
 import Luna: RK45
-import PyPlot: pygui, plt
 import Test: @test
 
 function testinit()
@@ -121,9 +120,11 @@ t, ω, zmax, Aω, f!, Lin, fnl!, Linfunc = testinit()
 z = 0
 dz = 1e-3
 
-zarr, Aarr = RK45.solve(f!, copy(Aω), z, dz, zmax, 501, rtol=1e-8)
-zarrp, Aarrp = RK45.solve_precon(fnl!, Lin, copy(Aω), z, dz, zmax, 501, rtol=1e-8)
-zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, copy(Aω), z, dz, zmax, 501, rtol=1e-8)
+zarr, Aarr = RK45.solve(f!, copy(Aω), z, dz, zmax, rtol=1e-8, output=true, outputN=501)
+zarrp, Aarrp = RK45.solve_precon(fnl!, Lin, copy(Aω), z, dz, zmax,
+                                 rtol=1e-8, output=true, outputN=501)
+zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, copy(Aω), z, dz, zmax, 
+                                   rtol=1e-8, output=true, outputN=501)
 # Is the initial spectrum restored after 2 soliton periods? (without preconditioner)
 @test isapprox(abs2.(Aarr[:, 1]), abs2.(Aarr[:, end]), rtol=1e-4)
 # Is the initial spectrum restored after 2 soliton periods? (with preconditioner)

@@ -14,6 +14,8 @@ include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("Modes.jl")
+include("Output.jl")
+include("Stats.jl")
 
 
 function make_linop(grid, βfun, αfun, frame_vel)
@@ -48,14 +50,13 @@ function scaled_input(grid, input, energyfun, FT)
 end
 
 function run(Eω, grid,
-             linop, transform, FT; max_dz=Inf)
+             linop, transform, FT, output; max_dz=Inf)
+
 
     Et = FT \ Eω
 
     z = 0
     dz = 1e-3
-    zmax = grid.zmax
-    saveN = 201
 
     window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
         function window!(Eω)
@@ -66,10 +67,13 @@ function run(Eω, grid,
         end
     end
 
-    zout, Eout, steps = RK45.solve_precon(
-        transform, linop, Eω, z, dz, zmax, saveN, stepfun=window!, max_dt=max_dz)
+    function stepfun(Eω, z, dz, interpolant)
+        window!(Eω)
+        output(Eω, z, dz, interpolant)
+    end
 
-    return zout, Eout
+    RK45.solve_precon(
+        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
 end
 
 end # module
