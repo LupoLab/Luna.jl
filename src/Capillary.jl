@@ -73,13 +73,15 @@ end
 
 # we use polar coords, so xs = (r, θ)
 function field(m::MarcatilliMode)
+    r = xs[1]
+    θ = xs[2]
     if m.kind == :HE
-        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
-                                                          sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ)))
+        return (xs) -> besselj(m.n-1, r*m.unm/m.a) .* SVector(cos(θ)*sin(m.n*(θ + m.ϕ)) - sin(θ)*cos(m.n*(θ + m.ϕ)),
+                                                              sin(θ)*sin(m.n*(θ + m.ϕ)) + cos(θ)*cos(m.n*(θ + m.ϕ)))
     elseif m.kind == :TE
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(-sin(xs[2]), cos(xs[2]))
+        return (xs) -> besselj(1, r*m.unm/m.a) .* SVector(-sin(θ), cos(θ))
     elseif m.kind == :TM
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2]), sin(xs[2]))
+        return (xs) -> besselj(1, r*m.unm/m.a) .* SVector(cos(θ), sin(θ))
     end
 end
 
