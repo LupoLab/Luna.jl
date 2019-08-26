@@ -13,7 +13,7 @@ include("AbstractModes.jl")
 include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
-include("Modes.jl")
+include("NonlinearRHS.jl")
 include("Output.jl")
 include("Stats.jl")
 
@@ -91,7 +91,7 @@ end
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs)
     xo1 = Array{Float64}(undef, length(grid.to))
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
-    transform = Modes.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     Eω = make_init(grid, inputs, energyfun, FT)
@@ -103,7 +103,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
-    transform = Modes.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     Eω = make_init(grid, inputs, energyfun, FT)
     Eω, transform, FT
 end
@@ -127,7 +127,7 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{Float64}(undef, length(grid.to), npol)
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
-    transform = Modes.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
+    transform = NonlinearRHS.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     Eω, transform, FT
@@ -152,7 +152,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
-    transform = Modes.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
+    transform = NonlinearRHS.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     Eω, transform, FT

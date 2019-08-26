@@ -69,7 +69,7 @@ end
 
 @testset "HDF5 vs Memory" begin
     import Luna
-    import Luna: Grid, Capillary, PhysData, Nonlinear, Modes, Output, Stats, Maths
+    import Luna: Grid, Capillary, PhysData, Nonlinear, NonlinearRHS, Output, Stats, Maths
     import FFTW
     import HDF5
 
@@ -80,7 +80,7 @@ end
     λ0 = 800e-9
     grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres)
-    energyfun = Modes.energy_mode_avg(m)
+    energyfun = NonlinearRHS.energy_mode_avg(m)
     β1const = Capillary.dispersion(m, 1; λ=λ0)
     βconst = zero(grid.ω)
     βconst[2:end] = Capillary.β(m, grid.ω[2:end])
@@ -90,8 +90,8 @@ end
     αfun(ω, m, n, z) = log(10)/10 * 2
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    normfun = Modes.norm_mode_average(grid.ω, βfun)
-    transform = Modes.trans_mode_avg(grid)
+    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
+    transform = NonlinearRHS.trans_mode_avg(grid)
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)

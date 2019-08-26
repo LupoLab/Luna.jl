@@ -15,7 +15,7 @@ To Do:
     3. Free space
         a. Azimuthal symmetry (Hankel transform)
         b. Full 2-D (Fourier transform)"
-module Modes
+module NonlinearRHS
 import FFTW
 import Cubature
 import LinearAlgebra: mul!

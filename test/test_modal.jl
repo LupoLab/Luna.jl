@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, RK45, Stats, Output
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -22,8 +22,8 @@ modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = Modes.energy_modal()
-normfun = Modes.norm_modal(grid.ω)
+energyfun = NonlinearRHS.energy_modal()
+normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)

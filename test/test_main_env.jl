@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, Output, Stats
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -20,7 +20,7 @@ grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres)
 
-energyfun = Modes.energy_env_mode_avg(m)
+energyfun = NonlinearRHS.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -33,7 +33,7 @@ densityfun(z) = dens0
 
 linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0)
 
-normfun = Modes.norm_mode_average(grid.ω, βfun)
+normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
