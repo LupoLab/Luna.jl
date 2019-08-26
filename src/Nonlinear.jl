@@ -107,7 +107,16 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
 end
 
-function (Plas::PlasmaCumtrapz)(out, E)
+function (Plas::PlasmaCumtrapz)(out, Et)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, size(Et,1))
+        else
+            error("vector plasma not yet implemented")
+        end
+    else
+        E = Et
+    end
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -119,7 +128,11 @@ function (Plas::PlasmaCumtrapz)(out, E)
         end
     end
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-    @. out += Plas.P
+    if ndims(Et) > 1
+        out .+= reshape(Plas.P, size(Et))
+    else
+        @. out += Plas.P
+    end
 end
 
 end
