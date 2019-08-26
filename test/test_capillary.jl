@@ -25,3 +25,8 @@ m = Capillary.MarcatilliMode(a, :He, 1.0)
 @test abs(1e9*Capillary.zdw(Capillary.MarcatilliMode(75e-6, :He, 5.9)) - 562) < 1
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
+
+loss(m, ω) = 0.1
+m = Capillary.MarcatilliMode(a, :He, 1.0, loss=loss)
+@test Capillary.α(m, 2π*c/2000e-9) == 0.1
+@test Capillary.α(m, 2π*c/1200e-9) == 0.1
