@@ -41,7 +41,7 @@ linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
-in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
+in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)

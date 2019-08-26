@@ -91,7 +91,7 @@ end
         ω0 = 2π*PhysData.c/λ0
         Et = @. sqrt(It)*cos(ω0*t)
     end
-    in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
+    in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))

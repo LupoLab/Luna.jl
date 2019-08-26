@@ -38,6 +38,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     Eω, transform, FT
 end
 
+# for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false) where T
     Exys = []
@@ -52,7 +53,9 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     xt = Array{Float64}(undef, length(grid.t))
     FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
-    Eω[:,1] .= make_init(grid, inputs, energyfun, FTt)
+    for i in 1:length(inputs)
+        Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
+    end
     x = Array{Float64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{Float64}(undef, length(grid.to), npol)
@@ -63,6 +66,7 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     Eω, transform, FT
 end
 
+# for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false) where T
     Exys = []
@@ -77,7 +81,9 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     xt = Array{ComplexF64}(undef, length(grid.t))
     FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
-    Eω[:,1] .= make_init(grid, inputs, energyfun, FTt)
+    for i in 1:length(inputs)
+        Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
+    end
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)

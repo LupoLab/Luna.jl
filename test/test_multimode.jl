@@ -25,7 +25,7 @@ import Luna: Output
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
-    in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
+    in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
@@ -35,6 +35,7 @@ import Luna: Output
     modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),)
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
+    inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :Ey; full=false)
     outputr = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
@@ -70,7 +71,7 @@ end
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
-    in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
+    in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
@@ -80,6 +81,7 @@ end
     modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),)
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
+    inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :Ey; full=true)
     outputf = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
