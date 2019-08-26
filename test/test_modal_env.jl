@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, RK45
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, RK45, Stats, Output
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -32,25 +32,6 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-function get_linop(grid, m, vel, β0ref)
-    βconst = zero(grid.ω)
-    βconst[grid.sidx] = Capillary.β(m, grid.ω[grid.sidx])
-    βconst[.!grid.sidx] .= 1
-    -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- β0ref)
-end
-
-β0const = Capillary.β(modes[1], λ=λ0)
-vel = 1/Capillary.dispersion(modes[1], 1, λ=λ0)
-linops = zeros(ComplexF64, length(grid.ω), nmodes)
-for i = 1:nmodes
-    linops[:,i] = get_linop(grid, modes[i], vel, β0const)
-end
-
-Exys = []
-for i = 1:nmodes
-    push!(Exys, Capillary.Exy(modes[i]))
-end
-
 densityfun(z) = PhysData.std_dens * pres
 
 ionpot = PhysData.ionisation_potential(gas)
@@ -62,23 +43,20 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-xt = Array{Float64}(undef, length(grid.t))
-FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+                              modes, :Ey; full=false)
 
-Eω = zeros(ComplexF64, length(grid.ω), nmodes)
-Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
+statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+linop = Luna.make_const_linop(grid, modes, λ0)
 
-x = Array{Float64}(undef, length(grid.t), nmodes)
-FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
-
-xo1 = Array{Float64}(undef, length(grid.t), 2)
-FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
-
-transform = Modes.TransModal(grid, Capillary.dimlimits(modes[1]), Exys, FTo1, responses, densityfun, :Ey, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-zout, Eout = Luna.run(Eω, grid, linops, transform, FT)
+Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = FFTW.fftshift(grid.ω)
 t = grid.t
+
+zout = output.data["z"]
+Eout = output.data["Eω"]
 
 Etout = FFTW.ifft(Eout, 1)
 It = abs2.(Etout)

@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, RK45
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, Modes, RK45, Stats, Output
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -19,7 +19,6 @@ pres = 5
 
 modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0))
-nmodes = length(modes)
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
@@ -30,27 +29,6 @@ function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
     ω0 = 2π*PhysData.c/λ0
     Et = @. sqrt(It)*cos(ω0*t)
-end
-
-function get_linop(grid, m, vel)
-    βconst = zero(grid.ω)
-    βconst[2:end] = Capillary.β(m, grid.ω[2:end])
-    βconst[1] = 1
-    βfun(ω, m, n, z) = βconst
-    frame_vel(z) = vel
-    αfun(ω, m, n, z) = 0.0
-    Luna.make_linop(grid, βfun, αfun, frame_vel)
-end
-
-vel = 1/Capillary.dispersion(modes[1], 1, λ=λ0)
-linops = zeros(ComplexF64, length(grid.ω), nmodes)
-for i = 1:nmodes
-    linops[:,i] = get_linop(grid, modes[i], vel)
-end
-
-Exys = []
-for i = 1:nmodes
-    push!(Exys, Capillary.Exy(modes[i]))
 end
 
 densityfun(z) = PhysData.std_dens * pres
@@ -64,23 +42,20 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-xt = Array{Float64}(undef, length(grid.t))
-FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+                              modes, :Ey; full=false)
 
-Eω = zeros(ComplexF64, length(grid.ω), nmodes)
-Eω[:,1] .= Luna.make_init(grid, inputs, energyfun, FTt)
+statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+linop = Luna.make_const_linop(grid, modes, λ0)
 
-x = Array{Float64}(undef, length(grid.t), nmodes)
-FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
-
-xo1 = Array{Float64}(undef, length(grid.to), 1)
-FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
-
-transform = Modes.TransModal(grid, Capillary.dimlimits(modes[1]), Exys, FTo1, responses, densityfun, :Ey, normfun; rtol=1e-3, atol=0.0, mfcn=300)
-zout, Eout = Luna.run(Eω, grid, linops, transform, FT)
+Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
 t = grid.t
+
+zout = output.data["z"]
+Eout = output.data["Eω"]
 
 Etout = FFTW.irfft(Eout, length(grid.t), 1)
 It = abs2.(Maths.hilbert(Etout))
@@ -89,7 +64,7 @@ Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
 pygui(true)
 
-for i = 1:nmodes
+for i = 1:length(modes)
     plt.figure()
     plt.subplot(121)
     plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))

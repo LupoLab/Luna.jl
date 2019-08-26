@@ -27,20 +27,12 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-β1const = Capillary.dispersion(m, 1; λ=λ0)
-βconst = zero(grid.ω)
-βconst[2:end] = Capillary.β(m, grid.ω[2:end])
-βconst[1] = 1
-βfun(ω, m, n, z) = βconst
-frame_vel(z) = 1/β1const
-αfun(ω, m, n, z) = log(10)/10 * 2
-
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-normfun = Modes.norm_mode_average(grid.ω, βfun)
+linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0)
 
-transform = Modes.trans_mode_avg(grid)
+normfun = Modes.norm_mode_average(grid.ω, βfun)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -51,15 +43,12 @@ responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas),length(grid.to)),
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-x = Array{Float64}(undef, length(grid.t))
-FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
-linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
-         responses, transform, FT, output)
+Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
 t = grid.t
@@ -80,7 +69,7 @@ zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii], 1, 1)
+    energy[ii] = energyfun(t, Etout[:, ii])
 end
 
 pygui(true)

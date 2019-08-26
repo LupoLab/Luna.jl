@@ -28,14 +28,6 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-β1const = Capillary.dispersion(m, 1; λ=λ0)
-βconst = zero(grid.ω)
-βconst[2:end] = Capillary.β(m, grid.ω[2:end])
-βconst[1] = 1
-βfun(ω, m, n, z) = βconst
-frame_vel(z) = 1/β1const
-αfun(ω, m, n, z) = log(10)/10 * 2
-
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
@@ -45,25 +37,19 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
             # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-normfun = Modes.norm_mode_average(grid.ω, βfun)
+linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0)
 
-xo1 = Array{Float64}(undef, length(grid.to))
-FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
-transform = Modes.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
+normfun = Modes.norm_mode_average(grid.ω, βfun)
 
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-x = Array{Float64}(undef, length(grid.t))
-FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
-Eω = Luna.make_init(grid, inputs, energyfun, FT)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
-linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-
-zout, Eout = Luna.run(Eω, grid, linop, transform, FT, output)
+Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
 t = grid.t

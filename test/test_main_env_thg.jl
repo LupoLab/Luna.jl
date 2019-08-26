@@ -17,6 +17,7 @@ pres = 5
 λ0 = 800e-9
 
 grid = Grid.EnvGrid(0.5e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
+#grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12, thg=true)
 
 m = Capillary.MarcatilliMode(a, gas, pres)
 
@@ -28,20 +29,12 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-β1const = Capillary.dispersion(m, 1, λ=λ0)
-β0const = Capillary.β(m, λ=λ0)
-βconst = zero(grid.ω)
-βconst[grid.sidx] = Capillary.β(m, grid.ω[grid.sidx])
-βconst[.!grid.sidx] .= 1
-βfun(ω, m, n, z) = βconst
-αfun(ω, m, n, z) = log(10)/10 * 2
-
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-normfun = Modes.norm_mode_average(grid.ω, βfun)
+linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0, thg=true)
 
-transform = Modes.trans_env_mode_avg(grid)
+normfun = Modes.norm_mode_average(grid.ω, βfun)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -51,15 +44,12 @@ responses = (Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), 2π*PhysData.c/λ0, g
 in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
 inputs = (in1, )
 
-x = Array{ComplexF64}(undef, length(grid.t))
-FT = FFTW.plan_fft(x, 1)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
-linop = -im.*(βconst .- β1const.*(grid.ω .- grid.ω0))
-Luna.run(grid, linop, normfun, energyfun, densityfun,
-         inputs, responses, transform, FT, output)
+Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
 t = grid.t
@@ -79,7 +69,7 @@ zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 Et = Etout
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii], 1, 1)
+    energy[ii] = energyfun(t, Etout[:, ii])
 end
 
 pygui(true)
