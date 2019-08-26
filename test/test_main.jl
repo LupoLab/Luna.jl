@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -37,7 +37,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
             # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0)
+linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 

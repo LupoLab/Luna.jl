@@ -114,7 +114,7 @@ end
         o(Dict("ω" => grid.ω, "λ0" => λ0))
         o("τ", τ)
     end
-    linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
+    linop = LinearOps.make_linop(grid, βfun, αfun, frame_vel)
     Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
              responses, transform, FT, output)
     HDF5.h5open(hdf5.fpath, "r") do file

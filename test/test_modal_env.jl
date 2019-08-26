@@ -48,7 +48,7 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
-linop = Luna.make_const_linop(grid, modes, λ0)
+linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

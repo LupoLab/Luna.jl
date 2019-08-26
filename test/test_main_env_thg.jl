@@ -32,7 +32,7 @@ end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-linop, βfun, frame_vel, αfun = Luna.make_const_linop(grid, m, λ0, thg=true)
+linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0, thg=true)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
