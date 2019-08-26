@@ -12,7 +12,7 @@ import Luna: Output
     pres = 5
     τ = 30e-15
     λ0 = 800e-9
-    grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+    grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres)
     energyfun = NonlinearRHS.energy_mode_avg(m)
     function gausspulse(t)
