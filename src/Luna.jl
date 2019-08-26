@@ -9,7 +9,7 @@ include("Hankel.jl")
 include("PhysData.jl")
 include("Grid.jl")
 include("RK45.jl")
-include("AbstractModes.jl")
+include("Modes.jl")
 include("Capillary.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
@@ -32,11 +32,11 @@ function make_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel; thg=false)
     return -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) - α/2
 end
 
-function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <: AbstractModes.AbstractMode
-    β1const = AbstractModes.dispersion(mode, 1, λ=λ0)
-    β0const = AbstractModes.β(mode, λ=λ0)
+function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <: Modes.AbstractMode
+    β1const = Modes.dispersion(mode, 1, λ=λ0)
+    β0const = Modes.β(mode, λ=λ0)
     βconst = zero(grid.ω)
-    βconst[grid.sidx] = AbstractModes.β(mode, grid.ω[grid.sidx])
+    βconst[grid.sidx] = Modes.β(mode, grid.ω[grid.sidx])
     βconst[.!grid.sidx] .= 1
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
@@ -44,10 +44,10 @@ function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <
     make_linop(grid, βfun, αfun, frame_vel, thg=thg), βfun, frame_vel, αfun
 end
 
-function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: AbstractModes.AbstractMode
-    β1const = AbstractModes.dispersion(mode, 1; λ=λ0)
+function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.AbstractMode
+    β1const = Modes.dispersion(mode, 1; λ=λ0)
     βconst = zero(grid.ω)
-    βconst[2:end] = AbstractModes.β(mode, grid.ω[2:end])
+    βconst[2:end] = Modes.β(mode, grid.ω[2:end])
     βconst[1] = 1
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
@@ -56,12 +56,12 @@ function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Abstract
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes::Tuple, λ0; ref_mode=1)
-    vel = 1/AbstractModes.dispersion(modes[ref_mode], 1, λ=λ0)
+    vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
         βconst = zero(grid.ω)
-        βconst[2:end] = AbstractModes.β(modes[i], grid.ω[2:end])
+        βconst[2:end] = Modes.β(modes[i], grid.ω[2:end])
         βconst[1] = 1
         α = 0.0 # TODO deal with loss properly
         linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
@@ -70,17 +70,17 @@ function make_const_linop(grid::Grid.RealGrid, modes::Tuple, λ0; ref_mode=1)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, modes::Tuple, λ0; ref_mode=1, thg=false)
-    vel = 1/AbstractModes.dispersion(modes[ref_mode], 1, λ=λ0)
+    vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
     if thg
         βref = 0.0
     else
-        βref = AbstractModes.β(modes[ref_mode], λ=λ0)
+        βref = Modes.β(modes[ref_mode], λ=λ0)
     end
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
         βconst = zero(grid.ω)
-        βconst[grid.sidx] = AbstractModes.β(modes[i], grid.ω[grid.sidx])
+        βconst[grid.sidx] = Modes.β(modes[i], grid.ω[grid.sidx])
         βconst[.!grid.sidx] .= 1
         α = 0.0 # TODO deal with loss properly
         linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2
@@ -112,7 +112,7 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
                modes, components; full=false) where T
     Exys = []
     for mode in modes
-        push!(Exys, AbstractModes.Exy(mode))
+        push!(Exys, Modes.Exy(mode))
     end
     if components == :Exy
         npol = 2
@@ -127,7 +127,7 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{Float64}(undef, length(grid.to), npol)
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
-    transform = NonlinearRHS.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
+    transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     Eω, transform, FT
@@ -137,7 +137,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
                modes, components; full=false) where T
     Exys = []
     for mode in modes
-        push!(Exys, AbstractModes.Exy(mode))
+        push!(Exys, Modes.Exy(mode))
     end
     if components == :Exy
         npol = 2
@@ -152,7 +152,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
-    transform = NonlinearRHS.TransModal(grid, AbstractModes.dimlimits(modes[1]), Exys, FTo1,
+    transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     Eω, transform, FT

@@ -20,7 +20,7 @@ import FFTW
 import Cubature
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, AbstractModes, Maths, Grid
+import Luna: PhysData, Modes, Maths, Grid
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -354,7 +354,7 @@ end
 
 "Calculate energy from field E(t) for mode-averaged field"
 function energy_mode_avg(m)
-    aeff = AbstractModes.Aeff(m)
+    aeff = Modes.Aeff(m)
     function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
@@ -365,7 +365,7 @@ end
 
 "Calculate energy from envelope field E(t) for mode-averaged field"
 function energy_env_mode_avg(m)
-    aeff = AbstractModes.Aeff(m)
+    aeff = Modes.Aeff(m)
     function energyfun(t, Et)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*aeff/2

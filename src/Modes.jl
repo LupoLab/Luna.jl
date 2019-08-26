@@ -1,4 +1,4 @@
-module AbstractModes
+module Modes
 import Roots: fzero
 import Cubature: hcubature
 import LinearAlgebra: dot, norm

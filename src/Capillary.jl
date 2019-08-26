@@ -7,10 +7,10 @@ import Cubature: hquadrature, hcubature
 import SpecialFunctions: besselj
 import StaticArrays: SVector
 using Reexport
-@reexport using Luna.AbstractModes
+@reexport using Luna.Modes
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
+import Luna.Modes: AbstractMode, dimlimits, β, α, field
 
 export MarcatilliMode, dimlimits, β, α, field
 
