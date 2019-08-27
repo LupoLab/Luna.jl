@@ -4,6 +4,7 @@ import NumericalIntegration
 import Logging
 import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
+include("Utils.jl")
 include("Maths.jl")
 include("Hankel.jl")
 include("PhysData.jl")
