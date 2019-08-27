@@ -104,7 +104,7 @@ function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
     idcs = CartesianIndices(size(dest)[2:end])
-    _cpsc_core(dest, source, scale, N, idcs)
+    _cpsc_core(dest, source, N, scale, idcs)
 end
 
 function _cpsc_core(dest, source, N, scale, idcs)
