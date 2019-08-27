@@ -40,7 +40,7 @@ end
 
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs,
-               modes, components; full=false) where T
+               modes, components; full=false)
     Exys = []
     for mode in modes
         push!(Exys, Modes.Exy(mode))
@@ -68,7 +68,7 @@ end
 
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs,
-               modes, components; full=false) where T
+               modes, components; full=false)
     Exys = []
     for mode in modes
         push!(Exys, Modes.Exy(mode))

@@ -2,14 +2,14 @@ module LinearOps
 import FFTW
 import Luna: Modes, Grid
 
-function make_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
+function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     β = .-βfun(grid.ω, 0)
     α = αfun(grid.ω, 0)
     β1 = -1/frame_vel(0)
     return @. im*(β-β1*grid.ω) - α/2
 end
 
-function make_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
+function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
     β = βfun(grid.ω, 0)
     α = αfun(grid.ω, 0)
     β1 = 1/frame_vel(0)
@@ -29,7 +29,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
     αfun(ω, z) = 0.0 # TODO deal with loss properly
-    make_linop(grid, βfun, αfun, frame_vel, β0const), βfun, frame_vel, αfun
+    make_const_linop(grid, βfun, αfun, frame_vel, β0const), βfun, frame_vel, αfun
 end
 
 function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.AbstractMode
@@ -40,7 +40,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.Ab
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
     αfun(ω, z) = 0.0 # TODO deal with loss properly
-    make_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
+    make_const_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes::Tuple, λ0; ref_mode=1)
