@@ -3,6 +3,7 @@ import Luna: Output
 
 @testset "HDF5" begin
     import HDF5
+    import Luna: Utils
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
@@ -18,6 +19,10 @@ import Luna: Output
     extra["ω"] = ω
     extra["git_commit"] = gitc
     o(extra)
+    meta = Dict()
+    meta["meta1"] = 100
+    meta["meta2"] = "src"
+    o(meta, meta=true)
     y0 = randn(ComplexF64, shape)
     y(t) = y0
     for (ii, ti) in enumerate(t)
@@ -33,11 +38,16 @@ import Luna: Output
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
         @test all(read(file["stats"]["stat"]) .== stat)
+        @test Utils.git_commit() == read(file["meta"]["git_commit"])
+        @test Utils.sourcecode() == read(file["meta"]["sourcecode"])
+        @test 100 == read(file["meta"]["meta1"])
+        @test "src" == read(file["meta"]["meta2"])
     end
     rm("test.h5")
 end
 
 @testset "Memory" begin
+    import Luna: Utils
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
@@ -53,6 +63,10 @@ end
     extra["ω"] = ω
     extra["git_commit"] = gitc
     o(extra)
+    meta = Dict()
+    meta["meta1"] = 100
+    meta["meta2"] = "src"
+    o(meta, meta=true)
     y0 = randn(ComplexF64, shape)
     y(t) = y0
     for (ii, ti) in enumerate(t)
@@ -65,6 +79,10 @@ end
     @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
     @test all(o.data["stats"]["stat"] .== stat)
+    @test Utils.git_commit() == o.data["meta"]["git_commit"]
+    @test Utils.sourcecode() == o.data["meta"]["sourcecode"]
+    @test 100 == o.data["meta"]["meta1"]
+    @test "src" == o.data["meta"]["meta2"]
 end
 
 @testset "HDF5 vs Memory" begin
