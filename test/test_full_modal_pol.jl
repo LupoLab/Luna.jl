@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output, LinearOps
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
