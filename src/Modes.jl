@@ -124,5 +124,4 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
-
 end
