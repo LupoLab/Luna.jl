@@ -105,12 +105,15 @@ end
 
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     hdf5 = Output.HDF5Output("test.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun)
+    hdf5c = Output.HDF5Output("test_comp.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun,
+                              compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
     function output(args...)
         hdf5(args...)
+        hdf5c(args...)
         mem(args...)
     end
-    for o in (hdf5, mem)
+    for o in (hdf5, hdf5c, mem)
         o(Dict("ω" => grid.ω, "λ0" => λ0))
         o("τ", τ)
     end
@@ -124,5 +127,7 @@ end
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
     end
+    @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
+    rm(hdf5c.fpath)
     rm(hdf5.fpath)
 end

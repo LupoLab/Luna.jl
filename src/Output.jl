@@ -117,17 +117,18 @@ end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
-                    yname="Eω", tname="z")
+                    yname="Eω", tname="z", compression=false)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
+    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
 end
 
 "Internal constructor - creates datasets in the file"
-function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
+function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
     idims = init_dims(ydims, save_cond)
     cdims = collect(idims)
     cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
     dims = Tuple(cdims)
+    chdims = (dims[1:end-1]..., 1) # Chunk size is that of one z-point
     mdims = copy(cdims)
     mdims[end] = -1
     maxdims = Tuple(mdims)
@@ -136,8 +137,13 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
         rm(fpath)
     end
     HDF5.h5open(fpath, "cw") do file
-        HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
-                      "chunk", dims)
+        if compression
+            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+                          "chunk", chdims, "blosc", 3)
+        else
+            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+                          "chunk", chdims)
+        end
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
         HDF5.g_create(file, "stats")
