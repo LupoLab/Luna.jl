@@ -40,7 +40,8 @@ import Luna: Output
         @test all(read(file["stats"]["stat"]) .== stat)
         @test Utils.git_commit() == read(file["meta"]["git_commit"])
         # Need to strip out date from sourcecode to compare
-        @test Utils.sourcecode()[40:end] == read(file["meta"]["sourcecode"])[40:end]
+        src = read(file["meta"]["sourcecode"])
+        @test split(Utils.sourcecode(), '\n')[2:end] == split(src, '\n')[2:end]
         @test 100 == read(file["meta"]["meta1"])
         @test "src" == read(file["meta"]["meta2"])
     end
@@ -82,7 +83,8 @@ end
     @test all(o.data["stats"]["stat"] .== stat)
     @test Utils.git_commit() == o.data["meta"]["git_commit"]
     # Need to strip out date from sourcecode to compare
-    @test Utils.sourcecode()[40:end] == o.data["meta"]["sourcecode"][40:end]
+    src = o.data["meta"]["sourcecode"]
+    @test split(Utils.sourcecode(), '\n')[2:end] == split(src, '\n')[2:end]
     @test 100 == o.data["meta"]["meta1"]
     @test "src" == o.data["meta"]["meta2"]
 end
