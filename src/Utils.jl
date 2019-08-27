@@ -3,11 +3,8 @@ import Dates
 
 function git_commit()
     wd = dirname(@__FILE__)
-    commit = read(`git -C $wd rev-parse HEAD`, String)
+    commit = read(`git -C $wd describe --always --tags --dirty`, String)
     commit = commit[1:end-1] # Strip newline off the end
-    if git_isdirty()
-        commit *= "-dirty"
-    end
 end
 
 function git_isdirty()
