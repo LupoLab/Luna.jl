@@ -69,7 +69,7 @@ end
 
 @testset "HDF5 vs Memory" begin
     import Luna
-    import Luna: Grid, Capillary, PhysData, Nonlinear, Modes, Output, Stats, Maths
+    import Luna: Grid, Capillary, PhysData, Nonlinear, NonlinearRHS, Output, Stats, Maths, LinearOps
     import FFTW
     import HDF5
 
@@ -80,43 +80,35 @@ end
     λ0 = 800e-9
     grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres)
-    energyfun = Modes.energy_mode_avg(m)
-    β1const = Capillary.dispersion(m, 1; λ=λ0)
-    βconst = zero(grid.ω)
-    βconst[2:end] = Capillary.β(m, grid.ω[2:end])
-    βconst[1] = 1
-    βfun(ω, m, n, z) = βconst
-    frame_vel(z) = 1/β1const
-    αfun(ω, m, n, z) = log(10)/10 * 2
+    energyfun = NonlinearRHS.energy_mode_avg(m)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    normfun = Modes.norm_mode_average(grid.ω, βfun)
-    transform = Modes.trans_mode_avg(grid)
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
+    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
         ω0 = 2π*PhysData.c/λ0
         Et = @. sqrt(It)*cos(ω0*t)
     end
-    in1 = (func=gausspulse, energy=1e-6, m=1, n=1)
+    in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
-    x = Array{Float64}(undef, length(grid.t))
-    FT = FFTW.plan_rfft(x, 1)
-
+    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     hdf5 = Output.HDF5Output("test.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun)
+    hdf5c = Output.HDF5Output("test_comp.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun,
+                              compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
     function output(args...)
         hdf5(args...)
+        hdf5c(args...)
         mem(args...)
     end
-    for o in (hdf5, mem)
+    for o in (hdf5, hdf5c, mem)
         o(Dict("ω" => grid.ω, "λ0" => λ0))
         o("τ", τ)
     end
-    linop = Luna.make_linop(grid, βfun, αfun, frame_vel)
-    Luna.run(grid, linop, normfun, energyfun, densityfun, inputs,
-             responses, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output)
     HDF5.h5open(hdf5.fpath, "r") do file
         @test read(file["ω"]) == mem.data["ω"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))
@@ -124,5 +116,7 @@ end
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
     end
+    @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
+    rm(hdf5c.fpath)
     rm(hdf5.fpath)
 end

@@ -3,14 +3,14 @@ import PhysicalConstants
 import Unitful
 import FunctionZeros: besselj_zero
 import Roots: fzero
-import Cubature: hquadrature
+import Cubature: hquadrature, hcubature
 import SpecialFunctions: besselj
 import StaticArrays: SVector
 using Reexport
-@reexport using Luna.AbstractModes
+@reexport using Luna.Modes
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.AbstractModes: AbstractMode, dimlimits, β, α, field
+import Luna.Modes: AbstractMode, dimlimits, β, α, field
 
 export MarcatilliMode, dimlimits, β, α, field
 
@@ -56,7 +56,7 @@ function MarcatilliMode(a, gas, P, loss::lT; n=1, m=1, kind=:HE, ϕ=0.0, T=roomt
     MarcatilliMode(a, gas, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, loss=(m,ω)->loss)
 end
 
-dimlimits(m::MarcatilliMode) = ((0.0, 0.0), (m.a, 2π))
+dimlimits(m::MarcatilliMode) = (:polar, (0.0, 0.0), (m.a, 2π))
 
 function β(m::MarcatilliMode, ω)
     χ = m.coren.(ω).^2 .- 1
@@ -84,12 +84,12 @@ end
 # we use polar coords, so xs = (r, θ)
 function field(m::MarcatilliMode)
     if m.kind == :HE
-        return (r, θ) -> besselj(m.n-1, r*m.unm/m.a) .* SVector(cos(θ)*sin(m.n*(θ + m.ϕ)) - sin(θ)*cos(m.n*(θ + m.ϕ)),
-                                                          sin(θ)*sin(m.n*(θ + m.ϕ)) + cos(θ)*cos(m.n*(θ + m.ϕ)))
+        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
+                                                          sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ)))
     elseif m.kind == :TE
-        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(-sin(θ), cos(θ))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(-sin(xs[2]), cos(xs[2]))
     elseif m.kind == :TM
-        return (r, θ) -> besselj(1, r*m.unm/m.a) .* SVector(cos(θ), sin(θ))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2]), sin(xs[2]))
     end
 end
 
