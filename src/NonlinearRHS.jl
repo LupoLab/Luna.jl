@@ -213,7 +213,7 @@ function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z)
     t.z = z
 end
 
-function pointcalc!(t::TransModal, xs, fval)
+function pointcalc!(fval, xs, t::TransModal)
     # TODO: parallelize this in Julia 1.3
     for i in 1:size(xs, 2)
         x1 = xs[1, i]
@@ -264,11 +264,11 @@ end
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
     if t.full
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(t, x, fval), t.dimlimits[2], t.dimlimits[3], 
+        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t), t.dimlimits[2], t.dimlimits[3], 
                                     reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
                                     error_norm=Cubature.L2)
     else
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(t, x, fval),
+        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t),
                                     (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
                                     reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
                                     error_norm=Cubature.L2)
