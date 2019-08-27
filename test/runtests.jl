@@ -26,4 +26,13 @@ end
 @testset "Output" begin
     include(joinpath(testdir, "test_output.jl"))
 end
+
+@testset "Multimode" begin
+    include(joinpath(testdir, "test_multimode.jl"))
+end
+
+@testset "Polarisation" begin
+    include(joinpath(testdir, "test_polarisation.jl"))
+end
+
 end

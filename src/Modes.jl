@@ -1,196 +1,127 @@
-"Functions which define the modal decomposition. This includes
-
-    1. Mode normalisation
-    2. Modal decomposition of Pₙₗ
-    3. Calculation of (modal) energy
-
-Wishlist of types of decomposition we want to use:
-
-    1. Mode-averaged waveguide
-    2. Multi-mode waveguide (with or without polarisation)
-        a. Azimuthal symmetry (radial integral only)
-        b. Full 2-D integral
-    3. Free space
-        a. Azimuthal symmetry (Hankel transform)
-        b. Full 2-D (Fourier transform)"
 module Modes
-import FFTW
-import LinearAlgebra: mul!
-import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, AbstractModes, Maths
+import Roots: fzero
+import Cubature: hcubature
+import LinearAlgebra: dot, norm
+import Luna: Maths
+import Luna.PhysData: c, ε_0, μ_0
 
-"Transform A(ω) to A(t) on oversampled time grid - real field"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
-    N = size(Aω, 1)
-    No = size(Aωo, 1)
-    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
-    fill!(Aωo, 0)
-    copy_scale!(Aωo, Aω, N, scale)
-    mul!(Ato, IFTplan, Aωo)
+export dimlimits, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+
+abstract type AbstractMode end
+
+"Maximum dimensional limits of validity for this mode"
+function dimlimits(m::M) where {M <: AbstractMode}
+    error("abstract method called")
 end
 
-"Transform A(ω) to A(t) on oversampled time grid - envelope"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
-    N = size(Aω, 1)
-    No = size(Aωo, 1)
-    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
-    fill!(Aωo, 0)
-    copy_scale_both!(Aωo, Aω, N÷2, scale)
-    mul!(Ato, IFTplan, Aωo)
+function β(m::M, ω) where {M <: AbstractMode}
+    error("abstract method called")
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - real field"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
-    N = size(Aω, 1)
-    No = size(Aωo, 1)
-    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
-    mul!(Aωo, FTplan, Ato)
-    copy_scale!(Aω, Aωo, N, scale)
+function β(m::M; λ) where {M <: AbstractMode}
+    return β(m, 2π*c./λ)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - envelope"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
-    N = size(Aω, 1)
-    No = size(Aωo, 1)
-    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
-    mul!(Aωo, FTplan, Ato)
-    copy_scale_both!(Aω, Aωo, N÷2, scale)
+function α(m::M, ω) where {M <: AbstractMode}
+    error("abstract method called")
 end
 
-"Copy first N elements from source to dest and simultaneously multiply by scale factor"
-function copy_scale!(dest::Vector, source::Vector, N, scale)
-    for i = 1:N
-        dest[i] = scale * source[i]
+function α(m::M; λ) where {M <: AbstractMode}
+    return α(m, 2π*c./λ)
+end
+
+function losslength(m::M, ω) where {M <: AbstractMode}
+    return 1 ./ α(m, ω)
+end
+
+function losslength(m::M; λ) where {M <: AbstractMode}
+    return losslength(m::M, 2π*c./λ) 
+end
+
+function transmission(m::M, L; λ) where {M <: AbstractMode}
+    return @. exp(-α(m, λ=λ)*L)
+end
+
+function dB_per_m(m::M, ω) where {M <: AbstractMode}
+    return 10/log(10).*α(m, ω)
+end
+
+function dB_per_m(m::M; λ) where {M <: AbstractMode}
+    return return 10/log(10) .* α(m, λ=λ)
+end
+
+function dispersion_func(m::M, order) where {M <: AbstractMode}
+    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
+    return βn
+end
+
+function dispersion(m::M, order, ω) where {M <: AbstractMode}
+    return dispersion_func(m, order).(ω)
+end
+
+function dispersion(m::M, order; λ) where {M <: AbstractMode}
+    return dispersion(m, order, 2π*c./λ)
+end
+
+function zdw(m::M) where {M <: AbstractMode}
+    ω0 = fzero(dispersion_func(m, 2), 1e14, 2e16) # TODO magic numbers
+    return 2π*c/ω0
+end
+
+"Create function of coords that returns (xs) -> (Ex, Ey)"
+function field(m::M) where {M <: AbstractMode}
+    error("abstract method called")
+end
+
+"Get mode normalization constant"
+function N(m::M) where {M <: AbstractMode}
+    f = field(m)
+    dl = dimlimits(m)
+    function Nfunc(xs)
+        E = f(xs)
+        ret = sqrt(ε_0/μ_0)*dot(E, E)
+        dl[1] == :polar ? xs[1]*ret : ret
     end
+    val, err = hcubature(Nfunc, dl[2], dl[3])
+    0.5*abs(val)
 end
 
-"""Copy first and last N elements from source to first and last N elements in dest
-and simultaneously multiply by scale factor"""
-function copy_scale_both!(dest::Vector, source::Vector, N, scale)
-    for i = 1:N
-        dest[i] = scale * source[i]
-    end
-    for i = 1:N
-        dest[end-i+1] = scale * source[end-i+1]
-    end
-end
-
-"copy_scale! for multi-dim arrays. Works along first axis"
-function copy_scale!(dest, source, N, scale)
-    (size(dest)[2:end] == size(source)[2:end] 
-     || error("dest and source must be same size except along first dimension"))
-    idcs = CartesianIndices(size(dest)[2:end])
-    _cpsc_core(dest, source, scale, N, idcs)
-end
-
-function _cpsc_core(dest, source, N, scale, idcs)
-    for i in idcs
-        for j = 1:N
-            dest[j, i] = scale * source[j, i]
+"Create function that returns normalised (xs) -> |E|"
+function absE(m::M) where {M <: AbstractMode}
+    func = let sN = sqrt(N(m)), f = field(m)
+        function func(xs)
+            norm(f(xs) ./ sN)
         end
     end
 end
 
-"copy_scale_both! for multi-dim arrays. Works along first axis"
-function copy_scale_both!(dest, source, N, scale)
-    (size(dest)[2:end] == size(source)[2:end] 
-     || error("dest and source must be same size except along first dimension"))
-    idcs = CartesianIndices(size(dest)[2:end])
-    _cpscb_core(dest, source, N, scale, idcs)
-end
-
-function _cpscb_core(dest, source, N, scale, idcs)
-    for i in idcs
-        for j = 1:N
-            dest[j, i] = scale * source[j, i]
-        end
-        for j = 1:N
-            dest[end-j+1, i] = scale * source[end-j+1, i]
+"Create function that returns normalised (xs) -> (Ex, Ey)"
+function Exy(m) where {M <: AbstractMode}
+    func = let sN = sqrt(N(m)), f = field(m)
+        function func(xs)
+            f(xs) ./ sN
         end
     end
 end
 
-"Normalisation factor for mode-averaged field."
-function norm_mode_average(ω, βfun)
-    out = zero(ω)
-    function norm(z)
-        out .= PhysData.c^2 .* PhysData.ε_0 .* βfun(ω, 1, 1, z) ./ ω
-        return out
+"Get effective area of mode"
+function Aeff(m) where {M <: AbstractMode}
+    em = absE(m)
+    dl = dimlimits(m)
+    # Numerator
+    function Aeff_num(xs)
+        e = em(xs)
+        dl[1] == :polar ? xs[1]*e^2 : e^2
     end
-    return norm
-end
-
-"Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
-function trans_mode_avg(grid)
-    Nto = length(grid.to)
-    Nt = length(grid.t)
-
-    Eωo = zeros(ComplexF64, length(grid.ωo))
-    Eto = zeros(Float64, length(grid.to))
-    Pto = similar(Eto)
-    Pωo = similar(Eωo)
-
-    FT = FFTW.plan_rfft(Eto, flags=FFTW.PATIENT)
-    IFT = FFTW.plan_irfft(Eωo, Nto, flags=FFTW.PATIENT)
-
-    function Pω!(Pω, Eω, z, responses)
-        fill!(Pto, 0)
-        to_time!(Eto, Eω, Eωo, IFT)
-        for resp in responses
-            resp(Pto, Eto)
-        end
-        @. Pto *= grid.towin
-        to_freq!(Pω, Pωo, Pto, FT)
+    val, err = hcubature(Aeff_num, dl[2], dl[3])
+    num = val^2
+    # Denominator
+    function Aeff_den(xs)
+        e = em(xs)
+        dl[1] == :polar ? xs[1]*e^4 : e^4
     end
-
-    return Pω!
-end
-
-"Transform E(ω) -> Pₙₗ(ω) for mode-averaged field, i.e. only FT and inverse FT."
-function trans_env_mode_avg(grid)
-    Nto = length(grid.to)
-    Nt = length(grid.t)
-
-    Eωo = zeros(ComplexF64, length(grid.ωo))
-    Eto = similar(Eωo)
-    Pto = similar(Eto)
-    Pωo = similar(Eωo)
-
-    FT = FFTW.plan_fft(Eto, flags=FFTW.PATIENT)
-    IFT = FFTW.plan_ifft(Eωo, flags=FFTW.PATIENT)
-
-    function Pω!(Pω, Eω, z, responses)
-        fill!(Pto, 0)
-        to_time!(Eto, Eω, Eωo, IFT)
-        for resp in responses
-            resp(Pto, Eto)
-        end
-        @. Pto *= grid.towin
-        to_freq!(Pω, Pωo, Pto, FT)
-    end
-
-    return Pω!
-end
-
-"Calculate energy from field E(t) for mode-averaged field"
-function energy_mode_avg(m)
-    Aeff = AbstractModes.Aeff(m)
-    function energyfun(t, Et, m, n)
-        Eta = Maths.hilbert(Et)
-        intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*Aeff/2
-    end
-    return energyfun
-end
-
-"Calculate energy from envelope field E(t) for mode-averaged field"
-function energy_env_mode_avg(m)
-    Aeff = AbstractModes.Aeff(m)
-    function energyfun(t, Et, m, n)
-        intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*Aeff/2
-    end
-    return energyfun
+    den, err = hcubature(Aeff_den, dl[2], dl[3])
+    return num / den
 end
 
 end
