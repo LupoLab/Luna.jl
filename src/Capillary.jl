@@ -51,6 +51,11 @@ function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, loss=
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, loss=loss)
 end
 
+"convenience constructor assunming single gas filling and specifying constant loss"
+function MarcatilliMode(a, gas, P, loss::lT; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp) where lT <: Number
+    MarcatilliMode(a, gas, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, loss=(m,ω)->loss)
+end
+
 dimlimits(m::MarcatilliMode) = ((0.0, 0.0), (m.a, 2π))
 
 function β(m::MarcatilliMode, ω)

@@ -30,3 +30,7 @@ loss(m, ω) = 0.1
 m = Capillary.MarcatilliMode(a, :He, 1.0, loss=loss)
 @test Capillary.α(m, 2π*c/2000e-9) == 0.1
 @test Capillary.α(m, 2π*c/1200e-9) == 0.1
+
+m = Capillary.MarcatilliMode(a, :He, 1.0, 0.2)
+@test Capillary.α(m, 2π*c/2000e-9) == 0.2
+@test Capillary.α(m, 2π*c/1200e-9) == 0.2
