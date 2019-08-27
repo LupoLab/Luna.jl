@@ -44,9 +44,15 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
         ok = step!(s)
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
-                Logging.@info @sprintf("%.2f %%, stepsize %.2e, err %.2f, repeated %d",
-                    s.tn/tmax*100, s.dt, s.err, repeated_tot)
-                tic = Dates.now()
+            speed = s.tn/(Dates.value(Dates.now()-start)/1000)
+            eta = (tmax-s.tn)/(speed)
+            msg =  @sprintf("Progress: %.2f %%, stepsize %.2e, err %.2f, repeated %d, ETA: %4.2f s",
+                s.tn/tmax*100, s.dt, s.err, repeated_tot, eta)
+            update!(msg)
+            # Logging.@info @sprintf("%.2f %%, stepsize %.2e, err %.2f, repeated %d, ETA: %4.2f s \r",
+            #     s.tn/tmax*100, s.dt, s.err, repeated_tot, eta)
+            
+            tic = Dates.now()
         end
         if ok
             if output
@@ -66,6 +72,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
             end
         end
     end
+    print("\n")
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
 
@@ -317,4 +324,10 @@ end
 function donothing!(y, z, dz, interpolant)
 end
 
+function update!(msg; io::IO=stderr)
+    print(io, "\r")
+    print(io, "        "*msg)
+    print(io, "\u1b[K")
+    flush(io)
+end
 end
