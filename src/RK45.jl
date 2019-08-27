@@ -46,12 +46,9 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
         if Dates.value(Dates.now()-tic) > 1000*status_period
             speed = s.tn/(Dates.value(Dates.now()-start)/1000)
             eta = (tmax-s.tn)/(speed)
-            msg =  @sprintf("Progress: %.2f %%, stepsize %.2e, err %.2f, repeated %d, ETA: %4.2f s",
-                s.tn/tmax*100, s.dt, s.err, repeated_tot, eta)
+            msg =  @sprintf("Progress: %.2f %%, ETA: %4.2f s, stepsize %.2e, err %.2f, repeated %d",
+                s.tn/tmax*100, eta, s.dt, s.err, repeated_tot)
             update!(msg)
-            # Logging.@info @sprintf("%.2f %%, stepsize %.2e, err %.2f, repeated %d, ETA: %4.2f s \r",
-            #     s.tn/tmax*100, s.dt, s.err, repeated_tot, eta)
-            
             tic = Dates.now()
         end
         if ok
@@ -326,7 +323,7 @@ end
 
 function update!(msg; io::IO=stderr)
     print(io, "\r")
-    print(io, "        "*msg)
+    printstyled(io, "        "*msg, color=:yellow)
     print(io, "\u1b[K")
     flush(io)
 end
