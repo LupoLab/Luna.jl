@@ -67,15 +67,6 @@ function copy_scale!(dest::Vector, source::Vector, N, scale)
     end
 end
 
-"copy_scale! for 2-dim arrays. Works along first axis"
-function copy_scale!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
-    for i in 1:size(dest,2)
-        for j in 1:N
-            dest[j,i] = scale * source[j,i]
-        end
-    end
-end
-
 """Copy first and last N elements from source to first and last N elements in dest
 and simultaneously multiply by scale factor"""
 function copy_scale_both!(dest::Vector, source::Vector, N, scale)
@@ -84,18 +75,6 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     end
     for i = 1:N
         dest[end-i+1] = scale * source[end-i+1]
-    end
-end
-
-"copy_scale_both! for 2-dim arrays. Works along first axis"
-function copy_scale_both!(dest::Array{T,2}, source::Array{T,2}, N, scale) where T
-    for i in 1:size(dest,2)
-        for j = 1:N
-            dest[j,i] = scale * source[j,i]
-        end
-        for j = 1:N
-            dest[end-j+1,i] = scale * source[end-j+1,i]
-        end
     end
 end
 
