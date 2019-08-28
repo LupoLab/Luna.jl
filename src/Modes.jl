@@ -124,19 +124,23 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
-struct DelegatedMode{modeT<:AbstractMode,βT,αT,dimT,fieldT} <: AbstractMode
-    m::modeT
+struct ArbitraryMode{βT,αT,dimT,fieldT} <: AbstractMode
     β::βT
     α::αT
     dim::dimT
     field::fieldT
 end
 
-" Construct a DelegatedMode where all functionality is delegated to the mode in the first parameter
+" Construct a type of AbstractMode where functionality is optionally delegated to the mode in the first parameter
   apart from that which is overridden by the keyword arguments which have corresponding meaning to the 
   AbstractMode methods above. βf and αf should by function-like objects accepting a single argument of ω.
   dimilimtsf and fieldf sshould by function-like objects accepting no arguments."
-function DelegatedMode(m::AbstractMode; βf=nothing, αf=nothing, dimlimitsf=nothing, fieldf=nothing)
+function ArbitraryMode(;m=nothing, βf=nothing, αf=nothing, dimlimitsf=nothing, fieldf=nothing)
+    if any(.===((βf, αf, dimlimitsf, fieldf), nothing))
+        if m === nothing
+            error("m must be specified if any of (βf, αf, dimlimitsf, fieldf) are not")
+        end
+    end
     if βf === nothing
         βf = (ω) -> β(m, ω)
     end
@@ -149,15 +153,15 @@ function DelegatedMode(m::AbstractMode; βf=nothing, αf=nothing, dimlimitsf=not
     if fieldf === nothing
         fieldf = () -> field(m)
     end
-    DelegatedMode(m, βf, αf, dimlimitsf, fieldf)
+    ArbitraryMode(βf, αf, dimlimitsf, fieldf)
 end
 
-dimlimits(m::DelegatedMode) = m.dim()
+dimlimits(m::ArbitraryMode) = m.dim()
 
-β(m::DelegatedMode, ω) = m.β(ω)
+β(m::ArbitraryMode, ω) = m.β(ω)
 
-α(m::DelegatedMode, ω) = m.α(ω)
+α(m::ArbitraryMode, ω) = m.α(ω)
 
-field(m::DelegatedMode) = m.field()
+field(m::ArbitraryMode) = m.field()
 
 end

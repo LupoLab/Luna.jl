@@ -1,4 +1,4 @@
-import Test: @test
+import Test: @test, @test_throws
 import Luna: Capillary, Modes
 import Luna.PhysData: c
 
@@ -26,8 +26,13 @@ m = Capillary.MarcatilliMode(a, :He, 1.0)
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
 
-m = Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 5.9))
+m = Modes.ArbitraryMode(m=Capillary.MarcatilliMode(75e-6, :He, 5.9))
 @test Modes.Aeff(m) ≈ 8.42157534886545e-09
 @test abs(1e9*Modes.zdw(m) - 562) < 1
-@test Modes.α(Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), 2e15) == 0.2
-@test Modes.α(Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), λ=800e-9) == 0.2
+@test Modes.α(Modes.ArbitraryMode(m=Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), 2e15) == 0.2
+@test Modes.α(Modes.ArbitraryMode(m=Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), λ=800e-9) == 0.2
+
+# fully delegated test
+@test Modes.α(Modes.ArbitraryMode(βf=(ω)->0.2,αf=(ω)->0.2,dimlimitsf=()->(:polar, (0.0, 0.0), (m.a, 2π)), fieldf=()->nothing), 2e15) == 0.2
+# this should throw
+@test_throws ErrorException Modes.ArbitraryMode(βf=(ω)->0.2,αf=(ω)->0.2,dimlimitsf=()->(:polar, (0.0, 0.0), (m.a, 2π)))
