@@ -61,4 +61,7 @@ end
     Ek1 = prop .* Ek0
     Er1 = q \ Ek1
     @test isapprox(abs2.(Er1), Ir1, rtol=1e-6)
+    energy = π/2*w0^2 # analytical energy for gaussian beam
+    @test energy ≈ 2π*Hankel.integrateR(Ir0, q)
+    @test energy ≈ 2π*Hankel.integrateR(abs2.(Er1), q)
 end
