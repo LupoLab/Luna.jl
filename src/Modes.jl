@@ -131,10 +131,13 @@ struct ArbitraryMode{βT,αT,dimT,fieldT} <: AbstractMode
     field::fieldT
 end
 
-" Construct a type of AbstractMode where functionality is optionally delegated to the mode in the first parameter
-  apart from that which is overridden by the keyword arguments which have corresponding meaning to the 
-  AbstractMode methods above. βf and αf should by function-like objects accepting a single argument of ω.
-  dimilimtsf and fieldf sshould by function-like objects accepting no arguments."
+"""
+Construct a type of AbstractMode where functionality is optionally delegated to the
+`m` keyword parameter, or overridden by the keyword arguments which have the
+corresponding meaning to the AbstractMode methods. `βf` and `αf` should by function-like
+objects accepting a single argument of angular frequency `ω`. `dimilimtsf` and `fieldf`
+should by function-like objects accepting no arguments.
+"""
 function ArbitraryMode(;m=nothing, βf=nothing, αf=nothing, dimlimitsf=nothing, fieldf=nothing)
     if any(.===((βf, αf, dimlimitsf, fieldf), nothing))
         if m === nothing
