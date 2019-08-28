@@ -46,9 +46,9 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
         if Dates.value(Dates.now()-tic) > 1000*status_period
             speed = s.tn/(Dates.value(Dates.now()-start)/1000)
             eta = (tmax-s.tn)/(speed)
-            msg =  @sprintf("Progress: %.2f %%, ETA: %4.2f s, stepsize %.2e, err %.2f, repeated %d",
-                s.tn/tmax*100, eta, s.dt, s.err, repeated_tot)
-            update!(msg)
+            
+            Logging.@info @sprintf("Progress: %.2f %%, ETA: %s, stepsize %.2e, err %.2f, repeated %d",
+                s.tn/tmax*100, hms(eta), s.dt, s.err, repeated_tot)
             tic = Dates.now()
         end
         if ok
@@ -69,7 +69,6 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
             end
         end
     end
-    print("\n")
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
 
@@ -318,13 +317,13 @@ function weaknorm(yerr, y, yn, rtol, atol)
     return syerr/rtol/errwt
 end
 
+function hms(dt)
+    (h,r) = divrem(dt,60*60)
+    (m,r) = divrem(r, 60)
+    string(Int(h),":",Int(m),":",Int64(round(r)))
+end
+
 function donothing!(y, z, dz, interpolant)
 end
 
-function update!(msg; io::IO=stderr)
-    print(io, "\r")
-    printstyled(io, "        "*msg, color=:yellow)
-    print(io, "\u1b[K")
-    flush(io)
-end
 end
