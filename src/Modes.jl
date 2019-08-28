@@ -124,4 +124,40 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
+struct DelegatedMode{modeT<:AbstractMode,βT,αT,dimT,fieldT} <: AbstractMode
+    m::modeT
+    β::βT
+    α::αT
+    dim::dimT
+    field::fieldT
+end
+
+" Construct a DelegatedMode where all functionality is delegated to the mode in the first parameter
+  apart from that which is overridden by the keyword arguments which have corresponding meaning to the 
+  AbstractMode methods above. βf and αf should by function-like objects accepting a single argument of ω.
+  dimilimtsf and fieldf sshould by function-like objects accepting no arguments."
+function DelegatedMode(m::AbstractMode; βf=nothing, αf=nothing, dimlimitsf=nothing, fieldf=nothing)
+    if βf === nothing
+        βf = (ω) -> β(m, ω)
+    end
+    if αf === nothing
+        αf = (ω) -> α(m, ω)
+    end
+    if dimlimitsf === nothing
+        dimlimitsf = () -> dimlimits(m)
+    end
+    if fieldf === nothing
+        fieldf = () -> field(m)
+    end
+    DelegatedMode(m, βf, αf, dimlimitsf, fieldf)
+end
+
+dimlimits(m::DelegatedMode) = m.dim()
+
+β(m::DelegatedMode, ω) = m.β(ω)
+
+α(m::DelegatedMode, ω) = m.α(ω)
+
+field(m::DelegatedMode) = m.field()
+
 end

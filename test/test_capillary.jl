@@ -1,5 +1,5 @@
 import Test: @test
-import Luna: Capillary
+import Luna: Capillary, Modes
 import Luna.PhysData: c
 
 λ = 800e-9
@@ -25,3 +25,9 @@ m = Capillary.MarcatilliMode(a, :He, 1.0)
 @test abs(1e9*Capillary.zdw(Capillary.MarcatilliMode(75e-6, :He, 5.9)) - 562) < 1
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
+
+m = Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 5.9))
+@test Modes.Aeff(m) ≈ 8.42157534886545e-09
+@test abs(1e9*Modes.zdw(m) - 562) < 1
+@test Modes.α(Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), 2e15) == 0.2
+@test Modes.α(Modes.DelegatedMode(Capillary.MarcatilliMode(75e-6, :He, 1.0), αf=(ω)->0.2), λ=800e-9) == 0.2
