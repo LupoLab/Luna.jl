@@ -3,11 +3,30 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths
 import FFTW
 
+function KerrScalar(out, E, fac)
+    @. out += fac*E^3
+end
+
+function KerrVector(out, E, fac)
+    for i = 1:size(E,1)
+        Ex = E[i,1]
+        Ey = E[i,2]
+        Ex2 = Ex^2
+        Ey2 = Ey^2
+        out[i,1] += fac*(Ex2 + Ey2)*Ex
+        out[i,2] += fac*(Ex2 + Ey2)*Ey
+    end
+end
+
 "Kerr response for real field"
 function Kerr_field(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E)
-            @. out += ε_0*γ3*E^3
+            if size(E,2) == 1
+                KerrScalar(out, E, ε_0*γ3)
+            else
+                KerrVector(out, E, ε_0*γ3)
+            end
         end
     end
 end
@@ -26,11 +45,30 @@ function Kerr_field_nothg(γ3, n)
     end
 end
 
+function KerrScalarEnv(out, E, fac)
+    @. out += 3/4*fac*abs2(E)*E
+end
+
+function KerrVectorEnv(out, E, fac)
+    for i = 1:size(E,1)
+        Ex = E[i,1]
+        Ey = E[i,2]
+        Ex2 = abs2(Ex)
+        Ey2 = abs2(Ey)
+        out[i,1] += 3/4*fac*(Ex2 + Ey2)*Ex
+        out[i,2] += 3/4*fac*(Ex2 + Ey2)*Ey
+    end
+end
+
 "Kerr response for envelope"
 function Kerr_env(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E)
-            @. out += 3/4*ε_0*γ3*abs2(E)*E
+            if size(E,2) == 1
+                KerrScalarEnv(out, E, ε_0*γ3)
+            else
+                KerrVectorEnv(out, E, ε_0*γ3)
+            end
         end
     end
 end
@@ -69,7 +107,16 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
 end
 
-function (Plas::PlasmaCumtrapz)(out, E)
+function (Plas::PlasmaCumtrapz)(out, Et)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, size(Et,1))
+        else
+            error("vector plasma not yet implemented")
+        end
+    else
+        E = Et
+    end
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -81,7 +128,11 @@ function (Plas::PlasmaCumtrapz)(out, E)
         end
     end
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-    @. out += Plas.P
+    if ndims(Et) > 1
+        out .+= reshape(Plas.P, size(Et))
+    else
+        @. out += Plas.P
+    end
 end
 
 end

@@ -1,6 +1,7 @@
 module Output
 import HDF5
 import Logging
+import Luna: Utils
 
 "Output handler for writing only to memory"
 mutable struct MemoryOutput{sT, N, S}
@@ -25,6 +26,9 @@ function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats)
     data[yname] = Array{ComplexF64}(undef, dims)
     data[tname] = Array{Float64}(undef, (dims[end],))
     data["stats"] = Dict{String, Any}()
+    data["meta"] = Dict{String, Any}()
+    data["meta"]["sourcecode"] = Utils.sourcecode()
+    data["meta"]["git_commit"] = Utils.git_commit()
     MemoryOutput(save_cond, ydims, yname, tname, 0, data, statsfun)
 end
 
@@ -78,22 +82,23 @@ function append_stat!(o::MemoryOutput, name, value::AbstractArray)
 end
 
 "Calling the output on a dictionary writes the items to the array"
-function (o::MemoryOutput)(d::Dict; force=false)
+function (o::MemoryOutput)(d::Dict; force=false, meta=false)
     for (k, v) in pairs(d)
-        o(k, v; force=force)
+        o(k, v; force=force, meta=meta)
     end
 end
 
 "Calling the output with a key, value pair writes the value to the array."
-function (o::MemoryOutput)(key::AbstractString, val; force=false)
-    if haskey(o.data, key)
+function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false)
+    parent = meta ? o.data["meta"] : o.data
+    if haskey(parent, key)
             if force
                 Logging.@warn("Key $key already exists and will be overwritten.")
             else
                 error("Key $key already present in dataset.")
         end
     end
-    o.data[key] = val
+    parent[key] = val
 end
 
 function fastcat(A, v)
@@ -117,17 +122,18 @@ end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
-                    yname="Eω", tname="z")
+                    yname="Eω", tname="z", compression=false)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
+    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
 end
 
 "Internal constructor - creates datasets in the file"
-function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
+function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
     idims = init_dims(ydims, save_cond)
     cdims = collect(idims)
     cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
     dims = Tuple(cdims)
+    chdims = (dims[1:end-1]..., 1) # Chunk size is that of one z-point
     mdims = copy(cdims)
     mdims[end] = -1
     maxdims = Tuple(mdims)
@@ -136,11 +142,19 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun)
         rm(fpath)
     end
     HDF5.h5open(fpath, "cw") do file
-        HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
-                      "chunk", dims)
+        if compression
+            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+                          "chunk", chdims, "blosc", 3)
+        else
+            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+                          "chunk", chdims)
+        end
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
         HDF5.g_create(file, "stats")
+        HDF5.g_create(file, "meta")
+        file["meta"]["sourcecode"] = Utils.sourcecode()
+        file["meta"]["git_commit"] = Utils.git_commit()
     end
     stats0 = Vector{Dict{String, Any}}()
     HDF5Output(fpath, save_cond, ydims, yname, tname, 0, statsfun, stats0)
@@ -220,36 +234,38 @@ function create_dataset(parent, name, x::AbstractArray)
 end
 
 "Calling the output on a dictionary writes the items to the file"
-function (o::HDF5Output)(d::Dict; force=false)
+function (o::HDF5Output)(d::Dict; force=false, meta=false)
     HDF5.h5open(o.fpath, "r+") do file
+        parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
-            if HDF5.exists(file, k)
+            if HDF5.exists(parent, k)
                 if force
                     Logging.@warn("Dataset $k already present in file $(o.fpath)"*
                                   " and will be overwritten")
-                    HDF5.o_delete(file, k)
+                    HDF5.o_delete(parent, k)
                 else
                     error("File $(o.fpath) already has dataset $(k)")
                 end
             end
-            file[k] = v
+            parent[k] = v
         end
     end
 end
 
 "Calling the output on a key, value pair writes the value to the file"
-function (o::HDF5Output)(key::AbstractString, val; force=false)
+function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false)
     HDF5.h5open(o.fpath, "r+") do file
-        if HDF5.exists(file, key)
+        parent = meta ? file["meta"] : file
+        if HDF5.exists(parent, key)
             if force
                 Logging.@warn("Dataset $key already present in file $(o.fpath)"*
                                 " and will be overwritten")
-                HDF5.o_delete(file, key)
+                HDF5.o_delete(parent, key)
             else
                 error("File $(o.fpath) already has dataset $(key)")
             end
         end
-        file[key] = val
+        parent[key] = val
     end
 end
 
