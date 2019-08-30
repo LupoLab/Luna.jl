@@ -2,6 +2,7 @@ module Maths
 import ForwardDiff
 import SpecialFunctions: erf, erfc
 import FFTW
+import FunctionZeros: besselj_zero
 
 "Recursively calculate the nth derivative of some function at some input"
 function derivative(f, x, order::Integer)
@@ -335,5 +336,20 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
+function get_unm(n, m; kind=:HE)
+    if (kind == :TE) || (kind == :TM)
+        if (n != 0) || (m != 1)
+            error("n=0, m=1 for TE or TM modes")
+        end
+        unm = besselj_zero(1, 1)
+    elseif kind == :HE
+        unm = besselj_zero(n-1, m)
+    elseif kind == :EH
+        unm = besselj_zero(n+1, m)
+    else
+        error("kind must be :TE, :TM, :EH, or :HE")
+    end
+    return unm
+end
 
 end

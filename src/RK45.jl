@@ -45,7 +45,6 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
         steps += 1
         if Dates.value(Dates.now()-tic) > 1000*status_period
             speed = s.tn/(Dates.value(Dates.now()-start)/1000)
-
             eta_in_s = (tmax-s.tn)/(speed)
             eta_in_ms = Dates.Millisecond(ceil(eta_in_s*1000))
             etad = Dates.DateTime(Dates.UTInstant(eta_in_ms))
@@ -71,7 +70,6 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
             end
         end
     end
-    print("\n")
     Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
                            Dates.value(Dates.now()-start)/1000, steps)
 
@@ -323,10 +321,4 @@ end
 function donothing!(y, z, dz, interpolant)
 end
 
-function update!(msg; io::IO=stderr)
-    print(io, "\r")
-    printstyled(io, "        "*msg, color=:yellow)
-    print(io, "\u1b[K")
-    flush(io)
-end
 end

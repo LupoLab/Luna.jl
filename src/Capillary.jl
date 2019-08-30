@@ -1,7 +1,6 @@
 module Capillary
 import PhysicalConstants
 import Unitful
-import FunctionZeros: besselj_zero
 import Roots: fzero
 import Cubature: hquadrature, hcubature
 import SpecialFunctions: besselj
@@ -28,16 +27,7 @@ struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
 end
 
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn)
-    if (kind == :TE) || (kind == :TM)
-        if (n != 0) || (m != 1)
-            error("n=0, m=1 for TE or TM modes")
-        end
-        unm = besselj_zero(1, 1)
-    elseif kind == :HE
-        unm = besselj_zero(n-1, m)
-    else
-        error("kind must be :TE, :TM or :HE")
-    end
+    unm = Maths.get_unm(n, m, kind=kind)
     MarcatilliMode(a, n, m, kind, unm, ϕ, coren, cladn)
 end
 
