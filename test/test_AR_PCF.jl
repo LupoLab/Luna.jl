@@ -23,18 +23,11 @@ m = AR_PCF.Matthias(a, gas, pres, wthickness)
 @test all(isfinite.(AR_PCF.α(m, ω)))
 @test all(isreal.(AR_PCF.α(m, ω)))
 
+# these tests are valid for constants silica refractive index
+# correct as https://github.com/LupoLab/Luna/issues/74 close
 λ = 1000e-9
 ω = 2π*c/λ
-@test 1e4*real(1-m.neff(ω)) ≈ -0.8129573178683458
-@test AR_PCF.α(m, ω) ≈ 1.3817812262927658e-7
-λ = 600e-9
-ω = 2π*c/λ
-@test 1e4*real(1-m.neff(ω)) ≈ -2.0142992660843184
-@test AR_PCF.α(m, ω) ≈ 1.781240841218271e-8
-λ = 400e-9
-ω = 2π*c/λ
-@test 1e4*real(1-m.neff(ω)) ≈ -2.4379342768443557
-@test AR_PCF.α(m, ω) ≈ 8.008516657445107e-9
+@test 1e4*real(m.neff(ω)-1) ≈ -1.8352471679983218
+@test AR_PCF.α(m, ω) ≈ 1.3832667695368788e-7
 
-
-@test AR_PCF.Aeff(m) ≈ 5.988675803639484e-10
+@test AR_PCF.Aeff(m) ≈ 5.988675803639484e-10 
