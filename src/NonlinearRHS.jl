@@ -18,7 +18,7 @@ To Do:
 module NonlinearRHS
 import FFTW
 import Cubature
-import LinearAlgebra: mul!
+import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 
@@ -350,6 +350,57 @@ function energy_env_mode_avg(m)
         return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
     return energyfun
+end
+
+"Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation"
+struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT}
+    QDHT::HTT # Hankel transform (space to k-space)
+    FT::FTT # Fourier transform (time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    densityfun::dT # callable which returns density
+    Pto::Array{TT,2}
+    Eto::Array{TT,2}
+    Eωo::Array{ComplexF64,2}
+    Pωo::Array{ComplexF64,2}
+end
+
+function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), HT.N))
+    Eto = zeros(TT, (length(grid.to), HT.N))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo)
+end
+
+function TransRadial(grid::Grid.RealGrid, args...)
+    TransRadial(Float64, args...)
+end
+
+function TransRadial(grid::Grid.EnvGrid, args...)
+    TransRadial(ComplexF64, args...)
+end
+
+function (t::TransRadial)(nl, Eω, z)
+    fill!(t.Pto, 0)
+    to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
+    ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
+    Et_to_Pt!(t.Pto, t.Eto, t.resp) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Eto, t.QDHT, t.Eto) # transform r -> k
+    to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
+    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+"Normalisation factor for mode-averaged field."
+function norm_radial(ω, βfun, R, J1sq)
+    out = zero(ω)
+    function norm(z)
+        @. out = π*R^2/(PhysData.μ_0*ω) * J1sq * βfun(ω, z)
+        return out
+    end
+    return norm
 end
 
 end

@@ -15,6 +15,7 @@ import Base: *, \
 mutable struct QDHT
     N::Int64 # Number of samples
     T::Array{Float64, 2} # Transform matrix
+    J1sq::Array{Float64, 1} # J₁² factors
     K::Float64 # Highest spatial frequency
     k::Vector{Float64} # Spatial frequency grid
     R::Float64 # Aperture size (largest real-space coordinate)
@@ -43,7 +44,7 @@ function QDHT(R, N; dim=1)
 
     scaleR = 2*(R/S)^2 ./ J₁sq
     scaleK = 2*(K/S)^2 ./ J₁sq
-    QDHT(N, T, K, k, R, r, scaleR, scaleK, dim)
+    QDHT(N, T, J₁sq, K, k, R, r, scaleR, scaleK, dim)
 end
 
 "Forward transform"
