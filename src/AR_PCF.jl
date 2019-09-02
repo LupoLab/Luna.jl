@@ -41,17 +41,17 @@ function neff_fiber(a, gas, P, wthickness, kind, m, unm, T)
     # values for tests from the paper
     # change it after solving https://github.com/LupoLab/Luna/issues/74 
     cladn = 1.45
-    coren = 1.0
+    # coren = 1.0
+    rfg = PhysData.ref_index_fun(gas, P, T)
+    coren = ω -> rfg(2π*PhysData.c./ω)
     function neff(ω)
         # wait for https://github.com/LupoLab/Luna/issues/74 to be solved
-        # rfg = PhysData.ref_index_fun(gas, P, T)
         # rfs = PhysData.ref_index_fun(:SiO2)
-        # coren = rfg(2π*PhysData.c./ω)
         # cladn = rfs(2π*PhysData.c./ω)
-        ϵ = cladn.^2.0./coren.^2
+        ϵ = cladn.^2.0./coren(ω).^2
         k0 = ω./PhysData.c
-        ka = k0*coren
-        ϕ = k0*wthickness*sqrt(cladn^2 - coren^2)
+        ka = k0*coren(ω)
+        ϕ = k0*wthickness*sqrt(cladn^2 - coren(ω)^2)
         σ = 1.0/(ka*a)
         if (kind == :TE) || (kind == :TM)
             a = unm^2.0/2.0;
@@ -64,7 +64,7 @@ function neff_fiber(a, gas, P, wthickness, kind, m, unm, T)
                 c = unm^4/8 + 2*unm^2*ϵ^2/(ϵ - 1.0)/tan(ϕ)^2
                 d = unm^3*ϵ^2*(1+1/tan(ϕ)^2)/(ϵ - 1.0)
             end
-            neff = coren*(1.0 - a*σ^2 - b*σ^3 - c*σ^4 + 1im*d*σ^4)
+            neff = coren(ω)*(1.0 - a*σ^2 - b*σ^3 - c*σ^4 + 1im*d*σ^4)
         else
             if kind == :EH
                 s = 1
@@ -75,7 +75,7 @@ function neff_fiber(a, gas, P, wthickness, kind, m, unm, T)
             b = unm^2*(ϵ+1)/(2sqrt(ϵ-1)*tan(ϕ))
             c = unm^4/8 + unm^2*m*s/2 + (unm^2/4*(2+m*s)*(ϵ+1)^2/(ϵ-1)-unm^4*(ϵ-1)/(8*m))*1/tan(ϕ)^2
             d = unm^3*(ϵ^2+1)/(2*(ϵ-1))*(1+1/tan(ϕ)^2)
-            neff = coren*(1.0 - a*σ^2 - b*σ^3 - c*σ^4 + 1im*d*σ^4)
+            neff = coren(ω)*(1.0 - a*σ^2 - b*σ^3 - c*σ^4 + 1im*d*σ^4)
         end
         return neff
     end
@@ -83,8 +83,7 @@ function neff_fiber(a, gas, P, wthickness, kind, m, unm, T)
 end
 
 function β(m::Matthias, ω)
-    χ = real.(m.neff.(ω)).^2 .- 1
-    return @. ω/c*(1 + χ/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+    return @. ω/c*real(m.neff(ω))
 end
 
 function α(m::Matthias, ω)

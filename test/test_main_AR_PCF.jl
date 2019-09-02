@@ -11,10 +11,10 @@ import PyPlot:pygui, plt
 
 a = 12.3e-6
 gas = :Ar
-pres = 1.3
+pres = 5
 wthickness = 215e-9
 
-τ = 20e-15
+τ = 30e-15
 λ0 = 800e-9
 
 grid = Grid.RealGrid(20e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
