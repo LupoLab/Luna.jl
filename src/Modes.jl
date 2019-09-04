@@ -152,10 +152,8 @@ macro delegated(mex, kwargs...)
             @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
         end
     end
-    # get value of the mode expression that was passed in - needs to be done in caller scope
-    mode = __module__.eval(mex)
     quote
-        $Tname($mode)
+        $Tname($(esc(mex))) # create mode from expression (evaluted in the caller by esc)
     end
 end
 
