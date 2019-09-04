@@ -63,18 +63,18 @@ m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
 @test isapprox(Capillary.α(m, 2π*c/800e-9), 0.0290115788131925, rtol=1e-14)
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
 
-m = Modes.@delegated_mode(Capillary.MarcatilliMode(75e-6, :He, 5.9))
+m = Modes.@delegated(Capillary.MarcatilliMode(75e-6, :He, 5.9))
 @test Modes.Aeff(m) ≈ 8.42157534886545e-09
 @test abs(1e9*Modes.zdw(m) - 562) < 1
-m2 = Modes.@delegated_mode(Capillary.MarcatilliMode(75e-6, :He, 1.0), α=(ω)->0.2)
+m2 = Modes.@delegated(Capillary.MarcatilliMode(75e-6, :He, 1.0), α=(ω)->0.2)
 @test Modes.α(m2, 2e15) == 0.2
 @test Modes.α(m2, λ=800e-9) == 0.2
 
 cm = Capillary.MarcatilliMode(75e-6, :He, 5.9)
-dm = Modes.@delegated_mode(cm)
+dm = Modes.@delegated(cm)
 @test Modes.Aeff(dm) ≈ 8.42157534886545e-09
 
 # fully delegated test
-m3 = Modes.@arbitrary_mode(α=(ω)->0.2, β=(ω)->0.2,
+m3 = Modes.@arbitrary(α=(ω)->0.2, β=(ω)->0.2,
                           dimlimits=()->(:polar, (0.0, 0.0), (m.a, 2π)), field=()->nothing)
 @test Modes.α(m3, 2e15) == 0.2
