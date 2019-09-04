@@ -39,7 +39,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.Ab
     βconst[1] = 1
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
-    αfun(ω, z) = 0.0 # TODO deal with loss properly
+    αfun(ω, z) = Modes.α(mode, ω) # TODO make loss z-dependent
     make_const_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
 end
 

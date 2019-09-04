@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -18,7 +18,8 @@ pres = 5
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-m = Capillary.MarcatilliMode(a, gas, pres)
+# m = Capillary.MarcatilliMode(a, gas, pres)
+m = Modes.@delegated_mode(Capillary.MarcatilliMode(a, gas, pres), α=ω->1)
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
