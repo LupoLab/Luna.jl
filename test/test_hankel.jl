@@ -1,6 +1,6 @@
 import Test: @test, @test_throws, @testset
 import Luna: Hankel, Maths
-import LinearAlgebra: diagm
+import LinearAlgebra: diagm, mul!
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import NumericalIntegration: integrate, Trapezoidal
@@ -38,6 +38,13 @@ end
     Er = Hankel.integrateR(v.^2, q)
     Ek = Hankel.integrateK(vk.^2, q)
     @test Er ≈ Ek
+    # Test that in-place transform works
+    vk2 = similar(vk)
+    vk3 = copy(v)
+    mul!(vk2, q, v)
+    mul!(vk3, q, vk3)
+    @test all(vk2 ≈ vk)
+    @test all(vk3 ≈ vk)
 
     v2d = repeat(v, outer=(1, 16))'
     q2d = Hankel.QDHT(1, 128, dim=2)
