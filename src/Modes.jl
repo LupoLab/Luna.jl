@@ -137,16 +137,21 @@ end
 """
 Macro to create a delegated mode, which takes its methods from an existing mode except
 for those which are overwritten
+    Arguments:
+        mex: Expression which evaluates to a valid Mode(<:AbstractMode)
+        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
+    (Note: technically, exprs is a tuple of assignment expressions, which we are turning
+    into key-value pairs by only considering the two arguments to the = operator)
 """
-macro delegated(mex, kwargs...)
+macro delegated(mex, exprs...)
     Tname = Symbol(:DelegatedMode, gensym())
     @eval struct $Tname{mT}<:AbstractMode
         m::mT # wrapped mode
     end
-    funs = [kw.args[1] for kw in kwargs]
+    funs = [kw.args[1] for kw in exprs]
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
-            dfun = kwargs[findfirst(mfun.==funs)].args[2]
+            dfun = exprs[findfirst(mfun.==funs)].args[2]
             @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
         else
             @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
@@ -160,14 +165,16 @@ end
 """
 Macro to create a "fully delegated" or arbitrary mode from the four required functions,
 α, β, field and dimlimits.
+    Arguments:
+        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
 """
-macro arbitrary(kwargs...)
+macro arbitrary(exprs...)
     Tname = Symbol(:ArbitraryMode, gensym())
     @eval struct $Tname<:AbstractMode end
-    funs = [kw.args[1] for kw in kwargs]
+    funs = [kw.args[1] for kw in exprs]
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
-            dfun = kwargs[findfirst(mfun.==funs)].args[2]
+            dfun = exprs[findfirst(mfun.==funs)].args[2]
             @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
         else
             error("Must define $mfun for arbitrary mode!")
