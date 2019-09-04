@@ -5,7 +5,7 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary
 
 abstract type AbstractMode end
 
@@ -138,7 +138,7 @@ end
 Macro to create a delegated mode, which takes its methods from an existing mode except
 for those which are overwritten
 """
-macro delegated_mode(mex, kwargs...)
+macro delegated(mex, kwargs...)
     Tname = Symbol(:DelegatedMode, gensym())
     @eval struct $Tname{mT}<:AbstractMode
         m::mT # wrapped mode
@@ -163,7 +163,7 @@ end
 Macro to create a "fully delegated" or arbitrary mode from the four required functions,
 α, β, field and dimlimits.
 """
-macro arbitrary_mode(kwargs...)
+macro arbitrary(kwargs...)
     Tname = Symbol(:ArbitraryMode, gensym())
     @eval struct $Tname<:AbstractMode end
     funs = [kw.args[1] for kw in kwargs]
