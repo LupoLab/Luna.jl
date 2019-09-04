@@ -138,35 +138,6 @@ end
 Macro to create a delegated mode, which takes its methods from an existing mode except
 for those which are overwritten
 """
-macro delegated_mode_old(mex, kwargs...)
-    Tname = Symbol(:DelegatedMode, gensym())
-    @eval struct $Tname{mT}<:AbstractMode
-        m::mT # wrapped mode
-    end
-    @eval α(dm::($Tname), args...) = α(dm.m, args...)
-    @eval β(dm::($Tname), args...) = β(dm.m, args...)
-    @eval field(dm::($Tname), args...) = field(dm.m) 
-    @eval dimlimits(dm::($Tname), args...) = dimlimits(dm.m)
-    mode = __module__.eval(mex)
-    n = length(kwargs)
-    fdefs = Vector{Any}(undef, n+1)
-    println(n)
-    for i = 1:n
-        # each kw is an expression of form :(a = b), with head :(=) and args [:a, :b]
-        fun, delfun = kwargs[i].args
-        ffun = esc(fun)
-        fdefs[i] = quote
-            ($ffun)(dm::$Tname, args...) = ($delfun)(args...)
-        end
-    end
-    # push!(fdefs, quote ($Tname)($mode) end)
-    fdefs[end] = quote
-        ($Tname)($mode)
-    end
-    # println(fdefs)
-    return Expr(:block, fdefs...)
-end
-
 macro delegated_mode(mex, kwargs...)
     Tname = Symbol(:DelegatedMode, gensym())
     @eval struct $Tname{mT}<:AbstractMode
@@ -188,6 +159,10 @@ macro delegated_mode(mex, kwargs...)
     end
 end
 
+"""
+Macro to create a "fully delegated" or arbitrary mode from the four required functions,
+α, β, field and dimlimits.
+"""
 macro arbitrary_mode(kwargs...)
     Tname = Symbol(:ArbitraryMode, gensym())
     @eval struct $Tname<:AbstractMode end
