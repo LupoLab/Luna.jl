@@ -33,6 +33,10 @@ m2 = Modes.@delegated_mode(Capillary.MarcatilliMode(75e-6, :He, 1.0), α=(ω)->0
 @test Modes.α(m2, 2e15) == 0.2
 @test Modes.α(m2, λ=800e-9) == 0.2
 
+cm = Capillary.MarcatilliMode(75e-6, :He, 5.9)
+dm = Modes.@delegated_mode(cm)
+@test Modes.Aeff(dm) ≈ 8.42157534886545e-09
+
 # fully delegated test
 m3 = Modes.@arbitrary_mode(α=(ω)->0.2, β=(ω)->0.2,
                           dimlimits=()->(:polar, (0.0, 0.0), (m.a, 2π)), field=()->nothing)
