@@ -124,4 +124,74 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
+"""
+Macro to create a delegated mode, which takes its methods from an existing mode except
+for those which are overwritten
+"""
+macro delegated_mode_old(mex, kwargs...)
+    Tname = Symbol(:DelegatedMode, gensym())
+    @eval struct $Tname{mT}<:AbstractMode
+        m::mT # wrapped mode
+    end
+    @eval α(dm::($Tname), args...) = α(dm.m, args...)
+    @eval β(dm::($Tname), args...) = β(dm.m, args...)
+    @eval field(dm::($Tname), args...) = field(dm.m) 
+    @eval dimlimits(dm::($Tname), args...) = dimlimits(dm.m)
+    mode = __module__.eval(mex)
+    n = length(kwargs)
+    fdefs = Vector{Any}(undef, n+1)
+    println(n)
+    for i = 1:n
+        # each kw is an expression of form :(a = b), with head :(=) and args [:a, :b]
+        fun, delfun = kwargs[i].args
+        ffun = esc(fun)
+        fdefs[i] = quote
+            ($ffun)(dm::$Tname, args...) = ($delfun)(args...)
+        end
+    end
+    # push!(fdefs, quote ($Tname)($mode) end)
+    fdefs[end] = quote
+        ($Tname)($mode)
+    end
+    # println(fdefs)
+    return Expr(:block, fdefs...)
+end
+
+macro delegated_mode(mex, kwargs...)
+    Tname = Symbol(:DelegatedMode, gensym())
+    @eval struct $Tname{mT}<:AbstractMode
+        m::mT # wrapped mode
+    end
+    funs = [kw.args[1] for kw in kwargs]
+    for mfun in (:α, :β, :field, :dimlimits)
+        if mfun in funs
+            dfun = kwargs[findfirst(mfun.==funs)].args[2]
+            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+        else
+            @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
+        end
+    end
+    # get value of the mode expression that was passed in - needs to be done in caller scope
+    mode = __module__.eval(mex)
+    quote
+        $Tname($mode)
+    end
+end
+
+macro arbitrary_mode(kwargs...)
+    Tname = Symbol(:ArbitraryMode, gensym())
+    @eval struct $Tname<:AbstractMode end
+    funs = [kw.args[1] for kw in kwargs]
+    for mfun in (:α, :β, :field, :dimlimits)
+        if mfun in funs
+            dfun = kwargs[findfirst(mfun.==funs)].args[2]
+            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+        else
+            error("Must define $mfun for arbitrary mode!")
+        end
+    end
+    quote
+        $Tname()
+    end
+end
 end
