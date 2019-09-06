@@ -23,8 +23,11 @@ function sourcecode()
     src = dirname(@__FILE__)
     luna = dirname(src)
     out = "#= Date: $(Dates.now())\n"
-    out *= "git branch: $(git_branch())\n"
-    out *= "git commit: $(git_commit())\n"
+    try
+        out *= "git branch: $(git_branch())\n"
+        out *= "git commit: $(git_commit())\n"
+    catch e
+    end
     out *= "hostname: $(gethostname())\n"
     out *= "=#"
     for folder in (src, luna)
