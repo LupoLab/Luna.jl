@@ -1,0 +1,86 @@
+module RectModes
+import PhysicalConstants
+import Unitful
+import FunctionZeros: besselj_zero
+import Roots: fzero
+import Cubature: hquadrature, hcubature
+import StaticArrays: SVector
+using Reexport
+@reexport using Luna.Modes
+import Luna: Maths
+import Luna.PhysData: c, ref_index_fun, roomtemp
+import Luna.Modes: AbstractMode, dimlimits, β, α, field
+
+export RectMode, dimlimits, β, α, field
+
+# core and clad are function-like objects which return the
+# (possibly complex) refractive index as a function of freq
+# pol is either :x or :y
+struct RectMode{Tcore, Tclad} <: AbstractMode
+    a::Float64
+    b::Float64
+    n::Int
+    m::Int
+    pol::Symbol
+    coren::Tcore
+    cladn::Tclad
+end
+
+Broadcast.broadcastable(m::RectMode) = Ref(m)
+
+"convenience constructor assunming single gas filling and specified cladding"
+function RectMode(a, b, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
+    rfg = ref_index_fun(gas, P, T)
+    rfs = ref_index_fun(clad)
+    coren = ω -> rfg(2π*c./ω)
+    cladn = ω -> rfs(2π*c./ω)
+    RectMode(a, b, n, m, pol, coren, cladn)
+end
+
+dimlimits(m::RectMode) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
+
+function neff(m::RectMode, ω)
+    εcl = m.cladn(ω)^2
+    εco = m.coren(ω)^2
+    λ = 2π*c./ω
+    if m.pol == :x
+        ac = εcl/sqrt(εcl - 1)
+        bc = 1/sqrt(εcl - 1)
+    elseif m.pol == :y
+        bc = εcl/sqrt(εcl - 1)
+        ac = 1/sqrt(εcl - 1)
+    else
+        error("RectMode pol must be either :x or :y")
+    end
+    sqrt(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
+             - (m.n*λ/(4*m.b))^2*(1 - im*λ/(2π*m.b)*bc)^2)
+end
+
+function β(m::RectMode, ω)
+    return @. ω/c*real(neff(m, ω))
+end
+
+function α(m::RectMode, ω)
+    return @. 2*ω/c*imag(neff(m, ω))
+end
+
+# here we use cartesian coords, so xs = (x, y)
+function field(m::RectMode)
+    if isodd(m.m)
+        Ea = (x) -> cos(m.m*π*x/(2*m.a))
+    else
+        Ea = (x) -> sin(m.m*π*x/(2*m.a))
+    end
+    if isodd(m.n)
+        Eb = (x) -> cos(m.n*π*x/(2*m.b))
+    else
+        Eb = (x) -> sin(m.n*π*x/(2*m.b))
+    end
+    if m.pol == :x
+        return (xs) -> SVector(Ea(xs[1])*Eb(xs[2]), 0.0)
+    else
+        return (xs) -> SVector(0.0, Ea(xs[1])*Eb(xs[2]))
+    end
+end
+
+end

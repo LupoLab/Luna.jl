@@ -4,6 +4,7 @@ import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import Luna: Maths
+import Interpolations
 
 "Speed of light"
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
@@ -47,6 +48,7 @@ const gas_str = Dict(
     :Air => "Air"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+const metal = (:Ag,)
 
 "Linear coefficients"
 
@@ -221,6 +223,16 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
             end
         end
         return nglass
+    elseif material in metal
+        nmetal = let lookup = lookup_metal(material)
+            function nmetal(λ)
+                if any(λ .> 1.0)
+                    throw(DomainError(λ, "Wavelength must be given in metres"))
+                end
+                return lookup(λ.*1e6)
+            end
+        end
+        return nmetal
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -325,4 +337,88 @@ function quantum_numbers(material)
         return 1, 1, 1
     end
 end
+
+"Lookup tables for complex refractive indices of metals. Returns function of wavelength in μm which in turn
+ returns the refractive index directly"
+function lookup_metal(material::Symbol)
+    if material == :Ag
+        data = [
+        0.2066 1.079 1.247;
+        0.2101 1.101 1.258;
+        0.2138 1.121 1.267;
+        0.2175 1.140 1.272;
+        0.2214 1.157 1.280;
+        0.2254 1.169 1.283;
+        0.2296 1.181 1.287;
+        0.2339 1.190 1.294;
+        0.2384 1.198 1.306;
+        0.2431 1.215 1.317;
+        0.2480 1.233 1.326;
+        0.2530 1.254 1.328;
+        0.2583 1.270 1.327;
+        0.2638 1.294 1.329;
+        0.2695 1.321 1.310;
+        0.2755 1.348 1.291;
+        0.2818 1.380 1.247;
+        0.2883 1.402 1.181;
+        0.2952 1.427 1.079;
+        0.3024 1.410 0.894;
+        0.3100 1.265 0.656;
+        0.3179 0.859 0.466;
+        0.3263 0.307 0.651;
+        0.3351 0.187 1.042;
+        0.3444 0.142 1.269;
+        0.3542 0.106 1.467;
+        0.3647 0.076 1.645;
+        0.3757 0.061 1.815;
+        0.3875 0.050 1.981;
+        0.3999 0.054 2.138;
+        0.4133 0.050 2.292;
+        0.4275 0.051 2.448;
+        0.4428 0.052 2.604;
+        0.4592 0.052 2.765;
+        0.4769 0.053 2.930;
+        0.4959 0.052 3.105;
+        0.5166 0.052 3.288;
+        0.5391 0.05168 3.483;
+        0.5636 0.05009 3.694;
+        0.5904 0.04977 3.918;
+        0.6199 0.04803 4.164;
+        0.6525 0.04964 4.432;
+        0.6888 0.05080 4.725;
+        0.7293 0.05151 5.048;
+        0.7749 0.05269 5.409;
+        0.8266 0.05504 5.814;
+        0.8856 0.05896 6.276;
+        0.9537 0.06542 6.802;
+        1.033 0.07286 7.412;
+        1.127 0.08427 8.128;
+        1.240 0.09799 8.981;
+        1.305 0.1056 9.472;
+        1.378 0.1143 10.018;
+        1.459 0.1256 10.63;
+        1.550 0.1388 11.31;
+        1.653 0.1543 12.08;
+        1.771 0.1735 12.97;
+        1.907 0.1988 13.98;
+        2.066 0.2315 15.16;
+        2.254 0.2724 16.56;
+        2.480 0.3256 18.23;
+        2.755 0.3970 20.26;
+        3.100 0.4960 22.80;
+        3.542 0.6387 26.05;
+        4.133 0.8566 30.37;
+        4.959 1.228 36.37;
+        6.199 1.851 45.26;
+        8.266 3.227 59.73;
+        12.4000 5.079 86.53
+        ]
+    else
+        throw(DomainError(material, "Unknown metal $material"))
+    end
+    nspl = Interpolations.LinearInterpolation(data[:,1], data[:,2], extrapolation_bc = Interpolations.Flat())
+    kspl = Interpolations.LinearInterpolation(data[:,1], data[:,3], extrapolation_bc = Interpolations.Flat())
+    return μm -> nspl(μm) + im*kspl(μm)
+end
+
 end

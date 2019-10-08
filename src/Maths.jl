@@ -1,5 +1,6 @@
 module Maths
 import ForwardDiff
+import Calculus
 import SpecialFunctions: erf, erfc
 import FFTW
 
@@ -11,6 +12,20 @@ function derivative(f, x, order::Integer)
         return ForwardDiff.derivative(f, x)
     else
         return derivative(x->ForwardDiff.derivative(f, x), x, order - 1)
+    end
+end
+
+"Numerically calculate nth derivative of some function at some input.
+ For use when `derivative` does not work."
+function numderivative(f, x, order::Integer)
+    if order == 0
+        return f(x)
+    elseif order == 1
+        return Calculus.derivative(f, x)
+    elseif order == 2
+        return Calculus.second_derivative(f, x)
+    else
+        error("higher order numerical derivatives are not a good idea!")
     end
 end
 
