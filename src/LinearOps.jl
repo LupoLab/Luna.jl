@@ -43,7 +43,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.Ab
     make_const_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
 end
 
-function make_const_linop(grid::Grid.RealGrid, modes::Tuple, λ0; ref_mode=1)
+function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
@@ -57,7 +57,7 @@ function make_const_linop(grid::Grid.RealGrid, modes::Tuple, λ0; ref_mode=1)
     linops
 end
 
-function make_const_linop(grid::Grid.EnvGrid, modes::Tuple, λ0; ref_mode=1, thg=false)
+function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
     if thg
         βref = 0.0
