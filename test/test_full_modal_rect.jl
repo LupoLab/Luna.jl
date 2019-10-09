@@ -8,7 +8,6 @@ Logging.disable_logging(Logging.BelowMinLevel)
 
 import DSP.Unwrap: unwrap
 
-import PyPlot:pygui, plt
 
 a = 50e-6
 b = 10e-6
@@ -52,6 +51,7 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+#output = Output.HDF5Output("test_full_modal_rect.h5", 0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
@@ -67,17 +67,22 @@ It = abs2.(Maths.hilbert(Etout))
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
-pygui(true)
+import PyCall: pygui
+pygui(false)
+import PyPlot: plt
 
 for i = 1:nmodes
     plt.figure()
     plt.subplot(121)
-    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
+    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]), rasterized=true)
     plt.clim(-6, 0)
     plt.xlim(0,2.0)
     plt.colorbar()
     plt.subplot(122)
-    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
+    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]), rasterized=true)
     plt.xlim(-30.0,100.0)
     plt.colorbar()
+    plt.savefig("mode_$i.png")
+    plt.savefig("mode_$i.pdf")
+    plt.close()
 end
