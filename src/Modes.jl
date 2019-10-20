@@ -52,11 +52,11 @@ end
 
 function dispersion_func(m::M, order) where {M <: AbstractMode}
     βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
-    βnn(ω) = Maths.numderivative(ω -> β(m, ω), ω, order)
     try # to use fancy auto diff, if we fail use numerical diff
         βn(2π*c./800e-9) # TODO magic number
         return βn
     catch
+        βnn(ω) = Maths.numderivative(ω -> β(m, ω), ω, order)
         return βnn
     end
 end

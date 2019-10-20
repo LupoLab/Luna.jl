@@ -1,9 +1,4 @@
 module RectModes
-import PhysicalConstants
-import Unitful
-import FunctionZeros: besselj_zero
-import Roots: fzero
-import Cubature: hquadrature, hcubature
 import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
@@ -16,6 +11,7 @@ export RectMode, dimlimits, β, α, field
 # core and clad are function-like objects which return the
 # (possibly complex) refractive index as a function of freq
 # pol is either :x or :y
+# a and b are the half widths of the waveguide in each dimension.
 struct RectMode{Tcore, Tclad} <: AbstractMode
     a::Float64
     b::Float64
@@ -26,6 +22,7 @@ struct RectMode{Tcore, Tclad} <: AbstractMode
     cladn::Tclad
 end
 
+# make the mode broadcast like a scalar
 Broadcast.broadcastable(m::RectMode) = Ref(m)
 
 "convenience constructor assunming single gas filling and specified cladding"
@@ -39,6 +36,17 @@ end
 
 dimlimits(m::RectMode) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
 
+"effective index of rectabgular mode with dielectric core and arbitrary
+ (metal or dielectric) cladding.
+
+Adapted from
+Laakmann, K. D. & Steier, W. H.
+Waveguides: characteristic modes of hollow rectangular dielectric waveguides.
+Appl. Opt., AO 15, 1334–1340 (1976).
+
+I had to re-derive the result in order to get the complex cladding index contribution
+to the real part of neff.
+"
 function neff(m::RectMode, ω)
     εcl = m.cladn(ω)^2
     εco = m.coren(ω)^2
