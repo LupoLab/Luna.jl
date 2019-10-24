@@ -31,7 +31,10 @@ import Test: @test, @testset, @test_throws
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
     Luna.run(Eω, grid, linop, transform, FT, output)
 
-    modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),)
+    modes = (
+         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
+         α=ω->0),
+    )
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
@@ -77,7 +80,10 @@ end
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
     Luna.run(Eω, grid, linop, transform, FT, output)
 
-    modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),)
+    modes = (
+         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
+         α=ω->0),
+    )
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
