@@ -204,9 +204,6 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
         χ1 = χ1_fun(material)
         ngas = let χ1=χ1, P=P, T=T
             function ngas(λ)
-                if any(λ .> 1.0)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
                 return sqrt(1 + χ1(λ, P, T))
             end
         end
@@ -214,9 +211,6 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
-                if any(λ .> 1.0)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
                 return sell(λ.*1e6)
             end
         end
