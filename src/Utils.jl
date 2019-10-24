@@ -15,7 +15,7 @@ end
 
 function git_branch()
     wd = dirname(@__FILE__)
-    b = read(`git rev-parse --abbrev-ref HEAD`, String)
+    b = read(`git -C $wd rev-parse --abbrev-ref HEAD`, String)
     return b[1:end-1] # Strip newline off the end
 end
 
@@ -23,8 +23,12 @@ function sourcecode()
     src = dirname(@__FILE__)
     luna = dirname(src)
     out = "#= Date: $(Dates.now())\n"
-    out *= "git branch: $(git_branch())\n"
-    out *= "git commit: $(git_commit())\n"
+    try
+        out *= "git branch: $(git_branch())\n"
+        out *= "git commit: $(git_commit())\n"
+    catch
+        out *= "(Luna is not checked out for development, git version unavailable)\n"
+    end
     out *= "hostname: $(gethostname())\n"
     out *= "=#"
     for folder in (src, luna)
