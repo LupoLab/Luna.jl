@@ -27,7 +27,7 @@ function sourcecode()
         out *= "git branch: $(git_branch())\n"
         out *= "git commit: $(git_commit())\n"
     catch
-        out *= "(Luna is not checked out for development, git version unavailable)\n"
+        out *= "(Luna is not checked out for development, git version unavailable)\n\n"
     end
     out *= "hostname: $(gethostname())\n"
     out *= "=#"
