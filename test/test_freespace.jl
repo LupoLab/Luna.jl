@@ -9,18 +9,18 @@ import PyPlot:pygui, plt
 
 
 gas = :Ar
-pres = 0
+pres = 1e-6
 
-τ = 30e-15
+τ = 10e-15
 λ0 = 800e-9
 
-w0 = 500e-6
-energy = 1e-6
+w0 = 2e-3
+energy = 1e-3
 
 R = 10e-3
 N = 256
 
-grid = Grid.RealGrid(2, 800e-9, (400e-9, 3000e-9), 0.2e-12)
+grid = Grid.RealGrid(2, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 q = Hankel.QDHT(R, N, dim=2)
 
 energyfun = NonlinearRHS.energy_radial(q)
@@ -64,7 +64,9 @@ zout = output.data["z"]
 Eout = output.data["Eω"]
 
 Erout = (q \ Eout)
-Itr = abs2.(Erout)
+Iωr = abs2.(Erout)
+Iω0 = Iωr[:, 1, :]
+Iω0log = log10.(Maths.normbymax(Iω0))
 Etout = FFTW.irfft(Erout, length(grid.t), 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
@@ -79,18 +81,22 @@ for ii = 1:size(Etout, 3)
 end
 
 ω0idx = argmin(abs.(grid.ω .- 2π*PhysData.c/λ0))
-ωminidx = argmin(abs.(grid.ω .- 2π*PhysData.c/2e-6))
 
 pygui(true)
 plt.figure()
-plt.pcolormesh(zout*1e2, q.r*1e3, Itr[ω0idx, :, :])
+plt.pcolormesh(zout*1e2, q.r*1e3, Iωr[ω0idx, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
 
 plt.figure()
-plt.pcolormesh(zout*1e2, q.r*1e3, Itr[ωminidx, :, :])
+plt.pcolormesh(zout*1e2, q.r*1e3, It[length(grid.t)÷2, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
+
+plt.figure()
+plt.pcolormesh(zout*1e2, grid.ω*1e-15/2π, Iω0log)
+plt.colorbar()
+plt.clim(0, -4)
 
 
 plt.figure()
