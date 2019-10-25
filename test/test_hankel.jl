@@ -71,4 +71,5 @@ end
     energy = π/2*w0^2 # analytical energy for gaussian beam
     @test energy ≈ 2π*Hankel.integrateR(Ir0, q)
     @test energy ≈ 2π*Hankel.integrateR(abs2.(Er1), q)
+    @test energy ≈ 2π*Hankel.integrateK(abs2.(Ek1), q)
 end

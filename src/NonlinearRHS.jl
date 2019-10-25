@@ -393,7 +393,7 @@ function (t::TransRadial)(nl, Eω, z)
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
-"Normalisation factor for mode-averaged field."
+"Normalisation factor for radial symmetry."
 function norm_radial(ω, βfun, R, J1sq)
     out = zero(ω)
     function norm(z)
