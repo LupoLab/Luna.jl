@@ -416,9 +416,8 @@ function lookup_metal(material::Symbol)
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
-    nspl = Interpolations.LinearInterpolation(data[:,1], data[:,2], extrapolation_bc = Interpolations.Flat())
-    kspl = Interpolations.LinearInterpolation(data[:,1], data[:,3], extrapolation_bc = Interpolations.Flat())
-    return μm -> nspl(μm) + im*kspl(μm)
+    nspl = Maths.CSpline(data[:,1], data[:,2] + im.*data[:,3])
+    return nspl
 end
 
 end

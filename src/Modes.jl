@@ -5,7 +5,7 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
 
 abstract type AbstractMode end
 
@@ -14,8 +14,13 @@ function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")
 end
 
-function β(m::M, ω) where {M <: AbstractMode}
+"full complex refractive index of a mode"
+function neff(m::M, ω) where {M <: AbstractMode}
     error("abstract method called")
+end
+
+function β(m::M, ω) where {M <: AbstractMode}
+    return ω/c*real(neff(m, ω))
 end
 
 function β(m::M; λ) where {M <: AbstractMode}
@@ -23,7 +28,7 @@ function β(m::M; λ) where {M <: AbstractMode}
 end
 
 function α(m::M, ω) where {M <: AbstractMode}
-    error("abstract method called")
+    return 2*ω/c*imag(neff(m, ω))
 end
 
 function α(m::M; λ) where {M <: AbstractMode}
@@ -52,13 +57,13 @@ end
 
 function dispersion_func(m::M, order) where {M <: AbstractMode}
     βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
-    try # to use fancy auto diff, if we fail use numerical diff
-        βn(2π*c./800e-9) # TODO magic number
+    #try # to use fancy auto diff, if we fail use numerical diff
+    #    βn(2π*c./800e-9) # TODO magic number
         return βn
-    catch
-        βnn(ω) = Maths.numderivative(ω -> β(m, ω), ω, order)
-        return βnn
-    end
+    #catch
+    #    βnn(ω) = Maths.numderivative(ω -> β(m, ω), ω, order)
+    #    return βnn
+    #end
 end
 
 function dispersion(m::M, order, ω) where {M <: AbstractMode}
@@ -70,7 +75,9 @@ function dispersion(m::M, order; λ) where {M <: AbstractMode}
 end
 
 function zdw(m::M) where {M <: AbstractMode}
-    ω0 = fzero(dispersion_func(m, 2), 1e14, 2e16) # TODO magic numbers
+    ub = 2π*c/250e-9
+    #for
+    ω0 = fzero(dispersion_func(m, 2), 1e14, ub) # TODO magic numbers
     return 2π*c/ω0
 end
 

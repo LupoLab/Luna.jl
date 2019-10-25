@@ -4,9 +4,9 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, β, α, field
+import Luna.Modes: AbstractMode, dimlimits, neff, field
 
-export RectMode, dimlimits, β, α, field
+export RectMode, dimlimits, neff, field
 
 # core and clad are function-like objects which return the
 # (possibly complex) refractive index as a function of freq
@@ -52,24 +52,16 @@ function neff(m::RectMode, ω)
     εco = m.coren(ω)^2
     λ = 2π*c./ω
     if m.pol == :x
-        ac = εcl/sqrt(εcl - 1)
-        bc = 1/sqrt(εcl - 1)
+        ac = εcl/sqrt(Complex(εcl - 1))
+        bc = 1/sqrt(Complex(εcl - 1))
     elseif m.pol == :y
-        bc = εcl/sqrt(εcl - 1)
-        ac = 1/sqrt(εcl - 1)
+        bc = εcl/sqrt(Complex(εcl - 1))
+        ac = 1/sqrt(Complex(εcl - 1))
     else
         error("RectMode pol must be either :x or :y")
     end
-    sqrt(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
-             - (m.n*λ/(4*m.b))^2*(1 - im*λ/(2π*m.b)*bc)^2)
-end
-
-function β(m::RectMode, ω)
-    return @. ω/c*real(neff(m, ω))
-end
-
-function α(m::RectMode, ω)
-    return @. 2*ω/c*imag(neff(m, ω))
+    sqrt(Complex(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
+                     - (m.n*λ/(4*m.b))^2*(1 - im*λ/(2π*m.b)*bc)^2))
 end
 
 # here we use cartesian coords, so xs = (x, y)
