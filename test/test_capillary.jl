@@ -26,10 +26,12 @@ m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0, model=:reduced)) ≈ 8.42157534886545e-09
 
+# tests based on symbolic results is symbolic_marcatilli.py
 m = Capillary.MarcatilliMode(50e-6, :Ar, 2.0, model=:reduced)
-@test isapprox(β(m, 2π*PhysData.c/800e-9), 7857864.43728568, rtol=1e-15)
-@test isapprox(dispersion(m, 1, 2π*PhysData.c/800e-9), 3.33744310817186e-9, rtol=1e-13)
-@test isapprox(dispersion(m, 2, 2π*PhysData.c/800e-9), -1.68385315313058e-29, rtol=1e-7)
-@test isapprox(dispersion(m, 3, 2π*PhysData.c/800e-9), 8.43934205839032e-44, rtol=1e-6)
-@test isapprox(dispersion(m, 4, 2π*PhysData.c/800e-9), -1.13290569432975e-58, rtol=1e-4)
-@test isapprox(dispersion(m, 5, 2π*PhysData.c/800e-9), 2.45045893668943e-73, rtol=1e-3)
+@test isapprox(Capillary.β(m, 2π*c/800e-9), 7857864.43728568, rtol=1e-15)
+@test isapprox(Capillary.dispersion(m, 1, 2π*c/800e-9), 3.33744310817186e-9, rtol=1e-13)
+@test isapprox(Capillary.dispersion(m, 2, 2π*c/800e-9), -1.68385315313058e-29, rtol=1e-7)
+@test isapprox(Capillary.dispersion(m, 3, 2π*c/800e-9), 8.43934205839032e-44, rtol=1e-6)
+@test isapprox(Capillary.dispersion(m, 4, 2π*c/800e-9), -1.13290569432975e-58, rtol=1e-4)
+@test isapprox(Capillary.dispersion(m, 5, 2π*c/800e-9), 2.45045893668943e-73, rtol=1e-3)
+@test isapprox(Capillary.zdw(m), 7.288460357934073e-07, rtol=1e-8)

@@ -68,7 +68,7 @@ function dispersion(m::M, order; λ) where {M <: AbstractMode}
     return dispersion(m, order, 2π*c./λ)
 end
 
-function zdw(m::M; ub=200e-9, lb=10000e-9) where {M <: AbstractMode}
+function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
     ubω = 2π*c/ub
     lbω = 2π*c/lb
     ω0 = fzero(dispersion_func(m, 2), lbω, ubω)

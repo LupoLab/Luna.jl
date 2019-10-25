@@ -416,7 +416,7 @@ function lookup_metal(material::Symbol)
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
-    nspl = Maths.CSpline(data[:,1], data[:,2] + im.*data[:,3])
+    nspl = Maths.CSpline(data[:,1], data[:,2] .+ im.*data[:,3])
     return nspl
 end
 
