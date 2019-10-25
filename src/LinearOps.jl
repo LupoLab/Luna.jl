@@ -24,7 +24,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <
         β0const = Modes.β(mode, λ=λ0)
     end
     βconst = zero(grid.ω)
-    βconst[grid.sidx] = Modes.β(mode, grid.ω[grid.sidx])
+    βconst[grid.sidx] = Modes.β.(mode, grid.ω[grid.sidx])
     βconst[.!grid.sidx] .= 1
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
@@ -35,7 +35,7 @@ end
 function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.AbstractMode
     β1const = Modes.dispersion(mode, 1; λ=λ0)
     βconst = zero(grid.ω)
-    βconst[2:end] = Modes.β(mode, grid.ω[2:end])
+    βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
     βconst[1] = 1
     βfun(ω, z) = βconst
     frame_vel(z) = 1/β1const
@@ -49,7 +49,7 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
         βconst = zero(grid.ω)
-        βconst[2:end] = Modes.β(modes[i], grid.ω[2:end])
+        βconst[2:end] = Modes.β.(modes[i], grid.ω[2:end])
         βconst[1] = 1
         α = 0.0 # TODO deal with loss properly
         linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
@@ -68,7 +68,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
         βconst = zero(grid.ω)
-        βconst[grid.sidx] = Modes.β(modes[i], grid.ω[grid.sidx])
+        βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
         βconst[.!grid.sidx] .= 1
         α = 0.0 # TODO deal with loss properly
         linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2

@@ -15,4 +15,4 @@ m = RectMode(a, b, :Ar, 0.0, :Ag)
 @test isapprox(β(m, λ=800e-9), 7852915.234685494)
 @test isapprox(β(m, λ=210e-9), 29919650.305427298)
 
-@test abs(1e9*Modes.zdw(RectMode(a, b, :Ar, 5.0, :Ag)) - 565) < 1
+@test abs(1e9*Modes.zdw(RectMode(a, b, :Ar, 5.0, :Ag)) - 562.2) < 1

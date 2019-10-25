@@ -123,51 +123,51 @@ function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
         #TODO: Deal with sqrt of negative values better (somehow...)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 0.6961663/(1-(0.0684043/μm)^2)
              + 0.4079426/(1-(0.1162414/μm)^2)
              + 0.8974794/(1-(9.896161/μm)^2)
-             )
+             ))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 1.03961212/(1-0.00600069867/μm^2)
              + 0.231792344 / (1-0.0200179144/μm^2)
              + 1.01046945/(1-103.560653/μm^2)
-             )
+             ))
     elseif material == :CaF2
         # Appl. Opt. 41, 5275-5281 (2002)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 0.443749998/(1-0.00178027854/μm^2)
              + 0.444930066/(1-0.00788536061/μm^2)
              + 0.150133991/(1-0.0124119491/μm^2)
              + 8.85319946/(1-2752.28175/μm^2)
-             )
+             ))
     elseif material == :KBr
         # J. Phys. Chem. Ref. Data 5, 329-528 (1976)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 0.39408
              + 0.79221/(1-(0.146/μm)^2)
              + 0.01981/(1-(0.173/μm)^2)
              + 0.15587/(1-(0.187/μm)^2)
              + 0.17673/(1-(60.61/μm)^2)
              + 2.06217/(1-(87.72/μm)^2)
-             )
+             ))
     elseif material == :BaF2
         # J. Phys. Chem. Ref. Data 9, 161-289 (1980)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 0.33973
              + 0.81070/(1-(0.10065/μm)^2)
              + 0.19652/(1-(29.87/μm)^2)
              + 4.52469/(1-(53.82/μm)^2)
-             )
+             ))
     elseif material == :Si
         # J. Opt. Soc. Am., 47, 244-246 (1957)
-        return μm -> @. sqrt(1
+        return μm -> @. sqrt(Complex(1
              + 10.6684293/(1-(0.301516485/μm)^2)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
-             )
+             ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
