@@ -4,7 +4,6 @@ import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import Luna: Maths
-import Interpolations
 
 "Speed of light"
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
