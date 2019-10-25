@@ -77,7 +77,7 @@ function neff(m::MarcatilliMode, ω)
     if m.model == :full
         sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
     elseif m.model == :reduced
-        (εco - c^2*m.unm^2/(2*ω^2*m.a^2)) + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn
+        (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2)) + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn
     else
         error("model must be :full or :reduced")
     end 

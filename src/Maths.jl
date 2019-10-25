@@ -11,7 +11,7 @@ function derivative(f, x, order::Integer)
         return f(x)
     else
         # use 5th order central finite differences with 4 adaptive steps
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(5, order), y->f(y*x), 1.0, adapt=4)/x^order
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(7, order), y->f(y*x), 1.0, adapt=4)/x^order
     end
 end
 
