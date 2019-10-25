@@ -41,10 +41,10 @@ function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full)
     MarcatilliMode(a, n, m, kind, unm, ϕ, coren, cladn, model)
 end
 
-"convenience constructor assunming single gas filling and silica clad"
-function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full)
+"convenience constructor assunming single gas filling"
+function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2)
     rfg = ref_index_fun(gas, P, T)
-    rfs = ref_index_fun(:SiO2)
+    rfs = ref_index_fun(clad)
     coren = ω -> rfg(2π*c./ω)
     cladn = ω -> rfs(2π*c./ω)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model)

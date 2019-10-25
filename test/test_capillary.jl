@@ -1,6 +1,6 @@
 import Test: @test
 import Luna: Capillary
-import Luna.PhysData: c
+import Luna.PhysData: c, roomtemp, ref_index_fun
 
 λ = 800e-9
 ω = 2π*c/λ
@@ -35,3 +35,29 @@ m = Capillary.MarcatilliMode(50e-6, :Ar, 2.0, model=:reduced)
 @test isapprox(Capillary.dispersion(m, 4, 2π*c/800e-9), -1.13290569432975e-58, rtol=1e-4)
 @test isapprox(Capillary.dispersion(m, 5, 2π*c/800e-9), 2.45045893668943e-73, rtol=1e-3)
 @test isapprox(Capillary.zdw(m), 7.288460357934073e-07, rtol=1e-8)
+
+rfg = ref_index_fun(:Ar, 2.0, roomtemp)
+coren = ω -> rfg(2π*c./ω)
+cladn = ω -> 1.45
+m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
+@test isapprox(Capillary.β(m, 2π*c/800e-9), 7857863.48006503, rtol=1e-15)
+@test isapprox(Capillary.dispersion(m, 1, 2π*c/800e-9), 3.33744262246032e-9, rtol=1e-14)
+@test isapprox(Capillary.dispersion(m, 2, 2π*c/800e-9), -1.68286833115421e-29, rtol=1e-7)
+@test isapprox(Capillary.dispersion(m, 3, 2π*c/800e-9), 8.43469324575104e-44, rtol=1e-6)
+@test isapprox(Capillary.dispersion(m, 4, 2π*c/800e-9), -1.13224995913863e-58, rtol=1e-5)
+@test isapprox(Capillary.dispersion(m, 5, 2π*c/800e-9), 2.44896534856203e-73, rtol=1e-4)
+@test isapprox(Capillary.zdw(m), 7.288488367356287e-07, rtol=1e-8)
+@test isapprox(Capillary.α(m, 2π*c/800e-9), 2.21505888048642, rtol=1e-14)
+
+rfg = ref_index_fun(:Ar, 2.0, roomtemp)
+coren = ω -> rfg(2π*c./ω)
+cladn = ω -> 0.036759+im*5.5698
+m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
+@test isapprox(Capillary.β(m, 2π*c/800e-9), 7857861.48263403, rtol=1e-15)
+@test isapprox(Capillary.dispersion(m, 1, 2π*c/800e-9), 3.33744432288277e-9, rtol=1e-14)
+@test isapprox(Capillary.dispersion(m, 2, 2π*c/800e-9), -1.90000438857902e-29, rtol=1e-6)
+@test isapprox(Capillary.dispersion(m, 3, 2π*c/800e-9), 8.80439075111799e-44, rtol=1e-6)
+@test isapprox(Capillary.dispersion(m, 4, 2π*c/800e-9), -1.21093130760499e-58, rtol=1e-5)
+@test isapprox(Capillary.dispersion(m, 5, 2π*c/800e-9), 2.64991119379223e-73, rtol=1e-3)
+@test isapprox(Capillary.zdw(m), 7.224394530976951e-07, rtol=1e-8)
+@test isapprox(Capillary.α(m, 2π*c/800e-9), 0.0290115788131925, rtol=1e-14)

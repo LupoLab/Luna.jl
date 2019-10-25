@@ -340,6 +340,7 @@ end
 "
 Simple cubic spline
 http://mathworld.wolfram.com/CubicSpline.html
+Boundary conditions extrapolate with initially constant gradient
 "
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}}
     x::Vx
@@ -364,7 +365,7 @@ function CSpline(x, y)
     dl = fill(1.0, length(y) - 1)
     M = LinearAlgebra.Tridiagonal(dl, d, dl)
     D = M \ R
-    CSpline(SVector{length(x)}(x), SVector{length(y)}(y), SVector{length(D)}(D))
+    CSpline(x, y, D)
 end
 
 function (c::CSpline)(x0)
