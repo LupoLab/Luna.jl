@@ -57,13 +57,7 @@ end
 
 function dispersion_func(m::M, order) where {M <: AbstractMode}
     βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
-    #try # to use fancy auto diff, if we fail use numerical diff
-    #    βn(2π*c./800e-9) # TODO magic number
-        return βn
-    #catch
-    #    βnn(ω) = Maths.numderivative(ω -> β(m, ω), ω, order)
-    #    return βnn
-    #end
+    return βn
 end
 
 function dispersion(m::M, order, ω) where {M <: AbstractMode}
@@ -74,10 +68,10 @@ function dispersion(m::M, order; λ) where {M <: AbstractMode}
     return dispersion(m, order, 2π*c./λ)
 end
 
-function zdw(m::M) where {M <: AbstractMode}
-    ub = 2π*c/250e-9
-    #for
-    ω0 = fzero(dispersion_func(m, 2), 1e14, ub) # TODO magic numbers
+function zdw(m::M; ub=200e-9, lb=10000e-9) where {M <: AbstractMode}
+    ubω = 2π*c/ub
+    lbω = 2π*c/lb
+    ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
     return 2π*c/ω0
 end
 
