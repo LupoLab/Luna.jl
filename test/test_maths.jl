@@ -16,7 +16,7 @@ import Luna: Maths
 
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 1), 2*exp(2))
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 2), 4*exp(2))
-    @test isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0)
+    @test isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
 end
 
 @testset "Moments" begin
