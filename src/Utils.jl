@@ -3,20 +3,22 @@ import Dates
 
 function git_commit()
     wd = dirname(@__FILE__)
-    commit = read(`git -C $wd describe --always --tags --dirty`, String)
-    commit = commit[1:end-1] # Strip newline off the end
-end
-
-function git_isdirty()
-    wd = dirname(@__FILE__)
-    d = read(`git -C $wd diff --name-only`)
-    return length(d) > 0
+    try
+        commit = read(`git -C $wd describe --always --tags --dirty`, String)
+        commit = commit[1:end-1] # Strip newline off the end
+    catch
+        "unavailable (Luna is not checkout out for development)"
+    end
 end
 
 function git_branch()
-    wd = dirname(@__FILE__)
-    b = read(`git rev-parse --abbrev-ref HEAD`, String)
-    return b[1:end-1] # Strip newline off the end
+    try
+        wd = dirname(@__FILE__)
+        b = read(`git -C $wd rev-parse --abbrev-ref HEAD`, String)
+        return b[1:end-1] # Strip newline off the end
+    catch
+        "unavailable (Luna is not checkout out for development)"
+    end
 end
 
 function sourcecode()
