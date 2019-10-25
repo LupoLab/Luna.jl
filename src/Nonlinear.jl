@@ -24,8 +24,10 @@ function Kerr_field(γ3)
         function Kerr(out, E)
             if size(E,2) == 1
                 KerrScalar(out, E, ε_0*γ3)
-            else
+            elseif size(E, 2) == 2
                 KerrVector(out, E, ε_0*γ3)
+            else
+                KerrScalar(out, E, ε_0*γ3)
             end
         end
     end

@@ -96,6 +96,20 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     Eω, transform, FT
 end
 
+function setup(grid::Grid.RealGrid, q, energyfun, densityfun, normfun, responses, inputs)
+    xt = zeros(Float64, length(grid.t), length(q.r))
+    FT = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
+    Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
+    for input in inputs
+        Eω .+= scaled_input(grid, input, energyfun, FT)
+    end
+    Eωk = q * Eω
+    xo = Array{Float64}(undef, length(grid.to), length(q.r))
+    FTo = FFTW.plan_rfft(xo, 1, flags=FFTW.MEASURE)
+    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    Eωk, transform, FT
+end
+
 function make_init(grid, inputs, energyfun, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
     for input in inputs
@@ -118,7 +132,7 @@ function run(Eω, grid,
     Et = FT \ Eω
 
     z = 0
-    dz = 1e-3
+    dz = 1e-5
 
     window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
         function window!(Eω)
