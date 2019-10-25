@@ -215,7 +215,7 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
         end
         HDF5.set_dims!(parent[k], Tuple(s))
         for ii = 1:N
-            parent[k][curN+ii] = a[ii][k]
+            parent[k][fill(:, ndims(a[ii][k]))..., curN+ii] = a[ii][k]
         end
     end
 end

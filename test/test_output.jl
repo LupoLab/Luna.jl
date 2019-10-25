@@ -7,7 +7,7 @@ import Luna: Output
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
-    statsfun(y, t, dt) = Dict("stat" => stat)
+    statsfun(y, t, dt) = Dict("stat" => stat, "stat2d" => [stat, stat])
     t0 = 0
     t1 = 10
     t = collect(range(t0, stop=t1, length=n))
@@ -38,6 +38,7 @@ import Luna: Output
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
         @test all(read(file["stats"]["stat"]) .== stat)
+        @test all(read(file["stats"]["stat2d"]) .== stat)
         @test Utils.git_commit() == read(file["meta"]["git_commit"])
         # Need to strip out date from sourcecode to compare
         src = read(file["meta"]["sourcecode"])
@@ -53,7 +54,7 @@ end
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
-    statsfun(y, t, dt) = Dict("stat" => stat)
+    statsfun(y, t, dt) = Dict("stat" => stat, "stat2d" => [stat, stat])
     t0 = 0
     t1 = 10
     t = collect(range(t0, stop=t1, length=n))
@@ -81,6 +82,7 @@ end
     @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
     @test all(o.data["stats"]["stat"] .== stat)
+    @test all(o.data["stats"]["stat2d"] .== stat)
     @test Utils.git_commit() == o.data["meta"]["git_commit"]
     # Need to strip out date from sourcecode to compare
     src = o.data["meta"]["sourcecode"]
