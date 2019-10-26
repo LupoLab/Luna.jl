@@ -5,7 +5,7 @@ import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import FFTW
 
-"Recursively calculate the nth derivative of some function at some input"
+"Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
