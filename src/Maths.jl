@@ -1,16 +1,18 @@
 module Maths
-import ForwardDiff
+import FiniteDifferences
+import LinearAlgebra
 import SpecialFunctions: erf, erfc
+import StaticArrays: SVector
 import FFTW
 
-"Recursively calculate the nth derivative of some function at some input"
+"Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
-    elseif order == 1
-        return ForwardDiff.derivative(f, x)
     else
-        return derivative(x->ForwardDiff.derivative(f, x), x, order - 1)
+        # use 5th order central finite differences with 4 adaptive steps
+        scale = abs(x) > 0 ? x : 1.0
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(9, order), y->f(y*scale), x/scale, adapt=4)/scale^order
     end
 end
 
@@ -335,5 +337,47 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
+"
+Simple cubic spline
+http://mathworld.wolfram.com/CubicSpline.html
+Boundary conditions extrapolate with initially constant gradient
+"
+struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}}
+    x::Vx
+    y::Vy
+    D::Vy
+end
+
+# make  broadcast like a scalar
+Broadcast.broadcastable(c::CSpline) = Ref(c)
+
+function CSpline(x, y)
+    R = similar(y)
+    R[1] = y[2] - y[1]
+    for i in 2:(length(y)-1)
+        R[i] = y[i+1] - y[i-1]
+    end
+    R[end] = y[end] - y[end - 1]
+    @. R *= 3
+    d = fill(4.0, size(y))
+    d[1] = 2.0
+    d[end] = 2.0
+    dl = fill(1.0, length(y) - 1)
+    M = LinearAlgebra.Tridiagonal(dl, d, dl)
+    D = M \ R
+    CSpline(x, y, D)
+end
+
+function (c::CSpline)(x0)
+    if x0 <= c.x[1]
+        i = 2
+    elseif x0 >= c.x[end]
+        i = length(c.x)
+    else
+        i = findfirst(x0 .< c.x)
+    end
+    t = (x0 - c.x[i - 1])/(c.x[i] - c.x[i - 1])
+    c.y[i - 1] + c.D[i - 1]*t + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3
+end
 
 end

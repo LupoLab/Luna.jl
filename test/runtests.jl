@@ -15,6 +15,10 @@ end
     include(joinpath(testdir, "test_capillary.jl"))
 end
 
+@testset "Rectangular Modes" begin
+    include(joinpath(testdir, "test_rect_modes.jl"))
+end
+
 @testset "ODE Solver" begin
     include(joinpath(testdir, "test_rk45.jl"))
 end

@@ -4,19 +4,19 @@ import Luna: Maths
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
 
-    @test Maths.derivative(f, 1, 1) == 12+6+2
-    @test Maths.derivative(f, 1, 2) == 24+6
-    @test Maths.derivative(f, 1, 3) == 24
+    @test isapprox(Maths.derivative(f, 1, 1), 12+6+2)
+    @test isapprox(Maths.derivative(f, 1, 2), 24+6)
+    @test isapprox(Maths.derivative(f, 1, 3), 24)
 
     e(x) = @. exp(x)
 
     x = [1, 2, 3, 4, 5]
-    @test Maths.derivative(e, 1, 5) == exp(1)
-    @test Maths.derivative.(e, x, 5) == exp.(x)
+    @test isapprox(Maths.derivative(e, 1, 5), exp(1), rtol=1e-6)
+    @test isapprox(Maths.derivative.(e, x, 5), exp.(x), rtol=1e-6)
 
-    @test Maths.derivative(x -> exp.(2x), 1, 1) == 2*exp(2)
-    @test Maths.derivative(x -> exp.(2x), 1, 2) == 4*exp(2)
-    @test Maths.derivative(x -> exp.(-x.^2), 0, 1) == 0
+    @test isapprox(Maths.derivative(x -> exp.(2x), 1, 1), 2*exp(2))
+    @test isapprox(Maths.derivative(x -> exp.(2x), 1, 2), 4*exp(2))
+    @test isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
 end
 
 @testset "Moments" begin
@@ -102,4 +102,15 @@ end
     @test all(pl[x .< -5] .== 0)
     @test all(pl[-4 .< x .< 7] .== 1)
     @test all(pl[8 .< x] .== 0)
+end
+
+@testset "Spline" begin
+    x = range(0.0, 2π, length=100)
+    y = sin.(x)
+    spl = Maths.CSpline(x, y)
+    @test all(abs.(spl.(x) .- y) .< 5e-18)
+    x2 = range(0.0, 2π, length=300)
+    @test maximum(spl.(x2) - sin.(x2)) < 5e-8
+    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
 end

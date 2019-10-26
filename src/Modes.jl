@@ -5,17 +5,25 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
 
 abstract type AbstractMode end
+
+# make modes broadcast like a scalar
+Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
 function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")
 end
 
-function β(m::M, ω) where {M <: AbstractMode}
+"full complex refractive index of a mode"
+function neff(m::M, ω) where {M <: AbstractMode}
     error("abstract method called")
+end
+
+function β(m::M, ω) where {M <: AbstractMode}
+    return ω/c*real(neff(m, ω))
 end
 
 function β(m::M; λ) where {M <: AbstractMode}
@@ -23,7 +31,7 @@ function β(m::M; λ) where {M <: AbstractMode}
 end
 
 function α(m::M, ω) where {M <: AbstractMode}
-    error("abstract method called")
+    return 2*ω/c*imag(neff(m, ω))
 end
 
 function α(m::M; λ) where {M <: AbstractMode}
@@ -63,8 +71,10 @@ function dispersion(m::M, order; λ) where {M <: AbstractMode}
     return dispersion(m, order, 2π*c./λ)
 end
 
-function zdw(m::M) where {M <: AbstractMode}
-    ω0 = fzero(dispersion_func(m, 2), 1e14, 2e16) # TODO magic numbers
+function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
+    ubω = 2π*c/ub
+    lbω = 2π*c/lb
+    ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
     return 2π*c/ω0
 end
 
