@@ -26,7 +26,7 @@ m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0, model=:reduced)) ≈ 8.42157534886545e-09
 
-# tests based on symbolic results is symbolic_marcatilli.py
+# tests based on symbolic results in symbolic_marcatilli.py
 m = Capillary.MarcatilliMode(50e-6, :Ar, 2.0, model=:reduced)
 @test isapprox(Capillary.β(m, 2π*c/800e-9), 7857864.43728568, rtol=1e-15)
 @test isapprox(Capillary.dispersion(m, 1, 2π*c/800e-9), 3.33744310817186e-9, rtol=1e-13)
