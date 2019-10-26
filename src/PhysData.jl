@@ -240,7 +240,7 @@ end
 "Get a function which gives dispersion."
 function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
     n = ref_index_fun(material, P, T)
-    β(ω) = @. ω/c * n(2π*c/ω)
+    β(ω) = @. ω/c * real(n(2π*c/ω))
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
     return βn
 end
