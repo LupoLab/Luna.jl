@@ -46,10 +46,15 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
         if Dates.value(Dates.now()-tic) > 1000*status_period
             speed = s.tn/(Dates.value(Dates.now()-start)/1000)
             eta_in_s = (tmax-s.tn)/(speed)
-            eta_in_ms = Dates.Millisecond(ceil(eta_in_s*1000))
-            etad = Dates.DateTime(Dates.UTInstant(eta_in_ms))
-            Logging.@info @sprintf("Progress: %.2f %%, ETA: %s, stepsize %.2e, err %.2f, repeated %d",
-                s.tn/tmax*100, Dates.format(etad, "HH:MM:SS"), s.dt, s.err, repeated_tot)
+            if eta_in_s > 356400
+                Logging.@info @sprintf("Progress: %.2f %%, ETA: XX:XX:XX, stepsize %.2e, err %.2f, repeated %d",
+                s.tn/tmax*100, s.dt, s.err, repeated_tot)
+            else
+                eta_in_ms = Dates.Millisecond(ceil(eta_in_s*1000))
+                etad = Dates.DateTime(Dates.UTInstant(eta_in_ms))
+                Logging.@info @sprintf("Progress: %.2f %%, ETA: %s, stepsize %.2e, err %.2f, repeated %d",
+                    s.tn/tmax*100, Dates.format(etad, "HH:MM:SS"), s.dt, s.err, repeated_tot)
+            end
             tic = Dates.now()
         end
         if ok
