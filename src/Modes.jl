@@ -9,6 +9,9 @@ export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, 
 
 abstract type AbstractMode end
 
+# make modes broadcast like a scalar
+Broadcast.broadcastable(m::AbstractMode) = Ref(m)
+
 "Maximum dimensional limits of validity for this mode"
 function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")

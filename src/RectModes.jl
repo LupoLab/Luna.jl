@@ -22,9 +22,6 @@ struct RectMode{Tcore, Tclad} <: AbstractMode
     cladn::Tclad
 end
 
-# make the mode broadcast like a scalar
-Broadcast.broadcastable(m::RectMode) = Ref(m)
-
 "convenience constructor assunming single gas filling and specified cladding"
 function RectMode(a, b, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
     rfg = ref_index_fun(gas, P, T)

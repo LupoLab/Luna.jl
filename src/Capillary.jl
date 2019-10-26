@@ -24,9 +24,6 @@ struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
     model::Symbol
 end
 
-# make the mode broadcast like a scalar
-Broadcast.broadcastable(m::MarcatilliMode) = Ref(m)
-
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full)
     if (kind == :TE) || (kind == :TM)
         if (n != 0) || (m != 1)
