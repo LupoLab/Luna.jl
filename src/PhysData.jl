@@ -250,6 +250,15 @@ function dispersion(order, material::Symbol, λ, P=1, T=roomtemp)
     return dispersion_func(order, material, P, T).(λ)
 end
 
+"Get reflection coefficients"
+function fresnel(n2, θi; n1=1.0)
+    θt = asin(n1*sin(θi)/n2)
+    rs = (n1*cos(θi) - n2*cos(θt))/(n1*cos(θi) + n2*cos(θt))
+    rp = (n2*cos(θi) - n1*cos(θt))/(n2*cos(θi) + n1*cos(θt))
+    abs2(rs), angle(rs), abs2(rp), angle(rp)
+end
+
+
 "Nonlinear coefficients"
 
 "Calculate single-molecule third-order hyperpolarisability of a gas
@@ -341,6 +350,8 @@ end
  returns the refractive index directly"
 function lookup_metal(material::Symbol)
     if material == :Ag
+        # S. Babar and J. H. Weaver.
+        # Optical constants of Cu, Ag, and Au revisited, Appl. Opt. 54, 477-481 (2015)
         data = [
         0.2066 1.079 1.247;
         0.2101 1.101 1.258;
