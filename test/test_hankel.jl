@@ -4,6 +4,7 @@ import LinearAlgebra: diagm, mul!
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import NumericalIntegration: integrate, Trapezoidal
+import HCubature: hquadrature
 
 @testset "multiplication" begin
     M = diagm(0 => [1, 2, 3])
@@ -38,6 +39,8 @@ end
     Er = Hankel.integrateR(v.^2, q)
     Ek = Hankel.integrateK(vk.^2, q)
     @test Er ≈ Ek
+    Er_c = hquadrature(r -> r.*f(r).^2, 0, 1)
+    @test Er_c[1] ≈ Er
     # Test that in-place transform works
     vk2 = similar(vk)
     vk3 = copy(v)

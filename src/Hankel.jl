@@ -103,7 +103,7 @@ function dimdot(v, A; dim=1)
     dims = collect(size(A))
     dims[dim] = 1
     out = Array{eltype(A)}(undef, Tuple(dims))
-    dimdot!(out, v, A; dim=1)
+    dimdot!(out, v, A; dim=dim)
     return out
 end
 
