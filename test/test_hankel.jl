@@ -22,9 +22,12 @@ import HCubature: hquadrature
 end
 
 @testset "transform" begin
-    q = Hankel.QDHT(1, 128)
+    R = 4e-2
+    N = 256
+    w0 = 1e-3
+    a = 2/w0
+    q = Hankel.QDHT(R, N)
     @test all(isreal.(q.T))
-    a = 50
     f(r) = exp(-1//2 * a^2 * r^2)
     fk(k) = 1/a^2 * exp(-k^2/(2*a^2))
     v = f.(q.r)
@@ -35,7 +38,10 @@ end
     @test all(v ≈ vv)
     vk = q * v
     vka = fk.(q.k)
+    fki(k) = hquadrature(r -> r.*f(r).*besselj(0, k.*r), 0, R)[1]
     @test all(vka ≈ vk)
+    @test fki(q.k[1]) ≈ vk[1] # doing all of them takes too long
+    @test fki(q.k[128]) ≈ vk[128]
     Er = Hankel.integrateR(v.^2, q)
     Ek = Hankel.integrateK(vk.^2, q)
     @test Er ≈ Ek
@@ -50,7 +56,7 @@ end
     @test all(vk3 ≈ vk)
 
     v2d = repeat(v, outer=(1, 16))'
-    q2d = Hankel.QDHT(1, 128, dim=2)
+    q2d = Hankel.QDHT(R, N, dim=2)
     v2dk = q2d * v2d
     @test all([all(v2dk[ii, :] ≈ vk) for ii = 1:size(v2dk, 1)])
 end
