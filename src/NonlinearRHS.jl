@@ -460,6 +460,7 @@ end
 
 function (t::TransFree)(nl, Eωk, z)
     fill!(t.Pto, 0)
+    fill!(t.Eωo, 0)
     Eωk = FFTW.ifftshift(Eωk, (2, 3))
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)

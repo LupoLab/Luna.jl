@@ -15,7 +15,7 @@ pres = 0
 
 w0 = 2e-3
 energy = 1e-3
-L = 10
+L = 2
 
 R = 10e-3
 N = 64
@@ -89,6 +89,8 @@ end
 
 E0ωyx = FFTW.ifft(Eω[ω0idx, :, :], (1, 2));
 
+Iωlog = log10.(Maths.normbymax(abs2.(Eωyx)));
+
 pygui(true)
 plt.figure()
 plt.pcolormesh(x, y, (abs2.(E0ωyx)))
@@ -101,6 +103,13 @@ plt.pcolormesh(x, y, (abs2.(Eωyx[ω0idx, :, :, end])))
 plt.colorbar()
 plt.xlabel("X")
 plt.ylabel("Y")
+
+plt.figure()
+plt.pcolormesh(zout, ω.*1e-15, Iωlog[:, 32, 32, :])
+plt.xlabel("Z (m)")
+plt.ylabel("ω (rad/fs)")
+plt.clim(-6, 0)
+plt.colorbar()
 
 plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)
