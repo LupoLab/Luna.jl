@@ -14,7 +14,7 @@ pres = 0.4
 
 τ = 30e-15
 λ0 = 1800e-9
-energy = 400e-6
+energy = 500e-6
 
 modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2))
@@ -36,13 +36,17 @@ cenergy = energyfun(grid.t, Etlin)
 Etlin = sqrt(energy)/sqrt(cenergy) .* Etlin
 
 Et = [Etlin zero(grid.t)]
+#Etd = size(Et)
+#Etp = Array{ComplexF64,2}(undef, Etd[2], Etd[1])
+#permutedims!(Etp, Et, [2, 1])
+
 Ew = FFTW.rfft(Et, 1);
 Ewd = size(Ew)
 Ewp = Array{ComplexF64,2}(undef, Ewd[2], Ewd[1])
 permutedims!(Ewp, Ew, [2, 1])
 
-γ = deg2rad(2.8)
-CP = Polarisation.rotate(Polarisation.WP(π/2), γ + π/4)
+γ = deg2rad(10.0)
+CP = Polarisation.rotate(Polarisation.WP(π/2), π/4 - γ)
 Ewp .= CP * Ewp
 permutedims!(Ew, Ewp, [2, 1])
 #Et = FFTW.irfft(Ew, length(grid.t), 1);
@@ -79,7 +83,7 @@ Eoutd = size(Eout)
 Ewp = Array{ComplexF64,2}(undef, Eoutd[2], Eoutd[1])
 permutedims!(Ewp, Eout[:,:,end], [2, 1])
 
-CP = Polarisation.rotate(Polarisation.WP(π/2), π/4 + π/2 + γ)
+CP = Polarisation.rotate(Polarisation.WP(π/2), γ)
 LP = Polarisation.rotate(Polarisation.LP(), π/2)
 Ewp .= LP * CP * Ewp
 
@@ -141,3 +145,33 @@ plt.colorbar()
 plt.figure()
 plt.pcolormesh(zout, ω./2π.*1e-15, elip)
 plt.colorbar()
+
+Eenvo = Maths.hilbert(Etout)
+Etoutd = size(Eenvo)
+Etp = Array{ComplexF64,2}(undef, Etoutd[2], Etoutd[1])
+
+St = Array{Float64,3}(undef, 4, Etoutd[1], Etoutd[3])
+elipt = Array{Float64,2}(undef, Etoutd[1], Etoutd[3])
+Ss = Array{Float64,2}(undef, 4, Etoutd[3])
+Elipt = Array{Float64,1}(undef, Etoutd[3])
+CP = Polarisation.rotate(Polarisation.WP(π/2), γ)
+for i = 1:Etoutd[3]
+    permutedims!(Etp, Eenvo[:,:,i], [2, 1])
+    for j = 1:Etoutd[1]
+        St[:,j,i] .= Polarisation.Stokes(CP * Etp[:,j])
+        elipt[j,i] = Polarisation.ellipticity(St[:,j,i])
+    end
+    k = argmax(St[1,:,i])
+    Ss[:,i] .= St[:,k,i] ./ St[1,k,i]
+    Elipt[i] = elipt[k,i]
+end
+
+plt.figure()
+plt.plot(zout, Ss[1,:], label="S1")
+plt.plot(zout, Ss[2,:], label="S2")
+plt.plot(zout, Ss[3,:], label="S3")
+plt.plot(zout, Ss[4,:], label="S4")
+plt.plot(zout, Elipt, label="ε")
+plt.legend()
+
+
