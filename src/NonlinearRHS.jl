@@ -425,4 +425,92 @@ function energy_radial(q)
     end
 end
 
+"Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation"
+mutable struct TransFree{TT, FTT, nT, rT, gT, dT}
+    FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    densityfun::dT # callable which returns density
+    Pto::Array{TT, 3}
+    Eto::Array{TT, 3}
+    Eωo::Array{ComplexF64, 3}
+    Pωo::Array{ComplexF64, 3}
+    scale::Float64
+end
+
+function TransFree(TT, grid, FT, Ny, Nx, responses, densityfun, normfun)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
+    Eto = zeros(TT, (length(grid.to), Ny, Nx))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = (No-1)/(N-1)
+    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale)
+end
+
+function TransFree(grid::Grid.RealGrid, args...)
+    TransFree(Float64, grid, args...)
+end
+
+function TransFree(grid::Grid.EnvGrid, args...)
+    TransFree(ComplexF64, grid, args...)
+end
+
+function (t::TransFree)(nl, Eωk, z)
+    fill!(t.Pto, 0)
+    Eωk = FFTW.ifftshift(Eωk, (2, 3))
+    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    t.Pωo = FFTW.fftshift(t.Pωo, (2, 3))
+    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+# "Normalisation factor for 3D propagation."
+# function norm_free(ω, q, nfun)
+#     # TODO fix div by 0 and sqrt(βsq<0) (see const n version)
+#     out = zero(ω)
+#     function norm(z)
+#         @. out = π*q.R^2/(PhysData.μ_0*ω) * q.J1sq * sqrt((nfun(z)*ω/PhysData.c)^2 - q.k^2)
+#         return out
+#     end
+#     return norm
+# end
+
+"Normalisation factor for 3D propagation and constant ref index"
+function norm_free(ω, x, y, n::Union{Number, AbstractArray}=1)
+    Lx = abs(maximum(x) - minimum(x))
+    Ly = abs(maximum(y) - minimum(y))
+    Nx = collect(range(0, length=length(x)))
+    Ny = collect(range(0, length=length(y)))
+    kx = @. (Nx - length(x)/2) * 2π/Lx
+    kx = reshape(kx, (1, 1, length(kx)))
+    ky = @. (Ny - length(y)/2) * 2π/Ly
+    ky = reshape(ky, (1, length(ky)))
+    βsq = @. (n*ω/PhysData.c)^2 - kx^2 - ky^2
+    βsq[βsq .< 0] .= 0
+    out = @. sqrt.(βsq)/(PhysData.μ_0*ω) * Lx*Ly
+    out[ω .== 0, :, :] .= 1
+    out[out .== 0] .= 1
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+function energy_free(x, y)
+    Dx = abs(x[2] - x[1])
+    Dy = abs(y[2] - y[1])
+    function energyfun(t, Et)
+        Eta = Maths.hilbert(Et)
+        intg = sum(abs2.(Eta)) * Dx * Dy * abs(t[2] - t[1])
+        return PhysData.c*PhysData.ε_0/2 *intg
+    end
+end
+
 end

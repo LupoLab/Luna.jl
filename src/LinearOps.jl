@@ -2,6 +2,22 @@ module LinearOps
 import FFTW
 import Luna: Modes, Grid, PhysData, Hankel
 
+function make_const_linop(grid::Grid.RealGrid, x, y, n::Union{Number, AbstractArray}=1)
+    Lx = abs(maximum(x) - minimum(x));
+    Ly = abs(maximum(y) - minimum(y));
+    Nx = collect(range(0, length=length(x)));
+    Ny = collect(range(0, length=length(y)));
+    kx = (Nx .- length(x)/2) .* 2π/Lx;
+    kx = reshape(kx, (1, 1, length(kx)));
+    ky = (Ny .- length(y)/2) .* 2π/Ly;
+    ky = reshape(ky, (1, length(ky)));
+    βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
+    βsq[βsq .< 0] .= 0
+    β = .-sqrt.(βsq)
+    β1 = -n/PhysData.c
+    return @. im*(β-β1*grid.ω) 
+end
+
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, n=1)
     βsq = (n*grid.ω/PhysData.c).^2 .- (q.k.^2)'
     βsq[βsq .< 0] .= 0
@@ -52,7 +68,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.Ab
     make_const_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
 end
 
-function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
+function make_const_linop(grid::Grid.RealGrid, modes, λ0::Number; ref_mode=1)
     vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
