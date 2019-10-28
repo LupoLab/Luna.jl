@@ -385,11 +385,8 @@ end
 function (t::TransRadial)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
-    any(isinf.(t.Eto)) && error("inf after to_time!")
     ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    any(isinf.(t.Eto)) && error("inf after k->r")
     Et_to_Pt!(t.Pto, t.Eto, t.resp) # add up responses
-    any(isinf.(t.Pto)) && error("inf after responses")
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
@@ -410,7 +407,7 @@ end
 function norm_radial(ω, q, n::Union{Number, AbstractArray}=1)
     βsq = @. (n*ω/PhysData.c)^2 - (q.k^2)'
     βsq[βsq .< 0] .= 0
-    out = @. π*(q.R^2)'/(PhysData.μ_0*ω) * q.J1sq' * sqrt(βsq)
+    out = @. π*q.R^2/(PhysData.μ_0*ω) * q.J1sq' * sqrt(βsq)
     out[ω .== 0, :] .= 1
     out[out .== 0] .= 1
     function norm(z)
@@ -423,7 +420,7 @@ function energy_radial(q)
     function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = abs.(integrate(t, abs2.(Eta), SimpsonEven()))
-        return PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(intg, q)
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(intg, q)
     end
 end
 

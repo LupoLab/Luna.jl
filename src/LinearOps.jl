@@ -1,8 +1,8 @@
 module LinearOps
 import FFTW
-import Luna: Modes, Grid, PhysData
+import Luna: Modes, Grid, PhysData, Hankel
 
-function make_const_linop(grid::Grid.RealGrid, q, n=1)
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, n=1)
     βsq = (n*grid.ω/PhysData.c).^2 .- (q.k.^2)'
     βsq[βsq .< 0] .= 0
     β = .-sqrt.(βsq)
