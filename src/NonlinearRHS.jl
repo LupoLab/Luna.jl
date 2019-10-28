@@ -395,6 +395,7 @@ end
 
 "Normalisation factor for radial symmetry."
 function norm_radial(ω, q, nfun)
+    # TODO fix div by 0 and sqrt(βsq<0) (see const n version)
     out = zero(ω)
     function norm(z)
         @. out = π*q.R^2/(PhysData.μ_0*ω) * q.J1sq * sqrt((nfun(z)*ω/PhysData.c)^2 - q.k^2)
