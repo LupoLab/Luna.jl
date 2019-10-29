@@ -8,7 +8,7 @@ Logging.disable_logging(Logging.BelowMinLevel)
 import PyPlot:pygui, plt
 
 gas = :Ar
-pres = 0
+pres = 4
 
 τ = 30e-15
 λ0 = 800e-9
@@ -64,7 +64,7 @@ output = Output.MemoryOutput(0, grid.zmax, 21, (length(grid.ω), N, N))
 xwin = Maths.planck_taper(x, -R, -0.8R, 0.8R, R)
 xywin = reshape(xwin, (1, length(xwin))) .* reshape(xwin, (1, 1, length(xwin)))
 
-Luna.run(Eω, grid, linop, transform, FT, output, xywin, max_dz=Inf)
+Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf)
 
 ω = grid.ω
 t = grid.t
@@ -79,17 +79,21 @@ println("...done")
 
 Ilog = log10.(Maths.normbymax(abs2.(Eωyx)))
 
+Iωyx = abs2.(Eωyx);
 
-energy = zeros(length(zout))
+Iyx = zeros(Float64, (length(y), length(x), length(zout)));
+energy = zeros(length(zout));
 for ii = 1:size(Etyx, 4)
-    energy[ii] = energyfun(t, Etyx[:, :, :, ii])
+    energy[ii] = energyfun(t, Etyx[:, :, :, ii]);
+    Iyx[:, :, ii] = (grid.ω[2]-grid.ω[1]) .* sum(Iωyx[:, :, :, ii], dims=1);
 end
 
 ω0idx = argmin(abs.(grid.ω .- 2π*PhysData.c/λ0))
 
 E0ωyx = FFTW.ifft(Eω[ω0idx, :, :], (1, 2));
 
-Iωlog = log10.(Maths.normbymax(abs2.(Eωyx)));
+Iωyx = abs2.(Eωyx)
+Iωyxlog = log10.(Maths.normbymax(Iωyx));
 
 pygui(true)
 plt.figure()
@@ -97,18 +101,35 @@ plt.pcolormesh(x, y, (abs2.(E0ωyx)))
 plt.colorbar()
 plt.xlabel("X")
 plt.ylabel("Y")
+plt.title("I(ω=ω0, x, y, z=0)")
 
 plt.figure()
 plt.pcolormesh(x, y, (abs2.(Eωyx[ω0idx, :, :, end])))
 plt.colorbar()
 plt.xlabel("X")
 plt.ylabel("Y")
+plt.title("I(ω=ω0, x, y, z=L)")
 
 plt.figure()
-plt.pcolormesh(zout, ω.*1e-15, Iωlog[:, 32, 32, :])
+plt.pcolormesh(zout, ω.*1e-15/2π, Iωyxlog[:, 33, 33, :])
 plt.xlabel("Z (m)")
-plt.ylabel("ω (rad/fs)")
+plt.ylabel("f (PHz)")
+plt.title("I(ω, x=0, y=0, z)")
 plt.clim(-6, 0)
+plt.colorbar()
+
+plt.figure()
+plt.pcolormesh(x.*1e3, y.*1e3, Iyx[:, :, 1])
+plt.xlabel("X (mm)")
+plt.ylabel("Y (mm)")
+plt.title("\$\\int I(\\omega, x, y, z=0) d\\omega\$")
+plt.colorbar()
+
+plt.figure()
+plt.pcolormesh(x.*1e3, y.*1e3, Iyx[:, :, end])
+plt.xlabel("X (mm)")
+plt.ylabel("Y (mm)")
+plt.title("\$\\int I(\\omega, x, y, z=L) d\\omega\$")
 plt.colorbar()
 
 plt.figure()

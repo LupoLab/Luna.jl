@@ -8,7 +8,7 @@ Logging.disable_logging(Logging.BelowMinLevel)
 import PyPlot:pygui, plt
 
 gas = :Ar
-pres = 1e-5 # increasing this to more than 5e-5 makes everything blow up
+pres = 4
 
 τ = 30e-15
 λ0 = 800e-9
@@ -71,10 +71,13 @@ Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 It = PhysData.c * PhysData.ε_0/2 * abs2.(Maths.hilbert(Etout));
 Itlog = log10.(Maths.normbymax(It))
 
+Ir = zeros(Float64, (length(q.r), length(zout)))
+
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 3)
-    energy[ii] = energyfun(t, Etout[:, :, ii])
+    energy[ii] = energyfun(t, Etout[:, :, ii]);
+    Ir[:, ii] = integrate(grid.ω, Iωr[:, :, ii], SimpsonEven());
 end
 
 ω0idx = argmin(abs.(grid.ω .- 2π*PhysData.c/λ0))
@@ -92,16 +95,33 @@ plt.figure()
 plt.pcolormesh(zout*1e2, q.r*1e3, Iωr[ω0idx, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
+plt.xlabel("z (m)")
+plt.ylabel("r (m)")
+plt.title("I(r, ω=ω0)")
 
 plt.figure()
 plt.pcolormesh(zout*1e2, q.r*1e3, It[length(grid.t)÷2, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
+plt.xlabel("z (m)")
+plt.ylabel("r (m)")
+plt.title("I(r, t=0)")
+
+plt.figure()
+plt.pcolormesh(zout*1e2, q.r*1e3, Ir)
+plt.colorbar()
+plt.ylim(0, 4)
+plt.xlabel("z (m)")
+plt.ylabel("r (m)")
+plt.title("\$\\int I(r, \\omega) d\\omega\$")
 
 plt.figure()
 plt.pcolormesh(zout*1e2, grid.ω*1e-15/2π, Iω0log)
 plt.colorbar()
 plt.clim(0, -6)
+plt.xlabel("z (m)")
+plt.ylabel("f (PHz)")
+plt.title("I(r=0, ω)")
 
 
 plt.figure()

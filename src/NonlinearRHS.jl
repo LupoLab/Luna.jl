@@ -408,7 +408,7 @@ end
 function norm_radial(ω, q, n::Union{Number, AbstractArray}=1)
     βsq = @. (n*ω/PhysData.c)^2 - (q.k^2)'
     βsq[βsq .< 0] .= 0
-    out = @. π*q.R^2/(PhysData.μ_0*ω) * q.J1sq' * sqrt(βsq)
+    out = @. sqrt(βsq)/(PhysData.μ_0*ω)
     out[ω .== 0, :] .= 1
     out[out .== 0] .= 1
     function norm(z)
@@ -495,7 +495,7 @@ function norm_free(ω, x, y, n::Union{Number, AbstractArray}=1)
     ky = reshape(ky, (1, length(ky)))
     βsq = @. (n*ω/PhysData.c)^2 - kx^2 - ky^2
     βsq[βsq .< 0] .= 0
-    out = @. sqrt.(βsq)/(PhysData.μ_0*ω) * Lx*Ly
+    out = @. sqrt.(βsq)/(PhysData.μ_0*ω)
     out[ω .== 0, :, :] .= 1
     out[out .== 0] .= 1
     function norm(z)

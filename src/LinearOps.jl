@@ -18,7 +18,7 @@ function make_const_linop(grid::Grid.RealGrid, x, y, n::Union{Number, AbstractAr
     return @. im*(β-β1*grid.ω) 
 end
 
-function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, n=1)
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, n::Number=1)
     βsq = (n*grid.ω/PhysData.c).^2 .- (q.k.^2)'
     βsq[βsq .< 0] .= 0
     β = .-sqrt.(βsq)

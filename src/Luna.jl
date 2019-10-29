@@ -141,7 +141,7 @@ function scaled_input(grid, input, energyfun, FT)
 end
 
 function run(Eω, grid,
-             linop, transform, FT, output, xywin; max_dz=Inf, init_dz=1e-4)
+             linop, transform, FT, output; max_dz=Inf, init_dz=1e-4)
 
 
     Et = FT \ Eω
@@ -153,7 +153,6 @@ function run(Eω, grid,
             Eω .*= window
             ldiv!(Et, FT, Eω)
             Et .*= twindow
-            Et .*= xywin
             mul!(Eω, FT, Et)
         end
     end
