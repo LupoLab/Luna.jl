@@ -74,7 +74,11 @@ end
 function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
     ubω = 2π*c/ub
     lbω = 2π*c/lb
-    ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    ω0 = missing
+    try
+        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    catch
+    end
     return 2π*c/ω0
 end
 

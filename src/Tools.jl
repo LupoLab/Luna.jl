@@ -1,5 +1,5 @@
 module Tools
-import Luna: Modes, PhysData
+import Luna: Modes, PhysData, Capillary, RectModes
 
 "Calculate 'natural' pulse width from FWHM" 
 function τfw_to_τ0(τfw, shape)
@@ -18,7 +18,7 @@ function Ld(τfw, β2; shape=:sech)
 end
 
 "Get GVD coefficient"
-function getβ2(ω, m::M) where M <: Modes.AbstractMode
+function getβ2(ω, m::Modes.AbstractMode)
     Modes.dispersion(m, 2, ω)
 end
 
@@ -33,15 +33,16 @@ function Lfiss(P0, τfw, γ, β2; shape=:sech)
 end
 
 "Get nonlinear coefficient"
-function getγ(ω, m::M, n2) where M <: Modes.AbstractMode
+function getγ(ω, m::Modes.AbstractMode, n2)
     n2*ω/(PhysData.c*Modes.Aeff(m))
 end
 
-"Get linear and nonlinear refractive index"
-function getn0n2(ω, material; P=1.0, T=PhysData.roomtemp)
-    χ3 = PhysData.γ3_gas(material)*PhysData.density(material, P, T)
+"Get linear and nonlinear refractive index and gas number density"
+function getN0n0n2(ω, material; P=1.0, T=PhysData.roomtemp)
+    N0 = PhysData.density(material, P, T)
+    χ3 = PhysData.γ3_gas(material)*N0
     n0 = PhysData.ref_index(material, 2π*PhysData.c/ω, P, T)
-    n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
+    N0, n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
 end
 
 "Get soliotn order"
@@ -68,22 +69,33 @@ function Pcr(ω, n0, n2)
 end
 
 "Soliton parameter collection"
-function params(E, τfw, ω, m::M, material; shape=:sech, P=1.0, T=PhysData.roomtemp) where M <: Modes.AbstractMode
+function params(E, τfw, λ, mode, material; shape=:sech, P=1.0, T=PhysData.roomtemp)
+    ω = 2π*PhysData.c/λ
     P0 = E_to_P0(E, τfw, shape=shape)
     τ0 = τfw_to_τ0(τfw, shape)
-    β2 = getβ2(ω, m)
-    n0, n2 = getn0n2(ω, material, P=P, T=T)
-    γ = getγ(ω, m, n2)
+    β2 = getβ2(ω, mode)
+    N0, n0, n2 = getN0n0n2(ω, material, P=P, T=T)
+    γ = getγ(ω, mode, n2)
     N = getN(P0, τfw, γ, β2, shape=shape)
-    p = (E=E, τfw=τfw, τ0=τ0, ω=ω, material=material, P=P, T=T, shape=shape,
-         P0=P0, β2=β2, n0=n0, n2=n2, γ=γ, N=N,
-         I0=P0_to_I(P0, m), Pcr=Pcr(ω, n0, n2),
+    p = (E=E, τfw=τfw, τ0=τ0, ω=ω, λ=λ, material=material, P=P, T=T, shape=shape,
+         P0=P0, β2=β2, N0=N0, n0=n0, n2=n2, γ=γ, N=N,
+         I0=P0_to_I(P0, mode), Pcr=Pcr(ω, n0, n2),
          Ld=Ld(τfw, β2, shape=shape),
          Lnl=Lnl(P0, γ),
          Lfiss=Lfiss(P0, τfw, γ, β2, shape=shape),
-         λz=Modes.zdw(m),
-         Lloss=Modes.losslength(m,ω),
-         Aeff=Modes.Aeff(m))
+         zdw=Modes.zdw(mode),
+         Lloss=Modes.losslength(mode, ω),
+         Aeff=Modes.Aeff(mode))
+end
+
+function capillary_params(E, τfw, λ, a, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, kind=:HE, ϕ=0.0)
+    mode = Capillary.MarcatilliMode(a, material, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, clad=clad)
+    params(E, τfw, λ, m, material, shape=shape, P=P, T=T)
+end
+
+function rectangular_params(E, τfw, λ, a, b, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, pol=:x)
+    mode = RectModes.RectMode(a, b, material, P, clad, T=T, n=n, m=m, pol=pol)
+    params(E, τfw, λ, m, material, shape=shape, P=P, T=T)
 end
 
 end
