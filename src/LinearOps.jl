@@ -1,30 +1,40 @@
 module LinearOps
 import FFTW
-import Luna: Modes, Grid, PhysData, Hankel
+import Luna: Modes, Grid, PhysData, Hankel, Maths
 
-function make_const_linop(grid::Grid.RealGrid, x, y, n::Union{Number, AbstractArray}=1)
-    Lx = abs(maximum(x) - minimum(x));
-    Ly = abs(maximum(y) - minimum(y));
-    Nx = collect(range(0, length=length(x)));
-    Ny = collect(range(0, length=length(y)));
-    kx = (Nx .- length(x)/2) .* 2π/Lx;
-    kx = reshape(kx, (1, 1, length(kx)));
-    ky = (Ny .- length(y)/2) .* 2π/Ly;
-    ky = reshape(ky, (1, length(ky)));
+function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray,
+                          n::AbstractArray, frame_vel::Number)
+    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)));
+    ky = reshape(Maths.fftfreq(x), (1, length(y)));
     βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
     βsq[βsq .< 0] .= 0
     β = .-sqrt.(βsq)
-    β1 = -n/PhysData.c
+    β1 = -1/frame_vel
     return @. im*(β-β1*grid.ω) 
 end
 
-function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, n::Number=1)
-    βsq = (n*grid.ω/PhysData.c).^2 .- (q.k.^2)'
+function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray, nfun)
+    n = zero(grid.ω)
+    n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    make_const_linop(grid, x, y, n, 1/β1)
+end
+
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
+                          n::AbstractArray, frame_vel::Number)
+    βsq = (n.*grid.ω./PhysData.c).^2 .- (q.k.^2)'
     βsq[βsq .< 0] .= 0
     β = .-sqrt.(βsq)
-    β1 = -n/PhysData.c # TODO deal with frequency dependent n
+    β1 = -1/frame_vel
     # TODO loss
-    return @. im*(β-β1*grid.ω) 
+    return @. im*(β-β1*grid.ω)
+end
+
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
+    n = zero(grid.ω)
+    n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    make_const_linop(grid, q, n, 1/β1)
 end
 
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)

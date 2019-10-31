@@ -131,12 +131,19 @@ function norm_mode_average(ω, βfun)
     return norm
 end
 
+"Accumulate responses induced by Et in Pt"
 function Et_to_Pt!(Pt, Et, responses)
     for resp in responses
         resp(Pt, Et)
     end
 end
 
+function Et_to_Pt!(Pt, Et, responses, idcs)
+    for i in idcs
+        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses)
+    end
+end
+        
 mutable struct TransModal{IT, ET, TT, FTT, rT, gT, dT, nT, lT}
     nmodes::Int
     indices::IT
@@ -353,17 +360,18 @@ function energy_env_mode_avg(m)
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation"
-struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT}
+struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     QDHT::HTT # Hankel transform (space to k-space)
     FT::FTT # Fourier transform (time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
     densityfun::dT # callable which returns density
-    Pto::Array{TT,2}
-    Eto::Array{TT,2}
-    Eωo::Array{ComplexF64,2}
-    Pωo::Array{ComplexF64,2}
+    Pto::Array{TT,2} # Buffer array for NL polarisation on oversampled time grid
+    Eto::Array{TT,2} # Buffer array for field on oversampled time grid
+    Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
+    Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
+    idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
 end
 
 function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
@@ -371,7 +379,8 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
     Eto = zeros(TT, (length(grid.to), HT.N))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo)
+    idcs = CartesianIndices(size(Pto)[2:end])
+    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
 end
 
 function TransRadial(grid::Grid.RealGrid, args...)
@@ -386,27 +395,16 @@ function (t::TransRadial)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
     ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    Et_to_Pt!(t.Pto, t.Eto, t.resp) # add up responses
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
-"Normalisation factor for radial symmetry."
+"Normalisation factor for radial symmetry"
 function norm_radial(ω, q, nfun)
-    # TODO fix div by 0 and sqrt(βsq<0) (see const n version)
-    out = zero(ω)
-    function norm(z)
-        @. out = π*q.R^2/(PhysData.μ_0*ω) * q.J1sq * sqrt((nfun(z)*ω/PhysData.c)^2 - q.k^2)
-        return out
-    end
-    return norm
-end
-
-"Normalisation factor for radial symmetry and constant ref index"
-function norm_radial(ω, q, n::Union{Number, AbstractArray}=1)
-    βsq = @. (n*ω/PhysData.c)^2 - (q.k^2)'
+    βsq = @. (nfun(2π*PhysData.c/ω)*ω/PhysData.c)^2 - (q.k^2)'
     βsq[βsq .< 0] .= 0
     out = @. sqrt(βsq)/(PhysData.μ_0*ω)
     out[ω .== 0, :] .= 1
@@ -426,7 +424,7 @@ function energy_radial(q)
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation"
-mutable struct TransFree{TT, FTT, nT, rT, gT, dT}
+mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
@@ -437,6 +435,7 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, dT}
     Eωo::Array{ComplexF64, 3}
     Pωo::Array{ComplexF64, 3}
     scale::Float64
+    idcs::iT
 end
 
 function TransFree(TT, grid, FT, Ny, Nx, responses, densityfun, normfun)
@@ -447,7 +446,8 @@ function TransFree(TT, grid, FT, Ny, Nx, responses, densityfun, normfun)
     N = length(grid.ω)
     No = length(grid.ωo)
     scale = (No-1)/(N-1)
-    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale)
+    idcs = CartesianIndices((Ny, Nx))
+    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale, idcs)
 end
 
 function TransFree(grid::Grid.RealGrid, args...)
@@ -464,7 +464,7 @@ function (t::TransFree)(nl, Eωk, z)
     Eωk = FFTW.ifftshift(Eωk, (2, 3))
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
-    Et_to_Pt!(t.Pto, t.Eto, t.resp) # add up responses
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
     t.Pωo = FFTW.fftshift(t.Pωo, (2, 3))
@@ -472,27 +472,11 @@ function (t::TransFree)(nl, Eωk, z)
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
-# "Normalisation factor for 3D propagation."
-# function norm_free(ω, q, nfun)
-#     # TODO fix div by 0 and sqrt(βsq<0) (see const n version)
-#     out = zero(ω)
-#     function norm(z)
-#         @. out = π*q.R^2/(PhysData.μ_0*ω) * q.J1sq * sqrt((nfun(z)*ω/PhysData.c)^2 - q.k^2)
-#         return out
-#     end
-#     return norm
-# end
-
-"Normalisation factor for 3D propagation and constant ref index"
-function norm_free(ω, x, y, n::Union{Number, AbstractArray}=1)
-    Lx = abs(maximum(x) - minimum(x))
-    Ly = abs(maximum(y) - minimum(y))
-    Nx = collect(range(0, length=length(x)))
-    Ny = collect(range(0, length=length(y)))
-    kx = @. (Nx - length(x)/2) * 2π/Lx
-    kx = reshape(kx, (1, 1, length(kx)))
-    ky = @. (Ny - length(y)/2) * 2π/Ly
-    ky = reshape(ky, (1, length(ky)))
+"Normalisation factor for 3D propagation"
+function norm_free(ω, x, y, nfun)
+    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)))
+    ky = reshape(Maths.fftfreq(x), (1, length(y)))
+    n = nfun.(2π*PhysData.c./ω)
     βsq = @. (n*ω/PhysData.c)^2 - kx^2 - ky^2
     βsq[βsq .< 0] .= 0
     out = @. sqrt.(βsq)/(PhysData.μ_0*ω)

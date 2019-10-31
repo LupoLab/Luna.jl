@@ -14,11 +14,11 @@ pres = 4
 λ0 = 800e-9
 
 w0 = 2e-3
-energy = 1e-3
-L = 2
+energy = 2e-3
+L = 2.5
 
-R = 10e-3
-N = 128
+R = 6e-3
+N = 1024
 
 grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 q = Hankel.QDHT(R, N, dim=2)
@@ -37,12 +37,12 @@ densityfun(z) = dens0
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-#  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index(gas, λ0))
+linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index_fun(gas, pres))
 
-normfun = NonlinearRHS.norm_radial(grid.ω, q, PhysData.ref_index(gas, λ0))
+normfun = NonlinearRHS.norm_radial(grid.ω, q, PhysData.ref_index_fun(gas, pres))
 
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )

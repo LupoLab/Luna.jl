@@ -205,9 +205,6 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
         χ1 = χ1_fun(material)
         ngas = let χ1=χ1, P=P, T=T
             function ngas(λ)
-                if any(λ .> 1.0)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
                 return sqrt(1 + χ1(λ, P, T))
             end
         end
@@ -215,9 +212,6 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
-                if any(λ .> 1.0)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
                 return sell(λ.*1e6)
             end
         end
@@ -225,9 +219,6 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     elseif material in metal
         nmetal = let lookup = lookup_metal(material)
             function nmetal(λ)
-                if any(λ .> 1.0)
-                    throw(DomainError(λ, "Wavelength must be given in metres"))
-                end
                 return lookup(λ.*1e6)
             end
         end
@@ -238,11 +229,15 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
-    n = ref_index_fun(material, P, T)
-    β(ω) = @. ω/c * real(n(2π*c/ω))
+function dispersion_func(order, nfunc)
+    β(ω) = @. ω/c * real(nfunc(2π*c/ω))
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
     return βn
+end
+
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
+    n = ref_index_fun(material, P, T)
+    dispersion_func(order, n)
 end
 
 "Get dispersion."

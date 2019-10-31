@@ -380,4 +380,13 @@ function (c::CSpline)(x0)
     c.y[i - 1] + c.D[i - 1]*t + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3
 end
 
+"Calculate frequency vector k from samples x for FFT"
+function fftfreq(x)
+    Dx = abs(x[2] - x[1])
+    all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
+    N = length(x)
+    n = collect(range(0, length=N))
+    (n .- N/2) .* 2π/(N*Dx)
+end
+
 end
