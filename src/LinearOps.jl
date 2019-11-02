@@ -7,6 +7,7 @@ function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArra
     kx = reshape(Maths.fftfreq(x), (1, 1, length(x)));
     ky = reshape(Maths.fftfreq(x), (1, length(y)));
     βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
+    βsq = FFTW.fftshift(βsq, (2, 3))
     βsq[βsq .< 0] .= 0
     β = .-sqrt.(βsq)
     β1 = -1/frame_vel

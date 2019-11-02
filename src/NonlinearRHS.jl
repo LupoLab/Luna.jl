@@ -461,13 +461,11 @@ end
 function (t::TransFree)(nl, Eωk, z)
     fill!(t.Pto, 0)
     fill!(t.Eωo, 0)
-    Eωk = FFTW.ifftshift(Eωk, (2, 3))
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
-    t.Pωo = FFTW.fftshift(t.Pωo, (2, 3))
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
@@ -478,6 +476,7 @@ function norm_free(ω, x, y, nfun)
     ky = reshape(Maths.fftfreq(x), (1, length(y)))
     n = nfun.(2π*PhysData.c./ω)
     βsq = @. (n*ω/PhysData.c)^2 - kx^2 - ky^2
+    βsq = FFTW.fftshift(βsq, (2, 3))
     βsq[βsq .< 0] .= 0
     out = @. sqrt.(βsq)/(PhysData.μ_0*ω)
     out[ω .== 0, :, :] .= 1

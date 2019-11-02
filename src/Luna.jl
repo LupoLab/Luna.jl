@@ -117,7 +117,6 @@ function setup(grid::Grid.RealGrid, FT, x, y,
     for input in inputs
         Eωk .+= scaled_input(grid, input, energyfun, FT)
     end
-    Eωk = FFTW.fftshift(Eωk, (2, 3))
     xo = Array{Float64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_rfft(xo, (1, 2, 3), flags=FFTW.MEASURE)
     transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
