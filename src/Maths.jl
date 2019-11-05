@@ -341,17 +341,20 @@ end
 Simple cubic spline
 http://mathworld.wolfram.com/CubicSpline.html
 Boundary conditions extrapolate with initially constant gradient
+
+If given, ifun(x0) should return the index of the first element in x which is bigger than x0.
 "
-struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}}
+struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
     D::Vy
+    ifun::fT
 end
 
 # make  broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
-function CSpline(x, y)
+function CSpline(x, y, ifun=nothing)
     R = similar(y)
     R[1] = y[2] - y[1]
     for i in 2:(length(y)-1)
@@ -365,19 +368,22 @@ function CSpline(x, y)
     dl = fill(1.0, length(y) - 1)
     M = LinearAlgebra.Tridiagonal(dl, d, dl)
     D = M \ R
-    CSpline(x, y, D)
+    if ifun === nothing
+        f(x0) = x0 <= x[1] ? 2 :
+                x0 >= x[end] ? length(x) :
+                findfirst(x -> x>x0, x)
+        ifun = f
+    end
+    CSpline(x, y, D, ifun)
 end
 
 function (c::CSpline)(x0)
-    if x0 <= c.x[1]
-        i = 2
-    elseif x0 >= c.x[end]
-        i = length(c.x)
-    else
-        i = findfirst(x0 .< c.x)
-    end
+    i = c.ifun(x0)
     t = (x0 - c.x[i - 1])/(c.x[i] - c.x[i - 1])
-    c.y[i - 1] + c.D[i - 1]*t + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3
+    (c.y[i - 1] 
+        + c.D[i - 1]*t 
+        + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
+        + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
 end
