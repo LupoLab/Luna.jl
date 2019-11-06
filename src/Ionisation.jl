@@ -85,11 +85,12 @@ function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
     @info "PPT pre-calcuation done"
     f(E0) = E0 <= Emin ? 2 :
             E0 >= Emax ? N : 
-            floor(Int, (E0-Emin)/(Emax-Emin)*N) + 1
+            ceil(Int, (E0-Emin)/(Emax-Emin)*N) + 1
     # Interpolating the log10 and re-exponentiating makes the spline more accurate
     cspl = Maths.CSpline(E, log10.(rate), f)
-    function ir!(out, E)
-        out .= 10 .^ cspl.(E)
+    ir(E) = E <= Emin ? 0.0 : 10^cspl(E)
+    function ionrate!(out, E)
+        out .= ir.(E)
     end
 end
 
@@ -114,14 +115,14 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
     ionrate = let ω0_au=ω0_au, Cnl2=Cnl2, ns=ns, sum_tol=sum_tol
         function ionrate(E)
             E_au = abs(E)/au_Efield
-            g = ω0_au/sqrt(2*Ip_au)/E_au
+            g = ω0_au/sqrt(2Ip_au)/E_au
             g2 = g*g
-            β = 2*g/sqrt(1 + g2)
+            β = 2g/sqrt(1 + g2)
             α = 2*(asinh(g) - g/sqrt(1+g2))
             Up_au = E_au^2/(4*ω0_au^2)
             Uit_au = Ip_au + Up_au
             v = Uit_au/ω0_au
-            G = 3/(2*g)*((1 + 1/(2*g2))*asinh(g) - sqrt(1 + g2)/(2*g))
+            G = 3/(2g)*((1 + 1/(2g2))*asinh(g) - sqrt(1 + g2)/(2g))
             ret = 0
             divider = 0
             for m = -l:l
@@ -129,10 +130,10 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
                 mabs = abs(m)
                 flm = ((2*l + 1)*factorial(l + mabs)
                     / (2 ^ mabs*factorial(mabs)*factorial(l - mabs)))
-                Am = 4/(sqrt(3*π)*factorial(mabs))*g2/(1 + g2)
-                lret = sqrt(3/(2*π))*Cnl2*flm*Ip_au
-                lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2*ns - mabs - 3/2)
-                lret *= Am*exp(-2*E0_au*G/(3*E_au))
+                Am = 4/(sqrt(3π)*factorial(mabs))*g2/(1 + g2)
+                lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
+                lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2ns - mabs - 3/2)
+                lret *= Am*exp(-2*E0_au*G/(3E_au))
                 # lret *= sqrt(π*E0_au/(3*E_au))
                 k = ceil(v)
                 n0 = ceil(v)
