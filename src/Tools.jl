@@ -90,12 +90,12 @@ end
 
 function capillary_params(E, τfw, λ, a, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, kind=:HE, ϕ=0.0)
     mode = Capillary.MarcatilliMode(a, material, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, clad=clad)
-    params(E, τfw, λ, m, material, shape=shape, P=P, T=T)
+    params(E, τfw, λ, mode, material, shape=shape, P=P, T=T)
 end
 
 function rectangular_params(E, τfw, λ, a, b, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, pol=:x)
     mode = RectModes.RectMode(a, b, material, P, clad, T=T, n=n, m=m, pol=pol)
-    params(E, τfw, λ, m, material, shape=shape, P=P, T=T)
+    params(E, τfw, λ, mode, material, shape=shape, P=P, T=T)
 end
 
 end
