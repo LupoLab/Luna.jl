@@ -355,6 +355,9 @@ end
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 function CSpline(x, y, ifun=nothing)
+    if any(diff(x) .<= 0)
+        error("x must be strictly monotonically increasing")
+    end
     R = similar(y)
     R[1] = y[2] - y[1]
     for i in 2:(length(y)-1)
@@ -369,10 +372,23 @@ function CSpline(x, y, ifun=nothing)
     M = LinearAlgebra.Tridiagonal(dl, d, dl)
     D = M \ R
     if ifun === nothing
-        f(x0) = x0 <= x[1] ? 2 :
-                x0 >= x[end] ? length(x) :
-                findfirst(x -> x>x0, x)
-        ifun = f
+        δx = x[2] - x[1]
+        if all(diff(x) .≈ δx)
+            # x is uniformly spaced - use fast lookup
+            xmax = maximum(x)
+            xmin = minimum(x)
+            N = length(x)
+            ffast(x0) = x0 <= xmin ? 2 :
+                        x0 >= xmax ? N : 
+                        ceil(Int, (x0-xmin)/(xmax-xmin)*N) + 1
+            ifun = ffast
+        else
+            # x is not uniformly spaced - use brute-force lookup
+            fslow(x0) = x0 <= x[1] ? 2 :
+                        x0 >= x[end] ? length(x) :
+                        findfirst(x -> x>x0, x)
+            ifun = fslow
+        end
     end
     CSpline(x, y, D, ifun)
 end

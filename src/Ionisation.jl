@@ -63,10 +63,10 @@ function ADK_threshold(ionpot)
     return E
 end
 
-function ionrate_fun!_PPTaccel(material::Symbol, λ0; sum_tol=1e-4)
+function ionrate_fun!_PPTaccel(material::Symbol, λ0; sum_tol=1e-4, N=2^16)
     n, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTaccel(ip, λ0, Z, l; sum_tol=sum_tol)
+    ionrate_fun!_PPTaccel(ip, λ0, Z, l; sum_tol=sum_tol, N=N)
 end
 
 function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
@@ -83,11 +83,8 @@ function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
     rate = ionrate_PPT.(ionpot, λ0, Z, l, E);
     @info "PPT pre-calcuation done"
-    f(E0) = E0 <= Emin ? 2 :
-            E0 >= Emax ? N : 
-            ceil(Int, (E0-Emin)/(Emax-Emin)*N) + 1
     # Interpolating the log10 and re-exponentiating makes the spline more accurate
-    cspl = Maths.CSpline(E, log10.(rate), f)
+    cspl = Maths.CSpline(E, log10.(rate))
     ir(E) = E <= Emin ? 0.0 : 10^cspl(E)
     function ionrate!(out, E)
         out .= ir.(E)
