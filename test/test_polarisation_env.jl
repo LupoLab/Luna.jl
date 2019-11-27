@@ -24,7 +24,10 @@ import Luna: Output
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
 
-    modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),)
+    modes = (
+         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
+         α=ω->0),
+    )
     in1 = (func=gausspulse, energy=1e-6)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
@@ -34,8 +37,12 @@ import Luna: Output
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, output)
 
-    modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-             Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2))
+    modes = (
+        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
+                        α=ω->0),
+        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2),
+                        α=ω->0)
+    )
     in1 = (func=gausspulse, energy=1e-6/2.0)
     # same field in each mode
     inputs = ((1, (in1,)), (2, (in1,)))
