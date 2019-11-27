@@ -18,16 +18,20 @@ rate = Ionisation.ionrate_PPT.(:He, 800e-9, E)
 ifun(E0) =  E0 <= Emin ? 2 :
             E0 >= Emax ? N : 
             ceil(Int, (E0-Emin)/(Emax-Emin)*N) + 1
-spl1 = Maths.CSpline(E, rate)
-spl2 = Maths.CSpline(E, rate, ifun)
 ifun2(x0) = x0 <= E[1] ? 2 :
                 x0 >= E[end] ? length(E) :
                 findfirst(x -> x>x0, E)
-idx1 = ifun2.(E) # indices found with brute-force method
-idx2 = ifun.(E) # calculated indices
+spl1 = Maths.CSpline(E, rate, ifun)
+spl2 = Maths.CSpline(E, rate, ifun2)
+idx1 = ifun2.(E) # calculated indices
+idx2 = ifun.(E) # indices found with brute-force method
 @test all(idx1 .== idx2)
 @test all(spl1.(E) .== spl2.(E))
 
+ratefun! = Ionisation.ionrate_fun!_PPTaccel(:He, 800e-9)
+out = similar(E)
+ratefun!(out, E)
+@test all(isapprox.(out, rate, rtol=1e-3))
 
 # import PyPlot: plt, pygui
 # pygui(true)
