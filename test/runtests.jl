@@ -3,6 +3,7 @@ import Test: @test, @test_throws, @testset
 testdir = dirname(@__FILE__)
 
 @testset "All" begin
+
 @testset "Maths" begin
     include(joinpath(testdir, "test_maths.jl"))
 end
@@ -37,6 +38,8 @@ end
 
 @testset "Polarisation" begin
     include(joinpath(testdir, "test_polarisation.jl"))
+    include(joinpath(testdir, "test_polarisation_field.jl"))
+    include(joinpath(testdir, "test_polarisation_env.jl"))
 end
 
 @testset "Tools" begin

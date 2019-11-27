@@ -19,6 +19,7 @@ include("NonlinearRHS.jl")
 include("LinearOps.jl")
 include("Output.jl")
 include("Stats.jl")
+include("Polarisation.jl")
 include("Tools.jl")
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs)
