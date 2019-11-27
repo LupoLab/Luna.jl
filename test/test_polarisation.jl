@@ -1,5 +1,5 @@
 import Test: @test, @testset, @test_throws
-import Luna: Polarisation
+import Luna: Polarisation, Output, Modes
 import LinearAlgebra: norm
 
 @testset "Jones" begin
