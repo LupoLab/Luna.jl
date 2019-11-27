@@ -42,4 +42,8 @@ end
     include(joinpath(testdir, "test_polarisation_env.jl"))
 end
 
+@testset "Tools" begin
+    include(joinpath(testdir, "test_tools.jl"))
+end
+
 end
