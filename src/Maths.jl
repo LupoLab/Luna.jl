@@ -341,17 +341,23 @@ end
 Simple cubic spline
 http://mathworld.wolfram.com/CubicSpline.html
 Boundary conditions extrapolate with initially constant gradient
+
+If given, ifun(x0) should return the index of the first element in x which is bigger than x0.
 "
-struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}}
+struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
     D::Vy
+    ifun::fT
 end
 
 # make  broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
-function CSpline(x, y)
+function CSpline(x, y, ifun=nothing)
+    if any(diff(x) .<= 0)
+        error("x must be strictly monotonically increasing")
+    end
     R = similar(y)
     R[1] = y[2] - y[1]
     for i in 2:(length(y)-1)
@@ -365,19 +371,35 @@ function CSpline(x, y)
     dl = fill(1.0, length(y) - 1)
     M = LinearAlgebra.Tridiagonal(dl, d, dl)
     D = M \ R
-    CSpline(x, y, D)
+    if ifun === nothing
+        δx = x[2] - x[1]
+        if all(diff(x) .≈ δx)
+            # x is uniformly spaced - use fast lookup
+            xmax = maximum(x)
+            xmin = minimum(x)
+            N = length(x)
+            ffast(x0) = x0 <= xmin ? 2 :
+                        x0 >= xmax ? N : 
+                        ceil(Int, (x0-xmin)/(xmax-xmin)*N) + 1
+            ifun = ffast
+        else
+            # x is not uniformly spaced - use brute-force lookup
+            fslow(x0) = x0 <= x[1] ? 2 :
+                        x0 >= x[end] ? length(x) :
+                        findfirst(x -> x>x0, x)
+            ifun = fslow
+        end
+    end
+    CSpline(x, y, D, ifun)
 end
 
 function (c::CSpline)(x0)
-    if x0 <= c.x[1]
-        i = 2
-    elseif x0 >= c.x[end]
-        i = length(c.x)
-    else
-        i = findfirst(x0 .< c.x)
-    end
+    i = c.ifun(x0)
     t = (x0 - c.x[i - 1])/(c.x[i] - c.x[i - 1])
-    c.y[i - 1] + c.D[i - 1]*t + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3
+    (c.y[i - 1] 
+        + c.D[i - 1]*t 
+        + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
+        + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
 end

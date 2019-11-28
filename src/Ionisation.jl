@@ -1,6 +1,7 @@
 module Ionisation
 import SpecialFunctions: gamma
 import GSL: hypergeom
+import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths
@@ -62,6 +63,41 @@ function ADK_threshold(ionpot)
     return E
 end
 
+function ionrate_fun!_PPTaccel(material::Symbol, λ0; sum_tol=1e-4, N=2^16)
+    n, l, Z = quantum_numbers(material)
+    ip = ionisation_potential(material)
+    ionrate_fun!_PPTaccel(ip, λ0, Z, l; sum_tol=sum_tol, N=N)
+end
+
+function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
+                               sum_tol=1e-4, N=2^16)
+    Ip_au = ionpot / au_energy
+    ns = Z/sqrt(2*Ip_au)
+    Emax = Z^3/(16*ns^4) * au_Efield # Barrier suppression field strength
+
+    # ω0 = 2π*c/λ0
+    # Emin = ω0*sqrt(2m_e*ionpot)/electron/0.5 # Keldysh parameter of 0.5
+    Emin = Emax/1000
+
+    E = collect(range(Emin, stop=Emax, length=N));
+    @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
+    rate = ionrate_PPT.(ionpot, λ0, Z, l, E);
+    @info "PPT pre-calcuation done"
+    # Interpolating the log10 and re-exponentiating makes the spline more accurate
+    cspl = Maths.CSpline(E, log10.(rate))
+    ir(E) = E <= Emin ? 0.0 : 10^cspl(E)
+    function ionrate!(out, E)
+        out .= ir.(E)
+    end
+end
+
+function ionrate_fun!_PPT(args...)
+    ir = ionrate_fun_PPT(args...)
+    function ionrate!(out, E)
+        out .= ir.(E)
+    end
+    return ionrate!
+end
 
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
     Ip_au = ionpot / au_energy
@@ -75,15 +111,15 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
 
     ionrate = let ω0_au=ω0_au, Cnl2=Cnl2, ns=ns, sum_tol=sum_tol
         function ionrate(E)
-            E_au = @. abs(E)/au_Efield
-            g = ω0_au/sqrt(2*Ip_au)/E_au
+            E_au = abs(E)/au_Efield
+            g = ω0_au/sqrt(2Ip_au)/E_au
             g2 = g*g
-            β = 2*g/sqrt(1 + g2)
+            β = 2g/sqrt(1 + g2)
             α = 2*(asinh(g) - g/sqrt(1+g2))
             Up_au = E_au^2/(4*ω0_au^2)
             Uit_au = Ip_au + Up_au
             v = Uit_au/ω0_au
-            G = 3/(2*g)*((1 + 1/(2*g2))*asinh(g) - sqrt(1 + g2)/(2*g))
+            G = 3/(2g)*((1 + 1/(2g2))*asinh(g) - sqrt(1 + g2)/(2g))
             ret = 0
             divider = 0
             for m = -l:l
@@ -91,10 +127,10 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
                 mabs = abs(m)
                 flm = ((2*l + 1)*factorial(l + mabs)
                     / (2 ^ mabs*factorial(mabs)*factorial(l - mabs)))
-                Am = 4/(sqrt(3*π)*factorial(mabs))*g2/(1 + g2)
-                lret = sqrt(3/(2*π))*Cnl2*flm*Ip_au
-                lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2*ns - mabs - 3/2)
-                lret *= Am*exp(-2*E0_au*G/(3*E_au))
+                Am = 4/(sqrt(3π)*factorial(mabs))*g2/(1 + g2)
+                lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
+                lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2ns - mabs - 3/2)
+                lret *= Am*exp(-2*E0_au*G/(3E_au))
                 # lret *= sqrt(π*E0_au/(3*E_au))
                 k = ceil(v)
                 n0 = ceil(v)
@@ -127,16 +163,14 @@ function φ(m, x)
             / (2*gamma(3/2 + mabs)))
 end
 
-function ionrate_fun_PPT(material::Symbol)
-    return ionrate_fun_PPT(ionisation_potential(material))
+function ionrate_fun_PPT(material::Symbol, λ0)
+    n, l, Z = quantum_numbers(material)
+    ip = ionisation_potential(material)
+    return ionrate_fun_PPT(ip, λ0, Z, l)
 end
 
-function ionrate_PPT(ionpot, λ0, Z, l, E::AbstractArray)
+function ionrate_PPT(ionpot, λ0, Z, l, E)
     return ionrate_fun_PPT(ionpot, λ0, Z, l).(E)
-end
-
-function ionrate_PPT(ionpot, λ0, Z, l, E::Number)
-    return ionrate_fun_PPT(ionpot, λ0, Z, l)(E)
 end
 
 function ionrate_PPT(material::Symbol, λ0, E)
