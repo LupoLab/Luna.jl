@@ -59,6 +59,17 @@ end
     q2d = Hankel.QDHT(R, N, dim=2)
     v2dk = q2d * v2d
     @test all([all(v2dk[ii, :] ≈ vk) for ii = 1:size(v2dk, 1)])
+
+    f0 = f(0)
+    f0q = Hankel.onaxis(vk, q)
+    @test f0 ≈ f0q
+
+    f2(r) = sinc(100*r)^2
+    v = f2.(q.r);
+    vk = q * v
+    f0 = f2(0)
+    f0q = Hankel.onaxis(vk, q)
+    @test f0 ≈ f0q
 end
 
 @testset "Gaussian divergence" begin

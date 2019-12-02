@@ -4,6 +4,8 @@ import SpecialFunctions: besselj
 import LinearAlgebra: mul!, ldiv!, dot
 import Base: *, \
 
+J₀₀ = besselj(0, 0)
+
 """
     Quasi-discrete Hankel transform, after:
     [1] L. Yu, M. Huang, M. Chen, W. Chen, W. Huang, and Z. Zhu, Optics Letters 23, (1998)
@@ -80,6 +82,9 @@ end
 function integrateK(A, Q)
     return dimdot(Q.scaleK, A)
 end
+
+"Compute on-axis sample from transformed array"
+onaxis(A, Q) = J₀₀ .* integrateK(A, Q)
 
 "Matrix-vector multiplication along specific dimension of array V"
 function dot!(out, M, V; dim=1)
