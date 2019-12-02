@@ -104,7 +104,7 @@ end
     @test all(pl[8 .< x] .== 0)
 end
 
-# @testset "Spline" begin
+@testset "Spline" begin
     x = range(0.0, 2π, length=100)
     y = sin.(x)
     spl = Maths.CSpline(x, y)
@@ -119,4 +119,4 @@ end
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
-# end
+end
