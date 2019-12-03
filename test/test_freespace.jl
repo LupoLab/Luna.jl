@@ -14,11 +14,11 @@ pres = 4
 λ0 = 800e-9
 
 w0 = 2e-3
-energy = 2e-3
-L = 2.5
+energy = 1.5e-3
+L = 2
 
 R = 6e-3
-N = 1024
+N = 256
 
 grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 q = Hankel.QDHT(R, N, dim=2)
@@ -62,8 +62,10 @@ Eout = output.data["Eω"]
 
 Erout = (q \ Eout)
 Iωr = abs2.(Erout)
-Iω0 = Iωr[:, 1, :]
-Iω0log = log10.(Maths.normbymax(Iω0))
+# Iω0 = Iωr[:, 1, :]
+Er0 = dropdims(Hankel.onaxis(Eout, q), dims=2);
+Iω0 = abs2.(Er0);
+Iω0log = log10.(Maths.normbymax(Iω0));
 Etout = FFTW.irfft(Erout, length(grid.t), 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))

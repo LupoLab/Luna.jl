@@ -74,17 +74,17 @@ function \(Q::QDHT, A)
 end
 
 "Radial integral"
-function integrateR(A, Q)
-    return dimdot(Q.scaleR, A)
+function integrateR(A, Q; dim=1)
+    return dimdot(Q.scaleR, A; dim=dim)
 end
 
 "Integral in conjugate space"
-function integrateK(A, Q)
-    return dimdot(Q.scaleK, A)
+function integrateK(A, Q; dim=1)
+    return dimdot(Q.scaleK, A; dim=dim)
 end
 
 "Compute on-axis sample from transformed array"
-onaxis(A, Q) = J₀₀ .* integrateK(A, Q)
+onaxis(A, Q) = J₀₀ .* integrateK(A, Q; dim=Q.dim)
 
 "Matrix-vector multiplication along specific dimension of array V"
 function dot!(out, M, V; dim=1)
