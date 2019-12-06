@@ -51,4 +51,15 @@ end
         @test isreal(PhysData.n2_gas(gas, 1))
     end
 end
+
+@testset "Density spline" begin
+    P = range(0, 10, length=10)
+    Plow = range(0, 0.1, length=10)
+    for g in PhysData.gas
+        dens = PhysData.densityspline(g, Pmax=maximum(P))
+        @test all(dens.(P) .≈ PhysData.density.(g, P))
+        dens = PhysData.densityspline(g, Pmax=maximum(Plow))
+        @test all(dens.(Plow) .≈ PhysData.density.(g, Plow))
+    end
+end
 end

@@ -298,8 +298,15 @@ function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=:Lehmeier)
 end
 
 function density(gas::Symbol, P, T=roomtemp)
-    P == 0 ? 0 : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
+    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
 end
+
+function densityspline(gas::Symbol; Pmax, Pmin=0, Pmax=10, N=2^10, T=roomtemp)
+    P = collect(range(Pmin, Pmax, length=N))
+    ρ = density.(gas, P, T)
+    Maths.CSpline(P, ρ)
+end
+
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
