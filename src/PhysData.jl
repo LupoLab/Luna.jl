@@ -301,7 +301,7 @@ function density(gas::Symbol, P, T=roomtemp)
     P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
 end
 
-function densityspline(gas::Symbol; Pmax, Pmin=0, Pmax=10, N=2^10, T=roomtemp)
+function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     P = collect(range(Pmin, Pmax, length=N))
     ρ = density.(gas, P, T)
     Maths.CSpline(P, ρ)
