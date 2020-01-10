@@ -26,10 +26,10 @@ end
 
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full)
     if (kind == :TE) || (kind == :TM)
-        if (n != 0) || (m != 1)
-            error("n=0, m=1 for TE or TM modes")
+        if (n != 0)
+            error("n=0 for TE or TM modes")
         end
-        unm = besselj_zero(1, 1)
+        unm = besselj_zero(1, m)
     elseif kind == :HE
         unm = besselj_zero(n-1, m)
     else
