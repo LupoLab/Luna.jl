@@ -13,7 +13,15 @@ Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl.git", rev="mast
 then install Luna:
 
 ```
-Pkg.clone("https://github.com/LupoLab/Luna.git")
+Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna.git", rev="master")
 ```
+
+or
+
+```
+] add https://github.com//CoolProp/CoolProp.jl.git
+] add https://github.com/LupoLab/Luna.git
+```
+
 
 
