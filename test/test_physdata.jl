@@ -3,8 +3,6 @@ import Luna: PhysData
 
 @testset "All" begin
 @testset "Exceptions" begin
-    @test_throws DomainError PhysData.ref_index(:He, 800)
-    @test_throws DomainError PhysData.ref_index(:SiO2, 800)
     @test_throws DomainError PhysData.ref_index(:Hello, 800e-9)
 end
 

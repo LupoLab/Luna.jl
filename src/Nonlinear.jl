@@ -55,8 +55,8 @@ function KerrVectorEnv(out, E, fac)
         Ey = E[i,2]
         Ex2 = abs2(Ex)
         Ey2 = abs2(Ey)
-        out[i,1] += 3/4*fac*(Ex2 + Ey2)*Ex
-        out[i,2] += 3/4*fac*(Ex2 + Ey2)*Ey
+        out[i,1] += 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
+        out[i,2] += 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
     end
 end
 

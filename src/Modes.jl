@@ -5,7 +5,7 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary
 
 abstract type AbstractMode end
 
@@ -74,7 +74,11 @@ end
 function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
     ubω = 2π*c/ub
     lbω = 2π*c/lb
-    ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    ω0 = missing
+    try
+        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    catch
+    end
     return 2π*c/ω0
 end
 
@@ -134,4 +138,54 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
+"""
+Macro to create a delegated mode, which takes its methods from an existing mode except
+for those which are overwritten
+    Arguments:
+        mex: Expression which evaluates to a valid Mode(<:AbstractMode)
+        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
+    (Note: technically, exprs is a tuple of assignment expressions, which we are turning
+    into key-value pairs by only considering the two arguments to the = operator)
+"""
+macro delegated(mex, exprs...)
+    Tname = Symbol(:DelegatedMode, gensym())
+    @eval struct $Tname{mT}<:AbstractMode
+        m::mT # wrapped mode
+    end
+    funs = [kw.args[1] for kw in exprs]
+    for mfun in (:α, :β, :field, :dimlimits)
+        if mfun in funs
+            dfun = exprs[findfirst(mfun.==funs)].args[2]
+            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+        else
+            @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
+        end
+    end
+    quote
+        $Tname($(esc(mex))) # create mode from expression (evaluted in the caller by esc)
+    end
+end
+
+"""
+Macro to create a "fully delegated" or arbitrary mode from the four required functions,
+α, β, field and dimlimits.
+    Arguments:
+        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
+"""
+macro arbitrary(exprs...)
+    Tname = Symbol(:ArbitraryMode, gensym())
+    @eval struct $Tname<:AbstractMode end
+    funs = [kw.args[1] for kw in exprs]
+    for mfun in (:α, :β, :field, :dimlimits)
+        if mfun in funs
+            dfun = exprs[findfirst(mfun.==funs)].args[2]
+            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+        else
+            error("Must define $mfun for arbitrary mode!")
+        end
+    end
+    quote
+        $Tname()
+    end
+end
 end
