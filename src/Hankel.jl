@@ -86,6 +86,22 @@ end
 "Compute on-axis sample from transformed array"
 onaxis(A, Q) = J₀₀ .* integrateK(A, Q; dim=Q.dim)
 
+function symmetric(A, Q)
+    s = collect(size(A))
+    N = s[Q.dim]
+    s[Q.dim] = 2N + 1
+    out = Array{eltype(A)}(undef, Tuple(s))
+    idxlo = CartesianIndices(size(A)[1:Q.dim-1])
+    idxhi = CartesianIndices(size(A)[Q.dim+1:end])
+    out[idxlo, 1:N, idxhi] .= A[idxlo, N:-1:1, idxhi]
+    out[idxlo, N+1, idxhi] .= dropdims(onaxis(Q*A, Q), dims=Q.dim)
+    out[idxlo, N+2:end, idxhi] .= A[idxlo, :, idxhi]
+    return out
+end
+
+Rsymmetric(Q) = vcat(-Q.r[end:-1:1], 0, Q.r)
+
+
 "Matrix-vector multiplication along specific dimension of array V"
 function dot!(out, M, V; dim=1)
     size(V, dim) == size(M, 1) || throw(DomainError(
