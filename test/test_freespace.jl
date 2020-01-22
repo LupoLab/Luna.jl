@@ -14,7 +14,7 @@ pres = 1.2
 λ0 = 800e-9
 
 w0 = 40e-6
-energy = 2e-9
+energy = 2e-3
 L = 0.6
 
 R = 4e-3
@@ -153,7 +153,7 @@ plt.plot(zout.*1e2, energy.*1e6)
 plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
-jw = Plotting.cmap_white("jet")
+jw = Plotting.cmap_white("jet", 512, 10)
 fig = plt.figure()
 fig.set_size_inches(12, 4)
 for ii in 1:3
