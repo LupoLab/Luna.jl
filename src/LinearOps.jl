@@ -38,6 +38,28 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     make_const_linop(grid, q, n, 1/β1)
 end
 
+function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun, thg=false)
+    n = zero(grid.ω)
+    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    if thg
+        β0const = 0.0
+    else
+        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
+    end
+    make_const_linop(grid, q, n, 1/β1, β0const)
+end
+
+function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
+                          n::AbstractArray, frame_vel::Number, β0ref::Number)
+    βsq = (n.*grid.ω./PhysData.c).^2 .- (q.k.^2)'
+    βsq[βsq .< 0] .= 0
+    β = sqrt.(βsq)
+    β1 = 1/frame_vel
+    # TODO loss
+    return @. -im*(β - β1*(grid.ω - grid.ω0) - β0ref)
+end
+
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     β = .-βfun(grid.ω, 0)
     α = αfun(grid.ω, 0)

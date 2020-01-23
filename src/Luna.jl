@@ -114,6 +114,21 @@ function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
     Eωk, transform, FT
 end
 
+function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
+               energyfun, densityfun, normfun, responses, inputs)
+    xt = zeros(ComplexF64, length(grid.t), length(q.r))
+    FT = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
+    Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
+    for input in inputs
+        Eω .+= scaled_input(grid, input, energyfun, FT)
+    end
+    Eωk = q * Eω
+    xo = Array{ComplexF64}(undef, length(grid.to), length(q.r))
+    FTo = FFTW.plan_fft(xo, 1, flags=FFTW.MEASURE)
+    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    Eωk, transform, FT
+end
+
 function setup(grid::Grid.RealGrid, FT, x, y,
                energyfun, densityfun, normfun, responses, inputs)
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))

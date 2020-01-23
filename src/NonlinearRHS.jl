@@ -4,17 +4,15 @@
     2. Modal decomposition of Pₙₗ
     3. Calculation of (modal) energy
 
-Wishlist of types of decomposition we want to use:
-
-Done:
+Types of decomposition that are available:
     1. Mode-averaged waveguide
     2. Multi-mode waveguide (with or without polarisation)
         a. Azimuthal symmetry (radial integral only)
         b. Full 2-D integral
-To Do:
     3. Free space
         a. Azimuthal symmetry (Hankel transform)
         b. Full 2-D (Fourier transform)"
+
 module NonlinearRHS
 import FFTW
 import Cubature
@@ -423,6 +421,13 @@ function energy_radial(q)
     end
 end
 
+function energy_radial_env(q)
+    function energyfun(t, Et)
+        intg = abs.(integrate(t, abs2.(Et), SimpsonEven()))
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(intg, q)
+    end
+end
+
 "Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation"
 mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
@@ -493,6 +498,15 @@ function energy_free(x, y)
     function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = sum(abs2.(Eta)) * Dx * Dy * abs(t[2] - t[1])
+        return PhysData.c*PhysData.ε_0/2 *intg
+    end
+end
+
+function energy_free_env(x, y)
+    Dx = abs(x[2] - x[1])
+    Dy = abs(y[2] - y[1])
+    function energyfun(t, Et)
+        intg = sum(abs2.(Et)) * Dx * Dy * abs(t[2] - t[1])
         return PhysData.c*PhysData.ε_0/2 *intg
     end
 end
