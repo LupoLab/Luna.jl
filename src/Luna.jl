@@ -142,6 +142,19 @@ function setup(grid::Grid.RealGrid, FT, x, y,
     Eωk, transform, FTo
 end
 
+function setup(grid::Grid.EnvGrid, FT, x, y,
+               energyfun, densityfun, normfun, responses, inputs)
+    Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
+    for input in inputs
+        Eωk .+= scaled_input(grid, input, energyfun, FT)
+    end
+    xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))
+    FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=FFTW.MEASURE)
+    transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
+                                       responses, densityfun, normfun)
+    Eωk, transform, FTo
+end
+
 function make_init(grid, inputs, energyfun, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
     for input in inputs

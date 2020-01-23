@@ -56,7 +56,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
 
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
-    return RealGrid(zmax, referenceλ, t, ω, to, ωo, ωwindow, twindow, towindow)
+    return RealGrid(float(zmax), referenceλ, t, ω, to, ωo, ωwindow, twindow, towindow)
 end
 
 struct EnvGrid{T} <: AbstractGrid
@@ -146,7 +146,7 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     @assert all(to[zeroidx:factor:end] .== t[t .>= 0])
     @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
 
-    return EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+    return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
 end

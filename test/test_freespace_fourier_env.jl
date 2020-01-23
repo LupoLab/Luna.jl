@@ -20,7 +20,7 @@ L = 2
 R = 6e-3
 N = 128
 
-grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 
 Dx = 2R/N
 n = collect(range(0, length=N))
@@ -29,24 +29,20 @@ y = copy(x)
 
 r = sqrt.(reshape(x, (1, 1, N)).^2 .+ reshape(y, (1, N)).^2)
 
-xr = Array{Float64}(undef, length(grid.t), length(y), length(x))
-FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=FFTW.MEASURE)
+xr = Array{ComplexF64}(undef, length(grid.t), length(y), length(x))
+FT = FFTW.plan_fft(xr, (1, 2, 3), flags=FFTW.MEASURE)
 
-energyfun = NonlinearRHS.energy_free(x, y)
+energyfun = NonlinearRHS.energy_free_env(x, y)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ) .* Maths.gauss.(r, w0/2)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
+    Et = @. sqrt(It)
 end
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-#  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop = LinearOps.make_const_linop(grid, x, y, PhysData.ref_index_fun(gas, pres))
 normfun = NonlinearRHS.norm_free(grid.ω, x, y, PhysData.ref_index_fun(gas, pres))
@@ -62,18 +58,20 @@ output = Output.MemoryOutput(0, grid.zmax, 21, (length(grid.ω), N, N))
 xwin = Maths.planck_taper(x, -R, -0.8R, 0.8R, R)
 xywin = reshape(xwin, (1, length(xwin))) .* reshape(xwin, (1, 1, length(xwin)))
 
-Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf, init_dz=1e-1)
+Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf, init_dz=0.1)
 
-ω = grid.ω
+ω = FFTW.fftshift(grid.ω)
 t = grid.t
 
 zout = output.data["z"]
 Eout = output.data["Eω"]
 
 println("Transforming...")
-Eωyx = FFTW.ifft(Eout, (2, 3))
-Etyx = FFTW.irfft(Eout, length(grid.t), (1, 2, 3))
+Eωyx = FFTW.fftshift(FFTW.ifft(Eout, (2, 3)), 1);
+Etyx = FFTW.ifft(Eout, (1, 2, 3))
 println("...done")
+
+Eout = FFTW.fftshift(Eout, (2, 3))
 
 Ilog = log10.(Maths.normbymax(abs2.(Eωyx)))
 
@@ -90,7 +88,7 @@ end
 
 E0ωyx = FFTW.ifft(Eω[ω0idx, :, :], (1, 2));
 
-Iωyx = abs2.(Eωyx)
+Iωyx = abs2.(Eωyx);
 Iωyxlog = log10.(Maths.normbymax(Iωyx));
 
 pygui(true)

@@ -21,6 +21,30 @@ function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArra
     make_const_linop(grid, x, y, n, 1/β1)
 end
 
+function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray,
+                          n::AbstractArray, frame_vel::Number, β0ref::Number)
+    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)));
+    ky = reshape(Maths.fftfreq(x), (1, length(y)));
+    βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
+    βsq = FFTW.fftshift(βsq, (2, 3))
+    βsq[βsq .< 0] .= 0
+    β = sqrt.(βsq)
+    β1 = 1/frame_vel
+    return @. -im*(β-β1*(grid.ω-grid.ω0)-β0ref) 
+end
+
+function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun, thg=false)
+    n = zero(grid.ω)
+    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    if thg
+        β0const = 0.0
+    else
+        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
+    end
+    make_const_linop(grid, x, y, n, 1/β1, β0const)
+end
+
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
                           n::AbstractArray, frame_vel::Number)
     βsq = (n.*grid.ω./PhysData.c).^2 .- (q.k.^2)'
