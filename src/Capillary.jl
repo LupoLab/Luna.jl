@@ -5,8 +5,9 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
-import Luna.PhysData: c, ref_index_fun, roomtemp
+import Luna.PhysData: c, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.Tools: change
 
 export MarcatilliMode, dimlimits, neff, field
 
@@ -28,12 +29,19 @@ function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ, coren, cladn, model, loss)
 end
 
-"convenience constructor assunming single gas filling"
+"convenience constructor assuming single gas filling"
 function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
-    coren = ω -> rfg(2π*c./ω)
-    cladn = ω -> rfs(2π*c./ω)
+    coren = (ω; z) -> rfg(2π*c/ω)
+    cladn = (ω; z) -> rfs(2π*c/ω)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+end
+
+"convenience constructor for non-constant core index"
+function MarcatilliMode(a, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
+    rfs = ref_index_fun(clad)
+    cladn = (ω; z) -> rfs(2π*c/ω)
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
@@ -47,9 +55,9 @@ Hollow metallic and dielectric waveguides for long distance optical transmission
 examining normal mode propagation).
 Bell System Technical Journal 43, 1783–1809 (1964).
 "
-function neff(m::MarcatilliMode, ω)
-    εcl = m.cladn(ω)^2
-    εco = m.coren(ω)^2
+function neff(m::MarcatilliMode, ω; z=0)
+    εcl = m.cladn(ω, z=z)^2
+    εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
     k = ω/c
     if m.model == :full
@@ -111,4 +119,20 @@ function field(m::MarcatilliMode)
     end
 end
 
+function gradient(gas, L, p0, p1)
+    γ = sellmeier_gas(gas)
+    dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1))
+    p(z) = sqrt(p0^2 + z/L*(p1^2 - p0^2))
+    function dens(z)
+        try
+            dspl(p(z))
+        catch
+            println(z)
+            println(p(z))
+        end
+    end
+    # dens(z) = dspl(p(z))
+    coren(ω; z) = sqrt(1 + (γ(change(ω)*1e6)*dens(z)))
+    return coren, dens
+end
 end

@@ -307,6 +307,9 @@ function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     Maths.CSpline(P, ρ)
 end
 
+dsplines = Dict([(gi, densityspline(gi, Pmax=50, N=2^14)) for gi in gas])
+
+fastdensity(gas::Symbol, P) = dsplines[gas](P)
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)

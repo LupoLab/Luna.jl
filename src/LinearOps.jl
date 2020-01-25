@@ -17,7 +17,7 @@ function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
     return -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
 end
 
-function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <: Modes.AbstractMode
+function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
     β1const = Modes.dispersion(mode, 1, change(λ0))
     if thg
         β0const = 0.0
@@ -33,7 +33,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::T, λ0; thg=false) where T <
     make_const_linop(grid, βfun, αfun, frame_vel, β0const), βfun, frame_vel, αfun
 end
 
-function make_const_linop(grid::Grid.RealGrid, mode::T, λ0) where T <: Modes.AbstractMode
+function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     β1const = Modes.dispersion(mode, 1, change(λ0))
     βconst = zero(grid.ω)
     βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
@@ -78,15 +78,17 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
 end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
-    ω0idx = argmin(abs.(change(grid.λ0) - grid.ω))
-    β = complex(zero(grid.ω))
     function linop(z)
-        β .= -grid.ω./PhysData.c.*Modes.neff(m, z=z)
-        β1 = real((β[ω0idx+1] - β[ω0idx-1])/2)
-        return β .- grid.ω.*β1
+        β = -im.*grid.ω./PhysData.c.*Modes.neff.(mode, grid.ω, z=z)
+        β[1] = 1
+        return β .+ im.*grid.ω.*Modes.dispersion(mode, 1, change(λ0))
     end
-    function βfun end
-    linop, βfun, frame_vel, αfun
+    function βfun(ω, z)
+        β = Modes.β.(mode, ω, z=z)
+        β[1] = 1
+        return β
+    end
+    return linop, βfun
 end
 
 

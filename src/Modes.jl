@@ -74,37 +74,37 @@ function Aeff(m) where {M <: AbstractMode}
 end
 
 "full complex refractive index of a mode"
-function neff(m::AbstractMode, ω)
+function neff(m::AbstractMode, ω; z=0)
     error("abstract method called")
 end
 
-function β(m::AbstractMode, ω)
+function β(m::AbstractMode, ω; z=0)
     return ω/c*real(neff(m, ω))
 end
 
-function α(m::AbstractMode, ω)
+function α(m::AbstractMode, ω; z=0)
     return 2*ω/c*imag(neff(m, ω))
 end
 
-function losslength(m::AbstractMode, ω)
+function losslength(m::AbstractMode, ω; z=0)
     return 1/α(m, ω)
 end
 
-function transmission(m::AbstractMode, ω, L)
+function transmission(m::AbstractMode, ω, L; z=0)
     return exp(-α(m, ω)*L)
 end
 
-function dB_per_m(m::AbstractMode, ω)
+function dB_per_m(m::AbstractMode, ω; z=0)
     return 10/log(10).*α(m, ω)
 end
 
-function dispersion_func(m::AbstractMode, order)
-    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
+function dispersion_func(m::AbstractMode, order; z=0)
+    βn(ω) = Maths.derivative(ω -> β(m, ω, z=z), ω, order)
     return βn
 end
 
-function dispersion(m::AbstractMode, order, ω)
-    return dispersion_func(m, order).(ω)
+function dispersion(m::AbstractMode, order, ω; z=0)
+    return dispersion_func(m, order, z=z).(ω)
 end
 
 function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9)
