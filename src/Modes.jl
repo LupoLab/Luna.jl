@@ -9,9 +9,6 @@ export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, 
 
 abstract type AbstractMode end
 
-abstract type FreeMode <: AbstractMode end
-abstract type GridMode <: AbstractMode end
-
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
@@ -76,42 +73,41 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
-#==== Functions for free modes (without grid) ====#
 "full complex refractive index of a mode"
-function neff(m::FreeMode, ω)
+function neff(m::AbstractMode, ω)
     error("abstract method called")
 end
 
-function β(m::FreeMode, ω)
+function β(m::AbstractMode, ω)
     return ω/c*real(neff(m, ω))
 end
 
-function α(m::FreeMode, ω)
+function α(m::AbstractMode, ω)
     return 2*ω/c*imag(neff(m, ω))
 end
 
-function losslength(m::FreeMode, ω)
+function losslength(m::AbstractMode, ω)
     return 1/α(m, ω)
 end
 
-function transmission(m::FreeMode, ω, L)
+function transmission(m::AbstractMode, ω, L)
     return exp(-α(m, ω)*L)
 end
 
-function dB_per_m(m::FreeMode, ω)
+function dB_per_m(m::AbstractMode, ω)
     return 10/log(10).*α(m, ω)
 end
 
-function dispersion_func(m::FreeMode, order)
+function dispersion_func(m::AbstractMode, order)
     βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
     return βn
 end
 
-function dispersion(m::FreeMode, order, ω)
+function dispersion(m::AbstractMode, order, ω)
     return dispersion_func(m, order).(ω)
 end
 
-function zdw(m::FreeMode; ub=200e-9, lb=3000e-9)
+function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9)
     ubω = 2π*c/ub
     lbω = 2π*c/lb
     ω0 = missing
@@ -120,42 +116,6 @@ function zdw(m::FreeMode; ub=200e-9, lb=3000e-9)
     catch
     end
     return 2π*c/ω0
-end
-
-#==== Functions for modes with grid ====#
-"full complex refractive index of a mode"
-function neff(m::GridMode; z=0)
-    error("abstract method called")
-end
-
-function β(m::GridMode; z=0)
-    return m.grid.ω./c.*real(neff(m, z=z))
-end
-
-function α(m::GridMode; z=0)
-    return 2 .* m.grid.ω./c.*imag(neff(m, z=z))
-end
-
-function losslength(m::GridMode; z=0)
-    return 1 ./ α(m, z=z)
-end
-
-function transmission(m::GridMode, L)
-    return exp.(-α(m)*L) # TODO change to integral
-end
-
-function dB_per_m(m::GridMode; z=0)
-    return 10/log(10).*α(m, z=z)
-end
-
-function dispersion_func(m::GridMode, order; z=0)
-    spl = Maths.CSpline(m.grid.ω, β(m, z=z))
-    βn(ω) = Maths.derivative(ω -> spl(ω), ω, order)
-    return βn
-end
-
-function dispersion(m::GridMode, order, ω)
-    return dispersion_func(m, order).(ω)
 end
 
 """

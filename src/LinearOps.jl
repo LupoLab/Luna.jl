@@ -1,7 +1,7 @@
 module LinearOps
 import FFTW
 import Luna: Modes, Grid, PhysData
-using Luna: Tools
+import Luna.Tools: change
 
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     β = .-βfun(grid.ω, 0)
@@ -77,7 +77,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     linops
 end
 
-function make_linop(grid::Grid.RealGrid, mode::Modes.GridMode, λ0)
+function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     ω0idx = argmin(abs.(change(grid.λ0) - grid.ω))
     β = complex(zero(grid.ω))
     function linop(z)
@@ -85,7 +85,7 @@ function make_linop(grid::Grid.RealGrid, mode::Modes.GridMode, λ0)
         β1 = real((β[ω0idx+1] - β[ω0idx-1])/2)
         return β .- grid.ω.*β1
     end
-    function βfun
+    function βfun end
     linop, βfun, frame_vel, αfun
 end
 

@@ -26,28 +26,6 @@ m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
 
 @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0, model=:reduced)) ≈ 8.42157534886545e-09
 
-# GridMode vs FreeMode for both models, envelope and real grids
-rg = Grid.RealGrid(15e-2, 800e-9, (200e-9, 3000e-9), 1e-12)
-eg = Grid.EnvGrid(15e-2, 800e-9, (200e-9, 3000e-9), 1e-12)
-for grid in (rg, eg)
-    for model in (:reduced, :full)
-        fm = Capillary.MarcatilliMode(50e-6, :Ar, 2.0, model=model)
-        gm = Capillary.GridMarcatilliMode(grid, 50e-6, :Ar, 2.0, model=model)
-        βf = Capillary.β.(fm, grid.ω[grid.sidx])
-        βg = Capillary.β(gm)[grid.sidx]
-        @test all(isapprox.(βf, βg, rtol=1e-15))
-        αf = Capillary.α.(fm, grid.ω[grid.sidx])
-        αg = Capillary.α(gm)[grid.sidx]
-        @test all(isapprox.(αf, αg, rtol=1e-15))
-        nefff = Capillary.neff.(fm, grid.ω[grid.sidx])
-        neffg = Capillary.neff(gm)[grid.sidx]
-        @test all(isapprox.(nefff, neffg, rtol=1e-15))
-        β2g = Capillary.dispersion(gm, 2, change(800e-9))
-        β2f = Capillary.dispersion(fm, 2, change(800e-9))
-        @test isapprox(β2g, β2f, rtol=1e-6)
-    end
-end
-
 # tests based on symbolic results in symbolic_marcatilli.py
 m = Capillary.MarcatilliMode(50e-6, :Ar, 2.0, model=:reduced)
 ω = change(800e-9)
