@@ -385,7 +385,7 @@ function CSpline(x, y, ifun=nothing)
             N = length(x)
             ffast(x0) = x0 <= xmin ? 2 :
                         x0 >= xmax ? N : 
-                        ceil(Int, (x0-xmin)/(xmax-xmin)*N) + 1
+                        ceil(Int, (x0-xmin)/(xmax-xmin)*(N-1))+1
             ifun = ffast
         else
             # x is not uniformly spaced - use brute-force lookup
@@ -400,6 +400,8 @@ end
 
 function (c::CSpline)(x0)
     i = c.ifun(x0)
+    x0 == c.x[i] && return c.y[i]
+    x0 == c.x[i-1] && return c.y[i-1]
     t = (x0 - c.x[i - 1])/(c.x[i] - c.x[i - 1])
     (c.y[i - 1] 
         + c.D[i - 1]*t 
