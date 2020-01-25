@@ -21,19 +21,20 @@ struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
     coren::Tcore # callable, returns (possibly complex) core ref index as function of ω
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
     model::Symbol
+    loss::Bool
 end
 
-function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full)
-    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ, coren, cladn, model)
+function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
+    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ, coren, cladn, model, loss)
 end
 
 "convenience constructor assunming single gas filling"
-function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2)
+function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = ω -> rfg(2π*c./ω)
     cladn = ω -> rfs(2π*c./ω)
-    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 "complex effective index of Marcatilli mode with dielectric core and arbitrary
@@ -52,9 +53,18 @@ function neff(m::MarcatilliMode, ω)
     vn = get_vn(εcl, m.kind)
     k = ω/c
     if m.model == :full
-        sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+        if m.loss
+            return sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+        else
+            return real(sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2)))
+        end
     elseif m.model == :reduced
-        (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2)) + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn
+        if m.loss
+            return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+                     + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn)
+        else
+            return (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+        end
     else
         error("model must be :full or :reduced")
     end 
@@ -70,12 +80,13 @@ struct GridMarcatilliMode{gT, nT} <: AbstractMode
     unm::Float64
     ϕ::Float64
     model::Symbol
+    loss::Bool
     coren::nT # callable which returns core index as function of z (propagation)
     neff_wg::Array{ComplexF64, 1} # Pre-calculated waveguide contribution to neff
 end
 
 function GridMarcatilliMode(grid::Grid.AbstractGrid, a, n, m, kind, ϕ, coren, cladn;
-                        model=:full)
+                        model=:full, loss=true)
     unm = get_unm(n, m, kind)
     εcl = @. cladn(grid.ω)^2
     vn = get_vn.(εcl, kind)
@@ -83,28 +94,36 @@ function GridMarcatilliMode(grid::Grid.AbstractGrid, a, n, m, kind, ϕ, coren, c
     if model == :full
         neff_wg = @. -(unm/(k*a))^2*(1 - im*vn/(k*a))^2
     elseif model == :reduced
-        neff_wg = @. -c^2*unm^2/(2*grid.ω^2*a^2) + im*(c^3*unm^2)/(m.a^3*grid.ω^3)*vn
+        if loss
+            neff_wg = @. -c^2*unm^2/(2*grid.ω^2*a^2) + im*(c^3*unm^2)/(m.a^3*grid.ω^3)*vn
+        else
+            neff_wg = @. -c^2*unm^2/(2*grid.ω^2*a^2)
+        end
     else
         error("model must be :full or :reduced")
     end 
-    GridMarcatilliMode(grid, a, n, m, kind, unm, ϕ, model, coren, complex(neff_wg))
+    GridMarcatilliMode(grid, a, n, m, kind, unm, ϕ, model, loss, coren, complex(neff_wg))
 end
 
 "convenience constructor assunming single gas filling"
 function GridMarcatilliMode(grid::Grid.AbstractGrid, a, gas, P;
-                        n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2)
+                        n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T).(2π*c./grid.ω)
     rfs = ref_index_fun(clad)
     coren = z -> rfg
     cladn = ω -> rfs(2π*c./ω)
-    GridMarcatilliMode(grid, a, n, m, kind, ϕ, coren, cladn, model=model)
+    GridMarcatilliMode(grid, a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 function neff(m::GridMarcatilliMode, z=0)
     if m.model == :full
-        @. sqrt(Complex(m.coren(z)^2 + m.neff_wg))
+        if m.loss
+            return @. sqrt(Complex(m.coren(z)^2 + m.neff_wg))
+        else
+            return @. real(sqrt(Complex(m.coren(z)^2 + m.neff_wg)))
+        end
     elseif m.model == :reduced
-        @. 1 + (m.coren(z)^2 - 1) + m.neff_wg
+        return @. 1 + (m.coren(z)^2 - 1) + m.neff_wg
     else
         error("model must be :full or :reduced")
     end
