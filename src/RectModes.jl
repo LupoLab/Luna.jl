@@ -4,7 +4,7 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.Modes: FreeMode, dimlimits, neff, field
 
 export RectMode, dimlimits, neff, field
 
@@ -12,7 +12,7 @@ export RectMode, dimlimits, neff, field
 # (possibly complex) refractive index as a function of freq
 # pol is either :x or :y
 # a and b are the half widths of the waveguide in each dimension.
-struct RectMode{Tcore, Tclad} <: AbstractMode
+struct RectMode{Tcore, Tclad} <: FreeMode
     a::Float64
     b::Float64
     n::Int

@@ -42,6 +42,9 @@ for grid in (rg, eg)
         nefff = Capillary.neff.(fm, grid.ω[grid.sidx])
         neffg = Capillary.neff(gm)[grid.sidx]
         @test all(isapprox.(nefff, neffg, rtol=1e-15))
+        β2g = Capillary.dispersion(gm, 2, change(800e-9))
+        β2f = Capillary.dispersion(fm, 2, change(800e-9))
+        @test isapprox(β2g, β2f, rtol=1e-6)
     end
 end
 

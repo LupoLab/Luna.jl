@@ -54,9 +54,9 @@ function neff(m::MarcatilliMode, ω)
     k = ω/c
     if m.model == :full
         if m.loss
-            return sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+            return sqrt(complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
         else
-            return real(sqrt(Complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2)))
+            return real(sqrt(complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2)))
         end
     elseif m.model == :reduced
         if m.loss
@@ -100,7 +100,7 @@ function GridMarcatilliMode(grid::Grid.AbstractGrid, a, n, m, kind, ϕ, coren, c
             @. neff_wg[idcs] = @. (-c^2*unm^2/(2*grid.ω[idcs]^2*a^2)
                                 + im*(c^3*unm^2)/(a^3*grid.ω[idcs]^3)*vn[idcs])
         else
-            @. neff_wg = @. -c^2*unm^2/(2*grid.ω[idcs]^2*a^2)
+            @. neff_wg[idcs] = @. -c^2*unm^2/(2*grid.ω[idcs]^2*a^2)
         end
     else
         error("model must be :full or :reduced")
@@ -127,7 +127,7 @@ function neff(m::GridMarcatilliMode; z=0)
             return @. real(sqrt.(complex(m.coren(z).^2 .+ m.neff_wg)))
         end
     elseif m.model == :reduced
-        return 1 .+ (m.coren(z).^2 .- 1)/2 .+ m.neff_wg
+        return 1 .+ (m.coren(z).^2 .- 1)./2 .+ m.neff_wg
     else
         error("model must be :full or :reduced")
     end
@@ -135,11 +135,11 @@ end
 
 function get_vn(εcl, kind)
     if kind == :HE
-        (εcl + 1)/(2*sqrt(Complex(εcl - 1)))
+        (εcl + 1)/(2*sqrt(complex(εcl - 1)))
     elseif kind == :TE
-        1/sqrt(Complex(εcl - 1))
+        1/sqrt(complex(εcl - 1))
     elseif kind == :TM
-        εcl/sqrt(Complex(εcl - 1))
+        εcl/sqrt(complex(εcl - 1))
     else
         error("kind must be :TE, :TM or :HE")
     end

@@ -129,11 +129,11 @@ function neff(m::GridMode; z=0)
 end
 
 function β(m::GridMode; z=0)
-    return m.grid.ω/c.*real(neff(m, z=z))
+    return m.grid.ω./c.*real(neff(m, z=z))
 end
 
 function α(m::GridMode; z=0)
-    return 2*m.grid.ω/c.*imag(neff(m, z=z))
+    return 2 .* m.grid.ω./c.*imag(neff(m, z=z))
 end
 
 function losslength(m::GridMode; z=0)
@@ -148,8 +148,9 @@ function dB_per_m(m::GridMode; z=0)
     return 10/log(10).*α(m, z=z)
 end
 
-function dispersion_func(m::GridMode, order)
-    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
+function dispersion_func(m::GridMode, order; z=0)
+    spl = Maths.CSpline(m.grid.ω, β(m, z=z))
+    βn(ω) = Maths.derivative(ω -> spl(ω), ω, order)
     return βn
 end
 
