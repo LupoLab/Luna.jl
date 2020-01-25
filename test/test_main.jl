@@ -19,7 +19,7 @@ pres = 5
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 # m = Capillary.MarcatilliMode(a, gas, pres)
-m = Modes.@delegated(Capillary.MarcatilliMode(grid, a, gas, pres), α=ω->0)
+m = Modes.@delegated(Capillary.GridMarcatilliMode(grid, a, gas, pres), α=ω->0)
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
