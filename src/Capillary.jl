@@ -6,12 +6,12 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths, Grid
 import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.Modes: FreeMode, GridMode, dimlimits, neff, field
 
 export MarcatilliMode, dimlimits, neff, field
 
 "Marcatili mode without a grid"
-struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
+struct MarcatilliMode{Tcore, Tclad} <: FreeMode
     a::Float64
     n::Int
     m::Int
@@ -71,7 +71,7 @@ function neff(m::MarcatilliMode, ω)
 end
 
 "Marcatili mode with a grid pre-specified for speed"
-struct GridMarcatilliMode{gT, nT} <: AbstractMode
+struct GridMarcatilliMode{gT, nT} <: GridMode
     grid::gT
     a::Float64
     n::Int

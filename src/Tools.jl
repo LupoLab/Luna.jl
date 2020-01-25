@@ -1,6 +1,9 @@
 module Tools
 import Luna: Modes, PhysData, Capillary, RectModes
 
+"Change from ω to λ and vice versa"
+change(ωλ) = 2π*PhysData.c/ωλ
+
 "Calculate 'natural' pulse width from FWHM" 
 function τfw_to_τ0(τfw, shape)
     if shape == :sech

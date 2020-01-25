@@ -9,77 +9,15 @@ export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, 
 
 abstract type AbstractMode end
 
+abstract type FreeMode <: AbstractMode end
+abstract type GridMode <: AbstractMode end
+
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
 function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")
-end
-
-"full complex refractive index of a mode"
-function neff(m::M, ω) where {M <: AbstractMode}
-    error("abstract method called")
-end
-
-function β(m::M, ω) where {M <: AbstractMode}
-    return ω/c*real(neff(m, ω))
-end
-
-function β(m::M; λ) where {M <: AbstractMode}
-    return β(m, 2π*c./λ)
-end
-
-function α(m::M, ω) where {M <: AbstractMode}
-    return 2*ω/c*imag(neff(m, ω))
-end
-
-function α(m::M; λ) where {M <: AbstractMode}
-    return α(m, 2π*c./λ)
-end
-
-function losslength(m::M, ω) where {M <: AbstractMode}
-    return 1 ./ α(m, ω)
-end
-
-function losslength(m::M; λ) where {M <: AbstractMode}
-    return losslength(m::M, 2π*c./λ) 
-end
-
-function transmission(m::M, L; λ) where {M <: AbstractMode}
-    return @. exp(-α(m, λ=λ)*L)
-end
-
-function dB_per_m(m::M, ω) where {M <: AbstractMode}
-    return 10/log(10).*α(m, ω)
-end
-
-function dB_per_m(m::M; λ) where {M <: AbstractMode}
-    return return 10/log(10) .* α(m, λ=λ)
-end
-
-function dispersion_func(m::M, order) where {M <: AbstractMode}
-    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
-    return βn
-end
-
-function dispersion(m::M, order, ω) where {M <: AbstractMode}
-    return dispersion_func(m, order).(ω)
-end
-
-function dispersion(m::M, order; λ) where {M <: AbstractMode}
-    return dispersion(m, order, 2π*c./λ)
-end
-
-function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
-    ubω = 2π*c/ub
-    lbω = 2π*c/lb
-    ω0 = missing
-    try
-        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
-    catch
-    end
-    return 2π*c/ω0
 end
 
 "Create function of coords that returns (xs) -> (Ex, Ey)"
@@ -136,6 +74,87 @@ function Aeff(m) where {M <: AbstractMode}
     end
     den, err = hcubature(Aeff_den, dl[2], dl[3])
     return num / den
+end
+
+#==== Functions for free modes (without grid) ====#
+"full complex refractive index of a mode"
+function neff(m::FreeMode, ω)
+    error("abstract method called")
+end
+
+function β(m::FreeMode, ω)
+    return ω/c*real(neff(m, ω))
+end
+
+function α(m::FreeMode, ω)
+    return 2*ω/c*imag(neff(m, ω))
+end
+
+function losslength(m::FreeMode, ω)
+    return 1/α(m, ω)
+end
+
+function transmission(m::FreeMode, ω, L)
+    return exp(-α(m, ω)*L)
+end
+
+function dB_per_m(m::FreeMode, ω)
+    return 10/log(10).*α(m, ω)
+end
+
+function dispersion_func(m::FreeMode, order)
+    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
+    return βn
+end
+
+function dispersion(m::FreeMode, order, ω)
+    return dispersion_func(m, order).(ω)
+end
+
+function zdw(m::FreeMode; ub=200e-9, lb=3000e-9)
+    ubω = 2π*c/ub
+    lbω = 2π*c/lb
+    ω0 = missing
+    try
+        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    catch
+    end
+    return 2π*c/ω0
+end
+
+#==== Functions for modes with grid ====#
+"full complex refractive index of a mode"
+function neff(m::GridMode; z=0)
+    error("abstract method called")
+end
+
+function β(m::GridMode; z=0)
+    return @. m.grid.ω/c*real(neff(m, z=z))
+end
+
+function α(m::GridMode; z=0)
+    return @. 2*m.grid.ω/c*imag(neff(m, z=z))
+end
+
+function losslength(m::GridMode; z=0)
+    return 1 ./ α(m, z=z)
+end
+
+function transmission(m::GridMode, L)
+    return @. exp(-α(m)*L) # TODO change to integral
+end
+
+function dB_per_m(m::GridMode; z=0)
+    return 10/log(10).*α(m, z=z)
+end
+
+function dispersion_func(m::GridMode, order)
+    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
+    return βn
+end
+
+function dispersion(m::GridMode, order, ω)
+    return dispersion_func(m, order).(ω)
 end
 
 """
