@@ -13,6 +13,7 @@ struct RealGrid <: AbstractGrid
     ω::Array{Float64, 1}
     to::Array{Float64, 1}
     ωo::Array{Float64, 1}
+    sidx::BitArray{1}
     ωwin::Array{Float64, 1}
     twin::Array{Float64, 1}
     towin::Array{Float64, 1}
@@ -51,12 +52,14 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
 
+    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
 
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
-    return RealGrid(zmax, referenceλ, t, ω, to, ωo, ωwindow, twindow, towindow)
+    return RealGrid(zmax, referenceλ, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
 struct EnvGrid{T} <: AbstractGrid

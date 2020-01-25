@@ -129,11 +129,11 @@ function neff(m::GridMode; z=0)
 end
 
 function β(m::GridMode; z=0)
-    return @. m.grid.ω/c*real(neff(m, z=z))
+    return m.grid.ω/c.*real(neff(m, z=z))
 end
 
 function α(m::GridMode; z=0)
-    return @. 2*m.grid.ω/c*imag(neff(m, z=z))
+    return 2*m.grid.ω/c.*imag(neff(m, z=z))
 end
 
 function losslength(m::GridMode; z=0)
@@ -141,7 +141,7 @@ function losslength(m::GridMode; z=0)
 end
 
 function transmission(m::GridMode, L)
-    return @. exp(-α(m)*L) # TODO change to integral
+    return exp.(-α(m)*L) # TODO change to integral
 end
 
 function dB_per_m(m::GridMode; z=0)
