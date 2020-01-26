@@ -4,7 +4,10 @@ import Luna: Modes, Grid, PhysData
 import Luna.PhysData: change
 
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
-    β = .-βfun(grid.ω, 0)
+    β = similar(grid.ω)
+    βfun(β, grid.ω, 0)
+    β .*= -1
+    # β = .-βfun(grid.ω, 0)
     α = αfun(grid.ω, 0)
     β1 = -1/frame_vel(0)
     return @. im*(β-β1*grid.ω) - α/2
@@ -38,10 +41,12 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     βconst = zero(grid.ω)
     βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
     βconst[1] = 1
-    βfun(ω, z) = βconst
+    function βfun!(out, ω, z)
+        out .= βconst
+    end
     frame_vel(z) = 1/β1const
     αfun(ω, z) = Modes.α.(mode, ω)
-    make_const_linop(grid, βfun, αfun, frame_vel), βfun, frame_vel, αfun
+    make_const_linop(grid, βfun!, αfun, frame_vel), βfun!, frame_vel, αfun
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
