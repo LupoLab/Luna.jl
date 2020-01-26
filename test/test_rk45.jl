@@ -38,10 +38,9 @@ function testinit()
     Lin = @. -im/2*ω^2
     
     linout = similar(Aω)
-    Linfunc = let linout=linout, ω=ω
-        function Linfunc(z)
-            @. linout = -im/2*ω^2
-            return linout
+    Linfunc = let ω=ω
+        function Linfunc(out, z)
+            @. out = -im/2*ω^2
         end
     end
 

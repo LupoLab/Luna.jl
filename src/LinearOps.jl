@@ -78,17 +78,16 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
 end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
-    function linop(z)
-        β = grid.ω./PhysData.c.*Modes.neff.(mode, grid.ω, z=z)
-        β[1] = 1
-        return -im.*(β .- grid.ω.*Modes.dispersion(mode, 1, change(λ0), z=z))
+    function linop!(out, z)
+        out .= -im.*grid.ω./PhysData.c.*Modes.neff.(mode, grid.ω, z=z)
+        out[1] = 1
+        out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, change(λ0), z=z)
     end
-    function βfun(ω, z)
-        β = Modes.β.(mode, ω, z=z)
-        β[1] = 1
-        return β
+    function βfun!(out, ω, z)
+        out .= Modes.β.(mode, ω, z=z)
+        out[1] = 1
     end
-    return linop, βfun
+    return linop!, βfun!
 end
 
 
