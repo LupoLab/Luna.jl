@@ -49,6 +49,9 @@ const gas_str = Dict(
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 const metal = (:Ag,)
 
+"Change from ω to λ and vice versa"
+change(ωλ) = 2π*c/ωλ
+
 "Linear coefficients"
 
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at

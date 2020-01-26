@@ -1,6 +1,6 @@
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
-import Luna.Tools: change
+import Luna.PhysData: change
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -22,7 +22,7 @@ L = 15e-2
 grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 coren, densityfun = Capillary.gradient(gas, L, pres, 0)
-m = Capillary.MarcatilliMode(a, coren, loss=false)
+m = Capillary.MarcatilliMode(a, coren, loss=false, model=:reduced);
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
@@ -41,7 +41,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop, βfun = LinearOps.make_linop(grid, m, λ0)
+linop, βfun = LinearOps.make_linop(grid, m, λ0);
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 

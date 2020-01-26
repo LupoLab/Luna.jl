@@ -1,7 +1,7 @@
 import Test: @test
 import Luna: Modes, Capillary, Grid
 import Luna.PhysData: c, roomtemp, ref_index_fun
-import Luna.Tools: change
+import Luna.PhysData: change
 
 λ = 800e-9
 ω = change(λ)

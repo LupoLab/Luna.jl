@@ -273,7 +273,7 @@ function make_prop!(linop, y0)
     prop! = let linop=linop, linop_int=linop_int
         function prop!(y, t1, t2)
             # linop_int .= HCubature.hquadrature(linop, t1, t2)[1]
-            linop_int .= linop(t1).*(t2-t1)
+            linop_int .= linop((t1+t2)/2).*(t2-t1)
             @. y *= exp(linop_int)
         end
     end

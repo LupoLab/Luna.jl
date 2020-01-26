@@ -7,7 +7,7 @@ using Reexport
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field
-import Luna.Tools: change
+import Luna.PhysData: change
 
 export MarcatilliMode, dimlimits, neff, field
 
@@ -122,16 +122,10 @@ end
 function gradient(gas, L, p0, p1)
     γ = sellmeier_gas(gas)
     dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1))
-    p(z) = sqrt(p0^2 + z/L*(p1^2 - p0^2))
-    function dens(z)
-        try
-            dspl(p(z))
-        catch
-            println(z)
-            println(p(z))
-        end
-    end
-    # dens(z) = dspl(p(z))
+    p(z) =  z > L ? p1 :
+            z <= 0 ? p0 : 
+            sqrt(p0^2 + z/L*(p1^2 - p0^2))
+    dens(z) = dspl(p(z))
     coren(ω; z) = sqrt(1 + (γ(change(ω)*1e6)*dens(z)))
     return coren, dens
 end

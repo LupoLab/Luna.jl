@@ -79,15 +79,15 @@ function neff(m::AbstractMode, ω; z=0)
 end
 
 function β(m::AbstractMode, ω; z=0)
-    return ω/c*real(neff(m, ω))
+    return ω/c*real(neff(m, ω, z=z))
 end
 
 function α(m::AbstractMode, ω; z=0)
-    return 2*ω/c*imag(neff(m, ω))
+    return 2*ω/c*imag(neff(m, ω, z=z))
 end
 
 function losslength(m::AbstractMode, ω; z=0)
-    return 1/α(m, ω)
+    return 1/α(m, ω, z=z)
 end
 
 function transmission(m::AbstractMode, ω, L; z=0)
