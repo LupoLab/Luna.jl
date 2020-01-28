@@ -3,7 +3,8 @@ module PhysData
 import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
-import Luna: Maths
+import CSV
+import Luna: Maths, Utils
 
 "Speed of light"
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
@@ -51,6 +52,8 @@ const metal = (:Ag,)
 
 "Change from ω to λ and vice versa"
 change(ωλ) = 2π*c/ωλ
+
+eV_to_μm(eV) = 1e6*change(electron*eV/ħ)
 
 "Linear coefficients"
 
@@ -125,11 +128,16 @@ function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
         #TODO: Deal with sqrt of negative values better (somehow...)
-        return μm -> @. sqrt(Complex(1
-             + 0.6961663/(1-(0.0684043/μm)^2)
-             + 0.4079426/(1-(0.1162414/μm)^2)
-             + 0.8974794/(1-(9.896161/μm)^2)
-             ))
+        # return μm -> @. sqrt(Complex(1
+        #      + 0.6961663/(1-(0.0684043/μm)^2)
+        #      + 0.4079426/(1-(0.1162414/μm)^2)
+        #      + 0.8974794/(1-(9.896161/μm)^2)
+        #      ))
+        ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
+        kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
+        spl = Maths.CSpline(eV_to_μm.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+        μm = collect(range(0.05, 5, length=512))
+        Maths.CSpline(μm, spl.(μm))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
         return μm -> @. sqrt(Complex(1
