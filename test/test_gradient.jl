@@ -21,7 +21,7 @@ L = 15e-2
 
 grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-coren, densityfun = Capillary.gradient(gas, L, 3/2*pres, 0)
+coren, densityfun = Capillary.gradient(gas, L, pres, pres);
 m = Capillary.MarcatilliMode(a, coren, loss=false);
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
@@ -38,8 +38,8 @@ end
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-            #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop, βfun = LinearOps.make_linop(grid, m, λ0);
 
