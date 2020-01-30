@@ -136,8 +136,8 @@ function sellmeier_glass(material::Symbol)
         ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
         kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
         spl = Maths.CSpline(eV_to_μm.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
-        μm = collect(range(0.05, 5, length=512))
-        Maths.CSpline(μm, spl.(μm))
+        μm = collect(range(0.05, 5, length=512)) # TODO magic numbers
+        return Maths.CSpline(μm, spl.(μm))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
         return μm -> @. sqrt(Complex(1
