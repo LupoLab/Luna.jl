@@ -121,7 +121,7 @@ end
 "Check that function accepts z keyword argument and add it if necessary"
 function chkzkwarg(func)
     try
-        func(1e15, z=0.0)
+        func(2.5e15, z=0.0)
         return func
     catch e
         if isa(e, ErrorException)

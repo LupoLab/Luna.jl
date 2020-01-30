@@ -127,17 +127,12 @@ returns the refractive index directly"
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
-        #TODO: Deal with sqrt of negative values better (somehow...)
-        # return μm -> @. sqrt(Complex(1
-        #      + 0.6961663/(1-(0.0684043/μm)^2)
-        #      + 0.4079426/(1-(0.1162414/μm)^2)
-        #      + 0.8974794/(1-(9.896161/μm)^2)
-        #      ))
-        ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
-        kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
-        spl = Maths.CSpline(eV_to_μm.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
-        μm = collect(range(0.05, 5, length=512)) # TODO magic numbers
-        return Maths.CSpline(μm, spl.(μm))
+        # TODO: Deal with sqrt of negative values better (somehow...)
+        return μm -> @. sqrt(Complex(1
+             + 0.6961663/(1-(0.0684043/μm)^2)
+             + 0.4079426/(1-(0.1162414/μm)^2)
+             + 0.8974794/(1-(9.896161/μm)^2)
+             ))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
         return μm -> @. sqrt(Complex(1
@@ -360,6 +355,18 @@ function quantum_numbers(material)
         return 1, 1, 1
     end
 end
+
+function lookup_glass(material::Symbol)
+    if material == :SiO2
+        ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
+        kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
+        spl = Maths.CSpline(eV_to_μm.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+    else
+        throw(DomainError(material, "Unknown metal $material"))
+    end
+    return spl
+end
+
 
 "Lookup tables for complex refractive indices of metals. Returns function of wavelength in μm which in turn
  returns the refractive index directly"
