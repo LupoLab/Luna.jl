@@ -5,7 +5,7 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
 abstract type AbstractMode end
 
@@ -118,6 +118,21 @@ function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9)
     return 2π*c/ω0
 end
 
+"Check that function accepts z keyword argument and add it if necessary"
+function chkzkwarg(func)
+    try
+        func(1e15, z=0.0)
+        return func
+    catch e
+        if isa(e, ErrorException)
+            f = (ω; z) -> func(ω)
+            return f
+        else
+            throw(e)
+        end
+    end
+end
+
 """
 Macro to create a delegated mode, which takes its methods from an existing mode except
 for those which are overwritten
@@ -136,9 +151,9 @@ macro delegated(mex, exprs...)
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
             dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
         else
-            @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = ($mfun)(dm.m, args...; kwargs...)
         end
     end
     quote
@@ -159,7 +174,7 @@ macro arbitrary(exprs...)
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
             dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
         else
             error("Must define $mfun for arbitrary mode!")
         end

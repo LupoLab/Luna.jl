@@ -26,7 +26,9 @@ struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
 end
 
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
-    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ, coren, cladn, model, loss)
+    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
+                   chkzkwarg(coren), chkzkwarg(cladn),
+                   model, loss)
 end
 
 "convenience constructor assuming single gas filling"
