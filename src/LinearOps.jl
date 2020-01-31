@@ -6,20 +6,21 @@ import Luna.PhysData: change
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     β = similar(grid.ω)
     βfun(β, grid.ω, 0)
-    β .*= -1
-    # β = .-βfun(grid.ω, 0)
     α = αfun(grid.ω, 0)
-    β1 = -1/frame_vel(0)
-    return @. im*(β-β1*grid.ω) - α/2
+    β1 = 1/frame_vel(0)
+    linop = @. -im*(β-β1*grid.ω) - α/2
+    linop[1] = 1
+    return linop
 end
 
 function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
     β = similar(grid.ω)
     βfun(β, grid.ω, 0)
-    β .*= -1
     α = αfun(grid.ω, 0)
     β1 = 1/frame_vel(0)
-    return -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
+    linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
+    linop[.!grid.sidx] .= 1
+    return linop
 end
 
 function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
@@ -88,7 +89,7 @@ end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function linop!(out, z)
-        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*Modes.neff.(mode, grid.ω[2:end], z=z)
+        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[2:end], z=z))
         out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, change(λ0), z=z)
         out[1] = 1
     end
@@ -103,13 +104,13 @@ function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false
     function linop!(out, z)
         fill!(out, 1.0)
         out[grid.sidx] .= -im.*(
-            grid.ω[grid.sidx]./PhysData.c.*Modes.neff.(mode, grid.ω[grid.sidx], z=z)
+            grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[grid.sidx], z=z))
             )
         out[grid.sidx] .-= -im.*(
             (grid.ω[grid.sidx] .- grid.ω0).*Modes.dispersion(mode, 1, change(λ0), z=z)
             )
         if !thg
-            out .-= -im.*Modes.β(mode, change(λ0))
+            out[grid.sidx] .-= -im.*Modes.β(mode, change(λ0))
         end
     end
     function βfun!(out, ω, z)
@@ -125,7 +126,7 @@ function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         nmodes = length(modes)
         for i = 1:nmodes
             out[2:end, i] .= -im.*(
-                grid.ω[2:end]./PhysData.c.*Modes.neff.(modes[i], grid.ω[2:end], z=z)
+                grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[2:end], z=z))
                 .- grid.ω[2:end] .* β1
                 )
             out[1, i] = 1
@@ -141,7 +142,7 @@ function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         fill!(out, 1.0)
         for i = 1:nmodes
             out[grid.sidx, i] .= -im.*(
-                grid.ω[grid.sidx]./PhysData.c.*Modes.neff.(modes[i], grid.ω[grid.sidx], z=z)
+                grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
                 .- (grid.ω[grid.sidx] .- grid.ω0) .* β1
                 )
             if !thg
