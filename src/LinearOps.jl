@@ -100,8 +100,10 @@ function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         β1 = Modes.dispersion(modes[ref_mode], 1, change(λ0), z=z)
         nmodes = length(modes)
         for i = 1:nmodes
-            out[2:end, i] .= -im.*(grid.ω[2:end]./PhysData.c.*Modes.neff.(modes[i], grid.ω[2:end], z=z)
-                                  .- grid.ω[2:end] .* β1)
+            out[2:end, i] .= -im.*(
+                grid.ω[2:end]./PhysData.c.*Modes.neff.(modes[i], grid.ω[2:end], z=z)
+                .- grid.ω[2:end] .* β1
+                )
             out[1, i] = 1
         end
     end

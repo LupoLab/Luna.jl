@@ -261,8 +261,12 @@ end
 
 function make_prop!(linop::AbstractArray, y0)
     prop! = let linop=linop
-        function prop!(y, t1, t2)
-            @. y *= exp(linop*(t2-t1))
+        function prop!(y, t1, t2, bwd=false)
+            if bwd
+                @. y *= exp(linop*(t1-t2))
+            else
+                @. y *= exp(linop*(t2-t1))
+            end
         end
     end
 end
