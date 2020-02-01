@@ -13,19 +13,20 @@ export MarcatilliMode, dimlimits, neff, field
 
 "Marcatili mode"
 struct MarcatilliMode{Tcore, Tclad, LT} <: AbstractMode
-    a::Float64
-    n::Int
-    m::Int
-    kind::Symbol
-    unm::Float64
-    ϕ::Float64
+    a::Float64 # core radius
+    n::Int # radial mode index
+    m::Int # azimuthal mode index
+    kind::Symbol # kind of mode (transverse magnetic/electric or hybrid)
+    unm::Float64 # mth zero of the nth Bessel function of the first kind
+    ϕ::Float64 # overall rotation angle of the mode
     coren::Tcore # callable, returns (possibly complex) core ref index as function of ω
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
-    model::Symbol
-    loss::LT
+    model::Symbol # if :full, includes complete influence of complex cladding ref index
+    loss::LT # Val{true}() or Val{false}() - whether to include the loss
 end
 
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
+    # chkzkwarg makes sure that coren and cladn take z as a keyword argument
     MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
                    chkzkwarg(coren), chkzkwarg(cladn),
                    model, Val(loss))
@@ -35,15 +36,15 @@ end
 function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
-    coren = (ω; z) -> rfg(2π*c/ω)
-    cladn = (ω; z) -> rfs(2π*c/ω)
+    coren = (ω; z) -> rfg(change(ω))
+    cladn = (ω; z) -> rfs(change(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 "convenience constructor for non-constant core index"
 function MarcatilliMode(a, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
-    cladn = (ω; z) -> rfs(2π*c/ω)
+    cladn = (ω; z) -> rfs(change(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
@@ -64,7 +65,8 @@ function neff(m::MarcatilliMode, ω; z=0)
     neff(m, ω, εcl, εco, vn)
 end
 
-# Function barrier to make neff type stable - dispatch on loss
+# Dispatch on loss to make neff type stable
+# m.loss = Val{true}() (returns ComplexF64)
 function neff(m::MarcatilliMode{Tco, Tcl, Val{true}}, ω, εcl, εco, vn) where Tcl where Tco
     if m.model == :full
         k = ω/c
@@ -77,12 +79,13 @@ function neff(m::MarcatilliMode{Tco, Tcl, Val{true}}, ω, εcl, εco, vn) where 
     end 
 end
 
+# m.loss = Val{false}() (returns Float64)
 function neff(m::MarcatilliMode{Tco, Tcl, Val{false}}, ω, εcl, εco, vn) where Tcl where Tco
     if m.model == :full
         k = ω/c
         return real(sqrt(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
     elseif m.model == :reduced
-        return (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+        return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
     else
         error("model must be :full or :reduced")
     end 
@@ -129,6 +132,8 @@ function field(m::MarcatilliMode)
     end
 end
 
+"Convenience function to create density and core index profiles for
+simple two-point gradient fills."
 function gradient(gas, L, p0, p1)
     γ = sellmeier_gas(gas)
     dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1))
