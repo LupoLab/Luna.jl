@@ -1,6 +1,5 @@
 import Test: @test, @testset
 
-@testset "gradient" begin
 @testset "field" begin
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
@@ -97,5 +96,4 @@ output_grad = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfu
 Luna.run(Eω, grid, linop, transform, FT, output_grad)
 
 @test all(output_grad.data["Eω"][grid.sidx, :] .== output_const.data["Eω"][grid.sidx, :])
-end
 end

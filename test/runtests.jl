@@ -46,4 +46,8 @@ end
     include(joinpath(testdir, "test_tools.jl"))
 end
 
+@testset "Gradients" begin
+    include(joinpath(testdir, "test_gradient.jl"))
+end
+
 end
