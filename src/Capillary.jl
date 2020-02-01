@@ -12,7 +12,7 @@ import Luna.PhysData: change
 export MarcatilliMode, dimlimits, neff, field
 
 "Marcatili mode"
-struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
+struct MarcatilliMode{Tcore, Tclad, LT} <: AbstractMode
     a::Float64
     n::Int
     m::Int
@@ -22,13 +22,13 @@ struct MarcatilliMode{Tcore, Tclad} <: AbstractMode
     coren::Tcore # callable, returns (possibly complex) core ref index as function of ω
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
     model::Symbol
-    loss::Bool
+    loss::LT
 end
 
 function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
                    chkzkwarg(coren), chkzkwarg(cladn),
-                   model, loss)
+                   model, Val(loss))
 end
 
 "convenience constructor assuming single gas filling"
@@ -62,20 +62,28 @@ function neff(m::MarcatilliMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    k = ω/c
+    neff(m, ω, εcl, εco, vn)
+end
+
+# Function barrier to make neff type stable - dispatch on loss
+function neff(m::MarcatilliMode{Tco, Tcl, Val{true}}, ω, εcl, εco, vn) where Tcl where Tco
     if m.model == :full
-        if m.loss
-            return sqrt(complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
-        else
-            return real(sqrt(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
-        end
+        k = ω/c
+        return sqrt(complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
     elseif m.model == :reduced
-        if m.loss
-            return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
-                     + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn)
-        else
-            return (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
-        end
+        return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+                    + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn)
+    else
+        error("model must be :full or :reduced")
+    end 
+end
+
+function neff(m::MarcatilliMode{Tco, Tcl, Val{false}}, ω, εcl, εco, vn) where Tcl where Tco
+    if m.model == :full
+        k = ω/c
+        return real(sqrt(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+    elseif m.model == :reduced
+        return (1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
     else
         error("model must be :full or :reduced")
     end 
