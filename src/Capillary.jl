@@ -58,7 +58,6 @@ examining normal mode propagation).
 Bell System Technical Journal 43, 1783–1809 (1964).
 "
 function neff(m::MarcatilliMode, ω; z=0)
-    # TODO this function is not type stable - perhaps make m.loss a value type?
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
