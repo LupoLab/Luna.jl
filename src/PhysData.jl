@@ -53,7 +53,7 @@ const metal = (:Ag,)
 "Change from ω to λ and vice versa"
 change(ωλ) = 2π*c/ωλ
 
-eV_to_μm(eV) = 1e6*change(electron*eV/ħ)
+eV_to_m(eV) = change(electron*eV/ħ)
 
 "Linear coefficients"
 
@@ -360,7 +360,7 @@ function lookup_glass(material::Symbol)
     if material == :SiO2
         ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
         kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
-        spl = Maths.CSpline(eV_to_μm.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+        spl = Maths.CSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
