@@ -83,9 +83,9 @@ function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
     rate = ionrate_PPT.(ionpot, λ0, Z, l, E);
     @info "PPT pre-calcuation done"
-    # Interpolating the log10 and re-exponentiating makes the spline more accurate
-    cspl = Maths.CSpline(E, log10.(rate))
-    ir(E) = E <= Emin ? 0.0 : 10^cspl(E)
+    # Interpolating the log and re-exponentiating makes the spline more accurate
+    cspl = Maths.CSpline(E, log.(rate))
+    ir(E) = E <= Emin ? 0.0 : exp(cspl(E))
     function ionrate!(out, E)
         out .= ir.(E)
     end
