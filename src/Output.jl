@@ -169,8 +169,8 @@ end
 Note that if file[idx] is a group, HDF5 automatically converts this
 to a Dict"
 function getindex(o::HDF5Output, idx)
-    HDF5.h5open(o.fpath, "r") do file
-        global ret = read(file[idx])
+    ret = HDF5.h5open(o.fpath, "r") do file
+        read(file[idx])
     end
     if idx == o.yname
         return reinterpret(ComplexF64, ret)
