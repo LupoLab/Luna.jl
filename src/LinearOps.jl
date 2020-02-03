@@ -1,7 +1,7 @@
 module LinearOps
 import FFTW
 import Luna: Modes, Grid, PhysData
-import Luna.PhysData: change
+import Luna.PhysData: wlfreq
 
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     β = similar(grid.ω)
@@ -24,11 +24,11 @@ function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
-    β1const = Modes.dispersion(mode, 1, change(λ0))
+    β1const = Modes.dispersion(mode, 1, wlfreq(λ0))
     if thg
         β0const = 0.0
     else
-        β0const = Modes.β(mode, change(λ0))
+        β0const = Modes.β(mode, wlfreq(λ0))
     end
     βconst = zero(grid.ω)
     βconst[grid.sidx] = Modes.β.(mode, grid.ω[grid.sidx])
@@ -42,7 +42,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
 end
 
 function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
-    β1const = Modes.dispersion(mode, 1, change(λ0))
+    β1const = Modes.dispersion(mode, 1, wlfreq(λ0))
     βconst = zero(grid.ω)
     βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
     βconst[1] = 1
@@ -55,7 +55,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, change(λ0))
+    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
@@ -69,11 +69,11 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, change(λ0))
+    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     if thg
         βref = 0.0
     else
-        βref = Modes.β(modes[ref_mode], change(λ0))
+        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
     end
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
@@ -90,7 +90,7 @@ end
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function linop!(out, z)
         out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[2:end], z=z))
-        out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, change(λ0), z=z)
+        out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
         out[1] = 1
     end
     function βfun!(out, ω, z)
@@ -107,10 +107,10 @@ function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false
             grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[grid.sidx], z=z))
             )
         out[grid.sidx] .-= -im.*(
-            (grid.ω[grid.sidx] .- grid.ω0).*Modes.dispersion(mode, 1, change(λ0), z=z)
+            (grid.ω[grid.sidx] .- grid.ω0).*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
             )
         if !thg
-            out[grid.sidx] .-= -im.*Modes.β(mode, change(λ0))
+            out[grid.sidx] .-= -im.*Modes.β(mode, wlfreq(λ0))
         end
     end
     function βfun!(out, ω, z)
@@ -122,7 +122,7 @@ end
 
 function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, change(λ0), z=z)
+        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
         nmodes = length(modes)
         for i = 1:nmodes
             out[2:end, i] .= -im.*(
@@ -136,8 +136,8 @@ end
 
 function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, change(λ0), z=z)
-        βref = Modes.β(modes[ref_mode], change(λ0))
+        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
+        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
         nmodes = length(modes)
         fill!(out, 1.0)
         for i = 1:nmodes

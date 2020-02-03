@@ -7,7 +7,7 @@ using Reexport
 import Luna: Maths
 import Luna.PhysData: c, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field
-import Luna.PhysData: change
+import Luna.PhysData: wlfreq
 
 export MarcatilliMode, dimlimits, neff, field
 
@@ -36,15 +36,15 @@ end
 function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
-    coren = (ω; z) -> rfg(change(ω))
-    cladn = (ω; z) -> rfs(change(ω))
+    coren = (ω; z) -> rfg(wlfreq(ω))
+    cladn = (ω; z) -> rfs(wlfreq(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 "convenience constructor for non-constant core index"
 function MarcatilliMode(a, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
-    cladn = (ω; z) -> rfs(change(ω))
+    cladn = (ω; z) -> rfs(wlfreq(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
@@ -141,7 +141,7 @@ function gradient(gas, L, p0, p1)
             z <= 0 ? p0 : 
             sqrt(p0^2 + z/L*(p1^2 - p0^2))
     dens(z) = dspl(p(z))
-    coren(ω; z) = sqrt(1 + (γ(change(ω)*1e6)*dens(z)))
+    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
     return coren, dens
 end
 end

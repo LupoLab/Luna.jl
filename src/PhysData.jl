@@ -51,9 +51,9 @@ const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 const metal = (:Ag,)
 
 "Change from ω to λ and vice versa"
-change(ωλ) = 2π*c/ωλ
+wlfreq(ωλ) = 2π*c/ωλ
 
-eV_to_m(eV) = change(electron*eV/ħ)
+eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
 "Linear coefficients"
 
