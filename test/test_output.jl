@@ -33,7 +33,7 @@ import Luna: Output
     @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open("test.h5", "r") do file
         @test all(read(file["t"]) == t)
-        yr = reinterpret(ComplexF64, read(file["y"]))
+        global yr = reinterpret(ComplexF64, read(file["y"]))
         @test all([all(yr[:, :, :, ii] == y0) for ii=1:n])
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
@@ -46,6 +46,8 @@ import Luna: Output
         @test 100 == read(file["meta"]["meta1"])
         @test "src" == read(file["meta"]["meta2"])
     end
+    @test all(yr .== o["y"])
+    @test 100 == o["meta"]["meta1"]
     rm("test.h5")
 end
 
