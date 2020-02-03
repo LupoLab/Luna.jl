@@ -3,7 +3,7 @@ import Test: @test, @testset
 @testset "field" begin
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
-import Luna.PhysData: change
+import Luna.PhysData: wlfreq
 
 a = 13e-6
 gas = :Ar
@@ -52,7 +52,7 @@ end
 @testset "envelope" begin
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
-import Luna.PhysData: change
+import Luna.PhysData: wlfreq
 
 a = 13e-6
 gas = :Ar
