@@ -23,22 +23,26 @@ include("Polarisation.jl")
 include("Tools.jl")
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     xo1 = Array{Float64}(undef, length(grid.to))
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     Eω = make_init(grid, inputs, energyfun, FT)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
-    FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     Eω = make_init(grid, inputs, energyfun, FT)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
@@ -54,19 +58,21 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     else
         npol = 1
     end
+    Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
-    FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
+    FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
     for i in 1:length(inputs)
         Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
     end
     x = Array{Float64}(undef, length(grid.t), length(modes))
-    FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{Float64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
+    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
@@ -82,19 +88,21 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     else
         npol = 1
     end
+    Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
-    FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
+    FTt = FFTW.plan_fft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
     for i in 1:length(inputs)
         Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
     end
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
-    FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
+    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
