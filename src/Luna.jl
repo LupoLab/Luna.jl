@@ -34,7 +34,7 @@ end
 
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs)
     x = Array{ComplexF64}(undef, length(grid.t))
-    FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)

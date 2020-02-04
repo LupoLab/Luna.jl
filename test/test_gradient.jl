@@ -1,10 +1,9 @@
-import Test: @test, @testset
-
-@testset "field" begin
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
 import Luna.PhysData: wlfreq
+import Test: @test, @testset
 
+@testset "field" begin
 a = 13e-6
 gas = :Ar
 pres = 5
@@ -46,14 +45,10 @@ statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output_grad = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad)
 
-@test all(output_grad.data["Eω"][2:end, :] .== output_const.data["Eω"][2:end, :])
+@test all(output_grad.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
 end
 
 @testset "envelope" begin
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
-import Luna.PhysData: wlfreq
-
 a = 13e-6
 gas = :Ar
 pres = 5
@@ -95,5 +90,5 @@ statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output_grad = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad)
 
-@test all(output_grad.data["Eω"][grid.sidx, :] .== output_const.data["Eω"][grid.sidx, :])
+@test all(output_grad.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])
 end
