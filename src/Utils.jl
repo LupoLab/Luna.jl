@@ -23,6 +23,12 @@ function git_branch()
     end
 end
 
+srcdir() = dirname(@__FILE__)
+
+lunadir() = dirname(srcdir())
+
+datadir() = joinpath(srcdir(), "data")
+
 cachedir() = joinpath(homedir(), ".luna")
 
 function sourcecode()

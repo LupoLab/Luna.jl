@@ -1,5 +1,4 @@
 module RK45
-import HCubature
 import Dates
 import Logging
 import Printf: @sprintf
@@ -262,21 +261,25 @@ end
 
 function make_prop!(linop::AbstractArray, y0)
     prop! = let linop=linop
-        function prop!(y, t1, t2)
-            @. y *= exp(linop*(t2-t1))
+        function prop!(y, t1, t2, bwd=false)
+            if bwd
+                @. y *= exp(linop*(t1-t2))
+            else
+                @. y *= exp(linop*(t2-t1))
+            end
         end
     end
 end
 
-function make_prop!(linop, y0)
+function make_prop!(linop!, y0)
     linop_int = similar(y0)
-    prop! = let linop=linop, linop_int=linop_int
-        function prop!(y, t1, t2)
-            # linop_int .= HCubature.hquadrature(linop, t1, t2)[1]
-            linop_int .= linop(t1).*(t2-t1)
-            @. y *= exp(linop_int)
-        end
+    function prop!(y, t1, t2, bwd=false)
+        # linop is always evaluated at later time, even for backward propagation
+        linop!(linop_int, t2) 
+        linop_int .*= bwd ? (t1-t2) : (t2-t1)
+        @. y *= exp(linop_int)
     end
+    return prop!
 end
 
 function make_fbar!(f!, prop!, y0)
@@ -284,9 +287,9 @@ function make_fbar!(f!, prop!, y0)
     fbar! = let f! = f!, prop! = prop!, y=y
         function fbar!(out, ybar, t1, t2)
             y .= ybar
-            prop!(y, t1, t2)
-            f!(out, y, t2)
-            prop!(out, t2, t1)
+            prop!(y, t1, t2) # propagate to t2
+            f!(out, y, t2) # evaluate RHS function
+            prop!(out, t1, t2, true) # propagate back to t1
         end
     end
 end

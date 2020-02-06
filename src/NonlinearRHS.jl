@@ -122,10 +122,11 @@ function norm_modal(ω)
 end
 
 "Normalisation factor for mode-averaged field."
-function norm_mode_average(ω, βfun)
+function norm_mode_average(ω, βfun!)
     out = zero(ω)
     function norm(z)
-        out .= PhysData.c^2 .* PhysData.ε_0 .* βfun(ω, z) ./ ω
+        βfun!(out, ω, z)
+        out .*= PhysData.c^2 .* PhysData.ε_0 ./ ω
         return out
     end
     return norm
