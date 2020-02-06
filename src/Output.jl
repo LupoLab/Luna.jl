@@ -146,6 +146,8 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
         Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
         rm(fpath)
     end
+    fdir, fname = splitdir(fpath)
+    isdir(fdir) || mkpath(fdir)
     HDF5.h5open(fpath, "cw") do file
         if compression
             HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
