@@ -13,7 +13,7 @@ abstract type AbstractMode end
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
-function dimlimits(m::M) where {M <: AbstractMode}
+function dimlimits(m::M; z=0) where {M <: AbstractMode}
     error("abstract method called")
 end
 
