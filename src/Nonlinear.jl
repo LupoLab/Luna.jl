@@ -89,8 +89,8 @@ M. Geissler, G. Tempea, A. Scrinzi, M. Schnürer, F. Krausz, and T. Brabec, Phys
 struct PlasmaCumtrapz{R, EType, tType}
     ratefunc::R
     ionpot::Float64
-    rate::EType
-    fraction::EType
+    rate::tType
+    fraction::tType
     phase::EType
     J::EType
     P::EType
@@ -99,24 +99,15 @@ struct PlasmaCumtrapz{R, EType, tType}
 end
 
 function PlasmaCumtrapz(t, E, ratefunc, ionpot)
-    rate = similar(E)
-    fraction = similar(E)
+    rate = similar(t)
+    fraction = similar(t)
     phase = similar(E)
     J = similar(E)
     P = similar(E)
     return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
 end
 
-function (Plas::PlasmaCumtrapz)(out, Et)
-    if ndims(Et) > 1
-        if size(Et, 2) == 1
-            E = reshape(Et, size(Et,1))
-        else
-            error("vector plasma not yet implemented")
-        end
-    else
-        E = Et
-    end
+function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -128,6 +119,40 @@ function (Plas::PlasmaCumtrapz)(out, Et)
         end
     end
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+end
+
+function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
+    Ex = E[:,1]
+    Ey = E[:,2]
+    Em = @. hypot.(Ex, Ey)
+    Plas.ratefunc(Plas.rate, Em)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
+    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.phase = Plas.fraction * e_ratio * E
+    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
+    for ii in eachindex(Em)
+        if abs(Em[ii]) > 0
+            pre = Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/Em[ii]^2
+            Plas.J[ii,1] +=  pre*Ex[ii]
+            Plas.J[ii,2] +=  pre*Ey[ii]
+        end
+    end
+    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+    @. out += Plas.P
+end
+
+function (Plas::PlasmaCumtrapz)(out, Et)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, size(Et,1))
+        else
+            PlasmaVector!(out, Plas::PlasmaCumtrapz, Et)
+            return
+        end
+    else
+        E = Et
+    end
+    PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
     if ndims(Et) > 1
         out .+= reshape(Plas.P, size(Et))
     else
@@ -135,4 +160,7 @@ function (Plas::PlasmaCumtrapz)(out, Et)
     end
 end
 
+
 end
+
+
