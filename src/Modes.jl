@@ -23,9 +23,9 @@ function field(m::M) where {M <: AbstractMode}
 end
 
 "Get mode normalization constant"
-function N(m::M) where {M <: AbstractMode}
-    f = field(m)
-    dl = dimlimits(m)
+function N(m::M; z=0) where {M <: AbstractMode}
+    f = field(m, z=z)
+    dl = dimlimits(m, z=z)
     function Nfunc(xs)
         E = f(xs)
         ret = sqrt(ε_0/μ_0)*dot(E, E)
@@ -36,8 +36,8 @@ function N(m::M) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> |E|"
-function absE(m::M) where {M <: AbstractMode}
-    func = let sN = sqrt(N(m)), f = field(m)
+function absE(m::M; z=0) where {M <: AbstractMode}
+    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             norm(f(xs) ./ sN)
         end
@@ -45,8 +45,8 @@ function absE(m::M) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> (Ex, Ey)"
-function Exy(m) where {M <: AbstractMode}
-    func = let sN = sqrt(N(m)), f = field(m)
+function Exy(m; z=0) where {M <: AbstractMode}
+    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             f(xs) ./ sN
         end
@@ -54,9 +54,9 @@ function Exy(m) where {M <: AbstractMode}
 end
 
 "Get effective area of mode"
-function Aeff(m) where {M <: AbstractMode}
-    em = absE(m)
-    dl = dimlimits(m)
+function Aeff(m; z=0) where {M <: AbstractMode}
+    em = absE(m, z=z)
+    dl = dimlimits(m, z=z)
     # Numerator
     function Aeff_num(xs)
         e = em(xs)
