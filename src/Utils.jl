@@ -71,6 +71,7 @@ end
 function saveFFTwisdom()
     fpath = joinpath(cachedir(), "FFTWcache")
     isfile(fpath) && rm(fpath)
+    isdir(cachedir()) || mkpath(cachedir())
     FFTW.export_wisdom(fpath)
     Logging.@info("FFTW wisdom saved to $fpath")
 end

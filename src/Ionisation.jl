@@ -87,9 +87,7 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
     h = hash((ionpot, λ0, Z, l, sum_tol, N))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
-    if !isdir(cachedir)
-        mkpath(cachedir)
-    end
+    isdir(cachedir) || mkpath(cachedir)
     if isfile(fpath)
         @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
         E, rate = HDF5.h5open(fpath, "r") do file
