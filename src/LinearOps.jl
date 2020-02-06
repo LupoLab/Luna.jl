@@ -67,6 +67,7 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         βconst[1] = 1
         α = zeros(length(grid.ω))
         α[2:end] .= Modes.α.(modes[i], grid.ω[2:end])
+        α[α .> 300] .= 300
         linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
     end
     linops
@@ -86,6 +87,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
         βconst[.!grid.sidx] .= 1
         α = Modes.α.(modes[i], grid.ω)
+        α[α .> 300] .= 300
         linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2
     end
     linops
