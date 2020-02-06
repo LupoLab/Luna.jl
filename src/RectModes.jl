@@ -40,7 +40,7 @@ end
 
 dimlimits(m::RectMode) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
 
-"effective index of rectabgular mode with dielectric core and arbitrary
+"effective index of rectangular mode with dielectric core and arbitrary
  (metal or dielectric) cladding.
 
 Adapted from
