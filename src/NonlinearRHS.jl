@@ -277,7 +277,7 @@ function (t::TransModal)(nl, Eω, z)
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
-struct TransModeAvg{TT, FTT, rT, gT, dT, nT}
+struct TransModeAvg{TT, FTT, rT, gT, dT, nT, sT}
     Pto::Array{TT,1}
     Eto::Array{TT,1}
     Eωo::Array{ComplexF64,1}
@@ -287,28 +287,30 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT}
     grid::gT
     densityfun::dT
     normfun::nT
+    scale::sT # scaling factor to be applied to the field
 end
 
-function TransModeAvg(TT, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, scale)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun)
+    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun, scale)
 end
 
-function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun)
-    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun; scale=z -> 1)
+    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun, scale)
 end
 
-function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun)
-    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun; scale=z -> 1)
+    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun, scale)
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
+    t.Eto .*= t.scale(z) # apply scaling factor
     Et_to_Pt!(t.Pto, t.Eto, t.resp)
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
