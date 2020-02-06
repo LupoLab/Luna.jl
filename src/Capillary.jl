@@ -144,4 +144,26 @@ function gradient(gas, L, p0, p1)
     coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
     return coren, dens
 end
+
+"Convenience function to create density and core index profiles for
+multi-point gradient fills."
+function gradient(gas, Z, P)
+    γ = sellmeier_gas(gas)
+    ex = extrema(P)
+    dspl = densityspline(gas, Pmin=ex[1]==ex[2] ? 0 : ex[1], Pmax=ex[2])
+    function p(z)
+        if z <= Z[1]
+            return P[1]
+        elseif z >= Z[end]
+            return P[end]
+        else
+            i = findfirst(x -> x < z, Z)
+            return sqrt(P[i]^2 + (z - Z[i])/(Z[i+1] - Z[i])*(P[i+1]^2 - P[i]^2))
+        end
+    end
+    dens(z) = dspl(p(z))
+    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
+    return coren, dens
+end
+
 end
