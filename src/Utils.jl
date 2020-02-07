@@ -2,6 +2,7 @@ module Utils
 import Dates
 import FFTW
 import Logging
+import Pidfile: mkpidlock
 
 function git_commit()
     wd = dirname(@__FILE__)
@@ -56,9 +57,12 @@ end
 
 function loadFFTwisdom()
     fpath = joinpath(cachedir(), "FFTWcache")
+    lockpath = joinpath(cachedir(), "FFTWlock")
     if isfile(fpath)
         Logging.@info("Found FFTW wisdom at $fpath")
+        pidlock = mkpidlock(lockpath)
         ret = FFTW.import_wisdom(fpath)
+        close(pidlock)
         success = (ret != 0)
         Logging.@info(success ? "FFTW wisdom loaded" : "Loading FFTW wisdom failed")
         return success
@@ -70,9 +74,12 @@ end
 
 function saveFFTwisdom()
     fpath = joinpath(cachedir(), "FFTWcache")
+    lockpath = joinpath(cachedir(), "FFTWlock")
+    pidlock = mkpidlock(lockpath)
     isfile(fpath) && rm(fpath)
     isdir(cachedir()) || mkpath(cachedir())
     FFTW.export_wisdom(fpath)
+    close(pidlock)
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
