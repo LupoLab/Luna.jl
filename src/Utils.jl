@@ -83,4 +83,63 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
+macro scaninit()
+    esc(quote
+        SCANSETUP = "--setup" in ARGS
+        SCANVARS = Symbol[]
+        if !SCANSETUP
+            start, stop = ARGS
+            start = parse(Int, start) + 1
+            stop = parse(Int, stop) + 1
+        end
+    end)
+end
+
+macro scanvar(expr)
+    expr.head == :(=) || error("@scanvar must be applied to an assignment expression")
+    global lhs = expr.args[1]
+    isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
+    quote
+        $(esc(expr))
+        push!($(esc(:SCANVARS)), lhs)
+    end
+end
+
+function interpolate!(ex)
+    if ex.head === :($)
+        var = ex.args[1]
+        if var == :SCANIDX
+            return :SCANIDX
+        else
+            return :(SCANVALS[$var][SCANIDX])
+        end
+    else
+        for i in 1:length(ex.args)
+            arg = ex.args[i]
+            if isa(arg, Expr)
+                ex.args[i] = interpolate!(arg)
+            end
+        end
+    end
+    return ex
+end
+
+macro scan(ex)
+    body = interpolate!(ex)
+    quote
+        $(esc(quote
+            combos = vec(collect(Iterators.product([eval(vi) for vi in SCANVARS]...)))
+            SCANVALS = Dict{Any, Any}()
+            for (i, sv) in enumerate(SCANVARS)
+                SCANVALS[eval(sv)] = [ci[i] for ci in combos]
+            end
+        end))
+        for $(esc(:SCANIDX)) = $(esc(:start)):$(esc(:stop))
+            Logging.@info("SCAN: $($(esc(:SCANIDX)))")
+            $(esc(body))
+        end
+    end
+end
+
+
 end
