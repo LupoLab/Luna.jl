@@ -121,6 +121,47 @@ function scaled_input(grid, input, energyfun, FT)
     return FT * Et_sc
 end
 
+function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(2*PhysData.ħ*grid.ω/(PhysData.ε_0*PhysData.c*aeff*δω))
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(length(grid.ω))
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = complex(zero(grid.ω))
+    amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
+    rFFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(length(grid.ω))
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.RealGrid)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(PhysData.ħ*grid.ω/δω)
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = complex(zero(grid.ω))
+    amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
+    rFFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+
 function run(Eω, grid,
              linop, transform, FT, output; max_dz=Inf)
 
