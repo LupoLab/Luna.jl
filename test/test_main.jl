@@ -40,12 +40,13 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
+aeff = Modes.Aeff(m)
+normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, z->aeff)
 
 in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, z->aeff)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)

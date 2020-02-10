@@ -22,11 +22,11 @@ include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
 
-function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, scale=z -> 1)
+function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     xo1 = Array{Float64}(undef, length(grid.to))
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun, scale=scale)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun, aeff)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     Eω = make_init(grid, inputs, energyfun, FT)
@@ -34,13 +34,13 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs, scale=z -> 1)
+function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun,scale=scale)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun,aeff)
     Eω = make_init(grid, inputs, energyfun, FT)
     Utils.saveFFTwisdom()
     Eω, transform, FT

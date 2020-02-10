@@ -122,11 +122,12 @@ function norm_modal(ω)
 end
 
 "Normalisation factor for mode-averaged field."
-function norm_mode_average(ω, βfun!)
+function norm_mode_average(ω, βfun!, Aeff)
     out = zero(ω)
+    pre = @. PhysData.c^(3/2)*sqrt(2*PhysData.ε_0)/ω
     function norm(z)
         βfun!(out, ω, z)
-        out .*= PhysData.c^2 .* PhysData.ε_0 ./ ω
+        out .*= pre/sqrt(Aeff(z))
         return out
     end
     return norm
@@ -277,7 +278,7 @@ function (t::TransModal)(nl, Eω, z)
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
-struct TransModeAvg{TT, FTT, rT, gT, dT, nT, sT}
+struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     Pto::Array{TT,1}
     Eto::Array{TT,1}
     Eωo::Array{ComplexF64,1}
@@ -287,30 +288,30 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT, sT}
     grid::gT
     densityfun::dT
     normfun::nT
-    scale::sT # scaling factor to be applied to the field
+    aeff::aT # function which returns effective area
 end
 
-function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, scale)
+function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, aeff)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun, scale)
+    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun, aeff)
 end
 
-function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun; scale=z -> 1)
-    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun, scale)
+function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun, aeff)
+    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun, aeff)
 end
 
-function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun; scale=z -> 1)
-    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun, scale)
+function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun, aeff)
+    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun, aeff)
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
-    t.Eto .*= t.scale(z) # apply scaling factor
+    t.Eto ./= sqrt(PhysData.ε_0*PhysData.c*t.aeff(z)/2)
     Et_to_Pt!(t.Pto, t.Eto, t.resp)
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
@@ -340,7 +341,7 @@ function energy_mode_avg(m)
     function energyfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*aeff/2
+        return intg
     end
     return energyfun
 end
@@ -350,7 +351,7 @@ function energy_env_mode_avg(m)
     aeff = Modes.Aeff(m)
     function energyfun(t, Et)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*aeff/2
+        return intg
     end
     return energyfun
 end
