@@ -21,6 +21,7 @@ end
         m = Capillary.MarcatilliMode(a, :He, 1.0, n=n)
         norm = π/2 * m.a(0)^2 * besselj(n, m.unm)^2 * sqrt(ε_0/μ_0)
         @test norm ≈ Modes.N(m)
+        @test Modes.N(m) ≈ Capillary.N(m)
     end
     m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TE)
     norm = π/2 * m.a(0)^2 * besselj(2, m.unm)^2 * sqrt(ε_0/μ_0)

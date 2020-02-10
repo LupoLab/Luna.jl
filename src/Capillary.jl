@@ -5,11 +5,11 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
-import Luna.PhysData: c, ref_index_fun, roomtemp, densityspline, sellmeier_gas
+import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field
 import Luna.PhysData: wlfreq
 
-export MarcatilliMode, dimlimits, neff, field
+export MarcatilliMode, dimlimits, neff, field, N
 
 "Marcatili mode"
 struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
@@ -43,7 +43,6 @@ function MarcatilliMode(afun, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, mo
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    afun(z) = a
     MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
@@ -51,7 +50,6 @@ end
 function MarcatilliMode(afun, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    afun(z) = a
     MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
@@ -144,6 +142,11 @@ function field(m::MarcatilliMode; z=0)
     elseif m.kind == :TM
         return (xs) -> besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(cos(xs[2]), sin(xs[2]))
     end
+end
+
+function N(m::MarcatilliMode; z=0)
+    np1 = (m.kind == :HE) ? m.n : 2
+    π/2 * m.a(0)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
 end
 
 "Convenience function to create density and core index profiles for
