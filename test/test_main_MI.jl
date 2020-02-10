@@ -50,9 +50,6 @@ output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
-Iall .+= abs2.(Eout)
-error()
-
 ω = grid.ω
 t = grid.t
 f = FFTW.fftshift(ω, 1)./2π.*1e-15
