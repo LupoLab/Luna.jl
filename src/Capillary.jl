@@ -25,6 +25,11 @@ struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
     loss::LT # Val{true}() or Val{false}() - whether to include the loss
 end
 
+function MarcatilliMode(a::Number, args...; kwargs...)
+    afun(z) = a
+    MarcatilliMode(afun, args...; kwargs...)
+end
+
 function MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     # chkzkwarg makes sure that coren and cladn take z as a keyword argument
     MarcatilliMode(afun, n, m, kind, get_unm(n, m, kind), ϕ,
@@ -33,7 +38,7 @@ function MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn; model=:full, loss=tr
 end
 
 "convenience constructor assuming single gas filling"
-function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(wlfreq(ω))
@@ -43,7 +48,7 @@ function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model
 end
 
 "convenience constructor for non-constant core index"
-function MarcatilliMode(a::Number, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(wlfreq(ω))
     afun(z) = a
