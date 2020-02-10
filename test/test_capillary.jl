@@ -1,6 +1,7 @@
 import Test: @test, @testset
+import SpecialFunctions: besselj
 import Luna: Modes, Capillary, Grid
-import Luna.PhysData: c, roomtemp, ref_index_fun
+import Luna.PhysData: c, roomtemp, ref_index_fun, ε_0, μ_0
 import Luna.PhysData: wlfreq
 
 @testset "Capillary" begin
@@ -13,6 +14,22 @@ import Luna.PhysData: wlfreq
     @test isapprox(Capillary.dB_per_m(m, ω), 0.6152074146252722)
     @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatilliMode(2a, :He, 1.0, model=:reduced), ω)
 end
+
+@testset "normalisation" begin
+    a = 125e-6
+    for n=1:10
+        m = Capillary.MarcatilliMode(a, :He, 1.0, n=n)
+        norm = π/2 * m.a(0)^2 * besselj(n, m.unm)^2 * sqrt(ε_0/μ_0)
+        @test norm ≈ Modes.N(m)
+    end
+    m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TE)
+    norm = π/2 * m.a(0)^2 * besselj(2, m.unm)^2 * sqrt(ε_0/μ_0)
+    @test norm ≈ Modes.N(m)
+    m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TM)
+    norm = π/2 * m.a(0)^2 * besselj(2, m.unm)^2 * sqrt(ε_0/μ_0)
+    @test norm ≈ Modes.N(m)
+end
+
 
 @testset "β, α" begin
     m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
