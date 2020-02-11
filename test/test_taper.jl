@@ -27,9 +27,7 @@ end
 coren, dens = Capillary.gradient(gas, L, pres, pres); # dens is unused
 m = Capillary.MarcatilliMode(afun, coren, loss=false, model=:full);
  
-aeff = let afun=afun, a0=a0, Aeff=Modes.Aeff(m)
-    aeff(z) = (afun(z)/a0)^2 * Aeff
-end
+aeff(z) = Modes.Aeff(m, z=z)
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
