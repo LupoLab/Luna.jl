@@ -13,17 +13,17 @@ abstract type AbstractMode end
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
-function dimlimits(m::M; z=0) where {M <: AbstractMode}
+function dimlimits(m::AbstractMode; z=0)
     error("abstract method called")
 end
 
 "Create function of coords that returns (xs) -> (Ex, Ey)"
-function field(m::M) where {M <: AbstractMode}
+function field(m::AbstractMode)
     error("abstract method called")
 end
 
 "Get mode normalization constant"
-function N(m::M; z=0) where {M <: AbstractMode}
+function N(m::AbstractMode; z=0)
     f = field(m, z=z)
     dl = dimlimits(m, z=z)
     function Nfunc(xs)
@@ -36,7 +36,7 @@ function N(m::M; z=0) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> |E|"
-function absE(m::M; z=0) where {M <: AbstractMode}
+function absE(m::AbstractMode; z=0) where {M <: AbstractMode}
     func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             norm(f(xs) ./ sN)
@@ -45,7 +45,7 @@ function absE(m::M; z=0) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> (Ex, Ey)"
-function Exy(m; z=0) where {M <: AbstractMode}
+function Exy(m::AbstractMode; z=0)
     func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             f(xs) ./ sN
@@ -54,7 +54,7 @@ function Exy(m; z=0) where {M <: AbstractMode}
 end
 
 "Get effective area of mode"
-function Aeff(m; z=0) where {M <: AbstractMode}
+function Aeff(m::AbstractMode; z=0)
     em = absE(m, z=z)
     dl = dimlimits(m, z=z)
     # Numerator
