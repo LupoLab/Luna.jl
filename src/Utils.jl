@@ -110,7 +110,7 @@ function Scan(ARGS)
         start = parse(Int, start) + 1
         stop = parse(Int, stop) + 1
     end
-    Scan(start, stop, Symbol[], Array{Any, 1}(), Array{Any, 1}())
+    Scan(start, stop, Array{Any, 1}(), IdDict())
 end
 
 "Add a variable to a scan. Adds the array to the list of scan arrays, and re-makes the
