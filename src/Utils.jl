@@ -83,16 +83,38 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
-macro scaninit()
-    esc(quote
-        SCANSETUP = "--setup" in ARGS
-        SCANVARS = Symbol[]
-        if !SCANSETUP
-            start, stop = ARGS
-            start = parse(Int, start) + 1
-            stop = parse(Int, stop) + 1
-        end
-    end)
+mutable struct Scan
+    start::Int
+    stop::Int
+    variables
+    arrays
+    values
+end
+
+function Scan(ARGS)
+    if "--setup" in ARGS
+        start = 0
+        stop = 0
+    else
+        start, stop = ARGS
+        start = parse(Int, start) + 1
+        stop = parse(Int, stop) + 1
+    end
+    Scan(start, stop, Symbol[], Array{Any, 1}(), Array{Any, 1}())
+end
+
+function addvar!(s::Scan, v::Symbol, arr)
+    push!(s.variables, v)
+    push!(s.arrays, arr)
+    makearray!(s)
+end
+
+function makearray!(s::Scan)
+    combos = vec(collect(Iterators.product(s.arrays...)))
+    s.values = IdDict()
+    for (i, a) in enumerate(s.arrays)
+        s.values[a] = [ci[i] for ci in combos]
+    end
 end
 
 macro scanvar(expr)
@@ -101,17 +123,17 @@ macro scanvar(expr)
     isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
     quote
         $(esc(expr))
-        push!($(esc(:SCANVARS)), lhs)
+        addvar!($(esc(:__SCAN__)), lhs, $(esc(:($lhs))))
     end
 end
 
 function interpolate!(ex)
     if ex.head === :($)
         var = ex.args[1]
-        if var == :SCANIDX
-            return :SCANIDX
+        if var == :__SCANIDX__
+            return :__SCANIDX__
         else
-            return :(SCANVALS[$var][SCANIDX])
+            return :(__SCAN__.values[$(var)][__SCANIDX__])
         end
     else
         for i in 1:length(ex.args)
@@ -126,19 +148,12 @@ end
 
 macro scan(ex)
     body = interpolate!(ex)
-    quote
-        $(esc(quote
-            combos = vec(collect(Iterators.product([eval(vi) for vi in SCANVARS]...)))
-            SCANVALS = Dict{Any, Any}()
-            for (i, sv) in enumerate(SCANVARS)
-                SCANVALS[eval(sv)] = [ci[i] for ci in combos]
+    esc(quote
+            for __SCANIDX__ = __SCAN__.start:__SCAN__.stop
+                $body
             end
-        end))
-        for $(esc(:SCANIDX)) = $(esc(:start)):$(esc(:stop))
-            Logging.@info("SCAN: $($(esc(:SCANIDX)))")
-            $(esc(body))
         end
-    end
+    )
 end
 
 
