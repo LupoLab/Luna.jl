@@ -84,14 +84,15 @@ function saveFFTwisdom()
 end
 
 "Struct containing the scan arrays.
-    start and stop are indices into Scan.values, which contains
-    the cartesian product of all of the arrays that are to be scanned over.
-    Scan.values is an IdDict, and each field in values contains (N1 * N2 * N3...) entries,
-    where N1 etc are the lengths of the arrays to be scanned over. Each entry in each field of
-    Scan.values is the value of that scan variable for a particular run.
-    Taken together, the fields of Scan.values contain all possible combinations of the arrays.
-    The first array added using @scanvar varies the fastest, all other fields of 
-    Scan.values will contain repeated entries."
+
+`start` and `stop` are indices into `Scan.values`, which contains
+the cartesian product of all of the arrays that are to be scanned over.
+`Scan.values` is an `IdDict`, and each field in `values` contains (`N1 * N2 * N3...`) entries,
+where `N1` etc are the lengths of the arrays to be scanned over. Each entry in each field of
+`Scan.values` is the value of that scan variable for a particular run.
+Taken together, the fields of `Scan.values` contain all possible combinations of the arrays.
+The first array added using `@scanvar` varies the fastest, all other fields of 
+`Scan.values` will contain repeated entries."
 mutable struct Scan
     start::Int # First scan index to run in this execution
     stop::Int # Last scan index to run in this execution
