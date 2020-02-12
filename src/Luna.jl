@@ -135,11 +135,11 @@ function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode)
     aeff = Modes.Aeff(mode)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
-    amp = complex(zero(grid.ω))
+    amp = zero(grid.ω)
     amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
-    rFFTamp = sqrt(2π)/δt*amp
+    FFTamp = sqrt(2π)/δt*amp
     φ = 2π*rand(length(grid.ω))
-    @. Eω += rFFTamp * exp(1im*φ)
+    @. Eω += FFTamp * exp(1im*φ)
 end
 
 function shotnoise!(Eω, grid::Grid.RealGrid)
@@ -154,11 +154,11 @@ end
 function shotnoise!(Eω, grid::Grid.EnvGrid)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
-    amp = complex(zero(grid.ω))
+    amp = zero(grid.ω)
     amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
-    rFFTamp = sqrt(2π)/δt*amp
+    FFTamp = sqrt(2π)/δt*amp
     φ = 2π*rand(size(Eω)...)
-    @. Eω += rFFTamp * exp(1im*φ)
+    @. Eω += FFTamp * exp(1im*φ)
 end
 
 
