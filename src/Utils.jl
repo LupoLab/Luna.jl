@@ -83,14 +83,23 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
+"Struct containing the scan arrays.
+    start and stop are indices into Scan.values, which contains
+    the cartesian product of all of the arrays that are to be scanned over.
+    Scan.values is an IdDict, and each field in values contains (N1 * N2 * N3...) entries,
+    where N1 etc are the lengths of the arrays to be scanned over. Each entry in each field of
+    Scan.values is the value of that scan variable for a particular run.
+    Taken together, the fields of Scan.values contain all possible combinations of the arrays.
+    The first array added using @scanvar varies the fastest, all other fields of 
+    Scan.values will contain repeated entries."
 mutable struct Scan
-    start::Int
-    stop::Int
-    variables
-    arrays
-    values
+    start::Int # First scan index to run in this execution
+    stop::Int # Last scan index to run in this execution
+    arrays # Array of arrays, each element is one of the arrays to be scanned over
+    values # Dictionary mapping from each scan array to the expanded array of values
 end
 
+# Constructor taking command line arguments. --setup will be used in future
 function Scan(ARGS)
     if "--setup" in ARGS
         start = 0
@@ -103,30 +112,39 @@ function Scan(ARGS)
     Scan(start, stop, Symbol[], Array{Any, 1}(), Array{Any, 1}())
 end
 
-function addvar!(s::Scan, v::Symbol, arr)
-    push!(s.variables, v)
+"Add a variable to a scan. Adds the array to the list of scan arrays, and re-makes the
+cartesian product."
+function addvar!(s::Scan, arr)
     push!(s.arrays, arr)
     makearray!(s)
 end
 
+"Make the cartesian product array containing all possible combinations of the scan arrays."
 function makearray!(s::Scan)
     combos = vec(collect(Iterators.product(s.arrays...)))
     s.values = IdDict()
     for (i, a) in enumerate(s.arrays)
+        # The keys in the IdDict s.values are the arrays themselves
+        # Each field s.values[a] contains an array of length (N1*N2*N3...)
         s.values[a] = [ci[i] for ci in combos]
     end
 end
 
+"Macro to add to an array assignment.
+    e.g.
+        `@scanvar x = 1:10`
+    adds the variable `x` to be scanned over."
 macro scanvar(expr)
     expr.head == :(=) || error("@scanvar must be applied to an assignment expression")
     global lhs = expr.args[1]
     isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
     quote
-        $(esc(expr))
-        addvar!($(esc(:__SCAN__)), lhs, $(esc(:($lhs))))
+        $(esc(expr)) # First, simply execute the assignment
+        addvar!($(esc(:__SCAN__)), $(esc(:($lhs)))) # now add the resulting array to the Scan
     end
 end
 
+"Recursively interpolate scan variables into a scan expression."
 function interpolate!(ex)
     if ex.head === :($)
         var = ex.args[1]
@@ -146,6 +164,8 @@ function interpolate!(ex)
     return ex
 end
 
+"Run the enclosed expression as a scan. Interpolates the scan variables into the expression
+and then runs the expression as many times as required by the `start` and `stop` arguments."
 macro scan(ex)
     body = interpolate!(ex)
     esc(quote
