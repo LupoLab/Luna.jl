@@ -2,6 +2,7 @@ module Modes
 import Roots: fzero
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
+import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
@@ -183,4 +184,25 @@ macro arbitrary(exprs...)
         $Tname()
     end
 end
+
+function overlap(m::AbstractMode, r, E; dim)
+    f = Exy(m)
+    dl = dimlimits(m)
+    Er = [f((ri, 0))[2] for ri in r]
+    normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal()))
+    shape = collect(size(E))
+    shape[dim] = 1
+    integral = ones(Tuple(shape))
+    idxlo = CartesianIndices(size(E)[1:dim-1]);
+    idxhi = CartesianIndices(size(E)[dim+1:end]);
+    for hi in idxhi
+        for lo in idxlo
+                normE = sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal()))
+                integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
+                integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
+        end
+    end
+    return integral
+end
+
 end
