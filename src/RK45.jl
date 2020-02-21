@@ -10,17 +10,18 @@ include("dopri.jl")
 
 function solve(f!, y0, t, dt, tmax;
                rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true,
+               norm=weaknorm,
                kwargs...)
     stepper = Stepper(f!, y0, t, dt,
-                      rtol=rtol, atol=atol, safety=safety, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
+                      rtol=rtol, atol=atol, safety=safety, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap, norm=norm)
     return solve(stepper, tmax; kwargs...)
 end
 
 function solve_precon(f!, linop, y0, t, dt, tmax;
-                    rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true,
+                    rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true, norm=weaknorm,
                     kwargs...)
     stepper = PreconStepper(f!, linop, y0, t, dt,
-                      rtol=rtol, atol=atol, safety=safety, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap)
+                      rtol=rtol, atol=atol, safety=safety, max_dt=max_dt, min_dt=min_dt, locextrap=locextrap, norm=norm)
     return solve(stepper, tmax; kwargs...)
 end
 
@@ -86,7 +87,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
 end
 
 
-mutable struct Stepper{T<:AbstractArray, F}
+mutable struct Stepper{T<:AbstractArray, F, nT}
     f!::F  # RHS function
     y::T  # Solution at current t
     yn::T  # Solution at t+dt
@@ -98,27 +99,29 @@ mutable struct Stepper{T<:AbstractArray, F}
     dt::Float64  # time step
     dtn::Float64  # time step for next step
     rtol::Float64  # relative tolerance on error
-    atol::Float64
-    safety::Float64
+    atol::Float64  # absolute tolerance on error
+    safety::Float64  # safety factor for stepsize control
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
     ok::Bool  # true if current step was successful
     err::Float64  # error metric to be compared to tol
-    errlast::Float64
+    errlast::Float64  # error of the most recent successful step
+    norm::nT # function to calculate error metric, defaults to RK45.weaknorm
 end
 
-function Stepper(f!, y0, t, dt; rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true)
+function Stepper(f!, y0, t, dt; rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true, norm=weaknorm)
     k1 = similar(y0)
     f!(k1, y0, t)
     ks = (k1, similar(k1), similar(k1), similar(k1), similar(k1), similar(k1), similar(k1))
     yerr = similar(y0)
     return Stepper(f!, copy(y0), copy(y0), similar(y0), yerr, ks,
         float(t), float(t), float(dt), float(dt),
-        rtol, atol, safety, float(max_dt), float(min_dt), locextrap, false, 0.0, 0.0)
+        float(rtol), float(atol), float(safety), float(max_dt), float(min_dt),
+        locextrap, false, 0.0, 0.0, norm)
 end
 
-mutable struct PreconStepper{T<:AbstractArray, F, P}
+mutable struct PreconStepper{T<:AbstractArray, F, P, nT}
     fbar!::F  # RHS callable
     prop!::P # linear propagator callable
     y::T  # Solution at current t
@@ -131,18 +134,19 @@ mutable struct PreconStepper{T<:AbstractArray, F, P}
     dt::Float64  # time step
     dtn::Float64  # time step for next step
     rtol::Float64  # relative tolerance on error
-    atol::Float64
-    safety::Float64
+    atol::Float64  # absolute tolerance on error
+    safety::Float64  # safety factor for stepsize control
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
     ok::Bool  # true if current step was successful
     err::Float64  # error metric to be compared to tol
-    errlast::Float64
+    errlast::Float64  # error of the most recent successful step
+    norm::nT  # function to calculate error metric, defaults to RK45.weaknorm
 end
 
 function PreconStepper(f!, linop, y0, t, dt;
-                       rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true)
+                       rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true, norm=weaknorm)
     prop! = make_prop!(linop, y0)
     fbar! = make_fbar!(f!, prop!, y0)
     k1 = similar(y0)
@@ -151,8 +155,8 @@ function PreconStepper(f!, linop, y0, t, dt;
     yerr = similar(y0)
 
     return PreconStepper(fbar!, prop!, copy(y0), copy(y0), similar(y0), yerr, ks,
-        float(t), float(t), float(dt), float(dt), rtol, atol, safety,
-        float(max_dt), float(min_dt), locextrap, false, 0.0, 0.0)
+        float(t), float(t), float(dt), float(dt), float(rtol), float(atol), float(safety),
+        float(max_dt), float(min_dt), locextrap, false, 0.0, 0.0, norm)
 end
 
 function step!(s)    
@@ -169,33 +173,9 @@ function step!(s)
     for ii = 1:7
         errest[ii] == 0 || (@. s.yerr += s.dt*s.ks[ii]*errest[ii])
     end
-    s.err = weaknorm(s.yerr, s.y, s.yn, s.rtol, s.atol)
+    s.err = s.norm(s.yerr, s.y, s.yn, s.rtol, s.atol)
     s.ok = s.err <= 1
-    # if s.ok
-    #     s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
-    # else
-    #     s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
-    # end
-    β1 = 3/5 / 5
-    β2 = -1/5 / 5
-    ε = 1
-    if s.ok
-        s.errlast == 0 && (s.errlast = 1)
-        fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
-        # (0.99 <= fac <= 1.01) && (fac = 1.0)
-        s.dtn = fac * s.dt
-        s.errlast = s.err
-    else
-        s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
-    end
-
-
-    if s.dtn > s.max_dt
-        s.dtn = s.max_dt
-    elseif s.dtn < s.min_dt
-        s.dtn = s.min_dt
-        s.ok = true
-    end
+    stepcontrolPI!(s)
     if s.ok
         s.tn = s.t + s.dt
         s.ks[1] .= s.ks[end]
@@ -350,6 +330,40 @@ function weaknorm(yerr, y, yn, rtol, atol)
     end
     errwt = max(max(sqrt(sy), sqrt(syn)), atol)
     return sqrt(syerr)/rtol/errwt
+end
+
+function stepcontrolP!(s)
+    if s.ok
+        s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
+    else
+        s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+    end
+    steplims!(s)
+end
+
+function stepcontrolPI!(s)
+    β1 = 3/5 / 5
+    β2 = -1/5 / 5
+    ε = 0.8
+    if s.ok
+        s.errlast == 0 && (s.errlast = 1)
+        fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
+        # (0.99 <= fac <= 1.01) && (fac = 1.0)
+        s.dtn = fac * s.dt
+        s.errlast = s.err
+    else
+        s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+    end
+    steplims!(s)
+end
+
+function steplims!(s)
+    if s.dtn > s.max_dt
+        s.dtn = s.max_dt
+    elseif s.dtn < s.min_dt
+        s.dtn = s.min_dt
+        s.ok = true
+    end
 end
 
 function donothing!(y, z, dz, interpolant)
