@@ -134,6 +134,17 @@ function makearray!(s::Scan)
     end
 end
 
+function chunks(a::AbstractArray, n::Int)
+    N = length(a)
+    done = 0
+    out = [Array{eltype(a), 1}() for ii=1:n]
+    while done < N
+        push!(out[mod(done, n)+1], a[done+1])
+        done += 1
+    end
+    return out
+end
+
 "Macro to add to an array assignment.
     e.g.
         `@scanvar x = 1:10`
