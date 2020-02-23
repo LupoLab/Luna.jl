@@ -3,6 +3,7 @@ import Dates
 import FFTW
 import Logging
 import Pidfile: mkpidlock
+import Base: length
 
 function git_commit()
     wd = dirname(@__FILE__)
@@ -113,6 +114,8 @@ function Scan(ARGS)
     Scan(start, stop, Array{Any, 1}(), IdDict())
 end
 
+length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
+
 "Add a variable to a scan. Adds the array to the list of scan arrays, and re-makes the
 cartesian product."
 function addvar!(s::Scan, arr)
@@ -136,7 +139,14 @@ end
         `@scanvar x = 1:10`
     adds the variable `x` to be scanned over."
 macro scanvar(expr)
-    expr.head == :(=) || error("@scanvar must be applied to an assignment expression")
+    if isa(expr, Symbol)
+        # existing array being added
+        q = quote
+            addvar!($(esc(:__SCAN__)), $(esc(:($expr))))
+        end
+        return q
+    end
+    expr.head == :(=) || error("@scanvar must be applied to an assignment expression or variable")
     global lhs = expr.args[1]
     isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
     quote
