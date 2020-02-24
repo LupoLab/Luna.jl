@@ -102,7 +102,10 @@ function parse_scan_cmdline()
             help = "Batch index to execute"
             arg_type = Tuple{Int, Int}
         "--cirrus"
-            help = "Make job script for cirrus, do not run any simulations"
+            help = "Make job script for cirrus to run in given number of batches, do not run any simulations."
+            arg_type = Int
+        "--local"
+            help = "Simply run the scan locally"
             action = :store_true
     end
     args = parse_args(s)
@@ -110,7 +113,13 @@ function parse_scan_cmdline()
         isnothing(args[k]) && delete!(args, k)
     end
     if haskey(args, "batch") && haskey(args, "range")
-        error("Only one of range and batch can be given.")
+        error("Only one of range or batch can be given.")
+    end
+    if haskey(args, "range") && args["local"]
+        error("Option --local and range cannot both be given")
+    end
+    if args["local"] && haskey(args, "cirrus")
+        error("Local and cirrus-setup options cannot both be given.")
     end
     return args
 end
@@ -130,7 +139,7 @@ Taken together, the fields of `Scan.values` contain all possible combinations of
 The first array added using `@scanvar` varies the fastest, all other fields of 
 `Scan.values` will contain repeated entries."
 mutable struct Scan
-    mode::Symbol # :setup, :batch or :range
+    mode::Symbol # :cirrus, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
     arrays # Array of arrays, each element is one of the arrays to be scanned over
@@ -142,12 +151,19 @@ function Scan(args)
     mode = :setup
     batch = (0, 0)
     idcs = nothing
-if "batch" in keys(args)
+    if haskey(args, "batch")
         mode = :batch
         batch = args["batch"] # store batch index
-    elseif "range" in keys(args)
+    elseif haskey(args, "range")
         mode = :range
         idcs = args["range"]
+    elseif args["local"]
+        mode = :local
+    elseif haskey(args, "cirrus")
+        mode = :cirrus
+        batch = (0, args["cirrus"])
+    else
+        error("One of batch, range, local or cirrus options must be given!")
     end
     Scan(mode, batch, idcs, Array{Any, 1}(), IdDict())
 end
@@ -171,10 +187,14 @@ function makearray!(s::Scan)
         s.values[a] = [ci[i] for ci in combos]
     end
     if s.mode == :batch
+        # Running one batch - create chunks and select desired one.
         linidx = collect(1:length(s))
         chunkidx, Nchunks = s.batch
         chs = chunks(linidx, Nchunks)
         s.idcs = chs[chunkidx]
+    elseif s.mode == :local
+        # Running everything locally - idcs are simply everything.
+        s.idcs = collect(1:length(s))
     end
 end
 
@@ -218,7 +238,7 @@ function interpolate!(ex)
         if var == :__SCANIDX__
             return :__SCANIDX__
         else
-            return :(__SCAN__.values[$(var)][__SCANIDX__])
+            return :(__SCAN__.values[$var][__SCANIDX__])
         end
     else
         for i in 1:length(ex.args)
@@ -235,12 +255,42 @@ end
 and then runs the expression as many times as required by the `start` and `stop` arguments."
 macro scan(ex)
     body = interpolate!(ex)
-    esc(quote
-            for __SCANIDX__ in __SCAN__.idcs
-                $body
+    global script = string(__source__.file)
+    quote
+        if $(esc(:__SCAN__)).mode == :cirrus
+            cirrus_setup("test", script, $(esc(:__SCAN__)).batch[2])
+        else
+            for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
+                $(esc(body))
             end
         end
-    )
+    end
+end
+
+function cirrus_setup(name, script, batches)
+    lines = [
+        "#!/bin/bash --login",
+        "#PBS -N " * name,
+        "#PBS -J 0-$(batches-1)",
+        "#PBS -V",
+        "#PBS -l select=1:ncpus=4",
+        "#PBS -l walltime=48:00:00",
+        "#PBS -A sc007",
+        "",
+        "module load gcc",
+        "export OMP_NUM_THREADS=4",
+        "",
+        "cd \$PBS_O_WORKDIR",
+        "/lustre/home/sc007/cbrahms/julia-1.3.1/bin/julia $(basename(script)) --batch \$((PBS_ARRAY_INDEX+1)),$batches "
+    ]
+
+    fpath = joinpath(dirname(script), "doit.sh")
+    println(fpath)
+    open(fpath, "w") do file
+        for l in lines
+            write(file, l*"\n")
+        end
+    end
 end
 
 

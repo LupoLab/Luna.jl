@@ -1,10 +1,10 @@
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
-import Luna.Utils: @scanvar, @scan, Scan
+import Luna.Utils: @scanvar, @scan, @scaninit
 import Logging: @info
 
-ARGS = ["0", "2"] # simulate command line arguments
-__SCAN__ = Scan(ARGS)
+# ARGS = ["--batch", "5, 16"] # simulate command line arguments
+@scaninit
 
 @scanvar energy = range(0.1e-6, 1.5e-6, length=16)
 @scanvar τ = range(25e-15, 35e-15, length=11)
