@@ -4,6 +4,7 @@ authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
 version = "0.1.0"
 
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CoolProp = "e084ae63-2819-5025-826e-f8e611a84251"

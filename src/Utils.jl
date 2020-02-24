@@ -4,6 +4,7 @@ import FFTW
 import Logging
 import Pidfile: mkpidlock
 import Base: length
+import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 
 function git_commit()
     wd = dirname(@__FILE__)
@@ -84,9 +85,43 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
+macro scaninit()
+    quote
+        args = parse_scan_cmdline()
+        $(esc(:__SCAN__)) = Scan(args)
+    end
+end
+
+function parse_scan_cmdline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--range"
+            help = "Linear range of scan indices to execute"
+            arg_type = UnitRange{Int}
+        "--batch"
+            help = "Batch index to execute"
+            arg_type = Tuple{Int, Int}
+        "--cirrus"
+            help = "Make job script for cirrus, do not run any simulations"
+            action = :store_true
+    end
+    args = parse_args(s)
+    for k in keys(args)
+        isnothing(args[k]) && delete!(args, k)
+    end
+    if haskey(args, "batch") && haskey(args, "range")
+        error("Only one of range and batch can be given.")
+    end
+    return args
+end
+
+parse_item(::Type{UnitRange{Int}}, x::AbstractString) = eval(Meta.parse(x))
+parse_item(::Type{Tuple{Int, Int}}, x::AbstractString) = Tuple(parse(Int, xi) for xi in split(x, ","))
+
+
 "Struct containing the scan arrays.
 
-`start` and `stop` are indices into `Scan.values`, which contains
+idcs are indices into `Scan.values`, which contains
 the cartesian product of all of the arrays that are to be scanned over.
 `Scan.values` is an `IdDict`, and each field in `values` contains (`N1 * N2 * N3...`) entries,
 where `N1` etc are the lengths of the arrays to be scanned over. Each entry in each field of
@@ -95,23 +130,26 @@ Taken together, the fields of `Scan.values` contain all possible combinations of
 The first array added using `@scanvar` varies the fastest, all other fields of 
 `Scan.values` will contain repeated entries."
 mutable struct Scan
-    start::Int # First scan index to run in this execution
-    stop::Int # Last scan index to run in this execution
+    mode::Symbol # :setup, :batch or :range
+    batch::Tuple{Int, Int} # batch index and number of batches
+    idcs # Array or iterator of indices to be run on this execution
     arrays # Array of arrays, each element is one of the arrays to be scanned over
     values # Dictionary mapping from each scan array to the expanded array of values
 end
 
-# Constructor taking command line arguments. --setup will be used in future
-function Scan(ARGS)
-    if "--setup" in ARGS
-        start = 0
-        stop = 0
-    else
-        start, stop = ARGS
-        start = parse(Int, start) + 1
-        stop = parse(Int, stop) + 1
+# Constructor taking parsed command line arguments.
+function Scan(args)
+    mode = :setup
+    batch = (0, 0)
+    idcs = nothing
+if "batch" in keys(args)
+        mode = :batch
+        batch = args["batch"] # store batch index
+    elseif "range" in keys(args)
+        mode = :range
+        idcs = args["range"]
     end
-    Scan(start, stop, Array{Any, 1}(), IdDict())
+    Scan(mode, batch, idcs, Array{Any, 1}(), IdDict())
 end
 
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
@@ -132,8 +170,15 @@ function makearray!(s::Scan)
         # Each field s.values[a] contains an array of length (N1*N2*N3...)
         s.values[a] = [ci[i] for ci in combos]
     end
+    if s.mode == :batch
+        linidx = collect(1:length(s))
+        chunkidx, Nchunks = s.batch
+        chs = chunks(linidx, Nchunks)
+        s.idcs = chs[chunkidx]
+    end
 end
 
+"Split array a into n chunks, spreading the entries of a evenly."
 function chunks(a::AbstractArray, n::Int)
     N = length(a)
     done = 0
@@ -191,7 +236,7 @@ and then runs the expression as many times as required by the `start` and `stop`
 macro scan(ex)
     body = interpolate!(ex)
     esc(quote
-            for __SCANIDX__ = __SCAN__.start:__SCAN__.stop
+            for __SCANIDX__ in __SCAN__.idcs
                 $body
             end
         end
