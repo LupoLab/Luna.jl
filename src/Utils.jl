@@ -143,6 +143,7 @@ mutable struct Scan
     mode::Symbol # :cirrus, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
+    vars # Array of symbols, containing variable names of arrays
     arrays # Array of arrays, each element is one of the arrays to be scanned over
     values # Dictionary mapping from each scan array to the expanded array of values
 end
@@ -166,15 +167,16 @@ function Scan(name, args)
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
-    Scan(name, mode, batch, idcs, Array{Any, 1}(), IdDict())
+    Scan(name, mode, batch, idcs, Array{Symbol, 1}(), Array{Any, 1}(), IdDict())
 end
 
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
 
 "Add a variable to a scan. Adds the array to the list of scan arrays, and re-makes the
 cartesian product."
-function addvar!(s::Scan, arr)
+function addvar!(s::Scan, var, arr)
     push!(s.arrays, arr)
+    push!(s.vars, var)
     makearray!(s)
 end
 
@@ -216,10 +218,11 @@ end
         `@scanvar x = 1:10`
     adds the variable `x` to be scanned over."
 macro scanvar(expr)
+    global ex = expr
     if isa(expr, Symbol)
         # existing array being added
         q = quote
-            addvar!($(esc(:__SCAN__)), $(esc(:($expr))))
+            addvar!($(esc(:__SCAN__)), ex, $(esc(:($expr))))
         end
         return q
     end
@@ -228,7 +231,7 @@ macro scanvar(expr)
     isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
     quote
         $(esc(expr)) # First, simply execute the assignment
-        addvar!($(esc(:__SCAN__)), $(esc(:($lhs)))) # now add the resulting array to the Scan
+        addvar!($(esc(:__SCAN__)), lhs, $(esc(:($lhs)))) # now add the resulting array to the Scan
     end
 end
 

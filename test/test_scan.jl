@@ -8,6 +8,8 @@ import Logging: @info
 @scanvar energy = range(0.1e-6, 1.5e-6, length=16)
 @scanvar τ = range(25e-15, 35e-15, length=11)
 
+println(__SCAN__)
+
 @scan begin
 a = 13e-6
 gas = :Ar
@@ -54,8 +56,8 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 fname = "scantest_$(__SCANIDX__).h5"
-output = Output.HDF5Output(fname, 0, grid.zmax, 101, (length(grid.ω),), statsfun)
-# output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+# output = Output.HDF5Output(fname, 0, grid.zmax, 101, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
