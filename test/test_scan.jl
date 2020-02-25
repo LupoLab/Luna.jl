@@ -3,8 +3,7 @@ import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearR
 import Luna.Utils: @scanvar, @scan, @scaninit
 import Logging: @info
 
-# ARGS = ["--batch", "5, 16"] # simulate command line arguments
-@scaninit
+@scaninit "scantest"
 
 @scanvar energy = range(0.1e-6, 1.5e-6, length=16)
 @scanvar τ = range(25e-15, 35e-15, length=11)

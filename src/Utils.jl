@@ -85,10 +85,10 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
-macro scaninit()
+macro scaninit(name="scan")
     quote
         args = parse_scan_cmdline()
-        $(esc(:__SCAN__)) = Scan(args)
+        $(esc(:__SCAN__)) = Scan($name, args)
     end
 end
 
@@ -139,6 +139,7 @@ Taken together, the fields of `Scan.values` contain all possible combinations of
 The first array added using `@scanvar` varies the fastest, all other fields of 
 `Scan.values` will contain repeated entries."
 mutable struct Scan
+    name # Name for the scan
     mode::Symbol # :cirrus, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
@@ -147,7 +148,7 @@ mutable struct Scan
 end
 
 # Constructor taking parsed command line arguments.
-function Scan(args)
+function Scan(name, args)
     mode = :setup
     batch = (0, 0)
     idcs = nothing
@@ -165,7 +166,7 @@ function Scan(args)
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
-    Scan(mode, batch, idcs, Array{Any, 1}(), IdDict())
+    Scan(name, mode, batch, idcs, Array{Any, 1}(), IdDict())
 end
 
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
@@ -258,7 +259,7 @@ macro scan(ex)
     global script = string(__source__.file)
     quote
         if $(esc(:__SCAN__)).mode == :cirrus
-            cirrus_setup("test", script, $(esc(:__SCAN__)).batch[2])
+            cirrus_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
         else
             for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
                 $(esc(body))
