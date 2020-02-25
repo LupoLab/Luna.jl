@@ -55,8 +55,8 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 fname = "scantest_$(__SCANIDX__).h5"
-# output = Output.HDF5Output(fname, 0, grid.zmax, 101, (length(grid.ω),), statsfun)
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.HDF5Output(fname, 0, grid.zmax, 101, (length(grid.ω),), statsfun)
+# output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
