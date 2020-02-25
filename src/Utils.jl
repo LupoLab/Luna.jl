@@ -268,6 +268,11 @@ macro scan(ex)
 end
 
 function cirrus_setup(name, script, batches)
+    if Sys.iswindows()
+        error("--cirrus option must be invoked on the cirrus login node!")
+    end
+    cmd = split(string(Base.julia_cmd()))[1]
+    julia = strip(cmd, ['`', '\''])
     lines = [
         "#!/bin/bash --login",
         "#PBS -N " * name,
@@ -281,7 +286,7 @@ function cirrus_setup(name, script, batches)
         "export OMP_NUM_THREADS=4",
         "",
         "cd \$PBS_O_WORKDIR",
-        "/lustre/home/sc007/cbrahms/julia-1.3.1/bin/julia $(basename(script)) --batch \$((PBS_ARRAY_INDEX+1)),$batches "
+        "$julia $(basename(script)) --batch \$((PBS_ARRAY_INDEX+1)),$batches "
     ]
 
     fpath = joinpath(dirname(script), "doit.sh")
