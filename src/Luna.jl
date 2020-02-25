@@ -1,9 +1,8 @@
 module Luna
 import FFTW
-import NumericalIntegration
 import Logging
-import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
+import Random: MersenneTwister
 include("Utils.jl")
 include("Maths.jl")
 include("Hankel.jl")
@@ -120,6 +119,51 @@ function scaled_input(grid, input, energyfun, FT)
     Et_sc = sqrt(input.energy)/sqrt(energy) .* Et
     return FT * Et_sc
 end
+
+function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(2*PhysData.ħ*grid.ω/(PhysData.ε_0*PhysData.c*aeff*δω))
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.RealGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(PhysData.ħ*grid.ω/δω)
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
 
 function run(Eω, grid,
              linop, transform, FT, output; max_dz=Inf)
