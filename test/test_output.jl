@@ -95,6 +95,8 @@ end
     @test "src" == o.data["meta"]["meta2"]
 end
 
+fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
 @testset "HDF5 vs Memory" begin
     import Luna
     import Luna: Grid, Capillary, PhysData, Nonlinear, NonlinearRHS, Output, Stats, Maths, LinearOps, Modes
@@ -123,31 +125,33 @@ end
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
-    fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     hdf5 = Output.HDF5Output(fpath, 0, grid.zmax, 201, (length(grid.ω),), statsfun)
     hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 201, (length(grid.ω),), statsfun,
                               compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    function output(args...)
-        hdf5(args...)
-        hdf5c(args...)
-        mem(args...)
+    function output(args...; kwargs...)
+        hdf5(args...; kwargs...)
+        hdf5c(args...; kwargs...)
+        mem(args...; kwargs...)
     end
     for o in (hdf5, hdf5c, mem)
-        o(Dict("ω" => grid.ω, "λ0" => λ0))
+        o(Dict("λ0" => λ0))
         o("τ", τ)
     end
     Luna.run(Eω, grid, linop, transform, FT, output)
     HDF5.h5open(hdf5.fpath, "r") do file
-        @test read(file["ω"]) == mem.data["ω"]
+        @test read(file["λ0"]) == mem.data["λ0"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))
         @test Eω == mem.data["Eω"]
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
+        println(typeof(read(file["grid"]["sidx"])))
+    end
+    HDF5.h5open(hdf5c.fpath, "r") do file
+        println(typeof(read(file["grid"]["sidx"])))
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
-    rm(hdf5c.fpath)
-    rm(hdf5.fpath)
-    rm(splitdir(fpath)[1])
 end
+rm(fpath)
+rm(fpath_comp)
+rm(splitdir(fpath)[1])
