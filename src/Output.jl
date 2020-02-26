@@ -418,12 +418,13 @@ for op in (:MemoryOutput, :HDF5Output)
     eval(
         quote
             macro $op(args...)
-                code = ""
+                script_code = ""
                 try
                     script = string(__source__.file)
                     code = open(script, "r") do file
                         read(file, String)
                     end
+                    script_code = script*"\n"*code
                 catch
                 end
                 for arg in args
@@ -435,7 +436,7 @@ for op in (:MemoryOutput, :HDF5Output)
                 for arg in args
                     push!(exp.args, esc(arg))
                 end
-                push!(exp.args, Expr(:kw, :script, code))
+                push!(exp.args, Expr(:kw, :script, script_code))
                 exp
             end
         end
