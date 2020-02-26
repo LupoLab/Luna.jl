@@ -144,6 +144,8 @@ function run(Eω, grid,
         output(Eω, z, dz, interpolant)
     end
 
+    output(Grid.to_dict(grid), group="grid")
+
     RK45.solve_precon(
         transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
 end

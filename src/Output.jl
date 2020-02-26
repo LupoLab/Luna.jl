@@ -2,6 +2,7 @@ module Output
 import HDF5
 import Logging
 import Base: getindex
+import Printf: @sprintf
 import Luna: Utils
 
 "Output handler for writing only to memory"
@@ -16,12 +17,12 @@ mutable struct MemoryOutput{sT, N, S}
 end
 
 function MemoryOutput(tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
-                      yname="Eω", tname="z")
+                      yname="Eω", tname="z", script=nothing)
     save_cond = GridCondition(tmin, tmax, saveN)
-    MemoryOutput(save_cond, ydims, yname, tname, statsfun)
+    MemoryOutput(save_cond, ydims, yname, tname, statsfun, script)
 end
 
-function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats)
+function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats, script=nothing)
     dims = init_dims(ydims, save_cond)
     data = Dict{String, Any}()
     data[yname] = Array{ComplexF64}(undef, dims)
@@ -30,6 +31,9 @@ function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats)
     data["meta"] = Dict{String, Any}()
     data["meta"]["sourcecode"] = Utils.sourcecode()
     data["meta"]["git_commit"] = Utils.git_commit()
+    if !isnothing(script)
+        data["meta"]["script_code"] = script
+    end
     MemoryOutput(save_cond, ydims, yname, tname, 0, data, statsfun)
 end
 
@@ -87,14 +91,14 @@ function append_stat!(o::MemoryOutput, name, value::AbstractArray)
 end
 
 "Calling the output on a dictionary writes the items to the array"
-function (o::MemoryOutput)(d::Dict; force=false, meta=false)
+function (o::MemoryOutput)(d::Dict; force=false, meta=false, group=nothing)
     for (k, v) in pairs(d)
-        o(k, v; force=force, meta=meta)
+        o(k, v; force=force, meta=meta, group=group)
     end
 end
 
 "Calling the output with a key, value pair writes the value to the array."
-function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false)
+function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false, group=nothing)
     parent = meta ? o.data["meta"] : o.data
     if haskey(parent, key)
             if force
@@ -103,7 +107,14 @@ function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false)
                 error("Key $key already present in dataset.")
         end
     end
-    parent[key] = val
+    if !isnothing(group)
+        if !haskey(parent, group)
+            parent[group] = Dict{String, Any}()
+        end
+        parent[group][key] = val
+    else
+        parent[key] = val
+    end
 end
 
 function fastcat(A, v)
@@ -127,13 +138,13 @@ end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
-                    yname="Eω", tname="z", compression=false)
+                    yname="Eω", tname="z", compression=false, script=nothing)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
+    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression, script)
 end
 
 "Internal constructor - creates datasets in the file"
-function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression)
+function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression, script=nothing)
     idims = init_dims(ydims, save_cond)
     cdims = collect(idims)
     cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
@@ -162,6 +173,9 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
         HDF5.g_create(file, "meta")
         file["meta"]["sourcecode"] = Utils.sourcecode()
         file["meta"]["git_commit"] = Utils.git_commit()
+        if !isnothing(script)
+            file["meta"]["script_code"] = script
+        end
     end
     stats0 = Vector{Dict{String, Any}}()
     HDF5Output(fpath, save_cond, ydims, yname, tname, 0, statsfun, stats0)
@@ -255,7 +269,7 @@ function create_dataset(parent, name, x::AbstractArray)
 end
 
 "Calling the output on a dictionary writes the items to the file"
-function (o::HDF5Output)(d::Dict; force=false, meta=false)
+function (o::HDF5Output)(d::Dict; force=false, meta=false, group=nothing)
     HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
@@ -268,13 +282,20 @@ function (o::HDF5Output)(d::Dict; force=false, meta=false)
                     error("File $(o.fpath) already has dataset $(k)")
                 end
             end
-            parent[k] = v
+            if !isnothing(group)
+                if !HDF5.exists(parent, group)
+                    HDF5.g_create(parent, group)
+                end
+                parent[group][k] = v
+            else
+                parent[k] = v
+            end
         end
     end
 end
 
 "Calling the output on a key, value pair writes the value to the file"
-function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false)
+function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, group=nothing)
     HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         if HDF5.exists(parent, key)
@@ -286,7 +307,14 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false)
                 error("File $(o.fpath) already has dataset $(key)")
             end
         end
-        parent[key] = val
+        if !isnothing(group)
+            if !HDF5.exists(parent, group)
+                HDF5.g_create(parent, group)
+            end
+            parent[group][key] = val
+        else
+            parent[key] = val
+        end
     end
 end
 
@@ -336,6 +364,68 @@ end
 
 function nostats(args...)
     return Dict{String, Any}()
+end
+
+macro ScanHDF5Output(args...)
+    code = ""
+    try
+        script = string(__source__.file)
+        code = open(script, "r") do file
+            read(file, String)
+        end
+    catch
+    end
+    for arg in args
+        if isa(arg, Expr) && arg.head == :(=)
+            arg.head = :kw
+        end
+    end
+    fname = quote
+        $(esc(:__SCAN__)).name*"_"*@sprintf("%05d", $(esc(:__SCANIDX__)))*".h5"
+    end
+    exp = Expr(:call, HDF5Output, fname)
+    for arg in args
+        push!(exp.args, esc(arg))
+    end
+    push!(exp.args, Expr(:kw, :script, code))
+    quote 
+        begin
+            out = $exp
+            out("scanidx", $(esc(:__SCANIDX__)),  meta=true)
+            vars = Dict{String, Any}()
+            for var in keys($(esc(:__SCAN__)).vars)
+                val = Utils.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
+                vars[string(var)] = val
+            end
+            out(vars, meta=true, group="scanvars")
+            out
+        end
+    end
+end
+
+# Auto-generate @MemoryOutput and @HDF5Output macros
+for op in (:MemoryOutput, :HDF5Output)
+    eval(
+        quote
+            macro $op(args...)
+                script = string(__source__.file)
+                code = open(script, "r") do file
+                    read(file, String)
+                end
+                for arg in args
+                    if isa(arg, Expr) && arg.head == :(=)
+                        arg.head = :kw
+                    end
+                end
+                exp = Expr(:call, $op)
+                for arg in args
+                    push!(exp.args, esc(arg))
+                end
+                push!(exp.args, Expr(:kw, :script, code))
+                exp
+            end
+        end
+    )
 end
             
 end

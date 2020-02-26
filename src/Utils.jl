@@ -143,7 +143,7 @@ mutable struct Scan
     mode::Symbol # :cirrus, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
-    vars # Array of symbols, containing variable names of arrays
+    vars # Dict{Symbol, Any} -> maps from variable names to arrays
     arrays # Array of arrays, each element is one of the arrays to be scanned over
     values # Dictionary mapping from each scan array to the expanded array of values
 end
@@ -167,7 +167,7 @@ function Scan(name, args)
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
-    Scan(name, mode, batch, idcs, Array{Symbol, 1}(), Array{Any, 1}(), IdDict())
+    Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict())
 end
 
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
@@ -176,7 +176,7 @@ length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays])
 cartesian product."
 function addvar!(s::Scan, var, arr)
     push!(s.arrays, arr)
-    push!(s.vars, var)
+    s.vars[var] = arr
     makearray!(s)
 end
 
@@ -200,6 +200,9 @@ function makearray!(s::Scan)
         s.idcs = collect(1:length(s))
     end
 end
+
+getval(s::Scan, var::Symbol, scanidx::Int) = s.values[s.vars[var]][scanidx]
+
 
 "Split array a into n chunks, spreading the entries of a evenly."
 function chunks(a::AbstractArray, n::Int)
