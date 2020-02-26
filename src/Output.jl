@@ -275,7 +275,6 @@ function create_dataset(parent, name, x::AbstractArray)
     maxdims = (size(x)..., -1)
     HDF5.d_create(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
                   "chunk", dims)
-
 end
 
 "Calling the output on a dictionary writes the items to the file"
@@ -292,6 +291,7 @@ function (o::HDF5Output)(d::Dict; force=false, meta=false, group=nothing)
                     error("File $(o.fpath) already has dataset $(k)")
                 end
             end
+            isa(v, BitArray) && (v = Array{Bool, 1}(v))
             if !isnothing(group)
                 if !HDF5.exists(parent, group)
                     HDF5.g_create(parent, group)
@@ -317,6 +317,7 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
                 error("File $(o.fpath) already has dataset $(key)")
             end
         end
+        isa(val, BitArray) && (v = Array{Bool, 1}(val))
         if !isnothing(group)
             if !HDF5.exists(parent, group)
                 HDF5.g_create(parent, group)
