@@ -12,7 +12,7 @@ import Test: @test, @testset, @test_throws
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres), α=ω->0)
+    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
     energyfun = NonlinearRHS.energy_mode_avg(m)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
@@ -32,8 +32,7 @@ import Test: @test, @testset, @test_throws
     Luna.run(Eω, grid, linop, transform, FT, output)
 
     modes = (
-         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-         α=ω->0),
+         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)
@@ -81,8 +80,7 @@ end
     Luna.run(Eω, grid, linop, transform, FT, output)
 
     modes = (
-         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-         α=ω->0),
+         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun = NonlinearRHS.energy_modal()
     normfun = NonlinearRHS.norm_modal(grid.ω)

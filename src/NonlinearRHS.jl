@@ -34,7 +34,7 @@ end
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
-    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
+    scale = No/N # Scale factor makes up for difference in FFT array length
     fill!(Aωo, 0)
     copy_scale_both!(Aωo, Aω, N÷2, scale)
     mul!(Ato, IFTplan, Aωo)
@@ -53,7 +53,7 @@ end
 function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
-    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
+    scale = N/No # Scale factor makes up for difference in FFT array length
     mul!(Aωo, FTplan, Ato)
     copy_scale_both!(Aω, Aωo, N÷2, scale)
 end
@@ -120,10 +120,11 @@ function norm_modal(ω)
 end
 
 "Normalisation factor for mode-averaged field."
-function norm_mode_average(ω, βfun)
+function norm_mode_average(ω, βfun!)
     out = zero(ω)
     function norm(z)
-        out .= PhysData.c^2 .* PhysData.ε_0 .* βfun(ω, z) ./ ω
+        βfun!(out, ω, z)
+        out .*= PhysData.c^2 .* PhysData.ε_0 ./ ω
         return out
     end
     return norm

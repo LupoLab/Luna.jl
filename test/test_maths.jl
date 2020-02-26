@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws
 import Luna: Maths
 
+@testset "Maths" begin
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
 
@@ -119,4 +120,5 @@ end
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+end
 end

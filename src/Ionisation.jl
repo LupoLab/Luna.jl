@@ -1,6 +1,7 @@
 module Ionisation
 import SpecialFunctions: gamma
 import GSL: hypergeom
+import HDF5
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield
 import Luna.PhysData: ionisation_potential, quantum_numbers
@@ -69,8 +70,42 @@ function ionrate_fun!_PPTaccel(material::Symbol, λ0; sum_tol=1e-4, N=2^16)
     ionrate_fun!_PPTaccel(ip, λ0, Z, l; sum_tol=sum_tol, N=N)
 end
 
-function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
-                               sum_tol=1e-4, N=2^16)
+function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16)
+    E, rate = makePPTcache(ionpot, λ0, Z, l, sum_tol=sum_tol, N=N)
+    return makePPTaccel(E, rate)
+end
+
+function ionrate_fun!_PPTcached(material::Symbol, λ0; sum_tol=1e-4, N=2^16)
+    n, l, Z = quantum_numbers(material)
+    ip = ionisation_potential(material)
+    ionrate_fun!_PPTcached(ip, λ0, Z, l; sum_tol=sum_tol, N=N)
+end
+
+function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
+                                sum_tol=1e-4, N=2^16,
+                                cachedir=joinpath(homedir(), ".luna", "pptcache"))
+    h = hash((ionpot, λ0, Z, l, sum_tol, N))
+    fname = string(h, base=16)*".h5"
+    fpath = joinpath(cachedir, fname)
+    isdir(cachedir) || mkpath(cachedir)
+    if isfile(fpath)
+        @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
+        E, rate = HDF5.h5open(fpath, "r") do file
+            (read(file["E"]), read(file["rate"]))
+        end
+        makePPTaccel(E, rate)
+    else
+        E, rate = makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=sum_tol, N=N)
+        @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
+        HDF5.h5open(fpath, "cw") do file
+            file["E"] = E
+            file["rate"] = rate
+        end
+        makePPTaccel(E, rate)
+    end
+end
+
+function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2*Ip_au)
     Emax = Z^3/(16*ns^4) * au_Efield # Barrier suppression field strength
@@ -81,11 +116,16 @@ function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l;
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-    rate = ionrate_PPT.(ionpot, λ0, Z, l, E);
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E);
     @info "PPT pre-calcuation done"
-    # Interpolating the log10 and re-exponentiating makes the spline more accurate
-    cspl = Maths.CSpline(E, log10.(rate))
-    ir(E) = E <= Emin ? 0.0 : 10^cspl(E)
+    return E, rate
+end
+
+function makePPTaccel(E, rate)
+    cspl = Maths.CSpline(E, log.(rate))
+    Emin = minimum(E)
+    # Interpolating the log and re-exponentiating makes the spline more accurate
+    ir(E) = E <= Emin ? 0.0 : exp(cspl(E))
     function ionrate!(out, E)
         out .= ir.(E)
     end

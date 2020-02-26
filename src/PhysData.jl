@@ -3,7 +3,8 @@ module PhysData
 import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
-import Luna: Maths
+import CSV
+import Luna: Maths, Utils
 
 "Speed of light"
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
@@ -48,6 +49,11 @@ const gas_str = Dict(
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 const metal = (:Ag,)
+
+"Change from ω to λ and vice versa"
+wlfreq(ωλ) = 2π*c/ωλ
+
+eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
 "Linear coefficients"
 
@@ -121,7 +127,7 @@ returns the refractive index directly"
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
-        #TODO: Deal with sqrt of negative values better (somehow...)
+        # TODO: Deal with sqrt of negative values better (somehow...)
         return μm -> @. sqrt(Complex(1
              + 0.6961663/(1-(0.0684043/μm)^2)
              + 0.4079426/(1-(0.1162414/μm)^2)
@@ -299,8 +305,18 @@ function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=:Lehmeier)
 end
 
 function density(gas::Symbol, P, T=roomtemp)
-    P == 0 ? 0 : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
+    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
 end
+
+function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
+    P = collect(range(Pmin, Pmax, length=N))
+    ρ = density.(gas, P, T)
+    Maths.CSpline(P, ρ)
+end
+
+dsplines = Dict([(gi, densityspline(gi, Pmax=50, N=2^14)) for gi in gas])
+
+fastdensity(gas::Symbol, P) = dsplines[gas](P)
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
@@ -340,6 +356,18 @@ function quantum_numbers(material)
         return 1, 1, 1
     end
 end
+
+function lookup_glass(material::Symbol)
+    if material == :SiO2
+        ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
+        kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
+        spl = Maths.CSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+    else
+        throw(DomainError(material, "Unknown metal $material"))
+    end
+    return spl
+end
+
 
 "Lookup tables for complex refractive indices of metals. Returns function of wavelength in μm which in turn
  returns the refractive index directly"

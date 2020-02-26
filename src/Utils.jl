@@ -1,5 +1,7 @@
 module Utils
 import Dates
+import FFTW
+import Logging
 
 function git_commit()
     wd = dirname(@__FILE__)
@@ -20,6 +22,14 @@ function git_branch()
         "unavailable (Luna is not checkout out for development)"
     end
 end
+
+srcdir() = dirname(@__FILE__)
+
+lunadir() = dirname(srcdir())
+
+datadir() = joinpath(srcdir(), "data")
+
+cachedir() = joinpath(homedir(), ".luna")
 
 function sourcecode()
     src = dirname(@__FILE__)
@@ -43,4 +53,27 @@ function sourcecode()
     end
     return out
 end
+
+function loadFFTwisdom()
+    fpath = joinpath(cachedir(), "FFTWcache")
+    if isfile(fpath)
+        Logging.@info("Found FFTW wisdom at $fpath")
+        ret = FFTW.import_wisdom(fpath)
+        success = (ret != 0)
+        Logging.@info(success ? "FFTW wisdom loaded" : "Loading FFTW wisdom failed")
+        return success
+    else
+        Logging.@info("No FFTW wisdom found")
+        return false
+    end
+end
+
+function saveFFTwisdom()
+    fpath = joinpath(cachedir(), "FFTWcache")
+    isfile(fpath) && rm(fpath)
+    isdir(cachedir()) || mkpath(cachedir())
+    FFTW.export_wisdom(fpath)
+    Logging.@info("FFTW wisdom saved to $fpath")
+end
+
 end

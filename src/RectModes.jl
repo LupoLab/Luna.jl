@@ -26,8 +26,15 @@ end
 function RectMode(a, b, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
-    coren = ω -> rfg(2π*c./ω)
-    cladn = ω -> rfs(2π*c./ω)
+    coren = (ω; z) -> rfg(2π*c./ω)
+    cladn = (ω; z) -> rfs(2π*c./ω)
+    RectMode(a, b, n, m, pol, coren, cladn)
+end
+
+"convenience constructor for non-constant core index"
+function RectMode(a, b, coren, clad; n=1, m=1, pol=:x, T=roomtemp)
+    rfs = ref_index_fun(clad)
+    cladn = (ω; z) -> rfs(2π*c./ω)
     RectMode(a, b, n, m, pol, coren, cladn)
 end
 
@@ -44,20 +51,20 @@ Appl. Opt., AO 15, 1334–1340 (1976).
 I had to re-derive the result in order to get the complex cladding index contribution
 to the real part of neff.
 "
-function neff(m::RectMode, ω)
-    εcl = m.cladn(ω)^2
-    εco = m.coren(ω)^2
+function neff(m::RectMode, ω; z=0)
+    εcl = m.cladn(ω, z=z)^2
+    εco = m.coren(ω, z=z)^2
     λ = 2π*c./ω
     if m.pol == :x
-        ac = εcl/sqrt(Complex(εcl - 1))
-        bc = 1/sqrt(Complex(εcl - 1))
+        ac = εcl/sqrt(complex(εcl - 1))
+        bc = 1/sqrt(complex(εcl - 1))
     elseif m.pol == :y
-        bc = εcl/sqrt(Complex(εcl - 1))
-        ac = 1/sqrt(Complex(εcl - 1))
+        bc = εcl/sqrt(complex(εcl - 1))
+        ac = 1/sqrt(complex(εcl - 1))
     else
         error("RectMode pol must be either :x or :y")
     end
-    sqrt(Complex(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
+    sqrt(complex(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
                      - (m.n*λ/(4*m.b))^2*(1 - im*λ/(2π*m.b)*bc)^2))
 end
 
