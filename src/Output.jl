@@ -1,7 +1,7 @@
 module Output
 import HDF5
 import Logging
-import Base: getindex
+import Base: getindex, show
 import Printf: @sprintf
 import Luna: Utils
 
@@ -40,6 +40,8 @@ end
 "getindex works interchangeably so when switching from one Output to
 another, subsequent code can stay the same"
 getindex(o::MemoryOutput, idx) = o.data[idx]
+
+show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))")
 
 """Calling the output handler saves data in the arrays
     Arguments:
@@ -194,6 +196,14 @@ function getindex(o::HDF5Output, idx)
         return ret
     end
 end
+
+function show(io::IO, o::HDF5Output)
+    fields = HDF5.h5open(o.fpath) do file
+        names(file)
+    end
+    print(io, "HDF5Output$(fields)")
+end
+
 
 """Calling the output handler writes data to the file
     Arguments:
@@ -408,9 +418,13 @@ for op in (:MemoryOutput, :HDF5Output)
     eval(
         quote
             macro $op(args...)
-                script = string(__source__.file)
-                code = open(script, "r") do file
-                    read(file, String)
+                code = ""
+                try
+                    script = string(__source__.file)
+                    code = open(script, "r") do file
+                        read(file, String)
+                    end
+                catch
                 end
                 for arg in args
                     if isa(arg, Expr) && arg.head == :(=)
