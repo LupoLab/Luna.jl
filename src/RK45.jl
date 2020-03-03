@@ -217,6 +217,7 @@ function evaluate!(s::PreconStepper)
     end
 end
 
+"Interpolate solution, aka dense output."
 function interpolate(s::Stepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
@@ -236,6 +237,7 @@ function interpolate(s::Stepper, ti::Float64)
     return @. s.y + s.dt.*s.yi
 end
 
+"Interpolate solution, aka dense output."
 function interpolate(s::PreconStepper, ti::Float64)
     if ti > s.tn
         error("Attempting to extrapolate!")
@@ -257,6 +259,7 @@ function interpolate(s::PreconStepper, ti::Float64)
     return out
 end
 
+"Make propagator for the case of constant linear operator"
 function make_prop!(linop::AbstractArray, y0)
     prop! = let linop=linop
         function prop!(y, t1, t2, bwd=false)
@@ -269,6 +272,7 @@ function make_prop!(linop::AbstractArray, y0)
     end
 end
 
+"Make propagator for the case of non-constant linear operator"
 function make_prop!(linop!, y0)
     linop_int = similar(y0)
     function prop!(y, t1, t2, bwd=false)
@@ -280,6 +284,7 @@ function make_prop!(linop!, y0)
     return prop!
 end
 
+"Make closure for the pre-conditioned RHS function."
 function make_fbar!(f!, prop!, y0)
     y = similar(y0)
     fbar! = let f! = f!, prop! = prop!, y=y
@@ -292,6 +297,7 @@ function make_fbar!(f!, prop!, y0)
     end
 end
 
+"Max-ish norm (from Dane Austin's code, no idea where he got it from)."
 function maxnorm(yerr, y, yn, rtol, atol)
     maxerr = 0
     maxy = 0
@@ -302,6 +308,7 @@ function maxnorm(yerr, y, yn, rtol, atol)
     return maxerr/(atol + rtol*maxy)
 end
 
+"Alternative form of max-ish norm."
 function maxnorm_ratio(yerr, y, yn, rtol, atol)
     m = 0
     for ii in eachindex(yerr)
@@ -311,6 +318,8 @@ function maxnorm_ratio(yerr, y, yn, rtol, atol)
     return m
 end
 
+"Semi-norm as used in DifferentialEquations.jl, see Hairer, Solving Ordinary Differential
+Equations: Nonstiff Problems, eq. (4.11) (p.168 of the second revised edition)."
 function normnorm(yerr, y, yn, rtol, atol)
     s = 0
     for ii in eachindex(yerr)
@@ -319,6 +328,7 @@ function normnorm(yerr, y, yn, rtol, atol)
     sqrt(s/length(yerr))
 end
 
+"'Weak' norm as used in fnfep."
 function weaknorm(yerr, y, yn, rtol, atol)
     sy = 0
     syn = 0
@@ -332,6 +342,7 @@ function weaknorm(yerr, y, yn, rtol, atol)
     return sqrt(syerr)/rtol/errwt
 end
 
+"Simple proportional error controller, see e.g. Hairer eq. (4.13)."
 function stepcontrolP!(s)
     if s.ok
         s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
@@ -341,6 +352,9 @@ function stepcontrolP!(s)
     steplims!(s)
 end
 
+"Proportional-integral error controller, aka Lund stabilisation.
+See G. Söderlind and L. Wang, J. Comput. Appl. Math. 185, 225 (2006).
+"
 function stepcontrolPI!(s)
     β1 = 3/5 / 5
     β2 = -1/5 / 5
@@ -357,6 +371,7 @@ function stepcontrolPI!(s)
     steplims!(s)
 end
 
+"Apply user-defined limits on step size."
 function steplims!(s)
     if s.dtn > s.max_dt
         s.dtn = s.max_dt
