@@ -2,15 +2,18 @@ module Utils
 import Dates
 import FFTW
 import Logging
+import LibGit2
 import Pidfile: mkpidlock
 import Base: length
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
+import Base.Threads: @threads
 
 function git_commit()
-    wd = dirname(@__FILE__)
     try
-        commit = read(`git -C $wd describe --always --tags --dirty`, String)
-        commit = commit[1:end-1] # Strip newline off the end
+        repo = LibGit2.GitRepo(lunadir())
+        commit = string(LibGit2.GitHash(LibGit2.head(repo)))
+        LibGit2.isdirty(repo) && (commit *= " (dirty)")
+        return commit
     catch
         "unavailable (Luna is not checkout out for development)"
     end
@@ -18,9 +21,10 @@ end
 
 function git_branch()
     try
-        wd = dirname(@__FILE__)
-        b = read(`git -C $wd rev-parse --abbrev-ref HEAD`, String)
-        return b[1:end-1] # Strip newline off the end
+        repo = LibGit2.GitRepo(lunadir())
+        n = string(LibGit2.name(LibGit2.head(repo)))
+        branch = split(n, "/")[end]
+        return branch
     catch
         "unavailable (Luna is not checkout out for development)"
     end
@@ -107,6 +111,9 @@ function parse_scan_cmdline()
         "--local"
             help = "Simply run the scan locally"
             action = :store_true
+        "--parallel", "-p"
+            help = "Run multi-threaded"
+            action = :store_true
     end
     args = parse_args(s)
     for k in keys(args)
@@ -146,6 +153,7 @@ mutable struct Scan
     vars # Dict{Symbol, Any} -> maps from variable names to arrays
     arrays # Array of arrays, each element is one of the arrays to be scanned over
     values # Dictionary mapping from each scan array to the expanded array of values
+    parallel # boolean, true if scan is being run multi-threaded
 end
 
 # Constructor taking parsed command line arguments.
@@ -167,7 +175,7 @@ function Scan(name, args)
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
-    Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict())
+    Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
 end
 
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
@@ -267,8 +275,14 @@ macro scan(ex)
         if $(esc(:__SCAN__)).mode == :cirrus
             cirrus_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
         else
-            for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                $(esc(body))
+            if $(esc(:__SCAN__)).parallel
+                @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
+                    $(esc(body))
+                end
+            else
+                for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
+                    $(esc(body))
+                end
             end
         end
     end

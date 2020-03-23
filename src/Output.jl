@@ -3,7 +3,10 @@ import HDF5
 import Logging
 import Base: getindex, show
 import Printf: @sprintf
+import Pidfile: mkpidlock
 import Luna: Utils
+
+const HDF5LOCK = ReentrantLock()
 
 "Output handler for writing only to memory"
 mutable struct MemoryOutput{sT, N, S}
@@ -126,6 +129,17 @@ function fastcat(A, v)
     return reshape(Av, (dims[1:end-1]..., dims[end]+1))
 end
 
+macro hlock(expr)
+    quote
+        try
+            lock(HDF5LOCK)
+            $(esc(expr))
+        finally
+            unlock(HDF5LOCK)
+        end
+    end
+end
+
 "Output handler for writing to an HDF5 file"
 mutable struct HDF5Output{sT, N, S}
     fpath::AbstractString  # Path to output file
@@ -161,7 +175,7 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
     end
     fdir, fname = splitdir(fpath)
     isdir(fdir) || mkpath(fdir)
-    HDF5.h5open(fpath, "cw") do file
+    @hlock HDF5.h5open(fpath, "cw") do file
         if compression
             HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
                           "chunk", chdims, "blosc", 3)
@@ -187,7 +201,7 @@ end
 Note that if file[idx] is a group, HDF5 automatically converts this
 to a Dict"
 function getindex(o::HDF5Output, idx)
-    ret = HDF5.h5open(o.fpath, "r") do file
+    ret = @hlock HDF5.h5open(o.fpath, "r") do file
         read(file[idx])
     end
     if idx == o.yname
@@ -198,7 +212,7 @@ function getindex(o::HDF5Output, idx)
 end
 
 function show(io::IO, o::HDF5Output)
-    fields = HDF5.h5open(o.fpath) do file
+    fields = @hlock HDF5.h5open(o.fpath) do file
         names(file)
     end
     print(io, "HDF5Output$(fields)")
@@ -217,7 +231,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
-        HDF5.h5open(o.fpath, "r+") do file
+        @hlock HDF5.h5open(o.fpath, "r+") do file
             while save
                 idcs = fill(:, length(o.ydims))
                 s = collect(size(file[o.yname]))
@@ -244,7 +258,7 @@ end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
     N = length(a)
-    names = HDF5.names(parent)
+    names = @hlock HDF5.names(parent)
     for (k, v) in pairs(a[1])
         if ~(k in names)
             create_dataset(parent, k, v)
@@ -258,28 +272,28 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
         if ~(k in names)
             s[end] -= 1 # new dataset - overwrite initial value
         end
-        HDF5.set_dims!(parent[k], Tuple(s))
-        for ii = 1:N
+        @hlock HDF5.set_dims!(parent[k], Tuple(s))
+        @hlock for ii = 1:N
             parent[k][fill(:, ndims(a[ii][k]))..., curN+ii] = a[ii][k]
         end
     end
 end
 
 function create_dataset(parent, name, x::Number)
-    HDF5.d_create(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
+    @hlock HDF5.d_create(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
                   "chunk", (1,))
 end
 
 function create_dataset(parent, name, x::AbstractArray)
     dims = (size(x)..., 1)
     maxdims = (size(x)..., -1)
-    HDF5.d_create(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
+    @hlock HDF5.d_create(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
                   "chunk", dims)
 end
 
 "Calling the output on a dictionary writes the items to the file"
 function (o::HDF5Output)(d::Dict; force=false, meta=false, group=nothing)
-    HDF5.h5open(o.fpath, "r+") do file
+    @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
             if HDF5.exists(parent, k)
@@ -306,7 +320,7 @@ end
 
 "Calling the output on a key, value pair writes the value to the file"
 function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, group=nothing)
-    HDF5.h5open(o.fpath, "r+") do file
+    @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         if HDF5.exists(parent, key)
             if force
@@ -381,9 +395,13 @@ macro ScanHDF5Output(args...)
     code = ""
     try
         script = string(__source__.file)
+        lockpath = joinpath(Utils.cachedir(), "scriptlock")
+        isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
+        pidlock = mkpidlock(lockpath)
         code = open(script, "r") do file
             read(file, String)
         end
+        close(pidlock)
     catch
     end
     for arg in args
@@ -422,6 +440,7 @@ for op in (:MemoryOutput, :HDF5Output)
                 script_code = ""
                 try
                     script = string(__source__.file)
+                    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
                     code = open(script, "r") do file
                         read(file, String)
                     end
