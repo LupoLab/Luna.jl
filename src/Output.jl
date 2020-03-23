@@ -3,7 +3,6 @@ import HDF5
 import Logging
 import Base: getindex, show
 import Printf: @sprintf
-import Pidfile: mkpidlock
 import Luna: Utils
 
 const HDF5LOCK = ReentrantLock()
@@ -395,13 +394,10 @@ macro ScanHDF5Output(args...)
     code = ""
     try
         script = string(__source__.file)
-        lockpath = joinpath(Utils.cachedir(), "scriptlock")
         isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
-        pidlock = mkpidlock(lockpath)
         code = open(script, "r") do file
             read(file, String)
         end
-        close(pidlock)
     catch
     end
     for arg in args
