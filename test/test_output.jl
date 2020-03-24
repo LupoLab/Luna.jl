@@ -5,6 +5,7 @@ import Luna: Output
     import HDF5
     import Luna: Utils
     fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+    isfile(fpath) && rm(fpath)
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
@@ -14,7 +15,7 @@ import Luna: Output
     t = collect(range(t0, stop=t1, length=n))
     ω = randn((1024,))
     wd = dirname(@__FILE__)
-    gitc = read(`git -C $wd rev-parse --short HEAD`, String)
+    gitc = Utils.git_commit()
     o = Output.HDF5Output(fpath, t0, t1, n, shape, yname="y", tname="t", statsfun)
     extra = Dict()
     extra["ω"] = ω
@@ -34,7 +35,7 @@ import Luna: Output
     @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open(fpath, "r") do file
         @test all(read(file["t"]) == t)
-        global yr = reinterpret(ComplexF64, read(file["y"]))
+        global yr = read(file["y"])
         @test all([all(yr[:, :, :, ii] == y0) for ii=1:n])
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
@@ -64,7 +65,7 @@ end
     t = collect(range(t0, stop=t1, length=n))
     ω = randn((1024,))
     wd = dirname(@__FILE__)
-    gitc = read(`git -C $wd rev-parse --short HEAD`, String)
+    gitc = Utils.git_commit()
     o = Output.MemoryOutput(t0, t1, n, shape, statsfun, yname="y", tname="t")
     extra = Dict()
     extra["ω"] = ω
@@ -108,7 +109,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     pres = 5
     τ = 30e-15
     λ0 = 800e-9
-    grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+    grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres), α=ω->0)
     energyfun = NonlinearRHS.energy_mode_avg(m)
     dens0 = PhysData.density(gas, pres)
