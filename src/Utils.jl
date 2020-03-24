@@ -361,7 +361,7 @@ function condor_setup(name, script, batches)
     julia = strip(cmd, ['`', '\''])
     lines = [
         "executable = $julia",
-        """arguments = "$(basename(script)) --batch \$\$([\$(Process)+1]),$batches""",
+        """arguments = "$(basename(script)) --batch \$\$([\$(Process)+1]),$batches" """,
         "log = $name.log.\$(Process)",
         "output = $name.out.\$(Process)",
         "error = $name.err.\$(Process)",
