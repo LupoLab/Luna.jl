@@ -7,7 +7,7 @@ First install CoolProp:
 
 ```
 using Pkg
-Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl.git", rev="master"))
+Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"))
 ```
 
 then install Luna:
@@ -25,7 +25,7 @@ or
 
 ## running scans
 
-There are several utilities available to easily run arbitrary parameter scans: in `Luna.Utils`: `@scaninit`, `@scanvar`, and `@scan`; and in `Luna.Output`: `@ScanHDF5Output`.
+There are several utilities available to easily run arbitrary parameter scans: in `Luna.Scans`: `@scaninit`, `@scanvar`, and `@scan`; and in `Luna.Output`: `@ScanHDF5Output`.
 
 The first step is to write a standard Luna script to run a *single* simulation in the scan, e.g. for something involving a 30 fs, 1 μJ pulse:
 ```
@@ -93,7 +93,9 @@ To run the scan, you run the script (say it's called `energy_duration_scan.jl`) 
    idx=3 -> [3, 7, 11, ...]
    idx=4 -> [4, 8, 12, ...]
    ```
-   This mode of running is mostly intended for parallel execution.
+   This mode of running is mostly intended for parallel execution on clusters and workstations
+   
++ To run a scan on the workstation (HWLX0003-EPS), use `julia energy_duration_scan.jl --condor N`. This creates a `.sub` job script to submit via `condor_submit`, which will submit `N` jobs which each run a batch using the `--batch` option. Note that for this to work, you need to run `julia energy_duration_scan.jl --condor N` **on the workstation** rather than your local machine.
 
 + `julia energy_duration_scan.jl --cirrus N` should only be run on cirrus or another cluster with PBS installed. It makes a jobscript (to be `qsub`ed) which submits `N` jobs, each of which executes one batch using the `--batch` option.
 
