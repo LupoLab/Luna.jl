@@ -146,10 +146,6 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
         @test Eω == mem.data["Eω"]
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
-        println(typeof(read(file["grid"]["sidx"])))
-    end
-    HDF5.h5open(hdf5c.fpath, "r") do file
-        println(typeof(read(file["grid"]["sidx"])))
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
 end
