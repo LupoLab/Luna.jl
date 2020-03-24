@@ -150,7 +150,7 @@ end
 function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression, script=nothing)
     idims = init_dims(ydims, save_cond)
     cdims = collect(idims)
-    cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
+    # cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
     dims = Tuple(cdims)
     chdims = (dims[1:end-1]..., 1) # Chunk size is that of one z-point
     mdims = copy(cdims)
@@ -164,10 +164,10 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
     isdir(fdir) || mkpath(fdir)
     @hlock HDF5.h5open(fpath, "cw") do file
         if compression
-            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+            HDF5.d_create(file, yname, HDF5.datatype(ComplexF64), (dims, maxdims),
                           "chunk", chdims, "blosc", 3)
         else
-            HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
+            HDF5.d_create(file, yname, HDF5.datatype(ComplexF64), (dims, maxdims),
                           "chunk", chdims)
         end
         HDF5.d_create(file, tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
@@ -191,11 +191,7 @@ function getindex(o::HDF5Output, idx)
     ret = @hlock HDF5.h5open(o.fpath, "r") do file
         read(file[idx])
     end
-    if idx == o.yname
-        return reinterpret(ComplexF64, ret)
-    else
-        return ret
-    end
+    return ret
 end
 
 function show(io::IO, o::HDF5Output)
@@ -226,7 +222,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
                     s[end] += 1
                     HDF5.set_dims!(file[o.yname], Tuple(s))
                 end
-                file[o.yname][idcs..., o.saved+1] = reinterpret(Float64, yfun(ts))
+                file[o.yname][idcs..., o.saved+1] = yfun(ts)
                 s = collect(size(file[o.tname]))
                 if s[end] < o.saved+1
                     s[end] += 1
