@@ -7,6 +7,8 @@ import Pidfile: mkpidlock
 import Base: length
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Base.Threads: @threads
+import HDF5
+import Luna: @hlock
 
 function git_commit()
     try
@@ -88,6 +90,64 @@ function saveFFTwisdom()
     close(pidlock)
     Logging.@info("FFTW wisdom saved to $fpath")
 end
+
+function save_dict_h5(fpath, d, force=false, rmold=false)
+    if isfile(fpath) & rmold
+        rm(fpath)
+    end
+
+    function dict2h5(k::AbstractString, v, parent)
+        if HDF5.exists(parent, k) & !force
+            error("Dataset $k exists in $fpath. Set force=true to overwrite.")
+        end
+        parent[k] = v
+    end
+
+    function dict2h5(k::AbstractString, v::Nothing, parent)
+        if HDF5.exists(parent, k) & !force
+            error("Dataset $k exists in $fpath. Set force=true to overwrite.")
+        end
+        parent[k] = Float64[]
+    end
+
+    function dict2h5(k::AbstractString, v::AbstractDict, parent)
+        if !HDF5.exists(parent, k)
+            subparent = HDF5.g_create(parent, k)
+        else
+            subparent = parent[k]
+        end
+        for (kk, vv) in pairs(v)
+            dict2h5(kk, vv, subparent)
+        end
+    end
+    
+    @hlock HDF5.h5open(fpath, "cw") do file
+        for (k, v) in pairs(d)
+            dict2h5(k, v, file)
+        end
+    end
+end
+
+function load_dict_h5(fpath)
+    isfile(fpath) || error("Error loading file $fpath: file does not exist")
+
+    function h52dict(x::HDF5.HDF5Dataset)
+        return read(x)
+    end
+
+    function h52dict(x::Union{HDF5.HDF5Group, HDF5.HDF5File})
+        dd = Dict{String, Any}()
+        for n in names(x)
+            dd[n] = h52dict(x[n])
+        end
+        return dd
+    end
+
+    d = @hlock HDF5.h5open(fpath) do file
+        h52dict(file)
+    end
+end       
+
 
 macro scaninit(name="scan")
     quote

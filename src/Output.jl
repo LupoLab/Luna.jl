@@ -120,6 +120,10 @@ function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false, gr
     end
 end
 
+function tofile(fpath, o::MemoryOutput)
+    Utils.save_dict_h5(fpath, o.data)
+end
+
 function fastcat(A, v)
     Av = vec(A)
     append!(Av, vec(v))
@@ -275,7 +279,7 @@ function create_dataset(parent, name, x::AbstractArray)
 end
 
 "Calling the output on a dictionary writes the items to the file"
-function (o::HDF5Output)(d::Dict; force=false, meta=false, group=nothing)
+function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing)
     @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
