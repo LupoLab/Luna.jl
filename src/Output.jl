@@ -3,9 +3,8 @@ import HDF5
 import Logging
 import Base: getindex, show
 import Printf: @sprintf
-import Luna: Utils
+import Luna: Utils, @hlock
 
-const HDF5LOCK = ReentrantLock()
 
 "Output handler for writing only to memory"
 mutable struct MemoryOutput{sT, N, S}
@@ -128,17 +127,6 @@ function fastcat(A, v)
     return reshape(Av, (dims[1:end-1]..., dims[end]+1))
 end
 
-macro hlock(expr)
-    quote
-        try
-            lock(HDF5LOCK)
-            $(esc(expr))
-        finally
-            unlock(HDF5LOCK)
-        end
-    end
-end
-
 "Output handler for writing to an HDF5 file"
 mutable struct HDF5Output{sT, N, S}
     fpath::AbstractString  # Path to output file
@@ -257,7 +245,7 @@ end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
     N = length(a)
-    names = @hlock HDF5.names(parent)
+    names = HDF5.names(parent)
     for (k, v) in pairs(a[1])
         if ~(k in names)
             create_dataset(parent, k, v)
@@ -271,8 +259,8 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
         if ~(k in names)
             s[end] -= 1 # new dataset - overwrite initial value
         end
-        @hlock HDF5.set_dims!(parent[k], Tuple(s))
-        @hlock for ii = 1:N
+        HDF5.set_dims!(parent[k], Tuple(s))
+        for ii = 1:N
             parent[k][fill(:, ndims(a[ii][k]))..., curN+ii] = a[ii][k]
         end
     end
@@ -367,8 +355,9 @@ function every_nth(n)
     i = 0
     cond = let i = i, n = n
         function condition(y, t, dt, saved)
-            return i % n == 0, t
+            save = i % n == 0
             i += 1
+            return save, t
         end
     end
     return cond

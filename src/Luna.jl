@@ -4,7 +4,24 @@ import NumericalIntegration
 import Logging
 import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
+
+"Lock on the HDF5 library for multi-threaded execution."
+const HDF5LOCK = ReentrantLock()
+"Macro to wait for and then release HDF5LOCK. Any call to HDF5.jl needs to be
+preceeded by @hlock."
+macro hlock(expr)
+    quote
+        try
+            lock(HDF5LOCK)
+            $(esc(expr))
+        finally
+            unlock(HDF5LOCK)
+        end
+    end
+end
+
 include("Utils.jl")
+include("Output.jl")
 include("Maths.jl")
 include("Hankel.jl")
 include("PhysData.jl")
@@ -17,7 +34,6 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
 include("LinearOps.jl")
-include("Output.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")

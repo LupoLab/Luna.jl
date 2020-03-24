@@ -8,6 +8,7 @@ import Logging: @info
 @scanvar energy = range(0.1e-6, 1.5e-6, length=16)
 @scanvar τ = range(25e-15, 35e-15, length=11)
 
+
 @scan begin
 a = 13e-6
 gas = :Ar
@@ -15,7 +16,7 @@ pres = 5
 
 λ0 = 800e-9
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(1e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 
@@ -38,7 +39,7 @@ densityfun = let dens0=dens0
 end
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
+ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
@@ -57,5 +58,4 @@ output = Output.@ScanHDF5Output(0, grid.zmax, 101, (length(grid.ω),), statsfun)
 println(output["meta"]["scanvars"])
 
 Luna.run(Eω, grid, linop, transform, FT, output)
-
 end
