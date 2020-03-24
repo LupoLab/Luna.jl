@@ -168,6 +168,9 @@ function parse_scan_cmdline()
         "--cirrus"
             help = "Make job script for cirrus to run in given number of batches, do not run any simulations."
             arg_type = Int
+            "--condor"
+            help = "Make job submission script for HTCondor. Do not run any simulations."
+            arg_type = Int
         "--local"
             help = "Simply run the scan locally"
             action = :store_true
@@ -232,6 +235,9 @@ function Scan(name, args)
     elseif haskey(args, "cirrus")
         mode = :cirrus
         batch = (0, args["cirrus"])
+    elseif haskey(args, "condor")
+        mode = :condor
+        batch = (0, args["condor"])
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
@@ -334,6 +340,8 @@ macro scan(ex)
     quote
         if $(esc(:__SCAN__)).mode == :cirrus
             cirrus_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
+        elseif $(esc(:__SCAN__)).mode == :condor
+            condor_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
         else
             if $(esc(:__SCAN__)).parallel
                 @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
@@ -347,6 +355,29 @@ macro scan(ex)
         end
     end
 end
+
+function condor_setup(name, script, batches)
+    cmd = split(string(Base.julia_cmd()))[1]
+    julia = strip(cmd, ['`', '\''])
+    lines = [
+        "executable = $julia",
+        """arguments = "$(basename(script)) --batch \$\$([\$(Process)+1]),$batches""",
+        "log = $name.log.\$(Process)",
+        "output = $name.out.\$(Process)",
+        "error = $name.err.\$(Process)",
+        "request_cpus = 1",
+        "queue $batches"
+    ]
+
+    fpath = joinpath(dirname(script), "doit.sub")
+    println(fpath)
+    open(fpath, "w") do file
+        for l in lines
+            write(file, l*"\n")
+        end
+    end
+end
+
 
 function cirrus_setup(name, script, batches)
     if Sys.iswindows()
