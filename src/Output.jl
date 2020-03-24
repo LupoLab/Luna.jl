@@ -3,7 +3,7 @@ import HDF5
 import Logging
 import Base: getindex, show
 import Printf: @sprintf
-import Luna: Utils, @hlock
+import Luna: Scans, Utils, @hlock
 
 
 "Output handler for writing only to memory"
@@ -408,7 +408,7 @@ macro ScanHDF5Output(args...)
             out("scanidx", $(esc(:__SCANIDX__)),  meta=true)
             vars = Dict{String, Any}()
             for var in keys($(esc(:__SCAN__)).vars)
-                val = Utils.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
+                val = Scans.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
                 vars[string(var)] = val
             end
             out(vars, meta=true, group="scanvars")

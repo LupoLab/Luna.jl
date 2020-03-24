@@ -1,6 +1,6 @@
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
-import Luna.Utils: @scanvar, @scan, @scaninit
+import Luna.Scans: @scanvar, @scan, @scaninit
 import Logging: @info
 
 @scaninit "scantest"

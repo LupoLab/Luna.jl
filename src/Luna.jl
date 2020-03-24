@@ -21,6 +21,7 @@ macro hlock(expr)
 end
 
 include("Utils.jl")
+include("Scans.jl")
 include("Output.jl")
 include("Maths.jl")
 include("Hankel.jl")
