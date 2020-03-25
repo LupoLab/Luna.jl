@@ -24,3 +24,14 @@ for i in eachindex(fac)
     ηn[i] = Modes.overlap(m, r, Er, dim=1)[1]
 end
 @test 0.63 < fac[argmax(ηn)] < 0.65
+
+fac = 0.45
+w0 = fac*a
+Er = Maths.gauss(r, w0/sqrt(2))
+sum = 0
+for mi = 1:10
+    m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=mi)
+    η = Modes.overlap(m, r, Er, dim=1)[1]
+    global sum += η[1]
+end
+@test isapprox(sum, 1, rtol=1e-4)
