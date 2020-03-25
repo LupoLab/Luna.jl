@@ -16,6 +16,7 @@ function zdz!(d, Eω, z, dz)
 end
 
 function collect_stats(funcs)
+    # make sure z and dz are recorded
     if !(zdz! in funcs)
         funcs = (funcs..., zdz!)
     end

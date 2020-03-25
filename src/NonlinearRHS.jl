@@ -335,22 +335,33 @@ end
 "Calculate energy from field E(t) for mode-averaged field"
 function energy_mode_avg(m)
     aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
+    function tfun(t, Et)
         Eta = Maths.hilbert(Et)
         intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
-    return energyfun
+
+    function ωfun(ω, Eω)
+        abs(integrate(ω, abs2.(Eω*sqrt(2π)/ω[end]), SimpsonEven()))*PhysData.c*PhysData.ε_0*aeff/2
+    end
+
+    return tfun, ωfun
 end
 
 "Calculate energy from envelope field E(t) for mode-averaged field"
 function energy_env_mode_avg(m)
     aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
+    function tfun(t, Et)
         intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
         return intg * PhysData.c*PhysData.ε_0*aeff/2
     end
-    return energyfun
+
+    function ωfun(ω, Eω)
+        δω = ω[2] - ω[1]
+        Δω = length(ω)*δω
+        sum(abs2.(Eω*sqrt(2π)/Δω))*δω*PhysData.c*PhysData.ε_0*aeff/2
+    end
+    return tfun, ωfun
 end
 
 end
