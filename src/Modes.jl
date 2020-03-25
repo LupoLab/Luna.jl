@@ -14,17 +14,17 @@ abstract type AbstractMode end
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
-function dimlimits(m::M) where {M <: AbstractMode}
+function dimlimits(m::AbstractMode)
     error("abstract method called")
 end
 
 "Create function of coords that returns (xs) -> (Ex, Ey)"
-function field(m::M) where {M <: AbstractMode}
+function field(m::AbstractMode)
     error("abstract method called")
 end
 
 "Get mode normalization constant"
-function N(m::M) where {M <: AbstractMode}
+function N(m::AbstractMode)
     f = field(m)
     dl = dimlimits(m)
     function Nfunc(xs)
@@ -37,7 +37,7 @@ function N(m::M) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> |E|"
-function absE(m::M) where {M <: AbstractMode}
+function absE(m::AbstractMode)
     func = let sN = sqrt(N(m)), f = field(m)
         function func(xs)
             norm(f(xs) ./ sN)
@@ -46,7 +46,7 @@ function absE(m::M) where {M <: AbstractMode}
 end
 
 "Create function that returns normalised (xs) -> (Ex, Ey)"
-function Exy(m) where {M <: AbstractMode}
+function Exy(m)
     func = let sN = sqrt(N(m)), f = field(m)
         function func(xs)
             f(xs) ./ sN
@@ -55,7 +55,7 @@ function Exy(m) where {M <: AbstractMode}
 end
 
 "Get effective area of mode"
-function Aeff(m) where {M <: AbstractMode}
+function Aeff(m::AbstractMode)
     em = absE(m)
     dl = dimlimits(m)
     # Numerator
@@ -185,19 +185,43 @@ macro arbitrary(exprs...)
     end
 end
 
+"""
+    overlap(m::AbstractMode, r, E; dim)
+
+Calculate mode overlap between radially symmetric field and radially symmetric mode.
+
+# Examples
+```jldoctest
+julia> a = 100e-6;
+julia> m = Capillary.MarcatilliMode(a, :He, 1.0);
+julia> unm = besselj_zero(0, 1);
+julia> r = collect(range(0, a, length=512));
+julia> Er = besselj.(0, unm*r/a);
+
+julia> η = Modes.overlap(m, r, Er; dim=1);
+julia> η[1] ≈ 1
+true
+```
+"""
 function overlap(m::AbstractMode, r, E; dim)
-    f = Exy(m)
-    dl = dimlimits(m)
-    Er = [f((ri, 0))[2] for ri in r]
-    normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal()))
+    f = field(m) # f((r, θ)) returns field E(r, θ) of the mode
+    dl = dimlimits(m) # integration limits
+    Er = [f((ri, 0))[2] for ri in r] # sample the modal field at the same coords as E
+    normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal())) # normalisation factor
+
+    # Generate output array: same shape as input, except length in space is 1
     shape = collect(size(E))
     shape[dim] = 1
-    integral = ones(Tuple(shape))
-    idxlo = CartesianIndices(size(E)[1:dim-1]);
-    idxhi = CartesianIndices(size(E)[dim+1:end]);
+    integral = ones(Tuple(shape)) # make output array
+
+    # Indices to iterate over all other dimensions (e.g. polarisation, frequency)
+    idxlo = CartesianIndices(size(E)[1:dim-1])
+    idxhi = CartesianIndices(size(E)[dim+1:end])
     for hi in idxhi
         for lo in idxlo
+                # normalisation factor for the other field
                 normE = sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal()))
+                # E[lo, :, hi] is a vector
                 integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
                 integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
         end
