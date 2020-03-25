@@ -10,7 +10,15 @@ function ω0(grid)
     return addstat!
 end
 
+function zdz!(d, Eω, z, dz)
+    d["z"] = z
+    d["dz"] = dz
+end
+
 function collect_stats(funcs)
+    if !(zdz! in funcs)
+        funcs = (funcs..., zdz!)
+    end
     f = let funcs=funcs
         function collect_stats(Eω, z, dz)
             d = Dict{String, Any}()
