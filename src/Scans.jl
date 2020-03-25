@@ -3,6 +3,17 @@ import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Base.Threads: @threads
 import Base: length
 
+"""
+    @scaninit(name="scan")
+
+Initialise a scan for this file by parsing command line arguments and creating a Scan object.
+The scan name (added to file names via @ScanHDF5Output) can also be given.
+
+# Examples
+```julia
+@scaninit "energy_scan_5bar"
+```
+"""
 macro scaninit(name="scan")
     quote
         args = parse_scan_cmdline()
@@ -48,29 +59,42 @@ function parse_scan_cmdline()
     return args
 end
 
+# Enable parsing of command-line arguments of the form "1:5" to a UnitRange
 parse_item(::Type{UnitRange{Int}}, x::AbstractString) = eval(Meta.parse(x))
+
+# Enable parsing of command-line arguments of the form"1,5" to a Tuple of integers
 parse_item(::Type{Tuple{Int, Int}}, x::AbstractString) = Tuple(parse(Int, xi) for xi in split(x, ","))
 
 
-"Struct containing the scan arrays.
+"""
+    Scan
 
-idcs are indices into `Scan.values`, which contains
-the cartesian product of all of the arrays that are to be scanned over.
-`Scan.values` is an `IdDict`, and each field in `values` contains (`N1 * N2 * N3...`) entries,
-where `N1` etc are the lengths of the arrays to be scanned over. Each entry in each field of
-`Scan.values` is the value of that scan variable for a particular run.
-Taken together, the fields of `Scan.values` contain all possible combinations of the arrays.
+Struct to contain information about a scan, including the arrays to be scanned over.
+
+When an array is annotated by `@scanvar`, it is added to the `Scan` and then the cartesian
+product (all possible combinations) of the annotated arrays is computed. This product has
+contains (`N1 * N2 * N3...`) entries, where `N1` etc are the lengths of the arrays
+to be scanned over. Each entry is unique and itself has one entry for each annotated array.
+
+The cartesian product is split up into several arrays, one per annotated array, each also
+of length (`N1 * N2 * N3...`)--these contain the values that a given scan variable should take
+for each simulation in the scan. They are saved in in `values`, an `IdDict` that maps
+**from an annoted array itself** to the (`N1 * N2 * N3...`)-length array of values.
+By then indexing into this value array using `__SCANIDX__`, we find the value that this scan
+variable should take for this particular simulation.
+
 The first array added using `@scanvar` varies the fastest, all other fields of 
-`Scan.values` will contain repeated entries."
+`Scan.values` will contain repeated entries.
+"""
 mutable struct Scan
-    name # Name for the scan
-    mode::Symbol # :cirrus, :local, :batch or :range
+    name::AbstractString # Name for the scan
+    mode::Symbol # :cirrus, :condor, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
-    vars # Dict{Symbol, Any} -> maps from variable names to arrays
+    vars::Dict{Symbol, Any} # maps from variable names to arrays
     arrays # Array of arrays, each element is one of the arrays to be scanned over
-    values # Dictionary mapping from each scan array to the expanded array of values
-    parallel # boolean, true if scan is being run multi-threaded
+    values::IdDict # maps from each scan array to the expanded array of values
+    parallel::Bool # true if scan is being run multi-threaded
 end
 
 # Constructor taking parsed command line arguments.
@@ -98,19 +122,39 @@ function Scan(name, args)
     Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
 end
 
+# The length of a scan is the product of the lengths of the arrays to be scanned over
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
 
-"Add a variable to a scan. Adds the array to the list of scan arrays, and re-makes the
-cartesian product."
-function addvar!(s::Scan, var, arr)
+"""
+    addvar!(s::Scan, var::Symbol, arr::AbstractArray)
+
+Add an array to a scan, saving both the symbol given and the array, then re-make the 
+cartesian product.
+
+This function is used internally by `@scanvar`
+"""
+function addvar!(s::Scan, var::Symbol, arr::AbstractArray)
     push!(s.arrays, arr)
     s.vars[var] = arr
     makearray!(s)
 end
 
+"""
+    getval(s::Scan, var::Symbol, scanidx::Int)
+
+Get the value of a scan variable (identified by a symbol) for a given scan index.
+
+This function is used in e.g. `Output.@ScanHDF5Output` to get the values used for one
+particular simulation.
+"""
 getval(s::Scan, var::Symbol, scanidx::Int) = s.values[s.vars[var]][scanidx]
 
-"Make the cartesian product array containing all possible combinations of the scan arrays."
+"""
+    makearray!(s::Scan)
+
+Make the cartesian product array containing all possible combinations of the scan arrays,
+as well as the array of indices that are to be used in the current run of the script.
+"""
 function makearray!(s::Scan)
     combos = vec(collect(Iterators.product(s.arrays...)))
     s.values = IdDict()
@@ -131,7 +175,21 @@ function makearray!(s::Scan)
     end
 end
 
-"Split array a into n chunks, spreading the entries of a evenly."
+"""
+    chunks(a::AbstractArray, n::Int)
+
+Split array a into n chunks, spreading the entries of a evenly.
+
+# Examples
+```jldoctest
+julia> a = collect(range(1, length=10));
+julia> Scans.chunks(a, 3)
+3-element Array{Array{Int64,1},1}:
+ [1, 4, 7, 10]
+ [2, 5, 8]
+ [3, 6, 9]
+```
+"""
 function chunks(a::AbstractArray, n::Int)
     N = length(a)
     done = 0
@@ -143,10 +201,22 @@ function chunks(a::AbstractArray, n::Int)
     return out
 end
 
-"Macro to add to an array assignment.
-    e.g.
-        `@scanvar x = 1:10`
-    adds the variable `x` to be scanned over."
+"""
+    @scanvar
+
+Add an array as a variable to be scanned over.
+
+# Examples
+Create an array and add it to the scan simultaneously:
+```julia
+@scanvar energy = range(0.1e-6, 1.5e-6, length=16)
+```
+Create an array first and add it to the scan later:
+```julia
+τ = range(25e-15, 35e-15, length=11)
+@scanvar τ
+```
+"""
 macro scanvar(expr)
     global ex = expr
     if isa(expr, Symbol)
@@ -165,8 +235,29 @@ macro scanvar(expr)
     end
 end
 
-"Recursively interpolate scan variables into a scan expression."
-function interpolate!(ex)
+"""
+    interpolate!(ex::Expr)
+
+Recursively interpolate scan variables into a scan expression.
+
+# Examples
+```jldoctest
+julia> for i in eachindex(ARGS)
+    pop!(ARGS)
+end
+julia> push!(ARGS, "--local")
+julia> __SCANIDX__ = 1
+julia> @scaninit
+julia> @scanvar energy = range(0.1e-6, 1.5e-6, length=16);
+julia> ex = Expr(:\$, :energy)
+:(\$(Expr(:\$, :energy)))
+julia> exi = interpolate!(ex)
+:((__SCAN__.values[energy])[__SCANIDX__])
+julia> eval(exi)
+1.0e-7
+```
+"""
+function interpolate!(ex::Expr)
     if ex.head === :($)
         var = ex.args[1]
         if var == :__SCANIDX__
@@ -185,8 +276,18 @@ function interpolate!(ex)
     return ex
 end
 
-"Run the enclosed expression as a scan. Interpolates the scan variables into the expression
-and then runs the expression as many times as required by the `start` and `stop` arguments."
+"""
+    @scan
+
+Run the enclosed expression as a scan.
+
+Depending on `__SCAN__.mode`, different things happen:
+* :batch, :range, :local -> run enclosed expression as many times as required, using values
+    from the cartesian product `__SCAN__.values`. If `__SCAN__.parallel` is true, these runs
+    are done on different threads.
+* :cirrus -> make PBS job script for batched run on cirrus
+* :condor -> make HTCondor job script for batched run on HWLX0003
+"""
 macro scan(ex)
     body = interpolate!(ex)
     global script = string(__source__.file)
@@ -209,6 +310,12 @@ macro scan(ex)
     end
 end
 
+"""
+    condor_setup(name, script, batches)
+
+Make and save HTCondor job script for a scan named `name` contained in the script located at
+`script` which is to be run in batches.
+"""
 function condor_setup(name, script, batches)
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
@@ -231,7 +338,12 @@ function condor_setup(name, script, batches)
     end
 end
 
+"""
+    cirrus_setup(name, script, batches)
 
+Make and save PBS job script for a scan named `name` contained in the script located at
+`script` which is to be run in batches.
+"""
 function cirrus_setup(name, script, batches)
     if Sys.iswindows()
         error("--cirrus option must be invoked on the cirrus login node!")
