@@ -204,9 +204,10 @@ true
 ```
 """
 function overlap(m::AbstractMode, r, E; dim)
-    f = field(m) # f((r, θ)) returns field E(r, θ) of the mode
+    f = field(m) # f((r, θ)) returns field [Ex(r, θ), Ey(r, θ)] of the mode
     dl = dimlimits(m) # integration limits
-    Er = [f((ri, 0))[2] for ri in r] # sample the modal field at the same coords as E
+    # sample the modal field at the same coords as E - select y polarisation component 
+    Er = [f((ri, 0))[2] for ri in r] 
     Er[r .> dl[3][1]] .= 0 
     normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal())) # normalisation factor
 
