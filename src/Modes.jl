@@ -207,6 +207,7 @@ function overlap(m::AbstractMode, r, E; dim)
     f = field(m) # f((r, θ)) returns field E(r, θ) of the mode
     dl = dimlimits(m) # integration limits
     Er = [f((ri, 0))[2] for ri in r] # sample the modal field at the same coords as E
+    Er[r .> dl[3][1]] .= 0 
     normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal())) # normalisation factor
 
     # Generate output array: same shape as input, except length in space is 1
@@ -223,7 +224,7 @@ function overlap(m::AbstractMode, r, E; dim)
                 normE = sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal()))
                 # E[lo, :, hi] is a vector
                 integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
-                integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
+                integral[lo, 1, hi] = abs2.(integrate(r, integrand, Trapezoidal()))
         end
     end
     return integral
