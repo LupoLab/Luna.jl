@@ -21,7 +21,7 @@ grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 # m = Capillary.MarcatilliMode(a, gas, pres)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 
-energyfun = NonlinearRHS.energy_mode_avg(m)
+energyfun = NonlinearRHS.energy_modal()
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)

@@ -29,7 +29,7 @@ m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
  
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun = NonlinearRHS.energy_mode_avg(m)
+energyfun = NonlinearRHS.energy_modal()
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)

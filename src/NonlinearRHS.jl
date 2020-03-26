@@ -319,41 +319,9 @@ function (t::TransModeAvg)(nl, Eω, z)
 end
 
 "Calculate energy from modal field E(t)"
-function energy_modal()
-    function energyfun(t, Et)
-        Eta = Maths.hilbert(Et)
-        return abs(integrate(t, abs2.(Eta), SimpsonEven()))
-    end
-    return energyfun
-end
+energy_modal() = _energy_modal
 
-"Calculate energy from modal envelope field E(t)"
-function energy_env_modal()
-    function energyfun(t, Et)
-        return abs(integrate(t, abs2.(Et), SimpsonEven()))
-    end
-    return energyfun
-end
-
-"Calculate energy from field E(t) for mode-averaged field"
-function energy_mode_avg(m)
-    aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
-        Eta = Maths.hilbert(Et)
-        intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-        return intg
-    end
-    return energyfun
-end
-
-"Calculate energy from envelope field E(t) for mode-averaged field"
-function energy_env_mode_avg(m)
-    aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
-        intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
-        return intg
-    end
-    return energyfun
-end
+_energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
+_energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
 
 end
