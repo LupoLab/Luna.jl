@@ -61,6 +61,20 @@ end
     m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TM)
     @test Modes.N(m) ≈ N(m)
     @test Modes.Aeff(m) ≈ Aeff(m)
+    
+    a0 = a
+    aL = a/2
+    L = 1
+    afun = let a0=a0, aL=aL, L=L
+        afun(z) = a0 + (aL-a0)*z/L
+    end
+    m = Capillary.MarcatilliMode(afun, :He, 1, loss=false, model=:full)
+    @test Modes.N(m) ≈ N(m)
+    @test Modes.N(m, z=L/2) ≈ N(m, z=L/2)
+    @test Modes.N(m, z=L) ≈ N(m, z=L)
+    @test Modes.Aeff(m) ≈ Aeff(m)
+    @test Modes.Aeff(m, z=L/2) ≈ Aeff(m, z=L/2)
+    @test Modes.Aeff(m, z=L) ≈ Aeff(m, z=L)
 end
 
 

@@ -142,7 +142,7 @@ end
 
 function N(m::MarcatilliMode; z=0)
     np1 = (m.kind == :HE) ? m.n : 2
-    π/2 * m.a(0)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
+    π/2 * m.a(z)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
 end
 
 function Aeff_Jintg(n, unm, kind)
