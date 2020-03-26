@@ -5,7 +5,7 @@ import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 
-export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
 abstract type AbstractMode end
 
@@ -15,71 +15,6 @@ Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 "Maximum dimensional limits of validity for this mode"
 function dimlimits(m::M) where {M <: AbstractMode}
     error("abstract method called")
-end
-
-"full complex refractive index of a mode"
-function neff(m::M, ω) where {M <: AbstractMode}
-    error("abstract method called")
-end
-
-function β(m::M, ω) where {M <: AbstractMode}
-    return ω/c*real(neff(m, ω))
-end
-
-function β(m::M; λ) where {M <: AbstractMode}
-    return β(m, 2π*c./λ)
-end
-
-function α(m::M, ω) where {M <: AbstractMode}
-    return 2*ω/c*imag(neff(m, ω))
-end
-
-function α(m::M; λ) where {M <: AbstractMode}
-    return α(m, 2π*c./λ)
-end
-
-function losslength(m::M, ω) where {M <: AbstractMode}
-    return 1 ./ α(m, ω)
-end
-
-function losslength(m::M; λ) where {M <: AbstractMode}
-    return losslength(m::M, 2π*c./λ) 
-end
-
-function transmission(m::M, L; λ) where {M <: AbstractMode}
-    return @. exp(-α(m, λ=λ)*L)
-end
-
-function dB_per_m(m::M, ω) where {M <: AbstractMode}
-    return 10/log(10).*α(m, ω)
-end
-
-function dB_per_m(m::M; λ) where {M <: AbstractMode}
-    return return 10/log(10) .* α(m, λ=λ)
-end
-
-function dispersion_func(m::M, order) where {M <: AbstractMode}
-    βn(ω) = Maths.derivative(ω -> β(m, ω), ω, order)
-    return βn
-end
-
-function dispersion(m::M, order, ω) where {M <: AbstractMode}
-    return dispersion_func(m, order).(ω)
-end
-
-function dispersion(m::M, order; λ) where {M <: AbstractMode}
-    return dispersion(m, order, 2π*c./λ)
-end
-
-function zdw(m::M; ub=200e-9, lb=3000e-9) where {M <: AbstractMode}
-    ubω = 2π*c/ub
-    lbω = 2π*c/lb
-    ω0 = missing
-    try
-        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
-    catch
-    end
-    return 2π*c/ω0
 end
 
 "Create function of coords that returns (xs) -> (Ex, Ey)"
@@ -138,6 +73,66 @@ function Aeff(m) where {M <: AbstractMode}
     return num / den
 end
 
+"full complex refractive index of a mode"
+function neff(m::AbstractMode, ω; z=0)
+    error("abstract method called")
+end
+
+function β(m::AbstractMode, ω; z=0)
+    return ω/c*real(neff(m, ω, z=z))
+end
+
+function α(m::AbstractMode, ω; z=0)
+    return 2*ω/c*imag(neff(m, ω, z=z))
+end
+
+function losslength(m::AbstractMode, ω; z=0)
+    return 1/α(m, ω, z=z)
+end
+
+function transmission(m::AbstractMode, ω, L; z=0)
+    return exp(-α(m, ω)*L)
+end
+
+function dB_per_m(m::AbstractMode, ω; z=0)
+    return 10/log(10).*α(m, ω)
+end
+
+function dispersion_func(m::AbstractMode, order; z=0)
+    βn(ω) = Maths.derivative(ω -> β(m, ω, z=z), ω, order)
+    return βn
+end
+
+function dispersion(m::AbstractMode, order, ω; z=0)
+    return dispersion_func(m, order, z=z).(ω)
+end
+
+function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9)
+    ubω = 2π*c/ub
+    lbω = 2π*c/lb
+    ω0 = missing
+    try
+        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+    catch
+    end
+    return 2π*c/ω0
+end
+
+"Check that function accepts z keyword argument and add it if necessary"
+function chkzkwarg(func)
+    try
+        func(2.5e15, z=0.0)
+        return func
+    catch e
+        if isa(e, ErrorException)
+            f = (ω; z) -> func(ω)
+            return f
+        else
+            throw(e)
+        end
+    end
+end
+
 """
 Macro to create a delegated mode, which takes its methods from an existing mode except
 for those which are overwritten
@@ -156,9 +151,9 @@ macro delegated(mex, exprs...)
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
             dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
         else
-            @eval ($mfun)(dm::$Tname, args...) = ($mfun)(dm.m, args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = ($mfun)(dm.m, args...; kwargs...)
         end
     end
     quote
@@ -179,7 +174,7 @@ macro arbitrary(exprs...)
     for mfun in (:α, :β, :field, :dimlimits)
         if mfun in funs
             dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...) = $dfun(args...)
+            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
         else
             error("Must define $mfun for arbitrary mode!")
         end

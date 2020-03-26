@@ -1,6 +1,7 @@
 module Output
 import HDF5
 import Logging
+import Base: getindex
 import Luna: Utils
 
 "Output handler for writing only to memory"
@@ -31,6 +32,10 @@ function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats)
     data["meta"]["git_commit"] = Utils.git_commit()
     MemoryOutput(save_cond, ydims, yname, tname, 0, data, statsfun)
 end
+
+"getindex works interchangeably so when switching from one Output to
+another, subsequent code can stay the same"
+getindex(o::MemoryOutput, idx) = o.data[idx]
 
 """Calling the output handler saves data in the arrays
     Arguments:
@@ -141,6 +146,8 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
         Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
         rm(fpath)
     end
+    fdir, fname = splitdir(fpath)
+    isdir(fdir) || mkpath(fdir)
     HDF5.h5open(fpath, "cw") do file
         if compression
             HDF5.d_create(file, yname, HDF5.datatype(Float64), (dims, maxdims),
@@ -158,6 +165,20 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
     end
     stats0 = Vector{Dict{String, Any}}()
     HDF5Output(fpath, save_cond, ydims, yname, tname, 0, statsfun, stats0)
+end
+
+"Here, getindex also opens and closes the file.
+Note that if file[idx] is a group, HDF5 automatically converts this
+to a Dict"
+function getindex(o::HDF5Output, idx)
+    ret = HDF5.h5open(o.fpath, "r") do file
+        read(file[idx])
+    end
+    if idx == o.yname
+        return reinterpret(ComplexF64, ret)
+    else
+        return ret
+    end
 end
 
 """Calling the output handler writes data to the file

@@ -4,6 +4,7 @@ import Luna: Output
 @testset "HDF5" begin
     import HDF5
     import Luna: Utils
+    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
@@ -14,7 +15,7 @@ import Luna: Output
     ω = randn((1024,))
     wd = dirname(@__FILE__)
     gitc = read(`git -C $wd rev-parse --short HEAD`, String)
-    o = Output.HDF5Output("test.h5", t0, t1, n, shape, yname="y", tname="t", statsfun)
+    o = Output.HDF5Output(fpath, t0, t1, n, shape, yname="y", tname="t", statsfun)
     extra = Dict()
     extra["ω"] = ω
     extra["git_commit"] = gitc
@@ -31,9 +32,9 @@ import Luna: Output
     @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
     @test_throws ErrorException o("git_commit", gitc)
-    HDF5.h5open("test.h5", "r") do file
+    HDF5.h5open(fpath, "r") do file
         @test all(read(file["t"]) == t)
-        yr = reinterpret(ComplexF64, read(file["y"]))
+        global yr = reinterpret(ComplexF64, read(file["y"]))
         @test all([all(yr[:, :, :, ii] == y0) for ii=1:n])
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
@@ -46,7 +47,10 @@ import Luna: Output
         @test 100 == read(file["meta"]["meta1"])
         @test "src" == read(file["meta"]["meta2"])
     end
-    rm("test.h5")
+    @test all(yr .== o["y"])
+    @test 100 == o["meta"]["meta1"]
+    rm(fpath)
+    rm(splitdir(fpath)[1])
 end
 
 @testset "Memory" begin
@@ -119,8 +123,10 @@ end
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-    hdf5 = Output.HDF5Output("test.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    hdf5c = Output.HDF5Output("test_comp.h5", 0, grid.zmax, 201, (length(grid.ω),), statsfun,
+    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+    fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
+    hdf5 = Output.HDF5Output(fpath, 0, grid.zmax, 201, (length(grid.ω),), statsfun)
+    hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 201, (length(grid.ω),), statsfun,
                               compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
     function output(args...)
@@ -143,4 +149,5 @@ end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
     rm(hdf5c.fpath)
     rm(hdf5.fpath)
+    rm(splitdir(fpath)[1])
 end

@@ -5,8 +5,6 @@ import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
 
-import DSP.Unwrap: unwrap
-
 import PyPlot:pygui, plt
 
 a = 13e-6
@@ -18,7 +16,7 @@ pres = 5
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-m = Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres), α=ω->0)
+m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 
 energyfun = NonlinearRHS.energy_env_mode_avg(m)
 

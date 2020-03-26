@@ -5,8 +5,6 @@ import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
 
-# import DSP.Unwrap: unwrap
-
 import PyPlot:pygui, plt
 
 a = 13e-6
@@ -16,10 +14,12 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+L = 15e-2
 
-# m = Capillary.MarcatilliMode(a, gas, pres)
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
+
+coren, densityfun = Capillary.gradient(gas, L, pres, pres);
+m = Capillary.MarcatilliMode(a, coren, loss=true, model=:full);
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
@@ -29,8 +29,8 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+# dens0 = PhysData.density(gas, pres)
+# densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -38,7 +38,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
+linop, βfun = LinearOps.make_linop(grid, m, λ0);
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 

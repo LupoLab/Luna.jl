@@ -355,8 +355,13 @@ end
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 function CSpline(x, y, ifun=nothing)
+    if any(diff(x) .== 0)
+        error("entries in x must be unique")
+    end
     if any(diff(x) .<= 0)
-        error("x must be strictly monotonically increasing")
+        idcs = sortperm(x)
+        x = x[idcs]
+        y = y[idcs]
     end
     R = similar(y)
     R[1] = y[2] - y[1]

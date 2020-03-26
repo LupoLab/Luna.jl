@@ -1,9 +1,8 @@
 module Luna
 import FFTW
-import NumericalIntegration
 import Logging
-import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
+import Random: MersenneTwister
 include("Utils.jl")
 include("Maths.jl")
 include("Hankel.jl")
@@ -23,22 +22,26 @@ include("Polarisation.jl")
 include("Tools.jl")
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     xo1 = Array{Float64}(undef, length(grid.to))
     FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     Eω = make_init(grid, inputs, energyfun, FT)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
-    FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun)
     Eω = make_init(grid, inputs, energyfun, FT)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
@@ -54,19 +57,21 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     else
         npol = 1
     end
+    Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
-    FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.MEASURE)
+    FTt = FFTW.plan_rfft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
     for i in 1:length(inputs)
         Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
     end
     x = Array{Float64}(undef, length(grid.t), length(modes))
-    FT = FFTW.plan_rfft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{Float64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.MEASURE)
+    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
@@ -82,19 +87,21 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     else
         npol = 1
     end
+    Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
-    FTt = FFTW.plan_fft(xt, 1, flags=FFTW.MEASURE)
+    FTt = FFTW.plan_fft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
     for i in 1:length(inputs)
         Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
     end
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
-    FT = FFTW.plan_fft(x, 1, flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.MEASURE)
+    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
@@ -113,8 +120,55 @@ function scaled_input(grid, input, energyfun, FT)
     return FT * Et_sc
 end
 
+function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(2*PhysData.ħ*grid.ω/(PhysData.ε_0*PhysData.c*aeff*δω))
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.RealGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(PhysData.ħ*grid.ω/δω)
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
+
 function run(Eω, grid,
-             linop, transform, FT, output; max_dz=Inf)
+             linop, transform, FT, output;
+             min_dz=0, max_dz=Inf,
+             rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm)
 
 
     Et = FT \ Eω
@@ -137,7 +191,9 @@ function run(Eω, grid,
     end
 
     RK45.solve_precon(
-        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
+        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
+        max_dt=max_dz, min_dt=min_dz,
+        rtol=rtol, atol=atol, safety=safety, norm=norm)
 end
 
 end # module
