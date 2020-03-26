@@ -18,7 +18,7 @@ grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 
-energyfun = NonlinearRHS.energy_env_mode_avg(m)
+energyfun, energyfunω = NonlinearRHS.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -69,6 +69,7 @@ energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
     energy[ii] = energyfun(t, Etout[:, ii])
 end
+energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
 plt.figure()
@@ -84,6 +85,7 @@ plt.xlim(-30, 30)
 
 plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)
+plt.plot(zout.*1e2, energyω.*1e6, "--")
 plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
