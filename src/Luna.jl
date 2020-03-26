@@ -1,10 +1,27 @@
 module Luna
 import FFTW
-import NumericalIntegration
 import Logging
-import Printf: @sprintf
 import LinearAlgebra: mul!, ldiv!
+import Random: MersenneTwister
+
+"Lock on the HDF5 library for multi-threaded execution."
+const HDF5LOCK = ReentrantLock()
+"Macro to wait for and then release HDF5LOCK. Any call to HDF5.jl needs to be
+preceeded by @hlock."
+macro hlock(expr)
+    quote
+        try
+            lock(HDF5LOCK)
+            $(esc(expr))
+        finally
+            unlock(HDF5LOCK)
+        end
+    end
+end
+
 include("Utils.jl")
+include("Scans.jl")
+include("Output.jl")
 include("Maths.jl")
 include("Hankel.jl")
 include("PhysData.jl")
@@ -17,7 +34,6 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
 include("LinearOps.jl")
-include("Output.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
@@ -121,8 +137,55 @@ function scaled_input(grid, input, energyfun, FT)
     return FT * Et_sc
 end
 
+function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(2*PhysData.ħ*grid.ω/(PhysData.ε_0*PhysData.c*aeff*δω))
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode; seed=nothing)
+    rng = MersenneTwister(seed)
+    aeff = Modes.Aeff(mode)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.RealGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = @. sqrt(PhysData.ħ*grid.ω/δω)
+    rFFTamp = sqrt(2π)/2δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += rFFTamp * exp(1im*φ)
+end
+
+function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
+    rng = MersenneTwister(seed)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
+    FFTamp = sqrt(2π)/δt*amp
+    φ = 2π*rand(rng, size(Eω)...)
+    @. Eω += FFTamp * exp(1im*φ)
+end
+
+
 function run(Eω, grid,
-             linop, transform, FT, output; max_dz=Inf)
+             linop, transform, FT, output;
+             min_dz=0, max_dz=Inf,
+             rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm)
 
 
     Et = FT \ Eω
@@ -144,8 +207,12 @@ function run(Eω, grid,
         output(Eω, z, dz, interpolant)
     end
 
+    output(Grid.to_dict(grid), group="grid")
+
     RK45.solve_precon(
-        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
+        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
+        max_dt=max_dz, min_dt=min_dz,
+        rtol=rtol, atol=atol, safety=safety, norm=norm)
 end
 
 end # module
