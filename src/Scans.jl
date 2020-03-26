@@ -325,6 +325,7 @@ function condor_setup(name, script, batches)
         "log = $name.log.\$(Process)",
         "output = $name.out.\$(Process)",
         "error = $name.err.\$(Process)",
+        "initialdir = $(dirname(script))",
         "request_cpus = 1",
         "queue $batches"
     ]
