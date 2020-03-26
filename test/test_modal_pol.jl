@@ -23,7 +23,6 @@ modes = (
     Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0),
                      α=ω->0)
 )
-nmodes = length(modes)
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
@@ -41,14 +40,15 @@ densityfun(z) = PhysData.std_dens * pres
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
+Et = Array{Float64}(undef, length(grid.to), 2)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+             Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                              modes, :Ey; full=true)
+                              modes, :Exy; full=false)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
@@ -69,7 +69,7 @@ Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
 pygui(true)
 
-for i = 1:nmodes
+for i = 1:length(modes)
     plt.figure()
     plt.subplot(121)
     plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))

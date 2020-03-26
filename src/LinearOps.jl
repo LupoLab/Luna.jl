@@ -73,23 +73,6 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     linops
 end
 
-function make_var_linop(grid::Grid.RealGrid, modesf, λ0; ref_mode=1)
-    linops = zeros(ComplexF64, length(grid.ω), length(modesf(0.0)))
-    linop = let linops=linops, grid=grid, modesf=modesf, λ0=λ0, ref_mode=ref_mode
-        function linop(z)
-            modes = modesf(z)
-            nmodes = length(modes)
-            vel = 1/Modes.dispersion(modes[ref_mode], 1, λ=λ0)
-            for i = 1:nmodes
-                linops[2:end,i] = im.*(-Modes.β.(modes[i], grid.ω[2:end]) .+ grid.ω[2:end]./vel)
-                                  .- Modes.α.(modes[i], grid.ω[2:end])./2
-            end
-            linops
-        end
-    end
-    linop
-end
-
 function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     if thg
