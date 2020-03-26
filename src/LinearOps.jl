@@ -3,8 +3,10 @@ import FFTW
 import Luna: Modes, Grid, PhysData
 import Luna.PhysData: wlfreq
 
+# limit α so that we do not get overflow in exp(α*dz)
 function αlim!(α)
-    α[α .> 300] .= 300 # magic number: this is 1300 dB/m
+    # magic number: this is 1300 dB/m it could probably be bigger
+    α[α .> 300] .= 300
 end
 
 function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
