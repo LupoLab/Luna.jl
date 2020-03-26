@@ -53,8 +53,14 @@ function parse_scan_cmdline()
     if haskey(args, "range") && args["local"]
         error("Option --local and range cannot both be given")
     end
+    if haskey(args, "batch") && args["local"]
+        error("Option --local and batch cannot both be given")
+    end
     if args["local"] && haskey(args, "cirrus")
         error("Local and cirrus-setup options cannot both be given.")
+    end
+    if args["local"] && haskey(args, "condor")
+        error("Local and condor-setup options cannot both be given.")
     end
     return args
 end
