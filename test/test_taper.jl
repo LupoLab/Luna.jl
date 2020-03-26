@@ -24,8 +24,8 @@ aL = a
 afun = let a0=a0, aL=aL, L=L
     afun(z) = a0 + (aL-a0)*z/L
 end
-coren, dens = Capillary.gradient(gas, L, pres, pres); # dens is unused
-m = Capillary.MarcatilliMode(afun, coren, loss=false, model=:full);
+# coren, dens = Capillary.gradient(gas, L, pres, pres); # dens is unused
+m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
  
 aeff(z) = Modes.Aeff(m, z=z)
 
