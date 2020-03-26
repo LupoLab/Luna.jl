@@ -317,19 +317,29 @@ end
 
 "Calculate energy from modal field E(t)"
 function energy_modal()
-    function energyfun(t, Et)
+    function tfun(t, Et)
         Eta = Maths.hilbert(Et)
         return abs(integrate(t, abs2.(Eta), SimpsonEven()))
     end
-    return energyfun
+
+    function ωfun(ω, Eω)
+        abs(integrate(ω, abs2.(Eω*sqrt(2π)/ω[end]), SimpsonEven()))
+    end
+    return tfun, ωfun
 end
 
 "Calculate energy from modal envelope field E(t)"
 function energy_env_modal()
-    function energyfun(t, Et)
+    function tfun(t, Et)
         return abs(integrate(t, abs2.(Et), SimpsonEven()))
     end
-    return energyfun
+
+    function ωfun(ω, Eω)
+        δω = ω[2] - ω[1]
+        Δω = length(ω)*δω
+        sum(abs2.(Eω*sqrt(2π)/Δω))*δω
+    end
+    return tfun, ωfun
 end
 
 "Calculate energy from field E(t) for mode-averaged field"
