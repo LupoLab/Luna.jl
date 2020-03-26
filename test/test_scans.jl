@@ -31,7 +31,7 @@ Scans.@scaninit "scantest"
 @test __SCAN__.name == "scantest"
 @test !__SCAN__.parallel
 
-@scanvar dummy = range(1, length=10)
+Scans.@scanvar dummy = range(1, length=10)
 @test __SCAN__.vars[:dummy] == dummy
 @test __SCAN__.values[dummy] == dummy
 
@@ -46,7 +46,7 @@ end
 push!(ARGS, "--batch", "1,3")
 Scans.@scaninit "scantest"
 @test __SCAN__.mode == :batch
-@scanvar dummy = range(1, length=10)
+Scans.@scanvar dummy = range(1, length=10)
 @test __SCAN__.batch == (1, 3)
 @test __SCAN__.idcs == [1, 4, 7, 10]
 Scans.@scan begin
