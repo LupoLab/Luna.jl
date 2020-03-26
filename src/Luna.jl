@@ -132,10 +132,14 @@ end
 
 function scaled_input(grid, input, energyfun, FT)
     Et = input.func(grid.t)
-    energy = energyfun(grid.t, Et)
+    energy = energyfun(grid.t, fixtype(grid, Et))
     Et_sc = sqrt(input.energy)/sqrt(energy) .* Et
     return FT * Et_sc
 end
+
+# Make sure that envelope fields are complex to trigger correct dispatch
+fixtype(grid::Grid.RealGrid, Et) = Et
+fixtype(grid::Grid.EnvGrid, Et) = complex(Et)
 
 function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode; seed=nothing)
     rng = MersenneTwister(seed)
