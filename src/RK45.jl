@@ -2,8 +2,6 @@ module RK45
 import Dates
 import Logging
 import Printf: @sprintf
-import LinearAlgebra: norm
-# import PyPlot: pygui, plt
 
 #Get Butcher tableau etc from separate file (for convenience of changing if wanted)
 include("dopri.jl")

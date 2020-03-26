@@ -15,6 +15,7 @@ import Luna.PhysData: wlfreq
 end
 
 @testset "β, α" begin
+    a = 125e-6
     m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
     λ = 1e-9 .* collect(range(70, stop=7300, length=128))
     ω = wlfreq.(λ)
