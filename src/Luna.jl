@@ -3,7 +3,25 @@ import FFTW
 import Logging
 import LinearAlgebra: mul!, ldiv!
 import Random: MersenneTwister
+
+"Lock on the HDF5 library for multi-threaded execution."
+const HDF5LOCK = ReentrantLock()
+"Macro to wait for and then release HDF5LOCK. Any call to HDF5.jl needs to be
+preceeded by @hlock."
+macro hlock(expr)
+    quote
+        try
+            lock(HDF5LOCK)
+            $(esc(expr))
+        finally
+            unlock(HDF5LOCK)
+        end
+    end
+end
+
 include("Utils.jl")
+include("Scans.jl")
+include("Output.jl")
 include("Maths.jl")
 include("Hankel.jl")
 include("PhysData.jl")
@@ -16,7 +34,6 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
 include("LinearOps.jl")
-include("Output.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
@@ -166,7 +183,9 @@ end
 
 
 function run(Eω, grid,
-             linop, transform, FT, output; max_dz=Inf)
+             linop, transform, FT, output;
+             min_dz=0, max_dz=Inf,
+             rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm)
 
 
     Et = FT \ Eω
@@ -188,8 +207,12 @@ function run(Eω, grid,
         output(Eω, z, dz, interpolant)
     end
 
+    output(Grid.to_dict(grid), group="grid")
+
     RK45.solve_precon(
-        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
+        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
+        max_dt=max_dz, min_dt=min_dz,
+        rtol=rtol, atol=atol, safety=safety, norm=norm)
 end
 
 end # module

@@ -4,3 +4,4 @@
 deps/deps.jl
 *.mem
 *.h5
+Manifest.toml

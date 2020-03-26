@@ -349,6 +349,8 @@ function quantum_numbers(material)
     # Returns n, l, ion Z
     if material == :Ar
         return 3, 1, 1
+    elseif material == :Ne
+        return 2, 1, 1;
     elseif material == :Kr
         return 4, 1, 1
     elseif material in (:He, :HeJ)
