@@ -26,7 +26,7 @@ modes = (
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = NonlinearRHS.energy_modal()
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
@@ -49,7 +49,9 @@ inputs = ((1,(in1,)),)
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                               modes, :Ey; full=false)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+statsfun = Stats.collect_stats(Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω, length(modes))
+                               )
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
@@ -80,3 +82,13 @@ for i = 1:length(modes)
     plt.xlim(-30.0,100.0)
     plt.colorbar()
 end
+
+plt.figure()
+for i = 1:length(modes)
+    plt.semilogy(100*output["stats"]["z"], 1e6*output["stats"]["energy"][i, :],
+                 label="Mode $i") 
+end
+plt.xlabel("Distance (cm)")
+plt.ylabel("Energy (μJ)")
+plt.legend()
+

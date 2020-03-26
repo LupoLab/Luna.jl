@@ -47,7 +47,7 @@ inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+statsfun = Stats.collect_stats(Stats.ω0(grid), Stats.energy(grid, energyfunω))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
@@ -89,6 +89,7 @@ plt.xlim(-30, 30)
 plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)
 plt.plot(zout.*1e2, energyω.*1e6)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["energy"].*1e6)
 plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 

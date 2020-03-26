@@ -1,5 +1,5 @@
 module Stats
-import Luna: Maths, Grid
+import Luna: Maths, Grid, Modes
 
 function ω0(grid)
     addstat! = let ω=grid.ω
@@ -10,12 +10,26 @@ function ω0(grid)
     return addstat!
 end
 
+function energy(grid, energyfun_ω)
+    function addstat!(d, Eω, z, dz)
+        d["energy"] = energyfun_ω(grid.ω, Eω)
+    end
+    return addstat!
+end
+
+function energy(grid, energyfun_ω, N)
+    function addstat!(d, Eω, z, dz)
+        d["energy"] = [energyfun_ω(grid.ω, Eω[:, i]) for i=1:N]
+    end
+    return addstat!
+end
+
 function zdz!(d, Eω, z, dz)
     d["z"] = z
     d["dz"] = dz
 end
 
-function collect_stats(funcs)
+function collect_stats(funcs...)
     # make sure z and dz are recorded
     if !(zdz! in funcs)
         funcs = (funcs..., zdz!)
