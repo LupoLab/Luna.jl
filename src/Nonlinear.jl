@@ -94,7 +94,6 @@ struct PlasmaCumtrapz{R, EType, tType}
     phase::EType
     J::EType
     P::EType
-    t::tType
     δt::Float64
 end
 
@@ -104,7 +103,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     phase = similar(E)
     J = similar(E)
     P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
 end
 
 function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
@@ -146,13 +145,13 @@ function (Plas::PlasmaCumtrapz)(out, Et)
         if size(Et, 2) == 1
             E = reshape(Et, size(Et,1))
         else
-            PlasmaVector!(out, Plas::PlasmaCumtrapz, Et)
+            PlasmaVector!(out, Plas, Et)
             return
         end
     else
         E = Et
     end
-    PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
+    PlasmaScalar!(out, Plas, E)
     if ndims(Et) > 1
         out .+= reshape(Plas.P, size(Et))
     else
