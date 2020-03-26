@@ -132,5 +132,5 @@ zarrpf, Aarrpf = RK45.solve_precon(fnl!, Linfunc, copy(Aω), z, dz, zmax,
 # (with preconditioner and z-dependent linear part)
 @test isapprox(abs2.(Aarrpf[:, 1]), abs2.(Aarrpf[:, end]), rtol=1e-3)
 # Is there a difference if the linear part is a function (but constant)?
-@test isapprox(abs2.(Aarrp), abs2.(Aarrpf), rtol=1e-3)
+@test all(abs2.(Aarrp) .== abs2.(Aarrpf))
 

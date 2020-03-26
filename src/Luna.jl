@@ -183,7 +183,9 @@ end
 
 
 function run(Eω, grid,
-             linop, transform, FT, output; max_dz=Inf)
+             linop, transform, FT, output;
+             min_dz=0, max_dz=Inf,
+             rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm)
 
 
     Et = FT \ Eω
@@ -208,7 +210,9 @@ function run(Eω, grid,
     output(Grid.to_dict(grid), group="grid")
 
     RK45.solve_precon(
-        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun, max_dt=max_dz)
+        transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
+        max_dt=max_dz, min_dt=min_dz,
+        rtol=rtol, atol=atol, safety=safety, norm=norm)
 end
 
 end # module
