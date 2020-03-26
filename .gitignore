@@ -4,3 +4,5 @@
 deps/deps.jl
 *.mem
 *.h5
+fftw_wisdom.lock
+.vscode/settings.json
