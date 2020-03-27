@@ -69,7 +69,7 @@ idx=4 -> [4, 8, 12, ...]
 ```
 This mode of running is mostly intended for parallel execution on clusters and workstations
    
-+ `$ julia energy_duration_scan.jl --condor N` creates a `.sub` job script to submit via `condor_submit`, which will submit `N` jobs which each run a batch using the `--batch` option. Note that for this to work, you need to run `julia energy_duration_scan.jl --condor N` **on the workstation** rather than your local machine.
++ `$ julia energy_duration_scan.jl --condor N` creates a `.sub` job script to submit via `condor_submit`, which will create `N` jobs which each run a batch using the `--batch` option. Note that for this to work, you need to run `julia energy_duration_scan.jl --condor N` **on the workstation** rather than your local machine.
 
 + `$ julia energy_duration_scan.jl --cirrus N` should only be run on cirrus or another cluster with PBS installed. It makes a jobscript (to be `qsub`ed) which submits `N` jobs, each of which executes one batch using the `--batch` option.
 
