@@ -85,7 +85,8 @@ function params(E, τfw, λ, mode, material; shape=:sech, P=1.0, T=PhysData.room
          Lfiss=Lfiss(P0, τfw, γ, β2, shape=shape),
          zdw=Modes.zdw(mode),
          Lloss=Modes.losslength(mode, ω),
-         Aeff=Modes.Aeff(mode))
+         Aeff=Modes.Aeff(mode),
+         mode=mode)
 end
 
 function capillary_params(E, τfw, λ, a, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, kind=:HE, ϕ=0.0)
