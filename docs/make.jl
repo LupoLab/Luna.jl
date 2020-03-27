@@ -8,3 +8,7 @@ makedocs(
         prettyurls = get(ENV, "CI", nothing) == "true"
     )
 )
+
+deploydocs(
+    repo = "github.com/USER_NAME/PACKAGE_NAME.jl.git",
+)
