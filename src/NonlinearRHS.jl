@@ -139,11 +139,13 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
-mutable struct TransModal{IT, ET, TT, FTT, rT, gT, dT, nT, lT}
+mutable struct TransModal{IT, ET, EfT, TT, FTT, rT, gT, dT, nT, lT, lfT}
     nmodes::Int
     indices::IT
+    dlfun::lfT
     dimlimits::lT
     full::Bool
+    Exyfun::EfT
     Exys::ET
     Ems::Array{Float64,2}
     Emω::Array{ComplexF64,2}
@@ -167,12 +169,12 @@ mutable struct TransModal{IT, ET, TT, FTT, rT, gT, dT, nT, lT}
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
-# R - max radial extent
+# Exyfun - returns Exys as function of z
 # Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+function TransModal(tT, grid, nmodes, dlfun, Exyfun, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
     # npol is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
     if components == :Ey
         indices = 2
@@ -186,7 +188,6 @@ function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components,
     else
         error("components must be one of :Ex, :Ey or :Exy")
     end
-    nmodes = length(Exys)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     Ems = Array{Float64,2}(undef, nmodes, npol)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
@@ -197,22 +198,28 @@ function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components,
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
-    TransModal(nmodes, indices, dimlimits, full, Exys, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
-                     resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
+    Exys = Exyfun(z=0.0)
+    dimlimits = dlfun(z=0.0)
+    TransModal(nmodes, indices, dlfun, dimlimits, full, Exyfun, Exys,
+               Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
+               FT, resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
 end
 
-function TransModal(grid::Grid.RealGrid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    TransModal(Float64, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+function TransModal(grid::Grid.RealGrid, args...; kwargs...)
+    TransModal(Float64, grid, args...; kwargs...)
 end
 
-function TransModal(grid::Grid.EnvGrid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    TransModal(ComplexF64, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+function TransModal(grid::Grid.EnvGrid, nmodes, dlfun, Exyfun, FT, resp, densityfun, 
+                    components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    TransModal(ComplexF64, grid, nmodes, dlfun, Exyfun, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
 end
 
-function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z)
+function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
     t.ncalls = 0
     t.z = z
+    t.Exys .= t.Exyfun(z=z)
+    t.dimlimits = t.dlfun(z=z)
 end
 
 function pointcalc!(fval, xs, t::TransModal)

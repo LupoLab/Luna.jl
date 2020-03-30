@@ -124,10 +124,10 @@ function get_unm(n, m, kind)
     end
 end
 
-dimlimits(m::MarcatilliMode; z=0) = (:polar, (0.0, 0.0), (m.a(z), 2π))
+dimlimits(m::MarcatilliMode; z::Float64=0.0) = (:polar, (0.0, 0.0), (m.a(z), 2π))
 
 # we use polar coords, so xs = (r, θ)
-function field(m::MarcatilliMode; z=0)
+function field(m::MarcatilliMode; z::Float64=0.0)
     if m.kind == :HE
         return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a(z)) .* SVector(
             cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
@@ -140,7 +140,7 @@ function field(m::MarcatilliMode; z=0)
     end
 end
 
-function N(m::MarcatilliMode; z=0)
+function N(m::MarcatilliMode; z::Float64=0.0)
     np1 = (m.kind == :HE) ? m.n : 2
     π/2 * m.a(z)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
 end
@@ -152,7 +152,7 @@ function Aeff_Jintg(n, unm, kind)
     return 2π*num/den
 end
 
-Aeff(m::MarcatilliMode; z=0) = m.a(z)^2 * m.aeff_intg
+Aeff(m::MarcatilliMode; z::Float64=0.0) = m.a(z)^2 * m.aeff_intg
 
 
 "Convenience function to create density and core index profiles for
