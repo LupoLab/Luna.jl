@@ -65,10 +65,6 @@ end
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false)
-    # Exys = []
-    # for mode in modes
-    #     push!(Exys, Modes.Exy(mode))
-    # end
     Exyfun(;z) = [Modes.Exy(mode, z=z) for mode in modes]
     dlfun(;z) = Modes.dimlimits(modes[1], z=z)
     if components == :Exy
@@ -97,10 +93,8 @@ end
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false)
-    Exys = []
-    for mode in modes
-        push!(Exys, Modes.Exy(mode))
-    end
+    Exyfun(;z) = [Modes.Exy(mode, z=z) for mode in modes]
+    dlfun(;z) = Modes.dimlimits(modes[1], z=z)
     if components == :Exy
         npol = 2
     else
@@ -117,7 +111,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModal(grid, Modes.dimlimits(modes[1]), Exys, FTo1,
+    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo1,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     Utils.saveFFTwisdom()
