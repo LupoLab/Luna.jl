@@ -17,6 +17,7 @@ pres = 5
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+aeff(z) = Modes.Aeff(m, z=z)
 
 energyfun = NonlinearRHS.energy_modal()
 
@@ -31,8 +32,7 @@ densityfun(z) = dens0
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
-aeff = Modes.Aeff(m)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, z->aeff)
+normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -43,7 +43,8 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, z->aeff)
+Eω, transform, FT = Luna.setup(
+    grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
