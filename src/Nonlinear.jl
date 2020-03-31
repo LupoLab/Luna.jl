@@ -1,7 +1,8 @@
 module Nonlinear
 import Luna.PhysData: ε_0, e_ratio
-import Luna: Maths
+import Luna: Maths, Utils
 import FFTW
+import LinearAlgebra: mul!
 
 function KerrScalar(out, E, fac)
     @. out += fac*E^3
@@ -132,6 +133,67 @@ function (Plas::PlasmaCumtrapz)(out, Et)
         out .+= reshape(Plas.P, size(Et))
     else
         @. out += Plas.P
+    end
+end
+
+struct RamanPolarField{Tω, Tt, FTt}
+    hω::Tω
+    Eω2::Tω
+    Pω::Tω
+    E2::Tt
+    P::Tt
+    Pout::Tt
+    FT::FTt
+end
+
+function RamanPolarField(t, ht)
+    dt = t[2] - t[1]
+    h = zeros(length(t)*2)
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_rfft(h, 1, flags=FFTW.PATIENT)
+    inv(FT)
+    Utils.saveFFTwisdom()
+    fill!(h, 0.0)
+    start = findfirst(t .> 0.0)
+    for i = start:length(t)
+        h[i] = ht(t[i])*dt
+    end
+    hω = FT * h
+    Eω2 = similar(hω)
+    Pω = similar(hω)
+    E2 = similar(h)
+    P = similar(h)
+    Pout = similar(t)
+    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT)
+end
+
+function (R::RamanPolarField)(out, Et)
+    n = size(Et, 1)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, n)
+        else
+            error("vector Raman not yet implemented")
+        end
+    else
+        E = Et
+    end
+
+    fill!(R.E2, 0.0)
+    for i = eachindex(E)
+        R.E2[i] = E[i]^2
+    end
+    mul!(R.Eω2, R.FT, R.E2)
+    @. R.Pω = R.hω * R.Eω2
+    mul!(R.P, inv(R.FT), R.Pω)
+    for i = eachindex(E)
+        R.Pout[i] = E[i]*R.P[(n ÷ 2) + i] # TODO: possible off by 1 error
+    end
+    
+    if ndims(Et) > 1
+        out .+= reshape(R.Pout, size(Et))
+    else
+        @. out += R.Pout
     end
 end
 

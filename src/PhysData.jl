@@ -301,6 +301,8 @@ References:
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
 
+TODO: More Bishop/Shelton; Wahlstrand updated values.
+
 "
 function γ3_gas(material::Symbol; source=nothing)
     if source == nothing
@@ -327,15 +329,19 @@ function γ3_gas(material::Symbol; source=nothing)
             fac = 188.2
         elseif material == :N2
             fac = 21.1
+        else
+            throw(DomainError(material, "Lehmeier model does not include $material"))
         end
         return 4*fac*3.43e-28 / dens
     elseif source == :Shelton
         # ref [4]
         if material == :H2
             return 2.2060999099841444e-26 / dens
+        else
+            throw(DomainError(material, "Shelton model does not include $material"))
         end
     else
-        error("TODO: Bishop/Shelton values for γ3")
+        throw(DomainError(source, "Unkown γ3 model $source"))
     end
 end
 

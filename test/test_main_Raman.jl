@@ -28,7 +28,7 @@ dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Raman.RamanPolarField(grid.to, Raman.raman_response(gas)))
+             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
