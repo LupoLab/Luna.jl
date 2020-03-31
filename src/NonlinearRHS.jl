@@ -213,6 +213,8 @@ function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
     TransModal(ComplexF64, grid, args...; kwargs...)
 end
 
+show(io::IO, t::TransModal) = print(io, "TransModal{$(t.nmodes) modes}")
+
 function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
     t.ncalls = 0

@@ -19,7 +19,7 @@ L = 15e-2
 grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 a0 = a
-aL = a
+aL = 3a/4
 
 afun = let a0=a0, aL=aL, L=L
     afun(z) = a0 + (aL-a0)*z/L
