@@ -16,17 +16,17 @@ pres = 5
 
 τ = 30e-15
 λ0 = 800e-9
+energy = 5e-6
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-m = RectModes.RectMode(a, b, gas, pres, :Ag)
+m = RectModes.RectMode(a, b, gas, pres, :Al)
 
-energyfun = NonlinearRHS.energy_mode_avg(m)
+energyfun = NonlinearRHS.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
+    Et = @. sqrt(It)
 end
 
 dens0 = PhysData.density(gas, pres)
@@ -42,7 +42,7 @@ linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
-in1 = (func=gausspulse, energy=5e-6)
+in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
