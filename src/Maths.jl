@@ -3,6 +3,7 @@ import FiniteDifferences
 import LinearAlgebra
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
+import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 
 "Calculate derivative of function f(x) at value x using finite differences"
@@ -12,7 +13,7 @@ function derivative(f, x, order::Integer)
     else
         # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(9, order), y->f(y*scale), x/scale, adapt=4)/scale^order
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+4, order), y->f(y*scale), x/scale, adapt=4)/scale^order
     end
 end
 
@@ -25,6 +26,11 @@ end
 function gauss(x; x0 = 0, power = 2, fwhm)
     σ = fwhm / (2 * (2 * log(2))^(1 / power))
     return gauss(x, σ, x0 = x0, power=power)
+end
+
+function randgauss(μ, σ, args...; seed=nothing)
+    rng = MersenneTwister(seed)
+    σ*randn(rng, args...) .+ μ
 end
 
 "nth moment of the vector y"
