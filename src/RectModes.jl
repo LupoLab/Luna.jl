@@ -38,7 +38,7 @@ function RectMode(a, b, coren, clad; n=1, m=1, pol=:x, T=roomtemp)
     RectMode(a, b, n, m, pol, coren, cladn)
 end
 
-dimlimits(m::RectMode) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
+dimlimits(m::RectMode; z=0) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
 
 "effective index of rectabgular mode with dielectric core and arbitrary
  (metal or dielectric) cladding.
@@ -69,7 +69,7 @@ function neff(m::RectMode, ω; z=0)
 end
 
 # here we use cartesian coords, so xs = (x, y)
-function field(m::RectMode)
+function field(m::RectMode; z=0)
     if isodd(m.m)
         Ea = (x) -> cos(m.m*π*x/(2*m.a))
     else

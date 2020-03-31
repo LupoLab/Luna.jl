@@ -51,7 +51,7 @@ import Luna: Output
     @test all(yr .== o["y"])
     @test 100 == o["meta"]["meta1"]
     rm(fpath)
-    rm(splitdir(fpath)[1])
+    rm(splitdir(fpath)[1], force=true)
 end
 
 @testset "Memory" begin
@@ -110,13 +110,14 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres), α=ω->0)
-    energyfun = NonlinearRHS.energy_mode_avg(m)
+    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    aeff(z) = Modes.Aeff(m, z=z)
+    energyfun = NonlinearRHS.energy_modal()
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
+    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
         ω0 = 2π*PhysData.c/λ0
@@ -124,7 +125,8 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     end
     in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
+    Eω, transform, FT = Luna.setup(
+        grid, energyfun, densityfun, normfun, responses, inputs, aeff)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     hdf5 = Output.HDF5Output(fpath, 0, grid.zmax, 201, (length(grid.ω),), statsfun)
     hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 201, (length(grid.ω),), statsfun,
@@ -151,4 +153,4 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
 end
 rm(fpath)
 rm(fpath_comp)
-rm(splitdir(fpath)[1])
+rm(splitdir(fpath)[1], force=true)
