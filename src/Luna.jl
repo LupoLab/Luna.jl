@@ -56,7 +56,7 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
     xo1 = Array{ComplexF64}(undef, length(grid.to))
     FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun,aeff)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun, aeff)
     Eω = make_init(grid, inputs, energyfun, FT)
     Utils.saveFFTwisdom()
     Eω, transform, FT
@@ -137,29 +137,6 @@ end
 fixtype(grid::Grid.RealGrid, Et) = Et
 fixtype(grid::Grid.EnvGrid, Et) = complex(Et)
 
-function shotnoise!(Eω, grid::Grid.RealGrid, mode::Modes.AbstractMode; seed=nothing)
-    rng = MersenneTwister(seed)
-    aeff = Modes.Aeff(mode)
-    δω = grid.ω[2] - grid.ω[1]
-    δt = grid.t[2] - grid.t[1]
-    amp = @. sqrt(2*PhysData.ħ*grid.ω/(PhysData.ε_0*PhysData.c*aeff*δω))
-    rFFTamp = sqrt(2π)/2δt*amp
-    φ = 2π*rand(rng, size(Eω)...)
-    @. Eω += rFFTamp * exp(1im*φ)
-end
-
-function shotnoise!(Eω, grid::Grid.EnvGrid, mode::Modes.AbstractMode; seed=nothing)
-    rng = MersenneTwister(seed)
-    aeff = Modes.Aeff(mode)
-    δω = grid.ω[2] - grid.ω[1]
-    δt = grid.t[2] - grid.t[1]
-    amp = zero(grid.ω)
-    amp[grid.sidx] = @. sqrt(2*PhysData.ħ*grid.ω[grid.sidx]/(PhysData.ε_0*PhysData.c*aeff*δω))
-    FFTamp = sqrt(2π)/δt*amp
-    φ = 2π*rand(rng, size(Eω)...)
-    @. Eω += FFTamp * exp(1im*φ)
-end
-
 function shotnoise!(Eω, grid::Grid.RealGrid; seed=nothing)
     rng = MersenneTwister(seed)
     δω = grid.ω[2] - grid.ω[1]
@@ -188,7 +165,6 @@ function run(Eω, grid,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
 
-
     Et = FT \ Eω
 
     z = 0.0
@@ -207,8 +183,10 @@ function run(Eω, grid,
         window!(Eω)
         output(Eω, z, dz, interpolant)
     end
+    println("functions")
 
     output(Grid.to_dict(grid), group="grid")
+    println("output")
 
     RK45.solve_precon(
         transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,

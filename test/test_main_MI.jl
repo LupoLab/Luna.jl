@@ -43,7 +43,7 @@ in1 = (func=gausspulse, energy=10e-6)
 inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
-Luna.shotnoise!(Eω, grid, m)
+Luna.shotnoise!(Eω, grid)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
