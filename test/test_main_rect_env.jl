@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, RectModes, PhysData, Modes, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
+import Luna: Grid, Maths, RectModes, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -13,22 +13,20 @@ a = 50e-6
 b = 10e-6
 gas = :Ar
 pres = 5
-L = 15e-2
 
-energy = 5e-6
 τ = 30e-15
 λ0 = 800e-9
+energy = 5e-6
 
-grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 m = RectModes.RectMode(a, b, gas, pres, :Al)
 
-energyfun = NonlinearRHS.energy_mode_avg(m)
+energyfun = NonlinearRHS.energy_env_mode_avg(m)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
+    Et = @. sqrt(It)
 end
 
 dens0 = PhysData.density(gas, pres)
@@ -37,8 +35,8 @@ densityfun(z) = dens0
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+             #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -56,21 +54,20 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
 t = grid.t
+f = FFTW.fftshift(ω, 1)./2π.*1e-15
 
 zout = output.data["z"]
 Eout = output.data["Eω"]
 
-Etout = FFTW.irfft(Eout, length(grid.t), 1)
+Etout = FFTW.ifft(Eout, 1)
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
 idcs = @. (t < 30e-15) & (t >-30e-15)
-to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
-It = abs2.(Maths.hilbert(Eto))
-Itlog = log10.(Maths.normbymax(It))
+to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=8, dim=1)
+It = abs2.(Eto)
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
-Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
     energy[ii] = energyfun(t, Etout[:, ii])
@@ -78,8 +75,9 @@ end
 
 pygui(true)
 plt.figure()
-plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
+plt.pcolormesh(f, zout, transpose(FFTW.fftshift(Ilog, 1)))
 plt.clim(-6, 0)
+plt.xlim(0.19, 1.9)
 plt.colorbar()
 
 plt.figure()
@@ -93,5 +91,10 @@ plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
 plt.figure()
-plt.plot(to*1e15, Eto[:, 121])
+plt.plot(to*1e15, abs2.(Eto[:, 121]))
 plt.xlim(-20, 20)
+
+plt.figure()
+plt.plot(to*1e15, real.(exp.(1im*grid.ω0.*to).*Eto[:, 121]))
+plt.plot(t*1e15, real.(exp.(1im*grid.ω0.*t).*Etout[:, 121]))
+plt.xlim(-10, 20)
