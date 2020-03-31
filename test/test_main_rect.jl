@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, RectModes, PhysData, Modes, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
+import Luna: Grid, Maths, RectModes, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -13,15 +13,13 @@ a = 50e-6
 b = 10e-6
 gas = :Ar
 pres = 5
-L = 15e-2
 
-energy = 5e-6
 τ = 30e-15
 λ0 = 800e-9
 
-grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-m = RectModes.RectMode(a, b, gas, pres, :Al)
+m = RectModes.RectMode(a, b, gas, pres, :Ag)
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
@@ -44,7 +42,7 @@ linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
-in1 = (func=gausspulse, energy=energy)
+in1 = (func=gausspulse, energy=5e-6)
 inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)

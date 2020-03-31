@@ -8,10 +8,9 @@ function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
     βfun(β, grid.ω, 0)
     α = zeros(length(grid.ω))
     α[2:end] .= αfun(grid.ω[2:end], 0)
-    α[α .> 300] .= 300
     β1 = 1/frame_vel(0)
     linop = @. -im*(β-β1*grid.ω) - α/2
-    linop[1] = 0
+    linop[1] = 1
     return linop
 end
 
@@ -19,10 +18,9 @@ function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
     β = similar(grid.ω)
     βfun(β, grid.ω, 0)
     α = αfun(grid.ω, 0)
-    α[α .> 300] .= 300
     β1 = 1/frame_vel(0)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
-    linop[.!grid.sidx] .= 0
+    linop[.!grid.sidx] .= 1
     return linop
 end
 
