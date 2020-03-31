@@ -10,7 +10,7 @@ import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sel
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 import Luna.PhysData: wlfreq
 
-export MarcatilliMode, dimlimits, neff, field, N
+export MarcatilliMode, dimlimits, neff, field, N, Aeff
 
 "Marcatili mode"
 struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode

@@ -3,10 +3,10 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
-import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 
-export RectMode, dimlimits, neff, field
+export RectMode, dimlimits, neff, field, N, Aeff
 
 # core and clad are function-like objects which return the
 # (possibly complex) refractive index as a function of freq
@@ -86,5 +86,9 @@ function field(m::RectMode; z=0)
         return (xs) -> SVector(0.0, Ea(xs[1])*Eb(xs[2]))
     end
 end
+
+N(m::RectMode) = 0.5*sqrt(ε_0/μ_0)*m.a*m.b
+
+Aeff(m::RectMode) = 16/9*m.a*m.b
 
 end
