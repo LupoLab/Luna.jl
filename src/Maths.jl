@@ -3,6 +3,7 @@ import FiniteDifferences
 import LinearAlgebra
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
+import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 
 "Calculate derivative of function f(x) at value x using finite differences"
@@ -25,6 +26,11 @@ end
 function gauss(x; x0 = 0, power = 2, fwhm)
     σ = fwhm / (2 * (2 * log(2))^(1 / power))
     return gauss(x, σ, x0 = x0, power=power)
+end
+
+function randgauss(μ, σ, args...; seed=nothing)
+    rng = MersenneTwister(seed)
+    σ*randn(rng, args...) .+ μ
 end
 
 "nth moment of the vector y"
