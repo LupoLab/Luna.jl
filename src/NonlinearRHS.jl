@@ -209,9 +209,8 @@ function TransModal(grid::Grid.RealGrid, args...; kwargs...)
     TransModal(Float64, grid, args...; kwargs...)
 end
 
-function TransModal(grid::Grid.EnvGrid, nmodes, dlfun, Exyfun, FT, resp, densityfun, 
-                    components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    TransModal(ComplexF64, grid, nmodes, dlfun, Exyfun, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
+    TransModal(ComplexF64, grid, args...; kwargs...)
 end
 
 function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
@@ -273,14 +272,17 @@ end
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
     if t.full
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t), t.dimlimits[2], t.dimlimits[3], 
-                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
-                                    error_norm=Cubature.L2)
+        val, err = Cubature.pcubature_v(
+            length(Eω)*2,
+            (x, fval) -> pointcalc!(fval, x, t),
+            t.dimlimits[2], t.dimlimits[3], 
+            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t),
-                                    (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
-                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
-                                    error_norm=Cubature.L2)
+        val, err = Cubature.pcubature_v(
+            length(Eω)*2,
+            (x, fval) -> pointcalc!(fval, x, t),
+            (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
+            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end
