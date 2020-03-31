@@ -40,12 +40,14 @@ include("Tools.jl")
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
-    xo1 = Array{Float64}(undef, length(grid.to))
-    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun, aeff)
+    xo = Array{Float64}(undef, length(grid.to))
+    FTo = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
     Eω = make_init(grid, inputs, energyfun, FT)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
@@ -54,10 +56,12 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
-    xo1 = Array{ComplexF64}(undef, length(grid.to))
-    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
+    xo = Array{ComplexF64}(undef, length(grid.to))
+    FTo = FFTW.plan_fft(xo, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransModeAvg(grid, FTo1, responses, densityfun, normfun, aeff)
     Eω = make_init(grid, inputs, energyfun, FT)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
@@ -81,11 +85,13 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     end
     x = Array{Float64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_rfft(x, 1, flags=FFTW.PATIENT)
-    xo1 = Array{Float64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_rfft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo1,
+    xo = Array{Float64}(undef, length(grid.to), npol)
+    FTo = FFTW.plan_rfft(xo, 1, flags=FFTW.PATIENT)
+    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
@@ -109,11 +115,13 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     end
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_fft(x, 1, flags=FFTW.PATIENT)
-    xo1 = Array{ComplexF64}(undef, length(grid.to), npol)
-    FTo1 = FFTW.plan_fft(xo1, 1, flags=FFTW.PATIENT)
-    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo1,
+    xo = Array{ComplexF64}(undef, length(grid.to), npol)
+    FTo = FFTW.plan_fft(xo, 1, flags=FFTW.PATIENT)
+    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo,
                                  responses, densityfun, components, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
@@ -183,10 +191,8 @@ function run(Eω, grid,
         window!(Eω)
         output(Eω, z, dz, interpolant)
     end
-    println("functions")
 
     output(Grid.to_dict(grid), group="grid")
-    println("output")
 
     RK45.solve_precon(
         transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
