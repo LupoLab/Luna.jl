@@ -3,7 +3,25 @@ import FFTW
 import Logging
 import LinearAlgebra: mul!, ldiv!
 import Random: MersenneTwister
+
+"Lock on the HDF5 library for multi-threaded execution."
+const HDF5LOCK = ReentrantLock()
+"Macro to wait for and then release HDF5LOCK. Any call to HDF5.jl needs to be
+preceeded by @hlock."
+macro hlock(expr)
+    quote
+        try
+            lock(HDF5LOCK)
+            $(esc(expr))
+        finally
+            unlock(HDF5LOCK)
+        end
+    end
+end
+
 include("Utils.jl")
+include("Scans.jl")
+include("Output.jl")
 include("Maths.jl")
 include("Hankel.jl")
 include("PhysData.jl")
@@ -16,7 +34,6 @@ include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
 include("LinearOps.jl")
-include("Output.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
@@ -189,6 +206,8 @@ function run(Eω, grid,
         window!(Eω)
         output(Eω, z, dz, interpolant)
     end
+
+    output(Grid.to_dict(grid), group="grid")
 
     RK45.solve_precon(
         transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,

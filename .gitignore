@@ -5,3 +5,4 @@ deps/deps.jl
 *.mem
 *.h5
 .vscode/settings.json
+Manifest.toml

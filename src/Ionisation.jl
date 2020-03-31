@@ -2,10 +2,12 @@ module Ionisation
 import SpecialFunctions: gamma
 import GSL: hypergeom
 import HDF5
+import Pidfile: mkpidlock
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths
+import Luna: @hlock
 
 function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
     nstar = sqrt(0.5/(ionpot/au_energy))
@@ -87,20 +89,25 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
     h = hash((ionpot, λ0, Z, l, sum_tol, N))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
+    lockpath = joinpath(cachedir, "pptlock")
     isdir(cachedir) || mkpath(cachedir)
     if isfile(fpath)
         @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-        E, rate = HDF5.h5open(fpath, "r") do file
+        pidlock = mkpidlock(lockpath)
+        E, rate = @hlock HDF5.h5open(fpath, "r") do file
             (read(file["E"]), read(file["rate"]))
         end
+        close(pidlock)
         makePPTaccel(E, rate)
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=sum_tol, N=N)
         @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
-        HDF5.h5open(fpath, "cw") do file
+        pidlock = mkpidlock(lockpath)
+        @hlock HDF5.h5open(fpath, "cw") do file
             file["E"] = E
             file["rate"] = rate
         end
+        close(pidlock)
         makePPTaccel(E, rate)
     end
 end

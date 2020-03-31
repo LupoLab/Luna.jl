@@ -121,4 +121,21 @@ end
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
 end
+
+@testset "randgauss" begin
+    import Statistics: std, mean
+    x = Maths.randgauss(1, 0.5, 1000000, seed=1234)
+    @test isapprox(std(x), 0.5, rtol=1e-3)
+    @test isapprox(mean(x), 1, rtol=1e-3)
+    x = Maths.randgauss(10, 0.1, 1000000, seed=1234)
+    @test isapprox(std(x), 0.1, rtol=1e-3)
+    @test isapprox(mean(x), 10, rtol=1e-3)
+    x = Maths.randgauss(-1, 0.5, 1000000, seed=1234)
+    @test isapprox(std(x), 0.5, rtol=1e-3)
+    @test isapprox(mean(x), -1, rtol=1e-3)
+    x = Maths.randgauss(1, 0.5, (1000, 1000), seed=1234)
+    @test isapprox(std(x), 0.5, rtol=1e-3)
+    @test isapprox(mean(x), 1, rtol=1e-3)
+end
+
 end
