@@ -3,20 +3,31 @@ import FFTW
 import Luna: Modes, Grid, PhysData
 import Luna.PhysData: wlfreq
 
-function make_const_linop(grid::Grid.RealGrid, βfun, αfun, frame_vel)
+# limit α so that we do not get overflow in exp(α*dz)
+function αlim!(α)
+    # magic number: this is 1300 dB/m it could probably be bigger
+    α[α .> 300] .= 300
+    α[α .< 0] .= 0
+end
+
+function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, frame_vel)
     β = similar(grid.ω)
-    βfun(β, grid.ω, 0)
-    α = αfun(grid.ω, 0)
+    βfun!(β, grid.ω, 0)
+    α = similar(grid.ω)
+    αfun!(α, grid.ω, 0)
+    αlim!(α)
     β1 = 1/frame_vel(0)
     linop = @. -im*(β-β1*grid.ω) - α/2
-    linop[1] = 1
+    linop[1] = 0
     return linop
 end
 
-function make_const_linop(grid::Grid.EnvGrid, βfun, αfun, frame_vel, β0ref)
+function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, frame_vel, β0ref)
     β = similar(grid.ω)
-    βfun(β, grid.ω, 0)
-    α = αfun(grid.ω, 0)
+    βfun!(β, grid.ω, 0)
+    α = similar(grid.ω)
+    αfun!(α, grid.ω, 0)
+    αlim!(α)
     β1 = 1/frame_vel(0)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
     linop[.!grid.sidx] .= 1
@@ -36,9 +47,13 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
     function βfun!(out, ω, z)
         out .= βconst
     end
+    αconst = zero(grid.ω)
+    αconst[grid.sidx] = Modes.α.(mode, grid.ω[grid.sidx])
+    function αfun!(out, ω, z)
+        out .= αconst
+    end
     frame_vel(z) = 1/β1const
-    αfun(ω, z) = Modes.α.(mode, ω)
-    make_const_linop(grid, βfun!, αfun, frame_vel, β0const), βfun!, frame_vel, αfun
+    make_const_linop(grid, βfun!, αfun!, frame_vel, β0const), βfun!, frame_vel, αfun!
 end
 
 function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
@@ -49,9 +64,13 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function βfun!(out, ω, z)
         out .= βconst
     end
+    αconst = zero(grid.ω)
+    αconst[2:end] = Modes.α.(mode, grid.ω[2:end])
+    function αfun!(out, ω, z)
+        out .= αconst
+    end
     frame_vel(z) = 1/β1const
-    αfun(ω, z) = Modes.α.(mode, ω)
-    make_const_linop(grid, βfun!, αfun, frame_vel), βfun!, frame_vel, αfun
+    make_const_linop(grid, βfun!, αfun!, frame_vel), βfun!, frame_vel, αfun!
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)

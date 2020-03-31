@@ -9,8 +9,8 @@ import DSP.Unwrap: unwrap
 
 import PyPlot:pygui, plt
 
-a = 13e-6
-b = 13e-6
+a = 50e-6
+b = 10e-6
 gas = :Ar
 pres = 5
 
