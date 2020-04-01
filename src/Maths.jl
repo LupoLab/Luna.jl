@@ -5,6 +5,7 @@ import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
+import LinearAlgebra: mul!, ldiv!
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -224,11 +225,31 @@ end
 Hilbert transform - find analytic signal from real signal
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
-    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    xf = FFTW.fft(x, dim)
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
-    xf[idxlo, 1:ceil(Int, size(xf, dim) / 2), idxhi] .= 0
-    return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
+    xf[idxlo, n1:n2, idxhi] .= 0
+    return 2 .* FFTW.ifft(xf, dim)
+end
+
+function plan_hilbert(x; dim=1)
+    FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    xf = Array{ComplexF64}(undef, size(FT))
+    idxlo = CartesianIndices(size(xf)[1:dim - 1])
+    idxhi = CartesianIndices(size(xf)[dim + 1:end])
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
+    xc = complex(x)
+    function hilbert!(out, x)
+        copyto!(xc, x)
+        mul!(xf, FT, xc)
+        xf[idxlo, n1:n2, idxhi] .= 0
+        ldiv!(out, FT, xf)
+        out .*= 2
+    end
+    return hilbert!
 end
 
 """
