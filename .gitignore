@@ -6,3 +6,4 @@ deps/deps.jl
 *.h5
 .vscode/settings.json
 Manifest.toml
+Manifest.toml
