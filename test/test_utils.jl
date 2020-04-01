@@ -32,7 +32,7 @@ dd = Utils.load_dict_h5(fpath)
 @test d == dd
 
 rm(fpath)
-rm(dirname(fpath))
+rm(dirname(fpath), force=true)
 end
 
 end
