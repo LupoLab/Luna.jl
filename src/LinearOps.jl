@@ -10,25 +10,23 @@ function αlim!(α)
     clamp!(α, 0.0, 3000.0)
 end
 
-function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, frame_vel)
+function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     β = similar(grid.ω)
     βfun!(β, grid.ω, 0)
     α = similar(grid.ω)
     αfun!(α, grid.ω, 0)
     αlim!(α)
-    β1 = 1/frame_vel(0)
     linop = @. -im*(β-β1*grid.ω) - α/2
     linop[1] = 0
     return linop
 end
 
-function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, frame_vel, β0ref)
+function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     β = similar(grid.ω)
     βfun!(β, grid.ω, 0)
     α = similar(grid.ω)
     αfun!(α, grid.ω, 0)
     αlim!(α)
-    β1 = 1/frame_vel(0)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
     linop[.!grid.sidx] .= 0
     return linop
@@ -52,8 +50,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
     function αfun!(out, ω, z)
         out .= αconst
     end
-    frame_vel(z) = 1/β1const
-    make_const_linop(grid, βfun!, αfun!, frame_vel, β0const), βfun!, frame_vel, αfun!
+    make_const_linop(grid, βfun!, αfun!, β1const, β0const), βfun!, β1const, αfun!
 end
 
 function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
@@ -69,12 +66,11 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function αfun!(out, ω, z)
         out .= αconst
     end
-    frame_vel(z) = 1/β1const
-    make_const_linop(grid, βfun!, αfun!, frame_vel), βfun!, frame_vel, αfun!
+    make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
+    β1 = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
@@ -84,13 +80,13 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         α = zeros(length(grid.ω))
         α[2:end] .= Modes.α.(modes[i], grid.ω[2:end])
         αlim!(α)
-        linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
+        linops[:,i] = im.*(-βconst .+ grid.ω.*β1) .- α./2
     end
     linops
 end
 
 function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
+    β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     if thg
         βref = 0.0
     else
@@ -104,7 +100,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         βconst[.!grid.sidx] .= 1
         α = Modes.α.(modes[i], grid.ω)
         αlim!(α)
-        linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2
+        linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0).*β1 .- βref) .- α./2
     end
     linops
 end
