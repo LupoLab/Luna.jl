@@ -1209,8 +1209,32 @@ function lookup_metal(material::Symbol)
     return nspl
 end
 
-"
-See:
+"""
+Get the Raman parameters for `material`.
+
+# Fields
+Fields in the returned named tuple must include:
+- `kind::Symbol`: one of `:molecular` or ...
+
+If `kind == :molecular` then the following must also be specified:
+- `rotation::Symbol`: only `:nonrigid` or `:none` supported at present.
+- `vibration::Symbol`: only `:sdo` or `:none` supported at present.
+
+If `rotation == :nonrigid` then the following must also be specified:
+- `B::Real`: the rotational constant [1/m]
+- `Δα::Real`: molecular polarizability anisotropy [m^3]
+- `τ2r::Real`: coherence time [s]
+- `qJodd::Integer`: nuclear spin parameter for off `J`
+- `qJeven::Integer`: nuclear spin parameter for even `J`
+- `D::Real=0.0`: centrifugal constant [1/m]
+
+If `vibration == :sdo` then the following must also be specified:
+- `Ωv::Real`: vibrational frequency [rad/s]
+- `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
+- `μ::Real`: reduced molecular mass [kg]
+- `τ2v::Real`: coherence time [s]
+
+# References
 [1] Phys. Rev. A, 94, 023816 (2016)
 [2] Phys. Rev. A, 85, 043820 (2012)
 [3] Phys. Rev. A, 92, 063828 (2015)
@@ -1218,18 +1242,8 @@ See:
 [5] J. Phys. Chem., 91, 41 (1987)
 [6] Applied Spectroscopy 23, 211 (1969)
 [7] Phys. Rev. A, 34, 3, 1944 (1986)
-"
+"""
 function raman_parameters(material)
-    # B - rotational constant [1/m]
-    # D - centrifugal constant [1/m]
-    # Δα - molecular polarizability anisotropy [m^3]
-    # dαdQ - isotropic averaged polarizability derivative [m^2]
-    # Ωv - vibrational frequency [rad/s]
-    # μ - reduced molecular mass [kg]
-    # τ2r - rotational coherence time [s]
-    # τ2v - vibrational coherence time [s]
-    # qJodd - nuclear spin parameter
-    # qJeven - nuclear spin parameter
     if material == :N2
         rp = (kind = :molecular,
               rotation = :nonrigid,

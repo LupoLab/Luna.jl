@@ -131,7 +131,11 @@ function (Plas::PlasmaCumtrapz)(out, Et)
     end
 end
 
-struct RamanPolarField{Tω, Tt, FTt}
+"Raman polarisation response type"
+abstract type RamanPolar end
+
+"Raman polarisation response type for a carrier resolved field"
+struct RamanPolarField{Tω, Tt, FTt} <: RamanPolar
     hω::Tω
     Eω2::Tω
     Pω::Tω
@@ -142,67 +146,8 @@ struct RamanPolarField{Tω, Tt, FTt}
     nothg::Bool
 end
 
-function RamanPolarField(t, ht; nothg=false)
-    dt = t[2] - t[1]
-    h = zeros(length(t)*2)
-    Utils.loadFFTwisdom()
-    FT = FFTW.plan_rfft(h, 1, flags=FFTW.PATIENT)
-    inv(FT)
-    Utils.saveFFTwisdom()
-    fill!(h, 0.0)
-    start = findfirst(t .> 0.0)
-    for i = start:length(t)
-        h[i] = ht(t[i])*dt
-    end
-    hω = FT * h
-    Eω2 = similar(hω)
-    Pω = similar(hω)
-    E2 = similar(h)
-    P = similar(h)
-    Pout = similar(t)
-    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, nothg)
-end
-
-function (R::RamanPolarField)(out, Et)
-    n = size(Et, 1)
-    if ndims(Et) > 1
-        if size(Et, 2) == 1
-            E = reshape(Et, n)
-        else
-            error("vector Raman not yet implemented")
-        end
-    else
-        E = Et
-    end
-
-    if R.nothg
-        Ei = 3/4 .* abs2.(Maths.hilbert(E))
-    else
-        Ei = E.^2
-    end
-
-    fill!(R.E2, 0.0)
-    for i = eachindex(Ei)
-        R.E2[i] = Ei[i]
-    end
-    mul!(R.Eω2, R.FT, R.E2)
-    @. R.Pω = R.hω * R.Eω2
-    mul!(R.P, inv(R.FT), R.Pω)
-    for i = eachindex(E)
-        R.Pout[i] = E[i]*R.P[(n ÷ 2) + i] # TODO: possible off by 1 error
-    end
-    
-    if ndims(Et) > 1
-        out .+= reshape(R.Pout, size(Et))
-    else
-        @. out += R.Pout
-    end
-end
-
-# TODO there is a huge amount of duplication here between field and env versions
-# can we make them one?
-
-struct RamanPolarEnv{Tω, FTt}
+"Raman polarisation response type for an envelope"
+struct RamanPolarEnv{Tω, FTt} <: RamanPolar
     hω::Tω
     Eω2::Tω
     Pω::Tω
@@ -212,14 +157,13 @@ struct RamanPolarEnv{Tω, FTt}
     FT::FTt
 end
 
-function RamanPolarEnv(t, ht)
+"Get `hω` for time grid `t` using response function `ht`
+ and Fourier transform `FT`"
+function gethω!(t, h, ht, FT)
     dt = t[2] - t[1]
-    h = zeros(length(t)*2)
-    Utils.loadFFTwisdom()
-    FT = FFTW.plan_fft(h, 1, flags=FFTW.PATIENT)
-    inv(FT)
-    Utils.saveFFTwisdom()
     fill!(h, 0.0)
+    # starting from positive t, fill only up to the first half of h
+    # i.e. only the part corresponding to the original time grid
     start = findfirst(t .> 0.0)
     for i = start:length(t)
         h[i] = ht(t[i])*dt
@@ -227,13 +171,56 @@ function RamanPolarEnv(t, ht)
     hω = FT * h
     Eω2 = similar(hω)
     Pω = similar(hω)
+    hω, Eω2, Pω
+end
+
+"Construct Raman polarisation response for a field on time grid `t`
+ using response function `ht`."
+function RamanPolarField(t, ht; nothg=false)
+    h = zeros(length(t)*2) # note double grid size, see explanation below
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_rfft(h, 1, flags=FFTW.PATIENT)
+    inv(FT)
+    Utils.saveFFTwisdom()
+    hω, Eω2, Pω = gethω!(t, h, ht, FT)
+    E2 = similar(h)
+    P = similar(h)
+    Pout = similar(t)
+    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, nothg)
+end
+
+"Construct Raman polarisation response for an envelope on time grid `t`
+ using response function `ht`."
+function RamanPolarEnv(t, ht)
+    h = zeros(length(t)*2) # note double grid size, see explanation below
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_fft(h, 1, flags=FFTW.PATIENT)
+    inv(FT)
+    Utils.saveFFTwisdom()
+    hω, Eω2, Pω = gethω!(t, h, ht, FT)
     E2 = similar(hω)
     P = similar(hω)
     Pout = Array{ComplexF64,}(undef,size(t))
     RamanPolarEnv(hω, Eω2, Pω, E2, P, Pout, FT)
 end
 
-function (R::RamanPolarEnv)(out, Et)
+"Square the field or envelope"
+function sqr(R::RamanPolarField, E)
+    if R.nothg
+        Ei = 3/4 .* abs2.(Maths.hilbert(E))
+    else
+        Ei = E.^2
+    end
+    Ei
+end
+
+function sqr(R::RamanPolarEnv, E)
+    abs2.(E)
+end
+
+"Calculate Raman polarisation for field/envelope Et"
+function (R::RamanPolar)(out, Et)
+    # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
         if size(Et, 2) == 1
@@ -245,17 +232,26 @@ function (R::RamanPolarEnv)(out, Et)
         E = Et
     end
 
-    fill!(R.E2, 0.0)
-    for i = eachindex(E)
-        R.E2[i] = abs2(E[i])
-    end
+    # square the field or envelope in first half
+    # corresponding to the field/envelope grid size
+    R.E2[1:length(E)] .= sqr(R, E)
+    # pad the rest with 0
+    R.E2[length(E)+1:end] .= 0.0 
+
+    # convolution by multiplication in frequency domain
+    # the double grid gives us accurate convolution between the
+    # full field grid and full response function
     mul!(R.Eω2, R.FT, R.E2)
     @. R.Pω = R.hω * R.Eω2
     mul!(R.P, inv(R.FT), R.Pω)
+
+    # calculate full polarisation, extracting only the valid
+    # grid region
     for i = eachindex(E)
         R.Pout[i] = E[i]*R.P[(n ÷ 2) + i] # TODO: possible off by 1 error
     end
     
+    # add to output in dimensions requested
     if ndims(Et) > 1
         out .+= reshape(R.Pout, size(Et))
     else

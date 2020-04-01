@@ -21,7 +21,6 @@ energyfun = NonlinearRHS.energy_modal()
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
     Et = @. sqrt(It)
 end
 
@@ -88,5 +87,5 @@ plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
 plt.figure()
-plt.plot(to*1e15, Eto[:, 121])
+plt.plot(to*1e15, abs2.(Eto[:, 121]))
 plt.xlim(-20, 20)

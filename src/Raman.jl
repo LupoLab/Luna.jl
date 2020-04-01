@@ -8,11 +8,19 @@ struct RamanRespSingleDampedOscillator
     τ2::Float64 # coherence dephasing time
 end
 
+"""
+Construct a simple normalised single damped oscillator model with scale factor `K`,
+angular frequency `Ω` and coherence time `τ2`.
+
+The scale factor `K` is applied after normalising the integral of the response function
+to unity.
+"""
 function RamanRespNormedSingleDampedOscillator(K, Ω, τ2)
     K *= (Ω^2 + 1/τ2^2)/Ω # normalise SDO model to unity integral, scaled by prefactor K.
     RamanRespSingleDampedOscillator(K, Ω, τ2)
 end
 
+"Get the response function at time `t`."
 function (R::RamanRespSingleDampedOscillator)(t)
     h = 0.0
     if t > 0.0
@@ -21,12 +29,21 @@ function (R::RamanRespSingleDampedOscillator)(t)
     return h
 end
 
-"
-dαdQ - isotropic averaged polarizability derivative [m^2]
-Ωv - vibrational frequency [rad/s]
-μ - reduced molecular mass [kg]
-τ2 - coherence time [s]
-"
+"""
+Construct a molecular vibrational Raman model (single damped oscillator).
+
+# Arguments
+- `Ωv::Real`: vibrational frequency [rad/s]
+- `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
+- `μ::Real`: reduced molecular mass [kg]
+- `τ2::Real`: coherence time [s]
+
+# References
+- Full model description: To be published, Yimgying paper.
+- We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
+  But note that that paper uses weird units, and we converted it to SI for
+  the above reference. 
+"""
 function RamanRespVibrational(Ωv, dαdQ, μ, τ2)
     # TODO we assume pressure independent linewidth which is incorrect
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
@@ -43,38 +60,54 @@ struct RamanRespRotationalNonRigid
     τ2::Float64 # coherence dephasing time
 end
 
-"
-B - rotational constant [1/m]
-Δα - molecular polarizability anisotropy [m^3]
-τ2 - coherence time [s]
-qJodd - nuclear spin parameter
-qJeven - nuclear spin parameter
-D - centrifugal constant [1/m]
-minJ - J value to start at
-maxJ - J value to sum until
-temp - temperature
-"
+"""
+Construct a rotational nonrigid rotor Raman model.
+
+# Arguments
+- `B::Real`: the rotational constant [1/m]
+- `Δα::Real`: molecular polarizability anisotropy [m^3]
+- `τ2::Real`: coherence time [s]
+- `qJodd::Integer`: nuclear spin parameter for off `J`
+- `qJeven::Integer`: nuclear spin parameter for even `J`
+- `D::Real=0.0`: centrifugal constant [1/m]
+- `minJ::Integer=0`: J value to start at
+- `maxJ::Integer=50`: J value to sum until
+- `temp::Real=roomtemp`: temperature
+
+# References
+- Full model description: To be published, Yimgying paper.
+- We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
+  But note that that paper uses weird units, and we converted it to SI for
+  the above reference. 
+"""
 function RamanRespRotationalNonRigid(B, Δα, τ2, qJodd::Int, qJeven::Int;
     D=0.0, minJ=0, maxJ=50, temp=roomtemp)
-    J = minJ:maxJ
-    EJ = @. 2π*ħ*c*(B*J*(J + 1) - D*(J*(J + 1))^2)
+    J = minJ:maxJ # range of J values to start with
+    EJ = @. 2π*ħ*c*(B*J*(J + 1) - D*(J*(J + 1))^2) # energy of each J level
+    # limit J range to those which have monotonic increasing energy
     mJ = findfirst(x -> x < 0.0, diff(EJ))
     if mJ != nothing
-        if length(minJ:mJ) <= 2
+        if length(minJ:mJ) <= 2 # need at least 1 pair of J levels
             error("Raman rigid rotation model cannot sum over levels")
         end
         J = J[1:mJ]
         EJ = EJ[1:mJ]
     end
+    # get nuclear degeneracy
     DJ = map(x -> isodd(x) ? qJodd : qJeven, J)
+    # get population of each level
     ρ = @. DJ*(2*J + 1)*exp(-EJ/(k_B*temp))
     ρ ./= sum(ρ)
+    # we need pairs of J, J+2 levels, so limit J to just the starting levels
     J = J[1:end-2]
+    # angular frequency of each J, J+2 pair
     Ω = (EJ[3:end] .- EJ[1:end-2])./ħ
+    # absolute Raman prefactor
     K = -(4π*ε_0)^2*2/15*Δα^2/ħ
     RamanRespRotationalNonRigid(K, J, ρ, Ω, τ2)
 end
 
+"Get the response function at time `t`."
 function (R::RamanRespRotationalNonRigid)(t)
     h = 0.0
     if t > 0.0
@@ -88,6 +121,13 @@ function (R::RamanRespRotationalNonRigid)(t)
     return h*R.K
 end
 
+"""
+Get the Raman response function for the Raman parameters in named tuple `rp`.
+
+`minJ` and `maxJ` are the minimum and maximum rotational quantum numbers to consider for 
+a molecular gas.
+
+"""
 function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
     if rotation
         if rp.rotation != :nonrigid
@@ -120,7 +160,15 @@ function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, max
     h
 end
 
-function raman_response(material; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
+"""
+Get the Raman response function for `material`.
+
+`minJ` and `maxJ` are the minimum and maximum rotational quantum numbers to consider for 
+a molecular gas.
+
+"""
+function raman_response(material; rotation=true, vibration=true,
+                        minJ=0, maxJ=50, temp=roomtemp)
     rp = raman_parameters(material)
     if rp.kind == :molecular
         return molecular_raman_response(rp, rotation=rotation, vibration=vibration,
