@@ -3,18 +3,18 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
-import Luna.PhysData: c, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 
-export RectMode, dimlimits, neff, field
+export RectMode, dimlimits, neff, field, N, Aeff
 
 # core and clad are function-like objects which return the
 # (possibly complex) refractive index as a function of freq
 # pol is either :x or :y
 # a and b are the half widths of the waveguide in each dimension.
-struct RectMode{Tcore, Tclad} <: AbstractMode
-    a::Float64
-    b::Float64
+struct RectMode{Ta, Tb, Tcore, Tclad} <: AbstractMode
+    a::Ta
+    b::Tb
     n::Int
     m::Int
     pol::Symbol
@@ -22,23 +22,27 @@ struct RectMode{Tcore, Tclad} <: AbstractMode
     cladn::Tclad
 end
 
+RectMode(a::Number, args...; kwargs...) = RectMode(z->a, args...; kwargs...)
+RectMode(afun, b::Number, args...; kwargs...) = RectMode(afun, z->b, args...; kwargs...)
+RectMode(a::Number, b::Number, args...; kwargs...) = RectMode(z->a, z->b, args...; kwargs...)
+
 "convenience constructor assunming single gas filling and specified cladding"
-function RectMode(a, b, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
+function RectMode(afun, bfun, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(2π*c./ω)
     cladn = (ω; z) -> rfs(2π*c./ω)
-    RectMode(a, b, n, m, pol, coren, cladn)
+    RectMode(afun, bfun, n, m, pol, coren, cladn)
 end
 
 "convenience constructor for non-constant core index"
-function RectMode(a, b, coren, clad; n=1, m=1, pol=:x, T=roomtemp)
+function RectMode(afun, bfun, coren, clad; n=1, m=1, pol=:x)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(2π*c./ω)
-    RectMode(a, b, n, m, pol, coren, cladn)
+    RectMode(afun, bfun, n, m, pol, coren, cladn)
 end
 
-dimlimits(m::RectMode) = (:cartesian, (-m.a, -m.b), (m.a, m.b))
+dimlimits(m::RectMode; z=0) = (:cartesian, (-m.a(z), -m.b(z)), (m.a(z), m.b(z)))
 
 "effective index of rectangular mode with dielectric core and arbitrary
  (metal or dielectric) cladding.
@@ -64,21 +68,21 @@ function neff(m::RectMode, ω; z=0)
     else
         error("RectMode pol must be either :x or :y")
     end
-    sqrt(complex(εco - (m.m*λ/(4*m.a))^2*(1 - im*λ/(2π*m.a)*ac)^2
-                     - (m.n*λ/(4*m.b))^2*(1 - im*λ/(2π*m.b)*bc)^2))
+    sqrt(complex(εco - (m.m*λ/(4*m.a(z)))^2*(1 - im*λ/(2π*m.a(z))*ac)^2
+                     - (m.n*λ/(4*m.b(z)))^2*(1 - im*λ/(2π*m.b(z))*bc)^2))
 end
 
 # here we use cartesian coords, so xs = (x, y)
-function field(m::RectMode)
+function field(m::RectMode; z=0)
     if isodd(m.m)
-        Ea = (x) -> cos(m.m*π*x/(2*m.a))
+        Ea = (x) -> cos(m.m*π*x/(2*m.a(z)))
     else
-        Ea = (x) -> sin(m.m*π*x/(2*m.a))
+        Ea = (x) -> sin(m.m*π*x/(2*m.a(z)))
     end
     if isodd(m.n)
-        Eb = (x) -> cos(m.n*π*x/(2*m.b))
+        Eb = (x) -> cos(m.n*π*x/(2*m.b(z)))
     else
-        Eb = (x) -> sin(m.n*π*x/(2*m.b))
+        Eb = (x) -> sin(m.n*π*x/(2*m.b(z)))
     end
     if m.pol == :x
         return (xs) -> SVector(Ea(xs[1])*Eb(xs[2]), 0.0)
@@ -86,5 +90,9 @@ function field(m::RectMode)
         return (xs) -> SVector(0.0, Ea(xs[1])*Eb(xs[2]))
     end
 end
+
+N(m::RectMode; z=0) = 0.5*sqrt(ε_0/μ_0)*m.a(z)*m.b(z)
+
+Aeff(m::RectMode; z=0) = 16/9*m.a(z)*m.b(z)
 
 end

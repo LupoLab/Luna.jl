@@ -193,6 +193,12 @@ function χ1_fun(gas::Symbol)
     return f
 end
 
+function χ1_fun(gas::Symbol, P, T)
+    γ = sellmeier_gas(gas)
+    dens = density(gas, P, T)
+    return λ -> γ(λ.*1e6)*dens
+end
+
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
 Gases only."
 function χ1(gas::Symbol, λ, P=1, T=roomtemp)
@@ -208,13 +214,8 @@ end
 "Get function which returns refractive index."
 function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     if material in gas
-        χ1 = χ1_fun(material)
-        ngas = let χ1=χ1, P=P, T=T
-            function ngas(λ)
-                return sqrt(1 + χ1(λ, P, T))
-            end
-        end
-        return ngas
+        χ1 = χ1_fun(material, P, T)
+        return λ -> sqrt(1 + χ1(λ))
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)

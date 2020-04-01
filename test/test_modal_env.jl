@@ -15,13 +15,15 @@ pres = 5
 τ = 30e-15
 λ0 = 800e-9
 
-modes = (Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false))
+modes = (
+    Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
+)
 nmodes = length(modes)
 
 grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_env_modal()
+energyfun = NonlinearRHS.energy_modal()
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
