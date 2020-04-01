@@ -1,6 +1,9 @@
 import Test: @test, @testset
+import SpecialFunctions: besselj
+import Cubature: hcubature
+import LinearAlgebra: dot, norm
 import Luna: Modes, Capillary, Grid
-import Luna.PhysData: c, roomtemp, ref_index_fun
+import Luna.PhysData: c, roomtemp, ref_index_fun, ε_0, μ_0
 import Luna.PhysData: wlfreq
 
 @testset "Capillary" begin
@@ -13,6 +16,67 @@ import Luna.PhysData: wlfreq
     @test isapprox(Capillary.dB_per_m(m, ω), 0.6152074146252722)
     @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatilliMode(2a, :He, 1.0, model=:reduced), ω)
 end
+
+@testset "normalisation" begin
+    # Copied definitions from Modes.jl to force manual calculation of Aeff and N
+    function Aeff(m; z=0)
+        em = Modes.absE(m, z=z)
+        dl = Modes.dimlimits(m, z=z)
+        # Numerator
+        function Aeff_num(xs)
+            e = em(xs)
+            dl[1] == :polar ? xs[1]*e^2 : e^2
+        end
+        val, err = hcubature(Aeff_num, dl[2], dl[3])
+        num = val^2
+        # Denominator
+        function Aeff_den(xs)
+            e = em(xs)
+            dl[1] == :polar ? xs[1]*e^4 : e^4
+        end
+        den, err = hcubature(Aeff_den, dl[2], dl[3])
+        return num / den
+    end
+    function N(m; z=0)
+        f = Modes.field(m, z=z)
+        dl = Modes.dimlimits(m, z=z)
+        function Nfunc(xs)
+            E = f(xs)
+            ret = sqrt(ε_0/μ_0)*dot(E, E)
+            dl[1] == :polar ? xs[1]*ret : ret
+        end
+        val, err = hcubature(Nfunc, dl[2], dl[3])
+        0.5*abs(val)
+    end
+
+    a = 125e-6
+    for n=1:10
+        m = Capillary.MarcatilliMode(a, :He, 1.0, n=n)
+        @test Modes.N(m) ≈ N(m)
+        @test Modes.Aeff(m) ≈ Aeff(m)
+    end
+    m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TE)
+    @test Modes.N(m) ≈ N(m)
+    @test Modes.Aeff(m) ≈ Aeff(m)
+    m = Capillary.MarcatilliMode(a, :He, 1.0, n=0, kind=:TM)
+    @test Modes.N(m) ≈ N(m)
+    @test Modes.Aeff(m) ≈ Aeff(m)
+    
+    a0 = a
+    aL = a/2
+    L = 1
+    afun = let a0=a0, aL=aL, L=L
+        afun(z) = a0 + (aL-a0)*z/L
+    end
+    m = Capillary.MarcatilliMode(afun, :He, 1, loss=false, model=:full)
+    @test Modes.N(m) ≈ N(m)
+    @test Modes.N(m, z=L/2) ≈ N(m, z=L/2)
+    @test Modes.N(m, z=L) ≈ N(m, z=L)
+    @test Modes.Aeff(m) ≈ Aeff(m)
+    @test Modes.Aeff(m, z=L/2) ≈ Aeff(m, z=L/2)
+    @test Modes.Aeff(m, z=L) ≈ Aeff(m, z=L)
+end
+
 
 @testset "β, α" begin
     a = 125e-6
