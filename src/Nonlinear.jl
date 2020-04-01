@@ -34,14 +34,9 @@ end
 
 "Kerr response for real field but without THG"
 function Kerr_field_nothg(γ3, n)
-    E2 = Array{Complex{Float64}}(undef, n)
     Kerr = let γ3 = γ3, E2 = E2
         function Kerr(out, E)
-            @. E2 = E
-            FFTW.fft!(E2)
-            E2[div(length(E2),2):end] .= 0.0
-            FFTW.ifft!(E2)
-            @. out += 3*ε_0*γ3*abs2(E2)*E
+            out .+= 3/4*ε_0*γ3.*abs2.(Maths.hilbert(E)).*E
         end
     end
 end
@@ -144,9 +139,10 @@ struct RamanPolarField{Tω, Tt, FTt}
     P::Tt
     Pout::Tt
     FT::FTt
+    nothg::Bool
 end
 
-function RamanPolarField(t, ht)
+function RamanPolarField(t, ht; nothg=false)
     dt = t[2] - t[1]
     h = zeros(length(t)*2)
     Utils.loadFFTwisdom()
@@ -164,7 +160,7 @@ function RamanPolarField(t, ht)
     E2 = similar(h)
     P = similar(h)
     Pout = similar(t)
-    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT)
+    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, nothg)
 end
 
 function (R::RamanPolarField)(out, Et)
@@ -179,9 +175,79 @@ function (R::RamanPolarField)(out, Et)
         E = Et
     end
 
+    if R.nothg
+        Ei = 3/4 .* abs2.(Maths.hilbert(E))
+    else
+        Ei = E.^2
+    end
+
+    fill!(R.E2, 0.0)
+    for i = eachindex(Ei)
+        R.E2[i] = Ei[i]
+    end
+    mul!(R.Eω2, R.FT, R.E2)
+    @. R.Pω = R.hω * R.Eω2
+    mul!(R.P, inv(R.FT), R.Pω)
+    for i = eachindex(E)
+        R.Pout[i] = E[i]*R.P[(n ÷ 2) + i] # TODO: possible off by 1 error
+    end
+    
+    if ndims(Et) > 1
+        out .+= reshape(R.Pout, size(Et))
+    else
+        @. out += R.Pout
+    end
+end
+
+# TODO there is a huge amount of duplication here between field and env versions
+# can we make them one?
+
+struct RamanPolarEnv{Tω, FTt}
+    hω::Tω
+    Eω2::Tω
+    Pω::Tω
+    E2::Tω
+    P::Tω
+    Pout::Tω
+    FT::FTt
+end
+
+function RamanPolarEnv(t, ht)
+    dt = t[2] - t[1]
+    h = zeros(length(t)*2)
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_fft(h, 1, flags=FFTW.PATIENT)
+    inv(FT)
+    Utils.saveFFTwisdom()
+    fill!(h, 0.0)
+    start = findfirst(t .> 0.0)
+    for i = start:length(t)
+        h[i] = ht(t[i])*dt
+    end
+    hω = FT * h
+    Eω2 = similar(hω)
+    Pω = similar(hω)
+    E2 = similar(hω)
+    P = similar(hω)
+    Pout = Array{ComplexF64,}(undef,size(t))
+    RamanPolarEnv(hω, Eω2, Pω, E2, P, Pout, FT)
+end
+
+function (R::RamanPolarEnv)(out, Et)
+    n = size(Et, 1)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, n)
+        else
+            error("vector Raman not yet implemented")
+        end
+    else
+        E = Et
+    end
+
     fill!(R.E2, 0.0)
     for i = eachindex(E)
-        R.E2[i] = E[i]^2
+        R.E2[i] = abs2(E[i])
     end
     mul!(R.Eω2, R.FT, R.E2)
     @. R.Pω = R.hω * R.Eω2
