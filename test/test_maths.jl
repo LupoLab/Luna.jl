@@ -1,7 +1,6 @@
 import Test: @test, @testset, @test_throws
 import Luna: Maths
 
-@testset "Maths" begin
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
 
@@ -136,6 +135,4 @@ end
     x = Maths.randgauss(1, 0.5, (1000, 1000), seed=1234)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
-end
-
 end
