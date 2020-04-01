@@ -67,7 +67,7 @@ Construct a rotational nonrigid rotor Raman model.
 - `B::Real`: the rotational constant [1/m]
 - `Δα::Real`: molecular polarizability anisotropy [m^3]
 - `τ2::Real`: coherence time [s]
-- `qJodd::Integer`: nuclear spin parameter for off `J`
+- `qJodd::Integer`: nuclear spin parameter for odd `J`
 - `qJeven::Integer`: nuclear spin parameter for even `J`
 - `D::Real=0.0`: centrifugal constant [1/m]
 - `minJ::Integer=0`: J value to start at

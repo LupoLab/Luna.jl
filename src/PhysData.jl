@@ -1224,7 +1224,7 @@ If `rotation == :nonrigid` then the following must also be specified:
 - `B::Real`: the rotational constant [1/m]
 - `Δα::Real`: molecular polarizability anisotropy [m^3]
 - `τ2r::Real`: coherence time [s]
-- `qJodd::Integer`: nuclear spin parameter for off `J`
+- `qJodd::Integer`: nuclear spin parameter for odd `J`
 - `qJeven::Integer`: nuclear spin parameter for even `J`
 - `D::Real=0.0`: centrifugal constant [1/m]
 

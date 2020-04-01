@@ -136,25 +136,25 @@ abstract type RamanPolar end
 
 "Raman polarisation response type for a carrier resolved field"
 struct RamanPolarField{Tω, Tt, FTt} <: RamanPolar
-    hω::Tω
-    Eω2::Tω
-    Pω::Tω
-    E2::Tt
-    P::Tt
-    Pout::Tt
-    FT::FTt
+    hω::Tω # the frequency domain Raman response function
+    Eω2::Tω # buffer to hold the Fourier transform of E^2
+    Pω::Tω # buffer to hold the frequency domain polarisation
+    E2::Tt # buffer to hold E^2
+    P::Tt # buffer to hold the time domain polarisation
+    Pout::Tt # buffer to hold the output portion of the time domain polarisation
+    FT::FTt # Fourier transform plan
     nothg::Bool
 end
 
 "Raman polarisation response type for an envelope"
 struct RamanPolarEnv{Tω, FTt} <: RamanPolar
-    hω::Tω
-    Eω2::Tω
-    Pω::Tω
-    E2::Tω
-    P::Tω
-    Pout::Tω
-    FT::FTt
+    hω::Tω # the frequency domain Raman response function
+    Eω2::Tω # buffer to hold the Fourier transform of E^2
+    Pω::Tω # buffer to hold the frequency domain polarisation
+    E2::Tω # buffer to hold E^2
+    P::Tω # buffer to hold the time domain polarisation
+    Pout::Tω # buffer to hold the output portion of the time domain polarisation
+    FT::FTt # Fourier transform plan
 end
 
 "Get `hω` for time grid `t` using response function `ht`
