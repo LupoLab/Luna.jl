@@ -112,8 +112,8 @@ end
     @test isapprox(Capillary.zdw(m), 7.288460357934073e-07, rtol=1e-8)
 
     rfg = ref_index_fun(:Ar, 2.0, roomtemp)
-    coren = ω -> rfg(2π*c./ω)
-    cladn = ω -> 1.45
+    coren = (ω; z) -> rfg(wlfreq(ω))
+    cladn = (ω; z) -> 1.45
     m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
     @test isapprox(Capillary.β(m, ω), 7857863.48006503, rtol=1e-15)
     @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744262246032e-9, rtol=1e-14)
@@ -125,8 +125,8 @@ end
     @test isapprox(Capillary.α(m, ω), 2.21505888048642, rtol=1e-14)
 
     rfg = ref_index_fun(:Ar, 2.0, roomtemp)
-    coren = ω -> rfg(2π*c./ω)
-    cladn = ω -> 0.036759+im*5.5698
+    coren = (ω; z) -> rfg(wlfreq(ω))
+    cladn = (ω; z) -> 0.036759+im*5.5698
     m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
     @test isapprox(Capillary.β(m, ω), 7857861.48263403, rtol=1e-15)
     @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744432288277e-9, rtol=1e-14)
