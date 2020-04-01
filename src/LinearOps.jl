@@ -3,11 +3,11 @@ import FFTW
 import Luna: Modes, Grid, PhysData
 import Luna.PhysData: wlfreq
 
-# limit α so that we do not get overflow in exp(α*dz)
+"Limit α so that we do not get overflow in exp(α*dz)."
 function αlim!(α)
-    # magic number: this is 1300 dB/m it could probably be bigger
-    α[α .> 300] .= 300
-    α[α .< 0] .= 0
+    # magic number: this is 130 dB/cm
+    # a test script sensitive this is test_main_rect_env.jl
+    clamp!(α, 0.0, 3000.0)
 end
 
 function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, frame_vel)
@@ -81,7 +81,9 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         βconst = zero(grid.ω)
         βconst[2:end] = Modes.β.(modes[i], grid.ω[2:end])
         βconst[1] = 1
-        α = Modes.α.(modes[i], grid.ω)
+        α = zeros(length(grid.ω))
+        α[2:end] .= Modes.α.(modes[i], grid.ω[2:end])
+        αlim!(α)
         linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
     end
     linops
@@ -101,6 +103,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
         βconst[.!grid.sidx] .= 1
         α = Modes.α.(modes[i], grid.ω)
+        αlim!(α)
         linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2
     end
     linops
