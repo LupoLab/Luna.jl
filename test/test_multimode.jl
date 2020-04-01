@@ -31,7 +31,7 @@ import Test: @test, @testset, @test_throws
         grid, energyfun, densityfun, normfun, responses, inputs, aeff)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
@@ -43,7 +43,7 @@ import Test: @test, @testset, @test_throws
                                 modes, :Ey; full=false)
     outputr = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputr)
+    Luna.run(Eω, grid, linop, transform, FT, outputr, status_period=10)
 
     Iω = abs2.(output.data["Eω"])
     Iωr = abs2.(dropdims(outputr.data["Eω"], dims=2))
@@ -81,7 +81,7 @@ end
         grid, energyfun, densityfun, normfun, responses, inputs, aeff)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
@@ -93,7 +93,7 @@ end
                                 modes, :Ey; full=true)
     outputf = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputf)
+    Luna.run(Eω, grid, linop, transform, FT, outputf, status_period=10)
 
     Iω = abs2.(output.data["Eω"])
     Iωf = abs2.(dropdims(outputf.data["Eω"], dims=2))

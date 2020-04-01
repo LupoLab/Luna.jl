@@ -88,7 +88,7 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
-function save_dict_h5(fpath, d, force=false, rmold=false)
+function save_dict_h5(fpath, d; force=false, rmold=false)
     if isfile(fpath) & rmold
         rm(fpath)
     end
