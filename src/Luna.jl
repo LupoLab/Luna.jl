@@ -171,6 +171,7 @@ function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=Inf,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
+             stats=true,
              status_period=1)
 
     Et = FT \ Eω
@@ -178,18 +179,16 @@ function run(Eω, grid,
     z = 0.0
     dz = 1e-3
 
-    window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
-        function window!(Eω)
-            Eω .*= window
-            ldiv!(Et, FT, Eω)
-            Et .*= twindow
-            mul!(Eω, FT, Et)
-        end
-    end
-
     function stepfun(Eω, z, dz, interpolant)
-        window!(Eω)
-        output(Eω, z, dz, interpolant)
+        Eω .*= grid.ωwin
+        ldiv!(Et, FT, Eω)
+        Et .*= grid.twin
+        mul!(Eω, FT, Et)
+        if stats
+            output(Eω, Et, z, dz, interpolant)
+        else
+            output(Eω, z, dz, interpolant)
+        end
     end
 
     output(Grid.to_dict(grid), group="grid")
