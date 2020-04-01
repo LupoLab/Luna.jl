@@ -2,7 +2,7 @@ import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
 import Logging
 import FFTW
-import NumericalIntegration: integrate, SimpsonEven
+import NumericalIntegration: integrate, SimpsonEven, Trapezoidal
 Logging.disable_logging(Logging.BelowMinLevel)
 
 import PyPlot:pygui, plt
@@ -19,7 +19,7 @@ grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun, energyfunω = NonlinearRHS.energy_modal()
+energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)

@@ -22,7 +22,7 @@ grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun, energyfunω = NonlinearRHS.energy_env_modal()
+energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -36,8 +36,8 @@ densityfun(z) = dens0
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+            #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 

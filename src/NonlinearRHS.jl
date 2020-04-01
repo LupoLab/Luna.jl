@@ -19,7 +19,7 @@ module NonlinearRHS
 import FFTW
 import Cubature
 import LinearAlgebra: mul!
-import NumericalIntegration: integrate, SimpsonEven
+import NumericalIntegration: integrate, SimpsonEven, Trapezoidal
 import Luna: PhysData, Modes, Maths, Grid
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
@@ -330,33 +330,31 @@ function (t::TransModeAvg)(nl, Eω, z)
 end
 
 "Calculate energy from modal field E(t)"
-function energy_modal()
+function energy_modal(grid::Grid.RealGrid)
     function tfun(t, Et)
         Eta = Maths.hilbert(Et)
-        return abs(integrate(t, abs2.(Eta), SimpsonEven()))
+        return integrate(grid.t, abs2.(Eta), SimpsonEven())
     end
 
+    prefac = 2π/(grid.ω[end]^2)
     function ωfun(ω, Eω)
-        abs(integrate(ω, abs2.(Eω*sqrt(2π)/ω[end]), SimpsonEven()))
+        prefac*integrate(ω, abs2.(Eω), SimpsonEven())
     end
-    return energy_modal_t, ωfun
+    return tfun, ωfun
 end
 
-"Calculate energy from modal envelope field E(t)"
-function energy_env_modal()
+function energy_modal(grid::Grid.EnvGrid)
     function tfun(t, Et)
-        return abs(integrate(t, abs2.(Et), SimpsonEven()))
+        return integrate(grid.t, abs2.(Et), SimpsonEven())
     end
 
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    prefac = 2π*δω/(Δω^2)
     function ωfun(ω, Eω)
-        δω = ω[2] - ω[1]
-        Δω = length(ω)*δω
-        sum(abs2.(Eω*sqrt(2π)/Δω))*δω
+        prefac*sum(abs2.(Eω))
     end
-    return energy_modal_t, ωfun
+    return tfun, ωfun
 end
-
-energy_modal_t(t, Et::Array{T, N}) where T <: Real where N = energy_modal_t(t, Maths.hilbert(Et))
-energy_modal_t(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
 
 end
