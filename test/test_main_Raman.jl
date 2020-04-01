@@ -15,8 +15,9 @@ energy = 1e-6
 grid = Grid.RealGrid(200e-2, 800e-9, (180e-9, 3000e-9), 4e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun = NonlinearRHS.energy_mode_avg(m)
+energyfun = NonlinearRHS.energy_modal()
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -32,12 +33,12 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
+normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
