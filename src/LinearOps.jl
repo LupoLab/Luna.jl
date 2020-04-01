@@ -70,7 +70,7 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
 end
 
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
-    β1 = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
+    β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
