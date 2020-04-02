@@ -1,7 +1,9 @@
 module Stats
 import Luna: Maths, Grid, Modes, Utils
+import Luna.PhysData: wlfreq
 import FFTW
 import LinearAlgebra: mul!
+import Printf: @sprintf
 
 function ω0(grid)
     addstat! = let ω=grid.ω
@@ -26,6 +28,24 @@ function energy(grid, energyfun_ω, N)
     return addstat!
 end
 
+function energy_λ(grid, energyfun_ω, λlims; label=nothing)
+    λlims = collect(λlims)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    idxmin = findfirst(grid.ω .> ωmin)
+    idxmax = findlast(grid.ω .< ωmax)
+    ω = grid.ω[idxmin:idxmax]
+    λnm = 1e9.*λlims
+    if isnothing(label)
+        key = @sprintf("energy_%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
+    else
+        key = "energy_$label"
+    end
+    function addstat!(d, Eω, Et, z, dz)
+        d[key] = energyfun_ω(ω, Eω[idxmin:idxmax])
+    end
+    return addstat!
+end
+
 function peakpower(grid)
     function addstat!(d, Eω, Et, z, dz)
         d["peakpower"] = maximum(abs2.(Et))
@@ -38,6 +58,18 @@ function peakpower(grid, N)
         d["peakpower"] = [maximum(abs2.(Et[:, i])) for i=1:N]
     end
     return addstat!
+end
+
+function fwhm_t(grid)
+    function addstat!(d, Eω, Et, z, dz)
+        d["fwhm_t"] = Maths.fwhm(grid.t, abs2.(Et), :nearest)
+    end
+end
+
+function fwhm_t(grid, N)
+    function addstat!(d, Eω, Et, z, dz)
+        d["fwhm_t"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), :nearest) for i=1:N]
+    end
 end
 
 function electrondensity(Presp, dfun)

@@ -6,6 +6,7 @@ import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
+import Roots: fzero
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -59,6 +60,47 @@ end
 
 function rms_width(x::Vector, y; dim = 1)
     return sqrt.(moment(x, y, 2, dim = dim) - moment(x, y, 1, dim = dim).^2)
+end
+
+"""
+    fwhm(x, y [, method, baseline])
+
+Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
+
+`method` can be :spline or :nearest. If 'baseline' is true, the width is not taken at
+half the global maximum, but at half of the span of `y`.
+"""
+function fwhm(x, y, method=:spline, baseline=false)
+    if baseline
+        val = minimum(y) + 0.5*(maximum(y) - minimum(y))
+    else
+        val = 0.5*maximum(y)
+    end
+    if method in (:spline, :nearest)
+        xmax = x[argmax(y)]
+        left, right = try
+            left = maximum(x[(x .< xmax) .& (y .< val)])
+            right = minimum(x[(x .> xmax) .& (y .< val)])
+            (method == :nearest) && return abs(right - left)
+            left, right
+        catch
+            return NaN
+        end
+        #spline method
+        try
+            spl = CSpline(x, y)
+            lb = xmax - 2*(xmax-left)
+            ub = xmax + 2*(right-xmax)
+            f(x) = spl(x) - val
+            lfine = fzero(f, lb, xmax)
+            rfine = fzero(f, xmax, ub)
+            return abs(right - left)
+        catch
+            return NaN
+        end
+    else
+        error("Unknown FWHM method $method")
+    end
 end
 
 """

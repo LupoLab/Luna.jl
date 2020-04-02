@@ -53,7 +53,9 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω),
+                               Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
                                Stats.peakpower(grid),
+                               Stats.fwhm_t(grid),
                                Stats.electrondensity(plasma, densityfun),
                                Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
@@ -107,9 +109,21 @@ plt.ylabel("Energy (μJ)")
 
 ##
 plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["energy_RDW"].*1e6)
+plt.xlabel("Distance (cm)")
+plt.ylabel("RDW Energy (μJ)")
+
+##
+plt.figure()
 plt.plot(output["stats"]["z"].*1e2, output["stats"]["peakpower"].*1e-9)
 plt.xlabel("Distance (cm)")
 plt.ylabel("Peak power (GW)")
+
+##
+plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t"].*1e15)
+plt.xlabel("Distance (cm)")
+plt.ylabel("FWHM (fs)")
 
 ##
 plt.figure()
