@@ -222,7 +222,7 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-    hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
+    hilbert(x; dim=1) where T <: Real where N
 
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
@@ -241,7 +241,7 @@ end
 
 Pre-plan a Hilbert transform.
 
-Returns a closure `f(out, x)` which places the Hilbert transform of `x` in `out`.
+Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
 """
 function plan_hilbert(x; dim=1)
     loadFFTwisdom()
