@@ -24,6 +24,26 @@ function energy(grid, energyfun_ω, N)
     return addstat!
 end
 
+function peakpower(grid)
+    function addstat!(d, Eω, Et, z, dz)
+        d["peakpower"] = maximum(abs2.(Et))
+    end
+    return addstat!
+end
+
+function peakpower(grid, N)
+    function addstat!(d, Eω, Et, z, dz)
+        d["peakpower"] = [maximum(abs2.(Et[:, i])) for i=1:N]
+    end
+    return addstat!
+end
+
+function electrondensity(Presp, dfun)
+    function addstat!(d, Eω, Et, z, dz)
+        d["electrondensity"] = maximum(Presp.fraction)*dfun(z)
+    end
+end
+
 function density(dfun)
     function addstat!(d, Eω, Et, z, dz)
         d["density"] = dfun(z)

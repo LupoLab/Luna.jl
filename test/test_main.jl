@@ -36,8 +36,9 @@ densityfun(z) = dens0
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-            #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             plasma)
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -49,10 +50,16 @@ inputs = (in1, )
 Eω, transform, FT = Luna.setup(
     grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats(Stats.ω0(grid), Stats.energy(grid, energyfunω))
+statsfun = Stats.collect_stats(Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω),
+                               Stats.peakpower(grid),
+                               Stats.electrondensity(plasma, densityfun),
+                               Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+
 
 ω = grid.ω
 t = grid.t
@@ -92,9 +99,20 @@ plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)
 plt.plot(zout.*1e2, energyω.*1e6)
 plt.plot(output["stats"]["z"].*1e2, output["stats"]["energy"].*1e6)
-plt.xlabel("Distance [cm]")
-plt.ylabel("Energy [μJ]")
+plt.xlabel("Distance (cm)")
+plt.ylabel("Energy (μJ)")
 
 plt.figure()
-plt.plot(to*1e15, Eto[:, 121])
-plt.xlim(-20, 20)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["peakpower"].*1e-9)
+plt.xlabel("Distance (cm)")
+plt.ylabel("Peak power (GW)")
+
+plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["density"]*1e-6)
+plt.xlabel("Distance (cm)")
+plt.ylabel("Density (cm\$^{-3}\$)")
+
+plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["electrondensity"]*1e-6)
+plt.xlabel("Distance (cm)")
+plt.ylabel("Electron Density (cm\$^{-3}\$)")
