@@ -60,7 +60,7 @@ end
 """
     plan_analytic(grid, Eω)
 
-Plan a transform from the frequency-domain field Eω to the analytic time-domain field.
+Plan a transform from the frequency-domain field `Eω` to the analytic time-domain field.
 
 Returns both a buffer for the analytic field and a closure to do the transform.
 """
@@ -76,10 +76,8 @@ function plan_analytic(grid::Grid.EnvGrid, Eω)
 end
 
 function plan_analytic(grid::Grid.RealGrid, Eω)
-    Nt = length(grid.t)
-    Nω = length(grid.ω)
     s = collect(size(Eω))
-    s[1] = (Nω - 1)*2 # e.g. for 4097 rFFT samples, we need 8192 FFT samples
+    s[1] = (length(grid.ω) - 1)*2 # e.g. for 4097 rFFT samples, we need 8192 FFT samples
     Eta = Array{ComplexF64, ndims(Eω)}(undef, Tuple(s))
     Eωa = zero(Eta)
     idxhi = CartesianIndices(size(Eω)[2:end]) # index over all other dimensions
@@ -96,7 +94,7 @@ end
 """
     copyto_fft!(Eωa, Eω, idxhi)
 
-Copy the rFFT-sampled field Eω to the FFT-sampled buffer Eωa, ready for inverse FFT
+Copy the rFFT-sampled field `Eω` to the FFT-sampled buffer `Eωa`, ready for inverse FFT
 """
 function copyto_fft!(Eωa, Eω, idxhi)
     n = size(Eω, 1)-1 # rFFT has sample at +fs/2, but FFT does not (only at -fs/2)
@@ -107,6 +105,18 @@ function copyto_fft!(Eωa, Eω, idxhi)
     end
 end
 
+"""
+    collect_stats(grid, Eω, funcs...)
+
+Create a closure which collects statistics from the individual functions in `funcs`.
+
+Each function given will be called with the arguments `(d, Eω, Et, z, dz)`, where
+- d -> dictionary to store statistics values. each `func` should **mutate** this
+- Eω -> frequency-domain field
+- Et -> analytic time-domain field
+- z -> current propagation distance
+- z -> current stepsize
+"""
 function collect_stats(grid, Eω, funcs...)
     # make sure z and dz are recorded
     if !(zdz! in funcs)
