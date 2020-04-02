@@ -20,7 +20,9 @@ grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 # m = Capillary.MarcatilliMode(a, gas, pres)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
-aeff(z) = Modes.Aeff(m, z=z)
+aeff = let m=m
+    z -> Modes.Aeff(m, z=z)
+end
 
 energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
 
@@ -30,8 +32,9 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -56,13 +59,12 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
                                Stats.peakpower(grid),
                                Stats.fwhm_t(grid),
-                               Stats.electrondensity(plasma, densityfun),
+                               Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
-
-
+##
 ω = grid.ω
 t = grid.t
 

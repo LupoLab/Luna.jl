@@ -1,6 +1,6 @@
 module Stats
 import Luna: Maths, Grid, Modes, Utils
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, c, ε_0
 import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf
@@ -70,9 +70,29 @@ function fwhm_t(grid, N)
     end
 end
 
-function electrondensity(Presp, dfun)
+"""
+    electrondensity(grid, ionrate, dfun, aeff; oversampling=1)
+
+Create stats function to calculate the maximum electron density.
+
+If oversampling > 1, the field is oversampled before the calculation
+!!! warning
+    Oversampling can lead to a significant performance hit
+"""
+function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling=1)
+    to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
+    δt = to[2] - to[1]
+    function ionfrac!(out, Et)
+        ionrate!(out, Et)
+        Maths.cumtrapz!(out, δt) # in-place cumulative integration
+        @. out = 1 - exp(-out)
+    end
+    frac = similar(to)
     function addstat!(d, Eω, Et, z, dz)
-        d["electrondensity"] = maximum(Presp.fraction)*dfun(z)
+        # note: oversampling returns its arguments without any work done if factor=1
+        to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+        ionfrac!(frac, real(Eto)/sqrt(ε_0*c*aeff(z)/2))
+        d["electrondensity"] = maximum(frac)*dfun(z)
     end
 end
 
@@ -145,7 +165,7 @@ Each function given will be called with the arguments `(d, Eω, Et, z, dz)`, whe
 - Eω -> frequency-domain field
 - Et -> analytic time-domain field
 - z -> current propagation distance
-- z -> current stepsize
+- dz -> current stepsize
 """
 function collect_stats(grid, Eω, funcs...)
     # make sure z and dz are recorded
