@@ -63,12 +63,18 @@ function rms_width(x::Vector, y; dim = 1)
 end
 
 """
-    fwhm(x, y [, method, baseline])
+    fwhm(x, y [, method, baseline]; minmax=:min)
 
 Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 
-`method` can be :spline or :nearest. If 'baseline' is true, the width is not taken at
+`method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
+`:nearest` finds the closest values either side of the crossing point and interpolates linearly.
+
+If `baseline` is true, the width is not taken at
 half the global maximum, but at half of the span of `y`.
+
+`minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
+point of y.
 """
 function fwhm(x, y, method=:spline, baseline=false; minmax=:min)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
@@ -114,6 +120,19 @@ function fwhm(x, y, method=:spline, baseline=false; minmax=:min)
     end
 end
 
+"""
+    linterpx(x1, x2, y1, y2, val)
+
+Given two points on a straight line, `(x1, y1)` and `(x2, y2)`, calculate the value of `x` 
+at which this straight line intercepts with `val`.
+
+# Examples
+```jldoctest
+julia> x1 = 0; x2 = 1; y1 = 0; y2 = 2; # y = 2x
+julia> linterpx(x1, x2, y1, y2, 0.5)
+0.25
+```
+"""
 function linterpx(x1, x2, y1, y2, val)
     slope = (y2-y1)/(x2-x1)
     icpt = y1 - slope*x1
