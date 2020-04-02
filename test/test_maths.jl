@@ -118,7 +118,7 @@ end
 @testset "Spline" begin
     x = range(0.0, 2π, length=100)
     y = sin.(x)
-    spl = Maths.CSpline(x, y)
+    spl = Maths.CSpline(x, y);
     fslow(x0) = x0 <= spl.x[1] ? 2 :
                 x0 >= spl.x[end] ? length(spl.x) :
                 findfirst(x -> x>x0, spl.x)

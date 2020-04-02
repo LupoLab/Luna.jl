@@ -34,10 +34,13 @@ function energy_λ(grid, energyfun_ω, λlims; label=nothing, winwidth=0)
     window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
     if isnothing(label)
         λnm = 1e9.*λlims
-        key = @sprintf("energy_%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
-    else
-        key = "energy_$label"
+        label = @sprintf("%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
     end
+    energy_window(grid, energyfun_ω, window; label=label)
+end
+
+function energy_window(grid, energyfun_ω, window; label)
+    key = "energy_$label"
     function addstat!(d, Eω, Et, z, dz)
         d[key] = energyfun_ω(grid.ω, Eω.*window)
     end
@@ -60,7 +63,8 @@ end
 
 function fwhm_t(grid)
     function addstat!(d, Eω, Et, z, dz)
-        d["fwhm_t"] = Maths.fwhm(grid.t, abs2.(Et), :nearest)
+        d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), :nearest, minmax=:min)
+        d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), :nearest, minmax=:max)
     end
 end
 

@@ -70,17 +70,28 @@ Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 `method` can be :spline or :nearest. If 'baseline' is true, the width is not taken at
 half the global maximum, but at half of the span of `y`.
 """
-function fwhm(x, y, method=:spline, baseline=false)
+function fwhm(x, y, method=:spline, baseline=false; minmax=:min)
+    minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
         val = minimum(y) + 0.5*(maximum(y) - minimum(y))
     else
         val = 0.5*maximum(y)
     end
     if method in (:spline, :nearest)
-        xmax = x[argmax(y)]
+        maxidx = argmax(y)
+        xmax = x[maxidx]
         left, right = try
-            left = maximum(x[(x .< xmax) .& (y .< val)])
-            right = minimum(x[(x .> xmax) .& (y .< val)])
+            if minmax == :min
+                lefti = findlast((x .< xmax) .& (y .< val))
+                righti = findfirst((x .> xmax) .& (y .< val))
+                left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
+                right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
+            else
+                lefti = findfirst((x .< xmax) .& (y .> val))
+                righti = findlast((x .> xmax) .& (y .> val))
+                left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
+                right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
+            end
             (method == :nearest) && return abs(right - left)
             left, right
         catch
@@ -94,13 +105,19 @@ function fwhm(x, y, method=:spline, baseline=false)
             f(x) = spl(x) - val
             lfine = fzero(f, lb, xmax)
             rfine = fzero(f, xmax, ub)
-            return abs(right - left)
+            return abs(rfine - lfine)
         catch
             return NaN
         end
     else
         error("Unknown FWHM method $method")
     end
+end
+
+function linterpx(x1, x2, y1, y2, val)
+    slope = (y2-y1)/(x2-x1)
+    icpt = y1 - slope*x1
+    (val-icpt)/slope
 end
 
 """

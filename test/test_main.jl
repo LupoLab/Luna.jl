@@ -82,10 +82,7 @@ Itlog = log10.(Maths.normbymax(It))
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 Et = Maths.hilbert(Etout)
-energy = zeros(length(zout))
-for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii])
-end
+energy = [energyfun(t, Etout[:, ii]) for ii=1:size(Etout, 2)]
 energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
@@ -123,7 +120,8 @@ plt.ylabel("Peak power (GW)")
 
 ##
 plt.figure()
-plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t"].*1e15)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t_min"].*1e15)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t_max"].*1e15)
 plt.xlabel("Distance (cm)")
 plt.ylabel("FWHM (fs)")
 
