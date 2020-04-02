@@ -159,7 +159,7 @@ end
 """
     _cumtrapz!([out, ] y, x, idxlo, idxhi)
 
-Inner function for multi-dimensional in-place `cumtrapz!` - uses 1-D routine internally
+Inner function for multi-dimensional `cumtrapz!` - uses 1-D routine internally
 """
 function _cumtrapz!(y, x, idxlo, idxhi)
     for lo in idxlo
