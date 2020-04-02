@@ -16,6 +16,3 @@ hsdo = Raman.RamanRespNormedSingleDampedOscillator(1.0, 2π*100e12, 100e-15)
 
 # test integral of normalosed response function is 1
 @test isapprox(quadgk(hsdo, -1e-12, 2e-12)[1], 1.0, rtol=1e-8)
-
-# comparisons to fnfep (both could be wrong!)
-# TODO
