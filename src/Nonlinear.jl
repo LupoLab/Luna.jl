@@ -34,9 +34,11 @@ end
 
 "Kerr response for real field but without THG"
 function Kerr_field_nothg(γ3, n)
-    Kerr = let γ3 = γ3, E2 = E2
+    E = Array{Float64}(undef, n)
+    hilbert = Maths.plan_hilbert(E)
+    Kerr = let γ3 = γ3, hilbert = hilbert
         function Kerr(out, E)
-            out .+= 3/4*ε_0*γ3.*abs2.(Maths.hilbert(E)).*E
+            out .+= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
         end
     end
 end
@@ -135,23 +137,26 @@ end
 abstract type RamanPolar end
 
 "Raman polarisation response type for a carrier resolved field"
-struct RamanPolarField{Tω, Tt, FTt} <: RamanPolar
+struct RamanPolarField{Tω, Tt, Tv, FTt, HTt} <: RamanPolar
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
     Pω::Tω # buffer to hold the frequency domain polarisation
     E2::Tt # buffer to hold E^2
+    E2v::Tv # view into first half of E2
     P::Tt # buffer to hold the time domain polarisation
     Pout::Tt # buffer to hold the output portion of the time domain polarisation
     FT::FTt # Fourier transform plan
+    HT::HTt # Hilbert transform
     thg::Bool # do we include third harmonic generation
 end
 
 "Raman polarisation response type for an envelope"
-struct RamanPolarEnv{Tω, FTt} <: RamanPolar
+struct RamanPolarEnv{Tω, Tv, FTt} <: RamanPolar
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
     Pω::Tω # buffer to hold the frequency domain polarisation
     E2::Tω # buffer to hold E^2
+    E2v::Tv # view into first half of E2
     P::Tω # buffer to hold the time domain polarisation
     Pout::Tω # buffer to hold the output portion of the time domain polarisation
     FT::FTt # Fourier transform plan
@@ -193,9 +198,12 @@ function RamanPolarField(t, ht; thg=true)
     Utils.saveFFTwisdom()
     hω, Eω2, Pω = gethω!(h, t, ht, FT)
     E2 = similar(h)
+    E2v = view(E2, 1:length(t))
     P = similar(h)
     Pout = similar(t)
-    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, thg)
+    HT = Maths.plan_hilbert(Pout)
+    fill!(E2, 0.0)
+    RamanPolarField(hω, Eω2, Pω, E2, E2v, P, Pout, FT, HT, thg)
 end
 
 """
@@ -214,21 +222,22 @@ function RamanPolarEnv(t, ht)
     E2 = similar(hω)
     P = similar(hω)
     Pout = Array{ComplexF64,}(undef,size(t))
-    RamanPolarEnv(hω, Eω2, Pω, E2, P, Pout, FT)
+    E2v = view(E2, 1:length(t))
+    fill!(E2, 0.0)
+    RamanPolarEnv(hω, Eω2, Pω, E2, E2v, P, Pout, FT)
 end
 
 "Square the field or envelope"
-function sqr(R::RamanPolarField, E)
+function sqr!(R::RamanPolarField, E)
     if !R.thg
-        Ei = 3/4 .* abs2.(Maths.hilbert(E))
+        R.E2v .= 3/4 .* abs2.(R.HT(E))
     else
-        Ei = E.^2
+        R.E2v .= E.^2
     end
-    Ei
 end
 
-function sqr(R::RamanPolarEnv, E)
-    abs2.(E)
+function sqr!(R::RamanPolarEnv, E)
+    R.E2v .= abs2.(E)
 end
 
 "Calculate Raman polarisation for field/envelope Et"
@@ -247,9 +256,7 @@ function (R::RamanPolar)(out, Et)
 
     # square the field or envelope in first half
     # corresponding to the field/envelope grid size
-    R.E2[1:length(E)] .= sqr(R, E)
-    # pad the rest with 0
-    R.E2[length(E)+1:end] .= 0.0 
+    sqr!(R, E)
 
     # convolution by multiplication in frequency domain
     # the double grid gives us accurate convolution between the

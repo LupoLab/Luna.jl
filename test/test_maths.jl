@@ -49,9 +49,13 @@ end
     @test maximum(abs.(EtA)) ≈ 1
     @test all(isapprox.(real(EtA), Et, atol=1e-9))
 
-    hilbert! = Maths.plan_hilbert(Et)
+    hilbert! = Maths.plan_hilbert!(Et)
     out = complex(Et)
     hilbert!(out, Et)
+    @test all(out .≈ EtA)
+
+    hilbert = Maths.plan_hilbert(Et)
+    out = hilbert(Et)
     @test all(out .≈ EtA)
 
     t = collect(range(-10, stop=10, length=512))
