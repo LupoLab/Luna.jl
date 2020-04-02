@@ -269,6 +269,12 @@ end
 Pre-plan a Hilbert transform.
 
 Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` without allocation.
+
+!!! Warning
+    The closure returned always returns a reference to the same array buffer, which could lead
+    to unexpected results if it is called from more than one location. To avoid this the array
+    should either: (i) only be used in the same code segment; or (ii) only be used transiently
+    as part of a larger computation.
 """
 function plan_hilbert(x; dim=1)
     out = complex(x)
