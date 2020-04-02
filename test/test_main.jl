@@ -40,7 +40,7 @@ plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
 
-linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
+linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 

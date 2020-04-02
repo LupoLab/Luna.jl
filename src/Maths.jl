@@ -1,11 +1,10 @@
 module Maths
 import FiniteDifferences
-import LinearAlgebra
+import LinearAlgebra: Tridiagonal, mul!, ldiv!
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
-import LinearAlgebra: mul!, ldiv!
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 
 "Calculate derivative of function f(x) at value x using finite differences"
@@ -223,7 +222,7 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-    hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
+    hilbert(x; dim=1)
 
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
@@ -242,7 +241,7 @@ end
 
 Pre-plan a Hilbert transform.
 
-Returns a closure `f(out, x)` which places the Hilbert transform of `x` in `out`.
+Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
 """
 function plan_hilbert(x; dim=1)
     loadFFTwisdom()
@@ -413,7 +412,7 @@ function CSpline(x, y, ifun=nothing)
     d[1] = 2.0
     d[end] = 2.0
     dl = fill(1.0, length(y) - 1)
-    M = LinearAlgebra.Tridiagonal(dl, d, dl)
+    M = Tridiagonal(dl, d, dl)
     D = M \ R
     if ifun === nothing
         δx = x[2] - x[1]
