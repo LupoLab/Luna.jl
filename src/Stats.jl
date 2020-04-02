@@ -1,5 +1,7 @@
 module Stats
-import Luna: Maths, Grid, Modes
+import Luna: Maths, Grid, Modes, Utils
+import FFTW
+import LinearAlgebra: mul!
 
 function ω0(grid)
     addstat! = let ω=grid.ω
@@ -55,14 +57,66 @@ function zdz!(d, Eω, Et, z, dz)
     d["dz"] = dz
 end
 
-function collect_stats(funcs...)
+"""
+    plan_analytic(grid, Eω)
+
+Plan a transform from the frequency-domain field Eω to the analytic time-domain field.
+
+Returns both a buffer for the analytic field and a closure to do the transform.
+"""
+function plan_analytic(grid::Grid.EnvGrid, Eω)
+    Eta = similar(Eω)
+    Utils.loadFFTwisdom()
+    iFT = FFTW.plan_ifft(Eω, 1, flags=FFTW.PATIENT)
+    Utils.saveFFTwisdom()
+    function analytic!(Eta, Eω)
+        mul!(Eta, iFT, Eω) # for envelope fields, we only need to do the inverse transform
+    end
+    return Eta, analytic!
+end
+
+function plan_analytic(grid::Grid.RealGrid, Eω)
+    Nt = length(grid.t)
+    Nω = length(grid.ω)
+    s = collect(size(Eω))
+    s[1] = (Nω - 1)*2 # e.g. for 4097 rFFT samples, we need 8192 FFT samples
+    Eta = Array{ComplexF64, ndims(Eω)}(undef, Tuple(s))
+    Eωa = zero(Eta)
+    idxhi = CartesianIndices(size(Eω)[2:end]) # index over all other dimensions
+    Utils.loadFFTwisdom()
+    iFT = FFTW.plan_ifft(Eωa, 1, flags=FFTW.PATIENT)
+    Utils.saveFFTwisdom()
+    function analytic!(Eta, Eω)
+        copyto_fft!(Eωa, Eω, idxhi) # copy across to FFT-sampled buffer
+        mul!(Eta, iFT, Eωa) # now do the inverse transform
+    end
+    return Eta, analytic!
+end
+
+"""
+    copyto_fft!(Eωa, Eω, idxhi)
+
+Copy the rFFT-sampled field Eω to the FFT-sampled buffer Eωa, ready for inverse FFT
+"""
+function copyto_fft!(Eωa, Eω, idxhi)
+    n = size(Eω, 1)-1 # rFFT has sample at +fs/2, but FFT does not (only at -fs/2)
+    for idx in idxhi
+        for i in 1:n
+            Eωa[i, idx] = 2*Eω[i, idx]
+        end
+    end
+end
+
+function collect_stats(grid, Eω, funcs...)
     # make sure z and dz are recorded
     if !(zdz! in funcs)
         funcs = (funcs..., zdz!)
     end
+    Et, analytic! = plan_analytic(grid, Eω)
     f = let funcs=funcs
-        function collect_stats(Eω, Et, z, dz)
+        function collect_stats(Eω, z, dz)
             d = Dict{String, Any}()
+            analytic!(Et, Eω)
             for func in funcs
                 func(d, Eω, Et, z, dz)
             end

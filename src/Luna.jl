@@ -184,11 +184,7 @@ function run(Eω, grid,
         ldiv!(Et, FT, Eω)
         Et .*= grid.twin
         mul!(Eω, FT, Et)
-        if stats
-            output(Eω, Et, z, dz, interpolant)
-        else
-            output(Eω, z, dz, interpolant)
-        end
+        output(Eω, z, dz, interpolant)
     end
 
     output(Grid.to_dict(grid), group="grid")

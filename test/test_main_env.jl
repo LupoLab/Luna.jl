@@ -46,7 +46,11 @@ inputs = (in1, )
 Eω, transform, FT = Luna.setup(
     grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats(Stats.ω0(grid), Stats.energy(grid, energyfunω))
+statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω),
+                               Stats.peakpower(grid),
+                               Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)

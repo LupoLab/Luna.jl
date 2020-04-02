@@ -54,7 +54,7 @@ show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))"
 """
 function (o::MemoryOutput)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
-    # append_stats!(o, o.statsfun(y, t, dt))
+    append_stats!(o, o.statsfun(y, t, dt))
     while save
         s = size(o.data[o.yname])
         if s[end] < o.saved+1
@@ -68,11 +68,6 @@ function (o::MemoryOutput)(y, t, dt, yfun)
         o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
     end
-end
-
-function (o::MemoryOutput)(yk, yx, t, dt, yfun)
-    append_stats!(o, o.statsfun(yk, yx, t, dt))
-    o(yk, t, dt, yfun)
 end
 
 function append_stats!(o::MemoryOutput, d)

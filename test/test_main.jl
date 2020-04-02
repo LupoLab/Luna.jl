@@ -50,7 +50,8 @@ inputs = (in1, )
 Eω, transform, FT = Luna.setup(
     grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats(Stats.ω0(grid),
+statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
                                Stats.energy(grid, energyfunω),
                                Stats.peakpower(grid),
                                Stats.electrondensity(plasma, densityfun),
@@ -58,7 +59,6 @@ statsfun = Stats.collect_stats(Stats.ω0(grid),
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
-
 
 
 ω = grid.ω
@@ -85,16 +85,19 @@ end
 energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
+##
 plt.figure()
 plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
 plt.clim(-6, 0)
 plt.colorbar()
 
+##
 plt.figure()
 plt.pcolormesh(to*1e15, zout, transpose(It))
 plt.colorbar()
 plt.xlim(-30, 30)
 
+##
 plt.figure()
 plt.plot(zout.*1e2, energy.*1e6)
 plt.plot(zout.*1e2, energyω.*1e6)
@@ -102,16 +105,19 @@ plt.plot(output["stats"]["z"].*1e2, output["stats"]["energy"].*1e6)
 plt.xlabel("Distance (cm)")
 plt.ylabel("Energy (μJ)")
 
+##
 plt.figure()
 plt.plot(output["stats"]["z"].*1e2, output["stats"]["peakpower"].*1e-9)
 plt.xlabel("Distance (cm)")
 plt.ylabel("Peak power (GW)")
 
+##
 plt.figure()
 plt.plot(output["stats"]["z"].*1e2, output["stats"]["density"]*1e-6)
 plt.xlabel("Distance (cm)")
 plt.ylabel("Density (cm\$^{-3}\$)")
 
+##
 plt.figure()
 plt.plot(output["stats"]["z"].*1e2, output["stats"]["electrondensity"]*1e-6)
 plt.xlabel("Distance (cm)")
