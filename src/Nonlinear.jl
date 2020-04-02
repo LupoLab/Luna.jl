@@ -143,7 +143,7 @@ struct RamanPolarField{Tω, Tt, FTt} <: RamanPolar
     P::Tt # buffer to hold the time domain polarisation
     Pout::Tt # buffer to hold the output portion of the time domain polarisation
     FT::FTt # Fourier transform plan
-    nothg::Bool
+    thg::Bool # do we include third harmonic generation
 end
 
 "Raman polarisation response type for an envelope"
@@ -157,9 +157,13 @@ struct RamanPolarEnv{Tω, FTt} <: RamanPolar
     FT::FTt # Fourier transform plan
 end
 
-"Get `hω` for time grid `t` using response function `ht`
- and Fourier transform `FT`"
-function gethω!(t, h, ht, FT)
+"""
+    gethω!(h, t, ht, FT)
+
+Get `hω` for time grid `t` using response function `ht`
+and Fourier transform `FT`
+"""
+function gethω!(h, t, ht, FT)
     dt = t[2] - t[1]
     fill!(h, 0.0)
     # starting from positive t, fill only up to the first half of h
@@ -174,30 +178,39 @@ function gethω!(t, h, ht, FT)
     hω, Eω2, Pω
 end
 
-"Construct Raman polarisation response for a field on time grid `t`
- using response function `ht`."
-function RamanPolarField(t, ht; nothg=false)
+"""
+    RamanPolarField(t, ht; thg=true)
+
+Construct Raman polarisation response for a field on time grid `t`
+using response function `ht`. If `thg=false` then exclude the third
+harmonic generation component of the response.
+"""
+function RamanPolarField(t, ht; thg=true)
     h = zeros(length(t)*2) # note double grid size, see explanation below
     Utils.loadFFTwisdom()
     FT = FFTW.plan_rfft(h, 1, flags=FFTW.PATIENT)
     inv(FT)
     Utils.saveFFTwisdom()
-    hω, Eω2, Pω = gethω!(t, h, ht, FT)
+    hω, Eω2, Pω = gethω!(h, t, ht, FT)
     E2 = similar(h)
     P = similar(h)
     Pout = similar(t)
-    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, nothg)
+    RamanPolarField(hω, Eω2, Pω, E2, P, Pout, FT, thg)
 end
 
-"Construct Raman polarisation response for an envelope on time grid `t`
- using response function `ht`."
+"""
+    RamanPolarEnv(t, ht)
+
+Construct Raman polarisation response for an envelope on time grid `t`
+using response function `ht`.
+"""
 function RamanPolarEnv(t, ht)
     h = zeros(length(t)*2) # note double grid size, see explanation below
     Utils.loadFFTwisdom()
     FT = FFTW.plan_fft(h, 1, flags=FFTW.PATIENT)
     inv(FT)
     Utils.saveFFTwisdom()
-    hω, Eω2, Pω = gethω!(t, h, ht, FT)
+    hω, Eω2, Pω = gethω!(h, t, ht, FT)
     E2 = similar(hω)
     P = similar(hω)
     Pout = Array{ComplexF64,}(undef,size(t))
@@ -206,7 +219,7 @@ end
 
 "Square the field or envelope"
 function sqr(R::RamanPolarField, E)
-    if R.nothg
+    if !R.thg
         Ei = 3/4 .* abs2.(Maths.hilbert(E))
     else
         Ei = E.^2

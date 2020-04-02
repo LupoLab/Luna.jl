@@ -9,6 +9,8 @@ struct RamanRespSingleDampedOscillator
 end
 
 """
+    RamanRespNormedSingleDampedOscillator(K, Ω, τ2)
+
 Construct a simple normalised single damped oscillator model with scale factor `K`,
 angular frequency `Ω` and coherence time `τ2`.
 
@@ -30,6 +32,8 @@ function (R::RamanRespSingleDampedOscillator)(t)
 end
 
 """
+    RamanRespVibrational(Ωv, dαdQ, μ, τ2)
+
 Construct a molecular vibrational Raman model (single damped oscillator).
 
 # Arguments
@@ -61,6 +65,9 @@ struct RamanRespRotationalNonRigid
 end
 
 """
+    RamanRespRotationalNonRigid(B, Δα, τ2, qJodd, qJeven;
+                                D=0.0, minJ=0, maxJ=50, temp=roomtemp)
+
 Construct a rotational nonrigid rotor Raman model.
 
 # Arguments
@@ -122,11 +129,16 @@ function (R::RamanRespRotationalNonRigid)(t)
 end
 
 """
+    molecular_raman_response(rp; kwargs...)
+
 Get the Raman response function for the Raman parameters in named tuple `rp`.
 
-`minJ` and `maxJ` are the minimum and maximum rotational quantum numbers to consider for 
-a molecular gas.
-
+# Keyword Arguments
+- `rotation::Bool = true`: whether to include the rotational contribution
+- `vibration::Bool = true`: whether to include the vibrational contribution
+- `minJ::Integer = 0`: the minimum rotational quantum number to include
+- `maxJ::Integer = 50`: the maximum rotational quantum number to include
+- `temp::Real = roomtemp`: the temperature
 """
 function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
     if rotation
@@ -161,18 +173,16 @@ function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, max
 end
 
 """
+    raman_response(material; kwargs...)
+
 Get the Raman response function for `material`.
 
-`minJ` and `maxJ` are the minimum and maximum rotational quantum numbers to consider for 
-a molecular gas.
-
+For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(material; rotation=true, vibration=true,
-                        minJ=0, maxJ=50, temp=roomtemp)
+function raman_response(material; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
-        return molecular_raman_response(rp, rotation=rotation, vibration=vibration,
-                                         minJ=minJ, maxJ=maxJ, temp=temp)
+        return molecular_raman_response(rp, ; kwargs...)
     elseif rp.kind == :normedsdo
         return RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)
     else
