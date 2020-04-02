@@ -1,10 +1,11 @@
 module Maths
 import FiniteDifferences
-import LinearAlgebra
+import LinearAlgebra: Tridiagonal, mul!, ldiv!
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
+import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -221,14 +222,45 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-Hilbert transform - find analytic signal from real signal
+    hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
+
+Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
-    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    xf = FFTW.fft(x, dim)
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
-    xf[idxlo, 1:ceil(Int, size(xf, dim) / 2), idxhi] .= 0
-    return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
+    xf[idxlo, n1:n2, idxhi] .= 0
+    return 2 .* FFTW.ifft(xf, dim)
+end
+
+"""
+    plan_hilbert(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `f(out, x)` which places the Hilbert transform of `x` in `out`.
+"""
+function plan_hilbert(x; dim=1)
+    loadFFTwisdom()
+    FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    saveFFTwisdom()
+    xf = Array{ComplexF64}(undef, size(FT))
+    idxlo = CartesianIndices(size(xf)[1:dim - 1])
+    idxhi = CartesianIndices(size(xf)[dim + 1:end])
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
+    xc = complex(x)
+    function hilbert!(out, x)
+        copyto!(xc, x)
+        mul!(xf, FT, xc)
+        xf[idxlo, n1:n2, idxhi] .= 0
+        ldiv!(out, FT, xf)
+        out .*= 2
+    end
+    return hilbert!
 end
 
 """
@@ -380,7 +412,7 @@ function CSpline(x, y, ifun=nothing)
     d[1] = 2.0
     d[end] = 2.0
     dl = fill(1.0, length(y) - 1)
-    M = LinearAlgebra.Tridiagonal(dl, d, dl)
+    M = Tridiagonal(dl, d, dl)
     D = M \ R
     if ifun === nothing
         δx = x[2] - x[1]
