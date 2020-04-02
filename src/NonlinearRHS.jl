@@ -331,30 +331,30 @@ end
 
 "Calculate energy from modal field E(t)"
 function energy_modal(grid::Grid.RealGrid)
-    function tfun(t, Et)
+    function energy_t(t, Et)
         Eta = Maths.hilbert(Et)
         return integrate(grid.t, abs2.(Eta), SimpsonEven())
     end
 
     prefac = 2π/(grid.ω[end]^2)
-    function ωfun(ω, Eω)
+    function energy_ω(ω, Eω)
         prefac*integrate(ω, abs2.(Eω), SimpsonEven())
     end
-    return tfun, ωfun
+    return energy_t, energy_ω
 end
 
 function energy_modal(grid::Grid.EnvGrid)
-    function tfun(t, Et)
+    function energy_t(t, Et)
         return integrate(grid.t, abs2.(Et), SimpsonEven())
     end
 
     δω = grid.ω[2] - grid.ω[1]
     Δω = length(grid.ω)*δω
     prefac = 2π*δω/(Δω^2)
-    function ωfun(ω, Eω)
+    function energy_ω(ω, Eω)
         prefac*sum(abs2.(Eω))
     end
-    return tfun, ωfun
+    return energy_t, energy_ω
 end
 
 end
