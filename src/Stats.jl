@@ -28,20 +28,18 @@ function energy(grid, energyfun_ω, N)
     return addstat!
 end
 
-function energy_λ(grid, energyfun_ω, λlims; label=nothing)
+function energy_λ(grid, energyfun_ω, λlims; label=nothing, winwidth=0)
     λlims = collect(λlims)
     ωmin, ωmax = extrema(wlfreq.(λlims))
-    idxmin = findfirst(grid.ω .> ωmin)
-    idxmax = findlast(grid.ω .< ωmax)
-    ω = grid.ω[idxmin:idxmax]
-    λnm = 1e9.*λlims
+    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
     if isnothing(label)
+        λnm = 1e9.*λlims
         key = @sprintf("energy_%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
     else
         key = "energy_$label"
     end
     function addstat!(d, Eω, Et, z, dz)
-        d[key] = energyfun_ω(ω, Eω[idxmin:idxmax])
+        d[key] = energyfun_ω(grid.ω, Eω.*window)
     end
     return addstat!
 end
