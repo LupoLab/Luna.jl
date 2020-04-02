@@ -223,7 +223,9 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-Hilbert transform - find analytic signal from real signal
+    hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
+
+Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
     xf = FFTW.fft(x, dim)
@@ -235,6 +237,13 @@ function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
     return 2 .* FFTW.ifft(xf, dim)
 end
 
+"""
+    plan_hilbert(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `f(out, x)` which places the Hilbert transform of `x` in `out`.
+"""
 function plan_hilbert(x; dim=1)
     loadFFTwisdom()
     FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
