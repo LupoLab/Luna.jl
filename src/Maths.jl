@@ -6,6 +6,7 @@ import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 import LinearAlgebra: mul!, ldiv!
+import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -235,7 +236,9 @@ function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
 end
 
 function plan_hilbert(x; dim=1)
+    loadFFTwisdom()
     FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    saveFFTwisdom()
     xf = Array{ComplexF64}(undef, size(FT))
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
