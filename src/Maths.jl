@@ -222,7 +222,7 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-    hilbert(x; dim=1) where T <: Real where N
+    hilbert(x; dim=1)
 
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
