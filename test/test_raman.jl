@@ -1,5 +1,5 @@
 import Test: @test, @testset
-import Luna: Raman, Maths
+import Luna: Raman, Maths, Nonlinear
 import QuadGK: quadgk
 
 h = Raman.raman_response(:N2)
@@ -31,3 +31,37 @@ minvr_fnfep = -7.984860885772331e-49 # min of new vibrational response model in 
 @test isapprox(minimum(hr.(T)), minrr_fnfep, rtol=1e-2)
 @test isapprox(maximum(hv.(T)), maxvr_fnfep, rtol=1e-2)
 @test isapprox(minimum(hv.(T)), minvr_fnfep, rtol=1e-2)
+
+# test off by one errors
+# we use the analytic result that the heaviside function u(t) convolves
+# with itself to produce t*u(t)
+# we check that the Raman convolution reproduces that
+# note we also use the fact that (u(t))^2 = u(t)
+function ht(t)
+    if t >= 0.0
+        return 1.0
+    else
+        return 0.0
+    end
+end
+Nt = collect(range(0, length=2^14))
+t = @. (Nt - 2^14/2)*3.430944979182369e-16
+rp = Nonlinear.RamanPolarEnv(t, ht)
+E = ht.(t) .+ 0im
+out = similar(E)
+fill!(out, 0.0)
+rp(out, E)
+@test all(abs.(extrema(abs.(t.*E) .- abs.(out))) .< 1e-23)
+@test abs.(t.*E) ≈ abs.(out)
+rp = Nonlinear.RamanPolarField(t, ht)
+E = ht.(t)
+out = similar(E)
+fill!(out, 0.0)
+rp(out, E)
+@test all(abs.(extrema(abs.(t.*E) .- abs.(out))) .< 1e-23)
+@test abs.(t.*E) ≈ abs.(out)
+rp = Nonlinear.RamanPolarField(t, ht, thg=false)
+fill!(out, 0.0)
+rp(out, E)
+@test all(abs.(extrema(abs.(t.*E) .- abs.(out))) .< 1e-23)
+@test abs.(t.*E) ≈ abs.(out)

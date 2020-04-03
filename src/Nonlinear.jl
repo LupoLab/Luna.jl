@@ -173,7 +173,7 @@ function gethω!(h, t, ht, FT)
     fill!(h, 0.0)
     # starting from positive t, fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
-    start = findfirst(t .> 0.0)
+    start = findfirst(t .>= 0.0)
     for i = start:length(t)
         h[i] = ht(t[i])*dt
     end
@@ -268,7 +268,7 @@ function (R::RamanPolar)(out, Et)
     # calculate full polarisation, extracting only the valid
     # grid region
     for i = eachindex(E)
-        R.Pout[i] = E[i]*R.P[(n ÷ 2) + i] # TODO: possible off by 1 error
+        R.Pout[i] = E[i]*R.P[(n ÷ 2) - 1 + i]
     end
     
     # add to output in dimensions requested
