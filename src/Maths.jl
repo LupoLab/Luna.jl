@@ -375,13 +375,6 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
-"""
-    CSpline
-
-Simple cubic spline, see e.g.:
-http://mathworld.wolfram.com/CubicSpline.html
-Boundary conditions extrapolate with initially constant gradient
-"""
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
@@ -396,6 +389,10 @@ Broadcast.broadcastable(c::CSpline) = Ref(c)
     CSpline(x, y [, ifun])
 
 Construct a `CSpline` to interpolate the values `y` on axis `x`.
+
+see e.g. http://mathworld.wolfram.com/CubicSpline.html
+
+Boundary conditions extrapolate with initially constant gradient
 
 If given, `ifun(x0)` should return the index of the first element in x which is bigger
 than x0. Otherwise, it defaults two one of two options:
@@ -459,11 +456,6 @@ function (c::CSpline)(x0)
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
-"""
-    FastFinder
-
-Callable type which accelerates index finding for the case where inputs are usually in order.
-"""
 mutable struct FastFinder{xT, xeT}
     x::xT
     mi::xeT
