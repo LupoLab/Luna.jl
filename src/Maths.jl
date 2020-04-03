@@ -232,8 +232,9 @@ function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
     n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
-    xf[idxlo, n1:n2, idxhi] .= 0
-    return 2 .* FFTW.ifft(xf, dim)
+    xf[idxlo, 2:n1, idxhi] .*= 2
+    xf[idxlo, (n1+1):n2, idxhi] .= 0
+    return FFTW.ifft(xf, dim)
 end
 
 """
@@ -256,9 +257,9 @@ function plan_hilbert(x; dim=1)
     function hilbert!(out, x)
         copyto!(xc, x)
         mul!(xf, FT, xc)
-        xf[idxlo, n1:n2, idxhi] .= 0
+        xf[idxlo, 2:n1, idxhi] .*= 2
+        xf[idxlo, (n1+1):n2, idxhi] .= 0
         ldiv!(out, FT, xf)
-        out .*= 2
     end
     return hilbert!
 end
