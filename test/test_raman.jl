@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_broken
-import Luna: Raman, Maths, Nonlinear
+import Luna: Raman, Maths, Nonlinear, PhysData
 import QuadGK: quadgk
+import FFTW
 
 h = Raman.raman_response(:N2)
 hv = Raman.raman_response(:N2, rotation=false)
@@ -51,8 +52,8 @@ E = ht.(t) .+ 0im
 out = similar(E)
 fill!(out, 0.0)
 rp(out, E)
-@test all(abs.(extrema(3/4 .* abs.(t.*E) .- abs.(out))) .< 1e-23)
-@test 3/4 .* abs.(t.*E) ≈ abs.(out)
+@test all(abs.(extrema(1/2 .* abs.(t.*E) .- abs.(out))) .< 1e-23)
+@test 1/2 .* abs.(t.*E) ≈ abs.(out)
 rp = Nonlinear.RamanPolarField(t, ht)
 E = ht.(t)
 out = similar(E)
@@ -60,8 +61,36 @@ fill!(out, 0.0)
 rp(out, E)
 @test all(abs.(extrema(abs.(t.*E) .- abs.(out))) .< 1e-23)
 @test abs.(t.*E) ≈ abs.(out)
+
+# test full / nothg / envelope for a realistic response function
+Nt = collect(range(0, length=2^16))
+t = @. (Nt - 2^16/2)*3.430944979182369e-16/4
+E = exp.(-0.5.*(t./10e-15).^2).*cos.(2π*PhysData.c/800e-9.*t)
+function hts(t)
+    if t >= 0.0
+        return sin(t*2π*100e12)
+    else
+        return 0.0
+    end
+end
+rp = Nonlinear.RamanPolarField(t, ht)
+outf = similar(E)
+fill!(outf, 0.0)
+rp(outf, E)
 rp = Nonlinear.RamanPolarField(t, ht, thg=false)
-fill!(out, 0.0)
-rp(out, E)
-@test_broken all(abs.(extrema(3/4 .* abs.(t.*E) .- abs.(out))) .< 1e-23)
-@test_broken 3/4 .* abs.(t.*E) ≈ abs.(out)
+outn = similar(E)
+fill!(outn, 0.0)
+rp(outn, E)
+outfω = FFTW.rfft(outf)
+outnω = FFTW.rfft(outn)
+# we compare only low (non THG) frequencies
+# note that these are not expected to be exact, because we have dropped not just the THG term
+# but also cross terms between positive and negative frequencies
+@test all(extrema(abs.(outfω[1800:2400]) .- abs.(outnω[1800:2400]))./maximum(abs.(outfω[1800:2400])) .< 1e-2)
+Eenv = Maths.hilbert(E)
+oute = similar(Eenv)
+fill!(oute, 0.0)
+rp = Nonlinear.RamanPolarEnv(t, ht)
+rp(oute, Eenv)
+outeω = FFTW.rfft(real.(oute))
+@test isapprox(maximum(abs.(outeω)), maximum(abs.(outfω)), rtol=1e-2)

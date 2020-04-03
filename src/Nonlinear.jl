@@ -169,6 +169,11 @@ Get `hω` for time grid `t` using response function `ht`
 and Fourier transform `FT`
 """
 function gethω!(h, t, ht, FT)
+    # possible improvements to this code:
+    # TODO: use a smaller factor than 2 to expand the convolution grid (for higher performance)
+    #       to do this needs careful checking
+    # TODO: use a temporal window function to smooth frequency response for response functions
+    #       which do not decay (common in gases, e.g. H2, which never decays on our usual grids)
     dt = t[2] - t[1]
     fill!(h, 0.0)
     # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
@@ -233,14 +238,16 @@ end
 "Square the field or envelope"
 function sqr!(R::RamanPolarField, E)
     if !R.thg
-        R.E2v .= 3/4 .* abs2.(R.HT(E))
+        # see documentation for factor of 1/2 here
+        R.E2v .= 1/2 .* abs2.(R.HT(E))
     else
         R.E2v .= E.^2
     end
 end
 
 function sqr!(R::RamanPolarEnv, E)
-    R.E2v .= 3/4 .* abs2.(E)
+    # see documentation for factor of 1/2 here
+    R.E2v .= 1/2 .* abs2.(E)
 end
 
 "Calculate Raman polarisation for field/envelope Et"
