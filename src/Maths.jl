@@ -375,6 +375,13 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
+"""
+    CSpline
+
+Simple cubic spline, see e.g.:
+http://mathworld.wolfram.com/CubicSpline.html Boundary        
+conditions extrapolate with initially constant gradient
+"""
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
@@ -389,10 +396,6 @@ Broadcast.broadcastable(c::CSpline) = Ref(c)
     CSpline(x, y [, ifun])
 
 Construct a `CSpline` to interpolate the values `y` on axis `x`.
-
-see e.g. http://mathworld.wolfram.com/CubicSpline.html
-
-Boundary conditions extrapolate with initially constant gradient
 
 If given, `ifun(x0)` should return the index of the first element in x which is bigger
 than x0. Otherwise, it defaults two one of two options:
@@ -456,6 +459,11 @@ function (c::CSpline)(x0)
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
+"""
+    FastFinder
+
+Callable type which accelerates index finding for the case where inputs are usually in order.
+"""
 mutable struct FastFinder{xT, xeT}
     x::xT
     mi::xeT
@@ -468,22 +476,24 @@ end
 """
     FastFinder(x)
 
-Construct a `FastFinder` to find indices in `x`.
+Construct a `FastFinder` to find indices in the array `x`.
 
 !!! warning
     `x` must be sorted in ascending order for `FastFinder` to work.
 """
-FastFinder(x) = FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
+function FastFinder(x::AbstractArray)
+    FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
+end
 
 """
     (f::FastFinder)(x0)
 
-Calling a `FastFinder` `f` with a value `x0` finds the first index in `f.x` which is larger
-than `x0`. It does this in a similar way to `findfirst`, but it starts at the index which
-was last used. If the new value `x0` is close to the previous `x0`, this is much faster
-than `findfirst`.
+Find the first index in `f.x` which is larger than `x0`.
+
+This is similar to [`findfirst`](@ref), but it starts at the index which was last used.
+If the new value `x0` is close to the previous `x0`, this is much faster than `findfirst`.
 """
-function (f::FastFinder)(x0)
+function (f::FastFinder)(x0::Number)
     if x0 == f.xlast # same value as before - no work to be done
         return f.ilast
     elseif x0 < f.xlast # smaller than previous value - go through array backwards
