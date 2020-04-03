@@ -237,7 +237,7 @@ function sqr!(R::RamanPolarField, E)
 end
 
 function sqr!(R::RamanPolarEnv, E)
-    R.E2v .= abs2.(E)
+    R.E2v .= 3/4 .* abs2.(E)
 end
 
 "Calculate Raman polarisation for field/envelope Et"
