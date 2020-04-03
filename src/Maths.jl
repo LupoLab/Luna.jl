@@ -427,10 +427,11 @@ function CSpline(x, y, ifun=nothing)
             ifun = ffast
         else
             # x is not uniformly spaced - use brute-force lookup
-            fslow(x0) = x0 <= x[1] ? 2 :
-                        x0 >= x[end] ? length(x) :
-                        findfirst(x -> x>x0, x)
-            ifun = fslow
+            ifun = let x=x, N=length(x)
+                fslow(x0) = x0 <= x[1] ? 2 :
+                            x0 >= x[end] ? length(x) :
+                            findfirst(x -> x>x0, x)
+            end
         end
     end
     CSpline(x, y, D, ifun)
