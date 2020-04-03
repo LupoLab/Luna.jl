@@ -427,15 +427,47 @@ function CSpline(x, y, ifun=nothing)
             ifun = ffast
         else
             # x is not uniformly spaced - use brute-force lookup
-            ifun = let x=x, N=length(x)
-                fslow(x0) = x0 <= x[1] ? 2 :
-                            x0 >= x[end] ? length(x) :
-                            findfirst(x -> x>x0, x)
-            end
+            ifun = FastFinder(x)
         end
     end
     CSpline(x, y, D, ifun)
 end
+
+mutable struct FastFinder{xT, xeT}
+    x::xT
+    mi::xeT
+    ma::xeT
+    N::Int
+    ilast::Int
+    xlast::xeT
+end
+
+FastFinder(x) = FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
+
+function (f::FastFinder)(x0)
+    if x0 == f.xlast
+        return f.ilast
+    elseif x0 < f.xlast
+        f.xlast = x0
+        for i = f.ilast:-1:1
+            if f.x[i] < x0
+                f.ilast = i+1
+                return i+1
+            end
+        end
+        return 2
+    else
+        f.xlast = x0
+        for i = f.ilast:f.N
+            if f.x[i] > x0
+                f.ilast = i
+                return i
+            end
+        end
+        return f.N
+    end
+end
+
 
 function (c::CSpline)(x0)
     i = c.ifun(x0)
