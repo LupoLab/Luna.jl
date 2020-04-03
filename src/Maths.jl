@@ -375,13 +375,13 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
-"
-Simple cubic spline
+"""
+    CSpline
+
+Simple cubic spline, see e.g.:
 http://mathworld.wolfram.com/CubicSpline.html
 Boundary conditions extrapolate with initially constant gradient
-
-If given, ifun(x0) should return the index of the first element in x which is bigger than x0.
-"
+"""
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
@@ -392,6 +392,16 @@ end
 # make  broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
+"""
+    CSpline(x, y [, ifun])
+
+Construct a `CSpline` to interpolate the values `y` on axis `x`.
+
+If given, `ifun(x0)` should return the index of the first element in x which is bigger
+than x0. Otherwise, it defaults two one of two options:
+1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
+2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
+"""
 function CSpline(x, y, ifun=nothing)
     if any(diff(x) .== 0)
         error("entries in x must be unique")
@@ -433,44 +443,11 @@ function CSpline(x, y, ifun=nothing)
     CSpline(x, y, D, ifun)
 end
 
-mutable struct FastFinder{xT, xeT}
-    x::xT
-    mi::xeT
-    ma::xeT
-    N::Int
-    ilast::Int
-    xlast::xeT
-end
+"""
+    (c::CSpline)(x0)
 
-FastFinder(x) = FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
-
-function (f::FastFinder)(x0)
-    if x0 == f.xlast
-        return f.ilast
-    elseif x0 < f.xlast
-        f.xlast = x0
-        for i = f.ilast:-1:1
-            if f.x[i] < x0
-                f.ilast = i+1
-                return i+1
-            end
-        end
-        f.ilast = 1
-        return 2
-    else
-        f.xlast = x0
-        for i = f.ilast:f.N
-            if f.x[i] > x0
-                f.ilast = i
-                return i
-            end
-        end
-        f.ilast = f.N
-        return f.N
-    end
-end
-
-
+Evaluate the `CSpline` at coordinate `x0`
+"""
 function (c::CSpline)(x0)
     i = c.ifun(x0)
     x0 == c.x[i] && return c.y[i]
@@ -480,6 +457,66 @@ function (c::CSpline)(x0)
         + c.D[i - 1]*t 
         + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
+end
+
+"""
+    FastFinder
+
+Callable type which accelerates index finding for the case where inputs are usually in order.
+"""
+mutable struct FastFinder{xT, xeT}
+    x::xT
+    mi::xeT
+    ma::xeT
+    N::Int
+    ilast::Int
+    xlast::xeT
+end
+
+"""
+    FastFinder(x)
+
+Construct a `FastFinder` to find indices in `x`.
+
+!!! warning
+    `x` must be sorted in ascending order for `FastFinder` to work.
+"""
+FastFinder(x) = FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
+
+"""
+    (f::FastFinder)(x0)
+
+Calling a `FastFinder` `f` with a value `x0` finds the first index in `f.x` which is larger
+than `x0`. It does this in a similar way to `findfirst`, but it starts at the index which
+was last used. If the new value `x0` is close to the previous `x0`, this is much faster
+than `findfirst`.
+"""
+function (f::FastFinder)(x0)
+    if x0 == f.xlast # same value as before - no work to be done
+        return f.ilast
+    elseif x0 < f.xlast # smaller than previous value - go through array backwards
+        f.xlast = x0
+        for i = f.ilast:-1:1
+            if f.x[i] < x0
+                f.ilast = i+1 # found last idx where x < x0 -> at i+1, x > x0
+                return i+1
+            end
+        end
+        # we only get to this point if we haven't found x0 - return the lower bound (2)
+        f.ilast = 1
+        return 2
+    else # larger than previous value - just pick up where we left off
+        f.xlast = x0
+        for i = f.ilast:f.N
+            if f.x[i] > x0
+                f.ilast = i
+                return i
+            end
+        end
+        # we only get to this point if we haven't found x0 - return the upper bound (N)
+        f.ilast = f.N
+        return f.N
+    end
 end
 
 end
