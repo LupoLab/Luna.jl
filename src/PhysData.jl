@@ -212,24 +212,25 @@ function ref_index(material::Symbol, λ, P=1, T=roomtemp)
 end
 
 "Get function which returns refractive index."
-function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
+function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=false)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + χ1(λ))
     elseif material in glass
-        nglass = let sell = sellmeier_glass(material)
-            function nglass(λ)
-                return sell(λ.*1e6)
-            end
+        if lookup
+            spl = lookup_glass(material)
+            return λ -> spl(λ*1e6)
+        else
+            sell = sellmeier_glass(material)
+            return λ -> sell(λ*1e6)
         end
-        return nglass
     elseif material in metal
-        nmetal = let lookup = lookup_metal(material)
+        nmetal = let spl = lookup_metal(material)
             function nmetal(λ)
                 if any(λ .> 1.0)
                     throw(DomainError(λ, "Wavelength must be given in metres"))
                 end
-                return lookup(λ.*1e6)
+                return spl(λ.*1e6)
             end
         end
         return nmetal
@@ -239,16 +240,16 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
-    n = ref_index_fun(material, P, T)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=false)
+    n = ref_index_fun(material, P, T; lookup=lookup)
     β(ω) = @. ω/c * real(n(2π*c/ω))
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
     return βn
 end
 
 "Get dispersion."
-function dispersion(order, material::Symbol, λ, P=1, T=roomtemp)
-    return dispersion_func(order, material, P, T).(λ)
+function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=false)
+    return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
 "Get reflection coefficients"
@@ -313,10 +314,6 @@ function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     ρ = density.(gas, P, T)
     Maths.CSpline(P, ρ)
 end
-
-dsplines = Dict([(gi, densityspline(gi, Pmax=50, N=2^14)) for gi in gas])
-
-fastdensity(gas::Symbol, P) = dsplines[gas](P)
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
