@@ -4,6 +4,8 @@ import Cubature: hcubature
 import LinearAlgebra: dot, norm
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
+import Memoize: @memoize
+import LinearAlgebra: mul!
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
@@ -17,13 +19,17 @@ function dimlimits(m::AbstractMode; z=0.0)
     error("abstract method called")
 end
 
-"Create function of coords that returns (xs) -> (Ex, Ey)"
-function field(m::AbstractMode; z=0.0)
+"Get the field components `(Ex, Ey)`` at position `xs`, `z`"
+function field(m::AbstractMode, xs; z=0.0)
     error("abstract method called")
 end
 
+"Create function of coords that returns (xs) -> (Ex, Ey)"
+field(m::AbstractMode; z=0) =  (xs) -> field(m, xs, z=z)
+
 "Get mode normalization constant"
-function N(m::AbstractMode; z=0.0)
+# we memoize this so it is only called once for each mode and z position
+@memoize function N(m::AbstractMode; z=0.0)
     f = field(m, z=z)
     dl = dimlimits(m, z=z)
     function Nfunc(xs)
@@ -35,26 +41,21 @@ function N(m::AbstractMode; z=0.0)
     0.5*abs(val)
 end
 
-"Create function that returns normalised (xs) -> |E|"
-function absE(m::AbstractMode; z=0.0) where {M <: AbstractMode}
-    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
-        function func(xs)
-            norm(f(xs) ./ sN)
-        end
-    end
-end
+"Get the normalised field components at position `xs`, `z`"
+Exy(m::AbstractMode, xs; z=0.0) = field(m, xs, z=z) ./ sqrt(N(m, z=z))
 
 "Create function that returns normalised (xs) -> (Ex, Ey)"
-function Exy(m::AbstractMode; z=0.0)
-    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
-        function func(xs)
-            f(xs) ./ sN
-        end
-    end
-end
+Exy(m::AbstractMode; z=0.0) = (xs) -> Exy(m, xs, z=z)
+
+"Get the field norm `|E|`` at position `xs`, `z`"
+absE(m::AbstractMode, xs; z=0.0) = norm(Exy(m, xs, z=z))
+
+"Create function that returns normalised (xs) -> |E|"
+absE(m::AbstractMode; z=0.0) = (xs) -> absE(m, xs, z=z)
 
 "Get effective area of mode"
-function Aeff(m::AbstractMode; z=0.0)
+# we memoize this so it is only called once for each mode and z position
+@memoize function Aeff(m::AbstractMode; z=0.0)
     em = absE(m, z=z)
     dl = dimlimits(m, z=z)
     # Numerator
@@ -107,12 +108,12 @@ function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 
-function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9)
+function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
     ubω = 2π*c/ub
     lbω = 2π*c/lb
     ω0 = missing
     try
-        ω0 = fzero(dispersion_func(m, 2), lbω, ubω)
+        ω0 = fzero(dispersion_func(m, 2, z=z), lbω, ubω)
     catch
     end
     return 2π*c/ω0
@@ -183,4 +184,89 @@ macro arbitrary(exprs...)
         $Tname()
     end
 end
+
+function indices(components)
+    if components == :xy
+        return 1:2
+    elseif components == :x
+        return 1
+    elseif components == :y
+        return 2
+    else
+        error("components $components not recognised")
+    end
+end
+
+"""
+    Em_to_Erω!(Erω, Emω, ms, xs; z=0.0, components=:xy)
+
+Convert from modal fields to real space.
+
+# Arguments
+- `Erω::Array{ComplexF64}`: a dimension nω x 2 array where the real space frequency domain
+                            field will be written to
+- `Emω::Array{ComplexF64}`: a dimension nω x nmodes array containing the frequency domain
+                            modal fields
+- `ms::Tuple`: a tuple of modes
+- `xs:Tuple`: the transverse coordinates, `x,y` for cartesian, `r,θ` for polar
+- `z::Real`: the axial position
+- `components::Symbol`: which polarisation components to return: :x, :y, :xy
+"""
+function Em_to_Erω!(Erω, Emω, ms, xs; z=0.0, components=:xy)
+    # we assume all dimlimits are the same
+    dimlims = dimlimits(ms[1])
+    # handle limits
+    if dimlimits[1] == :cartesian
+        # for the cartesian case
+        # if either coordinate is outside dimlimits we return 0
+        if xs[1] <= dimlimits[2][1] || xs[1] >= dimlimits[3][1]
+            fill!(Erω, 0.0)
+            return
+        elseif xs[2] <= dimlimits[2][2] || xs[2] >= dimlimits[3][2]
+            fill!(Erω, 0.0)
+            return
+        end
+    elseif dimlimits[1] == :polar
+        # for the polar case
+        # if the r coordinate is negative we error
+        if xs[1] < 0.0
+            error("polar coordinate r cannot be smaller than 0")
+        # if r is greater or equal to the boundary we return 0
+        elseif xs[1] >= dimlimits[3][1]
+            fill!(Erω, 0.0)
+            return
+        end
+    end
+    # get the field at x1, x2
+    nmodes = size(Emω,2)
+    if nmodes != length(ms)
+        error("the number of modes must match the number of modal fields")
+    end
+    idx = indices(components)
+    npol = length(idx)
+    if npol != size(Erω,2)
+        error("the number of output fields must be $npol for $components polarisation")
+    end
+    Ems = Array{Float64,2}(undef, nmodes, npol)
+    for i = 1:nmodes
+        Ems[i,:] .= Exy(ms[i], xs, z=z)[idx] # field matrix (nmodes x npol)
+    end
+    mul!(Erω, Emω, Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
+end
+
+"""
+    Em_to_Eω(Emω, ms, xs; z=0.0, components=:xy)
+
+Convert from modal fields to real space. Returns Erω::Array{ComplexF64,2} an nω x npol array
+containing the real space frequency domain field.
+
+See `Em_to_Erω!`(@ref) for argument descriptions.
+"""
+function Em_to_Erω(Emω, ms, xs; z=0.0, components=:xy)
+
+    Erω = Array{ComplexF64,2}(undef, size(Emω,1), length(indices(components)))
+    Em_to_Erω!(Erω, Emω, ms, xs, z=z, components=components)
+    Erω
+end
+
 end
