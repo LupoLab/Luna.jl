@@ -1,7 +1,6 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
 
-@testset "Maths" begin
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
 
@@ -112,6 +111,7 @@ end
 end
 
 @testset "Spline" begin
+    import Random: shuffle
     x = range(0.0, 2π, length=100)
     y = sin.(x)
     spl = Maths.CSpline(x, y)
@@ -125,9 +125,13 @@ end
     idcs_slow = fslow.(x2)
     idcs_ff = ff.(x2)
     idcs_ff_bw = ff.(x2[end:-1:1])
-    @test all(idcs .== idcs_slow)
-    @test all(idcs_ff .== idcs_slow)
-    @test all(idcs_ff_bw .== idcs_slow[end:-1:1])
+    @test idcs == idcs_slow
+    @test idcs_ff == idcs_slow
+    @test idcs_ff_bw == idcs_slow[end:-1:1]
+    for i = 1:10
+        x2r = shuffle(x2)
+        @test ff.(x2r) == fslow.(x2r)
+    end
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
@@ -147,5 +151,4 @@ end
     x = Maths.randgauss(1, 0.5, (1000, 1000), seed=1234)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
-end
 end

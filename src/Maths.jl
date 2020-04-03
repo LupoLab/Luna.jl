@@ -455,6 +455,7 @@ function (f::FastFinder)(x0)
                 return i+1
             end
         end
+        f.ilast = 1
         return 2
     else
         f.xlast = x0
@@ -464,6 +465,7 @@ function (f::FastFinder)(x0)
                 return i
             end
         end
+        f.ilast = f.N
         return f.N
     end
 end
