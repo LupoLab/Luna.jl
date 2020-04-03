@@ -171,11 +171,14 @@ and Fourier transform `FT`
 function gethω!(h, t, ht, FT)
     dt = t[2] - t[1]
     fill!(h, 0.0)
+    # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
+    # the ifft already scales by 1/n = dt*df, so we need an additional dt
+    scale = dt
     # starting from positive t, fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
     start = findfirst(t .>= 0.0)
     for i = start:length(t)
-        h[i] = ht(t[i])*dt
+        h[i] = ht(t[i])*scale
     end
     hω = FT * h
     Eω2 = similar(hω)
