@@ -36,8 +36,10 @@ const roomtemp = 294
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 "Avogadro constant"
 const N_A = ustrip(CODATA2014.N_A)
+"Amagat (Loschmidt constant)"
+const amg = atm/(k_B*273.15)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -45,7 +47,9 @@ const gas_str = Dict(
     :Ne => "Neon",
     :Kr => "Krypton",
     :Xe => "Xenon",
-    :Air => "Air"
+    :Air => "Air",
+    :N2 => "Nitrogen",
+    :H2 => "Hydrogen"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 const metal = (:Ag,:Al)
@@ -63,10 +67,20 @@ function γ_Börzsönyi(B1, C1, B2, C2)
     return μm -> @. (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
+"Adapted Sellmeier expansion for helium made to fit high frequency data
+Phys. Rev. A 92, 033821 (2015)"
 function γ_JCT(B1, C1, B2, C2, B3, C3)
     return @. μm -> @. (B1 * μm^2 / (μm^2 - C1)
                         + B2 * μm^2 / (μm^2 - C2)
                         + B3 * μm^2 / (μm^2 - C3))
+end
+
+"
+Sellmeier expansion for linear susceptibility from
+J. Opt. Soc. Am. 67, 1550 (1977)
+"
+function γ_Peck(B1, C1, B2, C2, dens)
+    return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
@@ -117,6 +131,18 @@ function sellmeier_gas(material::Symbol)
         B2 = 41807.57e-8
         C2 = 7.434e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :N2
+        B1 = 39209.95e-8
+        C1 = 1146.24e-6
+        B2 = 18806.48e-8
+        C2 = 13.476e-3
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :H2
+        B1 = 14895.6e-6
+        C1 = 180.7
+        B2 = 4903.7e-6
+        C2 = 92.0
+        return γ_Peck(B1, C1, B2, C2, dens)
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -193,6 +219,12 @@ function χ1_fun(gas::Symbol)
     return f
 end
 
+function χ1_fun(gas::Symbol, P, T)
+    γ = sellmeier_gas(gas)
+    dens = density(gas, P, T)
+    return λ -> γ(λ.*1e6)*dens
+end
+
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
 Gases only."
 function χ1(gas::Symbol, λ, P=1, T=roomtemp)
@@ -208,13 +240,8 @@ end
 "Get function which returns refractive index."
 function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
     if material in gas
-        χ1 = χ1_fun(material)
-        ngas = let χ1=χ1, P=P, T=T
-            function ngas(λ)
-                return sqrt(1 + χ1(λ, P, T))
-            end
-        end
-        return ngas
+        χ1 = χ1_fun(material, P, T)
+        return λ -> sqrt(1 + χ1(λ))
     elseif material in glass
         nglass = let sell = sellmeier_glass(material)
             function nglass(λ)
@@ -273,8 +300,22 @@ References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
+[4] Phys. Rev. A, vol. 42, 2578 (1990)
+
+TODO: More Bishop/Shelton; Wahlstrand updated values.
+
 "
-function γ3_gas(material::Symbol; source=:Lehmeier)
+function γ3_gas(material::Symbol; source=nothing)
+    if source == nothing
+        if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
+            source = :Lehmeier
+        elseif material in (:H2,)
+            source = :Shelton
+        else
+            error("no default γ3 source for material: $material")
+        end
+    end
+    dens = density(material, 1, 273.15)
     if source == :Lehmeier
         # Table 1 in [3]
         if material in (:He, :HeJ)
@@ -287,10 +328,21 @@ function γ3_gas(material::Symbol; source=:Lehmeier)
             fac = 64.0
         elseif material == :Xe
             fac = 188.2
+        elseif material == :N2
+            fac = 21.1
+        else
+            throw(DomainError(material, "Lehmeier model does not include $material"))
         end
-        return 4*fac*3.43e-28 / density(material, 1, 273.15)
+        return 4*fac*3.43e-28 / dens
+    elseif source == :Shelton
+        # ref [4]
+        if material == :H2
+            return 2.2060999099841444e-26 / dens
+        else
+            throw(DomainError(material, "Shelton model does not include $material"))
+        end
     else
-        error("TODO: Bishop/Shelton values for γ3")
+        throw(DomainError(source, "Unkown γ3 model $source"))
     end
 end
 
@@ -330,6 +382,10 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.4458
     elseif material == :H
         Ip = 0.5
+    elseif material == :N2
+        Ip = 0.5726
+    elseif material == :H2
+        Ip = 0.5669
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -355,6 +411,8 @@ function quantum_numbers(material)
         return 4, 1, 1
     elseif material in (:He, :HeJ)
         return 1, 1, 1
+    else
+        throw(DomainError(material, "Unknown material $material"))
     end
 end
 
@@ -371,12 +429,54 @@ end
 
 "Lookup tables for complex refractive indices of metals."
 function data_metal(material::Symbol)
+            # Below: 0.127: W. S. M. Werner, K. Glantschnig, C. Ambrosch-Draxl.
+            # Optical constants and inelastic electron-scattering data for 17 elemental metals,
+            # J. Phys Chem Ref. Data 38, 1013-1092 (2009)
             # Above 0.206: S. Babar and J. H. Weaver.
             # Optical constants of Cu, Ag, and Au revisited, Appl. Opt. 54, 477-481 (2015)
             # Below 0.206: K. Stahrenberg, Th. Herrmann, K. Wilmers, N. Esser, W. Richter, and M. J. G. Lee.
             # Optical properties of copper and silver in the energy range 2.5-9.0 eV,
             # Phys Rev. B 64, 115111 (2001) (Numerical data kindly provided by Prof. Dr. Norbert Esser)
-    dat = ( Ag = Float64[
+            # above 12.4: H.-J. Hagemann, W. Gudat, and C. Kunz.
+            # Optical constants from the far infrared to the x-ray region: Mg, Al, Cu, Ag, Au, Bi, C, and Al2O3,
+            # J. Opt. Soc. Am. 65, 742-744 (1975)
+            dat = ( Ag = Float64[
+                0.00236 0.99667 0.00774;
+                0.00316 0.99770 0.00530;
+                0.00447 0.99198 0.00237;
+                0.00676 0.9813 0.00291;
+                0.01140 0.9172 0.00818;
+                0.01355 0.860 0.0423;
+                0.01714 0.863 0.293;
+                0.02430 0.928 0.310;
+                0.02563 0.927 0.346;
+                0.03038 0.895 0.302;
+                0.03270 0.894 0.304;
+                0.03568 0.872 0.351;
+                0.03793 0.896 0.427;
+                0.04059 0.953 0.451;
+                0.04478 0.889 0.425;
+                0.04607 0.848 0.446;
+                0.04895 0.833 0.507;
+                0.05391 1.04 0.746;
+                0.05843 1.09 0.658;
+                0.06163 1.06 0.564;
+                0.06714 1.03 0.586;
+                0.07185 0.982 0.596;
+                0.07359 1.13 0.751;
+                0.07437 1.17 0.721;
+                0.08345 1.28 0.750;
+                0.08780 1.37 0.688;
+                0.09198 1.32 0.657;
+                0.09321 1.27 0.625;
+                0.09888 1.32 0.586;
+                0.10258 1.23 0.571;
+                0.10482 1.27 0.577;
+                0.10667 1.30 0.565;
+                0.10857 1.30 0.550;
+                0.11350 1.33 0.518;
+                0.12007 1.27 0.490;
+                0.12157 1.21 0.515;
             0.12782 1.10047 0.72025;
             0.12808 1.10131 0.72092;
             0.12835 1.10177 0.72135;
@@ -627,11 +727,143 @@ function data_metal(material::Symbol)
         4.959 1.228 36.37;
         6.199 1.851 45.26;
         8.266 3.227 59.73;
-        12.4000 5.079 86.53
+        12.4000 5.079 86.53;
+        2.480E+01 3.670E+01 1.73E+02;
+        4.959E+01 1.180E+02 3.06E+02;
+        1.240E+02 3.090E+02 5.06E+02;
+        2.480E+02 5.310E+02 6.89E+02
         ],
-                # K. M. McPeak, S. V. Jayanti, S. J. P. Kress, S. Meyer, S. Iotti, A. Rossinelli, and D. J. Norris.
+        # Below 0.14: H.-J. Hagemann, W. Gudat, and C. Kunz.
+        # Optical constants from the far infrared to the x-ray region: Mg, Al, Cu, Ag, Au, Bi, C, and Al2O3,
+        # J. Opt. Soc. Am. 65, 742-744 (1975)
+        # K. M. McPeak, S. V. Jayanti, S. J. P. Kress, S. Meyer, S. Iotti, A. Rossinelli, and D. J. Norris.
         # Plasmonic films can easily be better: Rules and recipes, ACS Photonics 2, 326-333 (2015)
-    Al = Float64[
+        # Above 2.0: M. A. Ordal, R. J. Bell, R. W. Alexander, L. A. Newquist, M. R. Querry.
+        # Optical properties of Al, Fe, Ti, Ta, W, and Mo at submillimeter wavelengths,
+        # Appl. Opt. 27, 1203-1209 (1988)
+        Al = Float64[
+            1.033E-05 9.990E-01 8.24E-12;
+            1.240E-05 1.001E+00 9.88E-12;
+            1.550E-05 1.000E+00 2.47E-11;
+            2.066E-05 1.001E+00 8.09E-11;
+            2.480E-05 1.001E+00 1.50E-10;
+            3.100E-05 1.002E+00 3.77E-10;
+            4.133E-05 1.002E+00 1.06E-09;
+            6.199E-05 1.001E+00 4.68E-09;
+            8.266E-05 1.000E+00 1.46E-08;
+            1.127E-04 1.002E+00 5.14E-08;
+            1.378E-04 1.000E+00 1.12E-07;
+            1.771E-04 1.003E+00 2.97E-07;
+            2.480E-04 1.002E+00 1.05E-06;
+            4.133E-04 1.001E+00 7.51E-06;
+            6.199E-04 1.000E+00 3.24E-05;
+            7.293E-04 1.000E+00 6.13E-05;
+            7.514E-04 1.000E+00 4.62E-05;
+            7.749E-04 1.000E+00 2.32E-05;
+            7.999E-04 1.000E+00 6.43E-06;
+            8.266E-04 1.000E+00 7.14E-06;
+            1.240E-03 1.000E+00 3.10E-05;
+            1.550E-03 1.000E+00 7.52E-05;
+            2.066E-03 9.990E-01 2.27E-04;
+            2.480E-03 9.990E-01 4.66E-04;
+            3.100E-03 9.980E-01 1.01E-03;
+            3.542E-03 9.960E-01 1.54E-03;
+            4.133E-03 9.960E-01 2.57E-03;
+            4.428E-03 9.960E-01 3.31E-03;
+            4.769E-03 9.920E-01 4.26E-03;
+            5.166E-03 9.930E-01 5.46E-03;
+            5.636E-03 9.930E-01 6.96E-03;
+            6.199E-03 9.910E-01 8.76E-03;
+            6.525E-03 9.890E-01 9.87E-03;
+            6.888E-03 9.890E-01 1.11E-02;
+            7.293E-03 9.880E-01 1.37E-02;
+            7.749E-03 9.880E-01 1.60E-02;
+            8.266E-03 9.890E-01 1.73E-02;
+            8.551E-03 9.880E-01 1.81E-02;
+            8.856E-03 9.880E-01 1.91E-02;
+            8.984E-03 9.880E-01 1.97E-02;
+            9.116E-03 9.870E-01 2.04E-02;
+            9.253E-03 9.870E-01 2.13E-02;
+            9.393E-03 9.860E-01 2.26E-02;
+            9.537E-03 9.860E-01 2.44E-02;
+            9.686E-03 9.870E-01 2.61E-02;
+            9.840E-03 9.880E-01 2.77E-02;
+            9.999E-03 9.890E-01 2.88E-02;
+            1.016E-02 9.910E-01 2.92E-02;
+            1.033E-02 9.920E-01 2.94E-02;
+            1.042E-02 9.920E-01 2.97E-02;
+            1.051E-02 9.920E-01 3.00E-02;
+            1.060E-02 9.930E-01 3.03E-02;
+            1.069E-02 9.930E-01 3.01E-02;
+            1.078E-02 9.940E-01 3.04E-02;
+            1.088E-02 9.940E-01 3.06E-02;
+            1.097E-02 9.950E-01 3.07E-02;
+            1.107E-02 9.950E-01 3.09E-02;
+            1.117E-02 9.950E-01 3.09E-02;
+            1.127E-02 9.960E-01 3.07E-02;
+            1.137E-02 9.970E-01 3.05E-02;
+            1.148E-02 9.970E-01 2.99E-02;
+            1.159E-02 9.970E-01 2.93E-02;
+            1.170E-02 9.960E-01 2.86E-02;
+            1.181E-02 9.960E-01 2.81E-02;
+            1.192E-02 9.940E-01 2.81E-02;
+            1.204E-02 9.920E-01 2.86E-02;
+            1.216E-02 9.920E-01 2.99E-02;
+            1.228E-02 9.890E-01 3.24E-02;
+            1.240E-02 9.890E-01 3.63E-02;
+            1.252E-02 9.910E-01 3.96E-02;
+            1.265E-02 9.940E-01 4.27E-02;
+            1.278E-02 9.980E-01 4.42E-02;
+            1.292E-02 1.001E+00 4.42E-02;
+            1.305E-02 1.005E+00 4.39E-02;
+            1.319E-02 1.007E+00 4.26E-02;
+            1.333E-02 1.009E+00 4.11E-02;
+            1.348E-02 1.011E+00 3.98E-02;
+            1.362E-02 1.012E+00 3.86E-02;
+            1.378E-02 1.013E+00 3.66E-02;
+            1.393E-02 1.014E+00 3.51E-02;
+            1.409E-02 1.014E+00 3.35E-02;
+            1.425E-02 1.014E+00 3.21E-02;
+            1.442E-02 1.014E+00 3.15E-02;
+            1.459E-02 1.014E+00 3.12E-02;
+            1.476E-02 1.016E+00 3.06E-02;
+            1.494E-02 1.017E+00 2.89E-02;
+            1.512E-02 1.017E+00 2.69E-02;
+            1.531E-02 1.016E+00 2.50E-02;
+            1.550E-02 1.016E+00 2.43E-02;
+            1.569E-02 1.015E+00 2.38E-02;
+            1.590E-02 1.014E+00 2.38E-02;
+            1.610E-02 1.015E+00 2.45E-02;
+            1.631E-02 1.016E+00 2.40E-02;
+            1.653E-02 1.018E+00 2.40E-02;
+            1.675E-02 1.021E+00 2.36E-02;
+            1.687E-02 1.025E+00 2.40E-02;
+            1.691E-02 1.028E+00 2.38E-02;
+            1.696E-02 1.030E+00 1.96E-02;
+            1.701E-02 1.036E+00 1.74E-02;
+            1.705E-02 1.031E+00 6.06E-03;
+            1.710E-02 1.026E+00 4.79E-03;
+            1.722E-02 1.021E+00 4.61E-03;
+            1.746E-02 1.015E+00 4.50E-03;
+            1.771E-02 1.012E+00 4.45E-03;
+            1.797E-02 1.009E+00 4.40E-03;
+            1.851E-02 1.005E+00 4.33E-03;
+            1.907E-02 1.001E+00 4.27E-03;
+            2.066E-02 9.920E-01 4.51E-03;
+            2.480E-02 9.740E-01 5.84E-03;
+            3.100E-02 9.440E-01 8.64E-03;
+            4.133E-02 8.820E-01 1.25E-02;
+            6.199E-02 6.730E-01 2.67E-02;
+            6.888E-02 5.640E-01 3.55E-02;
+            7.749E-02 3.460E-01 6.48E-02;
+            7.999E-02 2.520E-01 9.97E-02;
+            8.266E-02 1.520E-01 1.87E-01;
+            8.551E-02 1.070E-01 3.01E-01;
+            8.856E-02 8.400E-02 4.04E-01;
+            9.537E-02 6.500E-02 5.93E-01;
+            1.033E-01 6.100E-02 7.67E-01;
+            1.127E-01 6.100E-02 9.46E-01;
+            1.378E-01 7.300E-02 1.35E+00;
         0.15 0.095390828 1.283666394;
         0.155 0.095510386 1.337393822;
         0.16 0.09903925 1.402928641;
@@ -928,7 +1160,43 @@ function data_metal(material::Symbol)
         1.685 1.454908413 15.4724516;
         1.69 1.514176047 15.49621661;
         1.695 1.555668449 15.53351552;
-        1.7 1.584018511 15.55632073
+        1.7 1.584018511 15.55632073;
+        2.00 2.1962737 20.969371;
+        2.11 2.4038118 22.062867;
+        2.22 2.6179915 23.257800;
+        2.35 2.8842412 24.591905;
+        2.50 3.1815630 26.073820;
+        2.67 3.5693590 27.735962;
+        2.86 4.0097886 29.575977;
+        3.08 4.5104289 31.653186;
+        3.33 5.0466806 34.058286;
+        3.64 5.7888000 36.878956;
+        4.00 6.5579910 40.184716;
+        4.44 7.6669569 44.210650;
+        5.00 8.8866481 49.131664;
+        5.71 10.625810 55.544522;
+        6.67 13.385937 63.967532;
+        8.00 17.708575 75.320562;
+        10.0 25.832564 90.720430;
+        11.1 30.167884 98.172167;
+        12.5 35.492290 107.26425;
+        14.3 42.226361 117.86671;
+        16.7 50.744867 131.07397;
+        20.0 61.871514 148.17314;
+        22.2 68.262241 159.23227;
+        25.0 76.681189 174.09538;
+        28.6 88.918176 192.23917;
+        33.3 108.95823 213.37170;
+        40.0 134.05166 235.70537;
+        44.4 149.32871 248.55977;
+        50.0 167.07810 263.04366;
+        57.1 188.04844 279.77106;
+        66.7 213.38844 299.72607;
+        80.0 245.00980 324.59867;
+        100 286.08777 357.47647;
+        125 329.97183 393.77470;
+        154 374.73526 431.44791;
+        200 436.98909 485.19932
         ])
     dat[material]
 end
@@ -941,5 +1209,120 @@ function lookup_metal(material::Symbol)
     return nspl
 end
 
+"""
+Get the Raman parameters for `material`.
+
+# Fields
+Fields in the returned named tuple must include:
+- `kind::Symbol`: one of `:molecular` or ...
+
+If `kind == :molecular` then the following must also be specified:
+- `rotation::Symbol`: only `:nonrigid` or `:none` supported at present.
+- `vibration::Symbol`: only `:sdo` or `:none` supported at present.
+
+If `rotation == :nonrigid` then the following must also be specified:
+- `B::Real`: the rotational constant [1/m]
+- `Δα::Real`: molecular polarizability anisotropy [m^3]
+- `τ2r::Real`: coherence time [s]
+- `qJodd::Integer`: nuclear spin parameter for odd `J`
+- `qJeven::Integer`: nuclear spin parameter for even `J`
+- `D::Real=0.0`: centrifugal constant [1/m]
+
+If `vibration == :sdo` then the following must also be specified:
+- `Ωv::Real`: vibrational frequency [rad/s]
+- `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
+- `μ::Real`: reduced molecular mass [kg]
+- `τ2v::Real`: coherence time [s]
+
+# References
+[1] Phys. Rev. A, 94, 023816 (2016)
+[2] Phys. Rev. A, 85, 043820 (2012)
+[3] Phys. Rev. A, 92, 063828 (2015)
+[4] Journal of Raman Spectroscopy 2, 133 (1974)
+[5] J. Phys. Chem., 91, 41 (1987)
+[6] Applied Spectroscopy 23, 211 (1969)
+[7] Phys. Rev. A, 34, 3, 1944 (1986)
+"""
+function raman_parameters(material)
+    if material == :N2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 199.0, # [4]
+              D = 5.74e-4, # [4]
+              qJodd = 1,
+              qJeven = 2,
+              Δα = 6.7e-31, # [2]
+              τ2r = 2e-12, # [7] TODO pressure dependence
+              dαdQ = 1.75e-20, # [6]
+              Ωv = 2*π*2330.0*100.0*c, # [4]
+              μ = 1.16e-26,
+              τ2v = 8.8e-12, # [5] TODO pressure dependence
+              )
+    elseif material == :H2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 5890.0, # [3]
+              D = 5.0, # [3]
+              qJodd = 3,
+              qJeven = 1,
+              Δα = 3e-31, # [3]
+              τ2r = 280e-12, # at 10 bar, TODO pressure dependence
+              dαdQ = 1.3e-20, # [3]
+              Ωv = 2*π*124.5669e12,
+              μ = 8.369e-28,
+              τ2v = 578e-12, # at 10 bar, TODO pressure dependence
+              )
+    elseif material == :D2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 2930.0, # [3]
+              D = 2.1, # [3]
+              qJodd = 1,
+              qJeven = 2,
+              Δα = 3e-31, # [3]
+              # TODO τ2r = 
+              dαdQ = 1.4e-20, # [3]
+              # TODO Ωv = 
+              # TODO μ = 
+              # TODO τ2v = 
+              )
+    elseif material == :O2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 144.0, # [2]
+              D = 0.0, # TODO
+              qJodd = 1,
+              qJeven = 0,
+              Δα = 10.2e-31, # [2]
+              # TODO τ2r = 
+              dαdQ = 1.46e-20, # [1]
+              Ωv = 3e14, # [1]
+              μ = 1.3e-26, # [1]
+              # TODO τ2v = 
+              )
+    elseif material == :N2O
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 41.0, # [2]
+              D = 0.0, # TODO
+              # TODO qJodd = 
+              # TODO qJeven = 
+              Δα = 28.1e-31, # [2]
+              # TODO τ2r = 
+              # TODO dαdQ =  
+              # TODO Ωv =  
+              # TODO μ = 
+              # TODO τ2v = 
+             )           
+    else
+        throw(DomainError(material, "Unknown material $material"))
+    end
+    rp
+end
 
 end

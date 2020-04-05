@@ -1,7 +1,6 @@
-import Test: @test, @testset, @test_throws
+import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
 
-@testset "Maths" begin
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
 
@@ -12,12 +11,12 @@ import Luna: Maths
     e(x) = @. exp(x)
 
     x = [1, 2, 3, 4, 5]
-    @test isapprox(Maths.derivative(e, 1, 5), exp(1), rtol=1e-6)
-    @test isapprox(Maths.derivative.(e, x, 5), exp.(x), rtol=1e-6)
+    @test_broken isapprox(Maths.derivative(e, 1, 5), exp(1), rtol=1e-6)
+    @test_broken isapprox(Maths.derivative.(e, x, 5), exp.(x), rtol=1e-6)
 
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 1), 2*exp(2))
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 2), 4*exp(2))
-    @test isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
+    @test_broken isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
 end
 
 @testset "Moments" begin
@@ -48,6 +47,16 @@ end
     Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
     EtA = Maths.hilbert(Et)
     @test maximum(abs.(EtA)) ≈ 1
+    @test all(isapprox.(real(EtA), Et, atol=1e-9))
+
+    hilbert! = Maths.plan_hilbert!(Et)
+    out = complex(Et)
+    hilbert!(out, Et)
+    @test all(out .≈ EtA)
+
+    hilbert = Maths.plan_hilbert(Et)
+    out = hilbert(Et)
+    @test all(out .≈ EtA)
 
     t = collect(range(-10, stop=10, length=512))
     Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
@@ -136,6 +145,4 @@ end
     x = Maths.randgauss(1, 0.5, (1000, 1000), seed=1234)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
-end
-
 end

@@ -1,10 +1,11 @@
 module Maths
 import FiniteDifferences
-import LinearAlgebra
+import LinearAlgebra: Tridiagonal, mul!, ldiv!
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
+import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -13,7 +14,7 @@ function derivative(f, x, order::Integer)
     else
         # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(9, order), y->f(y*scale), x/scale, adapt=4)/scale^order
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+4, order), y->f(y*scale), x/scale, adapt=4)/scale^order
     end
 end
 
@@ -221,14 +222,68 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-Hilbert transform - find analytic signal from real signal
+    hilbert(x; dim=1)
+
+Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
-    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    xf = FFTW.fft(x, dim)
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
-    xf[idxlo, 1:ceil(Int, size(xf, dim) / 2), idxhi] .= 0
-    return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
+    xf[idxlo, 2:n1, idxhi] .*= 2
+    xf[idxlo, (n1+1):n2, idxhi] .= 0
+    return FFTW.ifft(xf, dim)
+end
+
+"""
+    plan_hilbert!(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
+"""
+function plan_hilbert!(x; dim=1)
+    loadFFTwisdom()
+    FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    saveFFTwisdom()
+    xf = Array{ComplexF64}(undef, size(FT))
+    idxlo = CartesianIndices(size(xf)[1:dim - 1])
+    idxhi = CartesianIndices(size(xf)[dim + 1:end])
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
+    xc = complex(x)
+    function hilbert!(out, x)
+        copyto!(xc, x)
+        mul!(xf, FT, xc)
+        xf[idxlo, 2:n1, idxhi] .*= 2
+        xf[idxlo, (n1+1):n2, idxhi] .= 0
+        ldiv!(out, FT, xf)
+    end
+    return hilbert!
+end
+
+"""
+    plan_hilbert(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` without allocation.
+
+!!! warning
+    The closure returned always returns a reference to the same array buffer, which could lead
+    to unexpected results if it is called from more than one location. To avoid this the array
+    should either: (i) only be used in the same code segment; (ii) only be used transiently
+    as part of a larger computation; (iii) copied.
+"""
+function plan_hilbert(x; dim=1)
+    out = complex(x)
+    hilbert! = plan_hilbert!(x, dim=dim)
+    function hilbert(x)
+        hilbert!(out, x)
+    end
+    return hilbert
 end
 
 """
@@ -380,7 +435,7 @@ function CSpline(x, y, ifun=nothing)
     d[1] = 2.0
     d[end] = 2.0
     dl = fill(1.0, length(y) - 1)
-    M = LinearAlgebra.Tridiagonal(dl, d, dl)
+    M = Tridiagonal(dl, d, dl)
     D = M \ R
     if ifun === nothing
         δx = x[2] - x[1]
