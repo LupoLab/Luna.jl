@@ -238,13 +238,13 @@ function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
 end
 
 """
-    plan_hilbert(x; dim=1)
+    plan_hilbert!(x; dim=1)
 
 Pre-plan a Hilbert transform.
 
 Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
 """
-function plan_hilbert(x; dim=1)
+function plan_hilbert!(x; dim=1)
     loadFFTwisdom()
     FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
     saveFFTwisdom()
@@ -262,6 +262,28 @@ function plan_hilbert(x; dim=1)
         ldiv!(out, FT, xf)
     end
     return hilbert!
+end
+
+"""
+    plan_hilbert(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` without allocation.
+
+!!! warning
+    The closure returned always returns a reference to the same array buffer, which could lead
+    to unexpected results if it is called from more than one location. To avoid this the array
+    should either: (i) only be used in the same code segment; (ii) only be used transiently
+    as part of a larger computation; (iii) copied.
+"""
+function plan_hilbert(x; dim=1)
+    out = complex(x)
+    hilbert! = plan_hilbert!(x, dim=dim)
+    function hilbert(x)
+        hilbert!(out, x)
+    end
+    return hilbert
 end
 
 """

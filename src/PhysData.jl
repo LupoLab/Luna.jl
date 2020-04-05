@@ -36,8 +36,10 @@ const roomtemp = 294
 const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
 "Avogadro constant"
 const N_A = ustrip(CODATA2014.N_A)
+"Amagat (Loschmidt constant)"
+const amg = atm/(k_B*273.15)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -45,7 +47,9 @@ const gas_str = Dict(
     :Ne => "Neon",
     :Kr => "Krypton",
     :Xe => "Xenon",
-    :Air => "Air"
+    :Air => "Air",
+    :N2 => "Nitrogen",
+    :H2 => "Hydrogen"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
 const metal = (:Ag,:Al)
@@ -63,10 +67,20 @@ function γ_Börzsönyi(B1, C1, B2, C2)
     return μm -> @. (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
+"Adapted Sellmeier expansion for helium made to fit high frequency data
+Phys. Rev. A 92, 033821 (2015)"
 function γ_JCT(B1, C1, B2, C2, B3, C3)
     return @. μm -> @. (B1 * μm^2 / (μm^2 - C1)
                         + B2 * μm^2 / (μm^2 - C2)
                         + B3 * μm^2 / (μm^2 - C3))
+end
+
+"
+Sellmeier expansion for linear susceptibility from
+J. Opt. Soc. Am. 67, 1550 (1977)
+"
+function γ_Peck(B1, C1, B2, C2, dens)
+    return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
@@ -117,6 +131,18 @@ function sellmeier_gas(material::Symbol)
         B2 = 41807.57e-8
         C2 = 7.434e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :N2
+        B1 = 39209.95e-8
+        C1 = 1146.24e-6
+        B2 = 18806.48e-8
+        C2 = 13.476e-3
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :H2
+        B1 = 14895.6e-6
+        C1 = 180.7
+        B2 = 4903.7e-6
+        C2 = 92.0
+        return γ_Peck(B1, C1, B2, C2, dens)
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -274,8 +300,22 @@ References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
+[4] Phys. Rev. A, vol. 42, 2578 (1990)
+
+TODO: More Bishop/Shelton; Wahlstrand updated values.
+
 "
-function γ3_gas(material::Symbol; source=:Lehmeier)
+function γ3_gas(material::Symbol; source=nothing)
+    if source == nothing
+        if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
+            source = :Lehmeier
+        elseif material in (:H2,)
+            source = :Shelton
+        else
+            error("no default γ3 source for material: $material")
+        end
+    end
+    dens = density(material, 1, 273.15)
     if source == :Lehmeier
         # Table 1 in [3]
         if material in (:He, :HeJ)
@@ -288,10 +328,21 @@ function γ3_gas(material::Symbol; source=:Lehmeier)
             fac = 64.0
         elseif material == :Xe
             fac = 188.2
+        elseif material == :N2
+            fac = 21.1
+        else
+            throw(DomainError(material, "Lehmeier model does not include $material"))
         end
-        return 4*fac*3.43e-28 / density(material, 1, 273.15)
+        return 4*fac*3.43e-28 / dens
+    elseif source == :Shelton
+        # ref [4]
+        if material == :H2
+            return 2.2060999099841444e-26 / dens
+        else
+            throw(DomainError(material, "Shelton model does not include $material"))
+        end
     else
-        error("TODO: Bishop/Shelton values for γ3")
+        throw(DomainError(source, "Unkown γ3 model $source"))
     end
 end
 
@@ -331,6 +382,10 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.4458
     elseif material == :H
         Ip = 0.5
+    elseif material == :N2
+        Ip = 0.5726
+    elseif material == :H2
+        Ip = 0.5669
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -356,6 +411,8 @@ function quantum_numbers(material)
         return 4, 1, 1
     elseif material in (:He, :HeJ)
         return 1, 1, 1
+    else
+        throw(DomainError(material, "Unknown material $material"))
     end
 end
 
@@ -1152,5 +1209,120 @@ function lookup_metal(material::Symbol)
     return nspl
 end
 
+"""
+Get the Raman parameters for `material`.
+
+# Fields
+Fields in the returned named tuple must include:
+- `kind::Symbol`: one of `:molecular` or ...
+
+If `kind == :molecular` then the following must also be specified:
+- `rotation::Symbol`: only `:nonrigid` or `:none` supported at present.
+- `vibration::Symbol`: only `:sdo` or `:none` supported at present.
+
+If `rotation == :nonrigid` then the following must also be specified:
+- `B::Real`: the rotational constant [1/m]
+- `Δα::Real`: molecular polarizability anisotropy [m^3]
+- `τ2r::Real`: coherence time [s]
+- `qJodd::Integer`: nuclear spin parameter for odd `J`
+- `qJeven::Integer`: nuclear spin parameter for even `J`
+- `D::Real=0.0`: centrifugal constant [1/m]
+
+If `vibration == :sdo` then the following must also be specified:
+- `Ωv::Real`: vibrational frequency [rad/s]
+- `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
+- `μ::Real`: reduced molecular mass [kg]
+- `τ2v::Real`: coherence time [s]
+
+# References
+[1] Phys. Rev. A, 94, 023816 (2016)
+[2] Phys. Rev. A, 85, 043820 (2012)
+[3] Phys. Rev. A, 92, 063828 (2015)
+[4] Journal of Raman Spectroscopy 2, 133 (1974)
+[5] J. Phys. Chem., 91, 41 (1987)
+[6] Applied Spectroscopy 23, 211 (1969)
+[7] Phys. Rev. A, 34, 3, 1944 (1986)
+"""
+function raman_parameters(material)
+    if material == :N2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 199.0, # [4]
+              D = 5.74e-4, # [4]
+              qJodd = 1,
+              qJeven = 2,
+              Δα = 6.7e-31, # [2]
+              τ2r = 2e-12, # [7] TODO pressure dependence
+              dαdQ = 1.75e-20, # [6]
+              Ωv = 2*π*2330.0*100.0*c, # [4]
+              μ = 1.16e-26,
+              τ2v = 8.8e-12, # [5] TODO pressure dependence
+              )
+    elseif material == :H2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 5890.0, # [3]
+              D = 5.0, # [3]
+              qJodd = 3,
+              qJeven = 1,
+              Δα = 3e-31, # [3]
+              τ2r = 280e-12, # at 10 bar, TODO pressure dependence
+              dαdQ = 1.3e-20, # [3]
+              Ωv = 2*π*124.5669e12,
+              μ = 8.369e-28,
+              τ2v = 578e-12, # at 10 bar, TODO pressure dependence
+              )
+    elseif material == :D2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 2930.0, # [3]
+              D = 2.1, # [3]
+              qJodd = 1,
+              qJeven = 2,
+              Δα = 3e-31, # [3]
+              # TODO τ2r = 
+              dαdQ = 1.4e-20, # [3]
+              # TODO Ωv = 
+              # TODO μ = 
+              # TODO τ2v = 
+              )
+    elseif material == :O2
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 144.0, # [2]
+              D = 0.0, # TODO
+              qJodd = 1,
+              qJeven = 0,
+              Δα = 10.2e-31, # [2]
+              # TODO τ2r = 
+              dαdQ = 1.46e-20, # [1]
+              Ωv = 3e14, # [1]
+              μ = 1.3e-26, # [1]
+              # TODO τ2v = 
+              )
+    elseif material == :N2O
+        rp = (kind = :molecular,
+              rotation = :nonrigid,
+              vibration = :sdo,
+              B = 41.0, # [2]
+              D = 0.0, # TODO
+              # TODO qJodd = 
+              # TODO qJeven = 
+              Δα = 28.1e-31, # [2]
+              # TODO τ2r = 
+              # TODO dαdQ =  
+              # TODO Ωv =  
+              # TODO μ = 
+              # TODO τ2v = 
+             )           
+    else
+        throw(DomainError(material, "Unknown material $material"))
+    end
+    rp
+end
 
 end
