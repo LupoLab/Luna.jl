@@ -1,8 +1,7 @@
-"Functions which define the modal decomposition. This includes
+"""
+    NonlinearRHS
 
-    1. Mode normalisation
-    2. Modal decomposition of Pₙₗ
-    3. Calculation of (modal) energy
+Functions which define the modal decomposition.
 
 Types of decomposition that are available:
     1. Mode-averaged waveguide
@@ -11,8 +10,8 @@ Types of decomposition that are available:
         b. Full 2-D integral
     3. Free space
         a. Azimuthal symmetry (Hankel transform)
-        b. Full 2-D (Fourier transform)"
-
+        b. Full 2-D (Fourier transform)
+"""
 module NonlinearRHS
 import FFTW
 import Cubature
@@ -358,7 +357,11 @@ function energy_env_mode_avg(m)
     return energyfun
 end
 
-"Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation"
+"""
+    TransRadial
+
+Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation
+"""
 struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     QDHT::HTT # Hankel transform (space to k-space)
     FT::FTT # Fourier transform (time to frequency)
@@ -382,6 +385,19 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
     TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
 end
 
+"""
+    TransRadial(grid, HT, FT, responses, densityfun, normfun)
+
+Construct a `TransRadial` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `HT::QDHT` : the Hankel transform which defines the spatial grid
+- `FT::FFTW.Plan` : the time-frequency Fourier transform for the oversampled time grid
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_radial`](@ref)
+"""
 function TransRadial(grid::Grid.RealGrid, args...)
     TransRadial(Float64, grid, args...)
 end
@@ -390,6 +406,12 @@ function TransRadial(grid::Grid.EnvGrid, args...)
     TransRadial(ComplexF64, grid, args...)
 end
 
+"""
+    (t::TransRadial)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field `Eω` and
+place the result in `nl`
+"""
 function (t::TransRadial)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
@@ -401,7 +423,13 @@ function (t::TransRadial)(nl, Eω, z)
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
-"Normalisation factor for radial symmetry"
+"""
+    norm_radial(ω, q, nfun)
+
+Make function to return normalisation factor for radial symmetry. 
+
+TODO: Make z-dependent
+"""
 function norm_radial(ω, q, nfun)
     βsq = @. (nfun(2π*PhysData.c/ω)*ω/PhysData.c)^2 - (q.k^2)'
     βsq[βsq .< 0] .= 0
@@ -429,41 +457,68 @@ function energy_radial_env(q)
     end
 end
 
-"Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation"
+"""
+    TransFree
+
+Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation
+"""
 mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
     densityfun::dT # callable which returns density
-    Pto::Array{TT, 3}
-    Eto::Array{TT, 3}
-    Eωo::Array{ComplexF64, 3}
-    Pωo::Array{ComplexF64, 3}
-    scale::Float64
-    idcs::iT
+    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 3} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    scale::Float64 # scale factor to be applied during oversampling
+    idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
 end
 
-function TransFree(TT, grid, FT, Ny, Nx, responses, densityfun, normfun)
+function TransFree(TT, scale, grid, FT, Ny, Nx, responses, densityfun, normfun)
     Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
     Eto = zeros(TT, (length(grid.to), Ny, Nx))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    N = length(grid.ω)
-    No = length(grid.ωo)
-    scale = (No-1)/(N-1)
     idcs = CartesianIndices((Ny, Nx))
     TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale, idcs)
 end
 
+"""
+    TransFree(grid, FT, Ny, Nx, responses, densityfun, normfun)
+
+Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
+- `Nx::Int` : number of spatial points in `x` direction
+- `Ny::Int` : number of spatial points in `y` direction
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
+"""
 function TransFree(grid::Grid.RealGrid, args...)
-    TransFree(Float64, grid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = (No-1)/(N-1)
+    TransFree(Float64, scale, grid, args...)
 end
 
 function TransFree(grid::Grid.EnvGrid, args...)
-    TransFree(ComplexF64, grid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = No/N
+    TransFree(ComplexF64, scale, grid, args...)
 end
 
+"""
+    (t::TransFree)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the field `Eω`
+and place the result in `nl`.
+"""
 function (t::TransFree)(nl, Eωk, z)
     fill!(t.Pto, 0)
     fill!(t.Eωo, 0)
@@ -476,7 +531,13 @@ function (t::TransFree)(nl, Eωk, z)
     nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
-"Normalisation factor for 3D propagation"
+"""
+    norm_free(ω, x, y, nfun)
+
+Make function to return normalisation factor for 3D propagation. 
+
+TODO: Make z-dependent
+"""
 function norm_free(ω, x, y, nfun)
     kx = reshape(Maths.fftfreq(x), (1, 1, length(x)))
     ky = reshape(Maths.fftfreq(x), (1, length(y)))
