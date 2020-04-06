@@ -23,7 +23,7 @@ N = 512
 grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 q = Hankel.QDHT(R, N, dim=2)
 
-energyfun = NonlinearRHS.energy_radial_env(q)
+energyfun, energyfun_ω = NonlinearRHS.energy_radial(grid, q)
 
 function prop(E, z)
     Eω = FFTW.fft(E, 1)
@@ -59,6 +59,10 @@ Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, respons
 
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
+Ert = FT \ (q \ Eω)
+println(energyfun(grid.t, Ert))
+println(energyfun_ω(grid.ω, Eω))
+error()
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

@@ -424,19 +424,35 @@ function norm_radial(ω, q, nfun)
     return norm
 end
 
-function energy_radial(q)
-    function energyfun(t, Et)
+function energy_radial(grid::Grid.RealGrid, q)
+    function energy_t(t, Et)
         Eta = Maths.hilbert(Et)
-        intg = abs.(integrate(t, abs2.(Eta), SimpsonEven()))
-        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(intg, q)
+        tintg = integrate(t, abs2.(Eta), SimpsonEven())
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
     end
+
+    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π/(grid.ω[end]^2)
+    function energy_ω(ω, Eω)
+        ωintg = integrate(ω, abs2.(Eω), SimpsonEven())
+        return prefac*Hankel.integrateK(ωintg, q)
+    end
+    return energy_t, energy_ω
 end
 
-function energy_radial_env(q)
-    function energyfun(t, Et)
-        intg = abs.(integrate(t, abs2.(Et), SimpsonEven()))
-        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(intg, q)
+function energy_radial(grid::Grid.EnvGrid, q)
+    function energy_t(t, Et)
+        tintg = integrate(t, abs2.(Et), SimpsonEven())
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
     end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2)
+    function energy_ω(ω, Eω)
+        ωintg = dropdims(sum(abs2.(Eω); dims=1), dims=1)
+        return prefac*Hankel.integrateK(ωintg, q)
+    end
+    return energy_t, energy_ω
 end
 
 """
