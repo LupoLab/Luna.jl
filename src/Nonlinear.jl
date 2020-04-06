@@ -4,6 +4,24 @@ import Luna: Maths, Utils
 import FFTW
 import LinearAlgebra: mul!
 
+"""
+    scaled_response(resp, scale, shape)
+
+Scale the response function `resp` by the factor `scale`. `shape` should be `size(Eto)` where
+`Eto` is the oversampled field in time.
+"""
+function scaled_response(resp, scale, shape)
+    buffer = Array{ComplexF64}(undef, shape)
+    let buffer=buffer, resp=resp
+        function resp!(out, E)
+            fill!(buffer, 0)
+            resp(buffer, E)
+            @. out += scale*buffer
+        end
+    end
+end
+
+
 function KerrScalar(out, E, fac)
     @. out += fac*E^3
 end
