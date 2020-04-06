@@ -62,19 +62,19 @@ function make_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray, nfu
     ky = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, length(y)))
     kperp2 = @. kx^2 + ky^2
     idcs = CartesianIndices((length(kx), length(ky)))
-    n = zero(grid.ω)
+    k2 = zero(grid.ω)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
-        n[2:end] = nfun.(grid.ω[2:end]; z=z)
-        _fill_linop!(out, grid, β1, n, kperp2, idcs)
+        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end] ./ PhysData.c).^2
+        _fill_linop!(out, grid, β1, k2, kperp2, idcs)
     end
 end
 
 # Internal routine -- function barrier aids with JIT compilation
-function _fill_linop!(out, grid::Grid.RealGrid, β1::Float64, n, kperp2, idcs)
+function _fill_linop!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idcs)
     for ii in idcs
         for iω in eachindex(grid.ω)
-            βsq = (n[iω]*grid.ω[iω]/PhysData.c)^2 - kperp2[1, ii]
+            βsq = k2[iω] - kperp2[1, ii]
             if βsq < 0
                 out[iω, ii] = 0
             else
@@ -89,24 +89,25 @@ function make_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun
     ky = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, length(y)))
     kperp2 = @. kx^2 + ky^2
     idcs = CartesianIndices((length(kx), length(ky)))
-    n = zero(grid.ω)
+    k2 = zero(grid.ω)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
-        n[grid.sidx] = nfun.(grid.ω[grid.sidx]; z=z)
-        _fill_linop!(out, grid, β1, n, kperp2, idcs, thg, nfun, z)
+        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+        _fill_linop!(out, grid, β1, k2, kperp2, idcs, thg, βref)
     end
 end
 
-function _fill_linop!(out, grid::Grid.RealGrid, β1::Float64, n, kperp2, idcs, thg, nfun, z)
+function _fill_linop!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, thg, βref)
     for ii in idcs
         for iω in grid.sidx
-            βsq = (n[iω]*grid.ω[iω]/PhysData.c)^2 - kperp2[1, ii]
+            βsq = k2[iω] - kperp2[1, ii]
             if βsq < 0
                 out[iω, ii] = 0
             else
                 out[iω, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
                 if !thg
-                    out[iω, ii] -= -im*grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+                    out[iω, ii] -= -im*βref
                 end
             end
         end
@@ -154,6 +155,56 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
     β1 = 1/frame_vel
     # TODO loss
     return @. -im*(β - β1*(grid.ω - grid.ω0) - β0ref)
+end
+
+function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
+    kr2 = (q.k.^2)'
+    k2 = zero(grid.ω)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
+        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω./PhysData.c).^2
+        _fill_linop!(out, grid, β1, k2, kr2, q.N)
+    end
+end
+
+function _fill_linop!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
+    for ir = 1:Nr
+        for iω = 1:length(grid.ω)
+            βsq = k2[iω] - kr2[ir]
+            if βsq < 0
+                out[iω, ir] = 0
+            else
+                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+            end
+        end
+    end
+end
+
+function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
+    kr2 = (q.k.^2)'
+    k2 = zero(grid.ω)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
+        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω./PhysData.c).^2
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+        _fill_linop!(out, grid, β1, k2, kr2, q.N, βref, thg)
+    end
+end
+
+function _fill_linop!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
+    for ir = 1:Nr
+        for iω = 1:length(grid.ω)
+            βsq = k2[iω] - kr2[ir]
+            if βsq < 0
+                out[iω, ir] = 0
+            else
+                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+                if !thg
+                    out[iω, ir] -= -im*βref
+                end
+            end
+        end
+    end
 end
 
 #=================================================#
