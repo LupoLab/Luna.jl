@@ -34,7 +34,8 @@ function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray
     return @. -im*(β-β1*(grid.ω-grid.ω0)-β0ref) 
 end
 
-function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun, thg=false)
+function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun,     
+                          thg=false)
     n = zero(grid.ω)
     n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
     β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
@@ -189,7 +190,8 @@ end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function linop!(out, z)
-        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[2:end], z=z))
+        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(
+            Modes.neff.(mode, grid.ω[2:end], z=z))
         out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
         out[1] = 0
     end
@@ -243,7 +245,8 @@ function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         fill!(out, 0.0)
         for i = 1:nmodes
             out[grid.sidx, i] .= -im.*(
-                grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
+                grid.ω[grid.sidx]./PhysData.c.*conj.(
+                    Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
                 .- (grid.ω[grid.sidx] .- grid.ω0) .* β1
                 )
             if !thg
