@@ -60,13 +60,13 @@ eV_to_m(eV) = wlfreq(electron*eV/ħ)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function γ_Börzsönyi(B1, C1, B2, C2)
-    return μm -> @. (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
+    return μm -> (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 function γ_JCT(B1, C1, B2, C2, B3, C3)
-    return @. μm -> @. (B1 * μm^2 / (μm^2 - C1)
-                        + B2 * μm^2 / (μm^2 - C2)
-                        + B3 * μm^2 / (μm^2 - C3))
+    return μm -> (B1 * μm^2 / (μm^2 - C1)
+                  + B2 * μm^2 / (μm^2 - C2)
+                  + B3 * μm^2 / (μm^2 - C3))
 end
 
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
@@ -187,7 +187,7 @@ function χ1_fun(gas::Symbol)
     γ = sellmeier_gas(gas)
     f = let γ=γ, gas=gas
         function χ1(λ, P, T)
-            γ(λ.*1e6)*density(gas, P, T)
+            γ(λ*1e6)*density(gas, P, T)
         end
     end
     return f
@@ -196,7 +196,7 @@ end
 function χ1_fun(gas::Symbol, P, T)
     γ = sellmeier_gas(gas)
     dens = density(gas, P, T)
-    return λ -> γ(λ.*1e6)*dens
+    return λ -> γ(λ*1e6)*dens
 end
 
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
