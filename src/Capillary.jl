@@ -2,18 +2,19 @@ module Capillary
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import StaticArrays: SVector
+import Cubature: hquadrature
 using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
-import Luna.PhysData: c, ref_index_fun, roomtemp, densityspline, sellmeier_gas
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 import Luna.PhysData: wlfreq
 
-export MarcatilliMode, dimlimits, neff, field
+export MarcatilliMode, dimlimits, neff, field, N, Aeff
 
 "Marcatili mode"
-struct MarcatilliMode{Tcore, Tclad, LT} <: AbstractMode
-    a::Float64 # core radius
+struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
+    a::Ta # core radius callable as function of z only
     n::Int # radial mode index
     m::Int # azimuthal mode index
     kind::Symbol # kind of mode (transverse magnetic/electric or hybrid)
@@ -23,29 +24,36 @@ struct MarcatilliMode{Tcore, Tclad, LT} <: AbstractMode
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
     model::Symbol # if :full, includes complete influence of complex cladding ref index
     loss::LT # Val{true}() or Val{false}() - whether to include the loss
+    aeff_intg::Float64 # Pre-calculated integral fraction for effective area
 end
 
-function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
+function MarcatilliMode(a::Number, args...; kwargs...)
+    afun(z) = a
+    MarcatilliMode(afun, args...; kwargs...)
+end
+
+function MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     # chkzkwarg makes sure that coren and cladn take z as a keyword argument
-    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
+    aeff_intg = Aeff_Jintg(n, get_unm(n, m, kind), kind)
+    MarcatilliMode(afun, n, m, kind, get_unm(n, m, kind), ϕ,
                    chkzkwarg(coren), chkzkwarg(cladn),
-                   model, Val(loss))
+                   model, Val(loss), aeff_intg)
 end
 
 "convenience constructor assuming single gas filling"
-function MarcatilliMode(a, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 "convenience constructor for non-constant core index"
-function MarcatilliMode(a, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
 "complex effective index of Marcatilli mode with dielectric core and arbitrary
@@ -62,30 +70,30 @@ function neff(m::MarcatilliMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    neff(m, ω, εcl, εco, vn)
+    neff(m, ω, εcl, εco, vn, m.a(z))
 end
 
 # Dispatch on loss to make neff type stable
 # m.loss = Val{true}() (returns ComplexF64)
-function neff(m::MarcatilliMode{Tco, Tcl, Val{true}}, ω, εcl, εco, vn) where Tcl where Tco
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a) where Ta where Tcl where Tco
     if m.model == :full
         k = ω/c
-        return sqrt(complex(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+        return sqrt(complex(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
     elseif m.model == :reduced
-        return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
-                    + im*(c^3*m.unm^2)/(m.a^3*ω^3)*vn)
+        return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
+                    + im*(c^3*m.unm^2)/(a^3*ω^3)*vn)
     else
         error("model must be :full or :reduced")
     end 
 end
 
 # m.loss = Val{false}() (returns Float64)
-function neff(m::MarcatilliMode{Tco, Tcl, Val{false}}, ω, εcl, εco, vn) where Tcl where Tco
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω, εcl, εco, vn, a) where Ta where Tcl where Tco
     if m.model == :full
         k = ω/c
-        return real(sqrt(εco - (m.unm/(k*m.a))^2*(1 - im*vn/(k*m.a))^2))
+        return real(sqrt(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
     elseif m.model == :reduced
-        return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*m.a^2))
+        return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
     else
         error("model must be :full or :reduced")
     end 
@@ -116,21 +124,36 @@ function get_unm(n, m, kind)
     end
 end
 
-dimlimits(m::MarcatilliMode) = (:polar, (0.0, 0.0), (m.a, 2π))
+dimlimits(m::MarcatilliMode; z=0) = (:polar, (0.0, 0.0), (m.a(z), 2π))
 
 # we use polar coords, so xs = (r, θ)
-function field(m::MarcatilliMode)
+function field(m::MarcatilliMode; z=0)
     if m.kind == :HE
-        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a) .* SVector(
+        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a(z)) .* SVector(
             cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
             sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ))
             )
     elseif m.kind == :TE
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(-sin(xs[2]), cos(xs[2]))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(-sin(xs[2]), cos(xs[2]))
     elseif m.kind == :TM
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a) .* SVector(cos(xs[2]), sin(xs[2]))
+        return (xs) -> besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(cos(xs[2]), sin(xs[2]))
     end
 end
+
+function N(m::MarcatilliMode; z=0)
+    np1 = (m.kind == :HE) ? m.n : 2
+    π/2 * m.a(z)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
+end
+
+function Aeff_Jintg(n, unm, kind)
+    den, err = hquadrature(r -> r*besselj(n-1, unm*r)^4, 0, 1)
+    np1 = (kind == :HE) ? n : 2
+    num = 1/4 * besselj(np1, unm)^4
+    return 2π*num/den
+end
+
+Aeff(m::MarcatilliMode; z=0) = m.a(z)^2 * m.aeff_intg
+
 
 "Convenience function to create density and core index profiles for
 simple two-point gradient fills."
