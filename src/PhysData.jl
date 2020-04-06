@@ -207,16 +207,19 @@ end
 
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, P=1, T=roomtemp)
-    return ref_index_fun(material, P, T)(λ)
+function ref_index(material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
+    return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
 "Get function which returns refractive index."
-function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=false)
+function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + χ1(λ))
     elseif material in glass
+        if isnothing(lookup)
+            lookup = (material == :SiO2)
+        end
         if lookup
             spl = lookup_glass(material)
             return λ -> spl(λ*1e6)
@@ -227,10 +230,10 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=false)
     elseif material in metal
         nmetal = let spl = lookup_metal(material)
             function nmetal(λ)
-                if any(λ .> 1.0)
+                if λ > 1
                     throw(DomainError(λ, "Wavelength must be given in metres"))
                 end
-                return spl(λ.*1e6)
+                return spl(λ*1e6)
             end
         end
         return nmetal
@@ -240,7 +243,7 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=false)
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=false)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
     n = ref_index_fun(material, P, T; lookup=lookup)
     β(ω) = @. ω/c * real(n(2π*c/ω))
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
@@ -248,7 +251,7 @@ function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=false)
 end
 
 "Get dispersion."
-function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=false)
+function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
     return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
