@@ -269,14 +269,13 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=nothing)
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
-    n = ref_index_fun(material, P, T; lookup=lookup)
-    β(ω) = @. ω/c * real(n(2π*c/ω))
-    βn(λ) = Maths.derivative(β, 2π*c/λ, order)
+function dispersion_func(order, n)
+    β(ω) = @. ω/c * real(n(wlfreq(ω)))
+    βn(λ) = Maths.derivative(β, wlfreq(λ), order)
     return βn
 end
 
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp, lookup=nothing)
     n = ref_index_fun(material, P, T)
     dispersion_func(order, n)
 end
