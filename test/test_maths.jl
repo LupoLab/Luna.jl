@@ -139,6 +139,14 @@ end
         x2r = shuffle(x2)
         @test ff.(x2r) == fslow.(x2r)
     end
+    # Create new FastFinder, immediately index backwards - does this still work?
+    ff = Maths.FastFinder(x)
+    @test ff.(x2[end:-1:1]) == idcs_slow[end:-1:1]
+    # Extrapolation
+    ff = Maths.FastFinder(x)
+    x3 = range(-0.5, 2π+0.5, length=200)
+    @test ff.(x3[end:-1:1]) == fslow.(x3[end:-1:1])
+    @test ff.(x3) == fslow.(x3)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
