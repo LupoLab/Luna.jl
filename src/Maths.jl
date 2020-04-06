@@ -406,7 +406,7 @@ function CSpline(x, y, ifun=nothing)
     if any(diff(x) .== 0)
         error("entries in x must be unique")
     end
-    if any(diff(x) .<= 0)
+    if !issorted(x)
         idcs = sortperm(x)
         x = x[idcs]
         y = y[idcs]
@@ -482,6 +482,10 @@ Construct a `FastFinder` to find indices in the array `x`.
     `x` must be sorted in ascending order for `FastFinder` to work.
 """
 function FastFinder(x::AbstractArray)
+    issorted(x) || error("Input array for FastFinder must be sorted in ascending order.")
+    if any(diff(x) .== 0)
+        error("Entries in input array for FastFinder must be unique.")
+    end
     FastFinder(x, x[1], x[end], length(x), 1, typemin(x[1]))
 end
 
