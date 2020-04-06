@@ -521,11 +521,20 @@ This is similar to [`findfirst`](@ref), but it starts at the index which was las
 If the new value `x0` is close to the previous `x0`, this is much faster than `findfirst`.
 """
 function (f::FastFinder)(x0::Number)
+    # Default cases if we're out of bounds
+    if x0 <= f.x[1]
+        f.xlast = x0
+        f.ilast = 1
+        return 2
+    elseif x0 >= f.x[end]
+        f.xlast = x0
+        f.ilast = f.N
+        return f.N
+    end
     if f.ilast == 0 # first call -- f.xlast is not set properly so comparisons won't work
         # return using brute-force method instead
-        return x0 <= f.x[1] ? 2 :
-               x0 >= f.x[end] ? f.N :
-               findfirst(x -> x>x0, f.x)
+        f.ilast = findfirst(x -> x>x0, f.x)
+        return f.ilast
     end
     if x0 == f.xlast # same value as before - no work to be done
         return f.ilast
