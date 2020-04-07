@@ -564,8 +564,10 @@ function (f::FastFinder)(x0::Number)
     end
 end
 
-struct RealSpline{sT}
+struct RealSpline{sT,hT}
     rspl::sT
+    h::hT
+    hh::hT
 end
 
 struct CmplxSpline{sT}
@@ -588,7 +590,9 @@ function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Complex
 end
 
 function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Real
-    RealSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0))
+    h = zeros(eltype(y), 4)
+    hh = similar(h)
+    RealSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0), h, hh)
 end
 
 """
@@ -606,7 +610,8 @@ end
 Evaluate the `RealSpline` at coordinate(s) `x`
 """
 function (rs::RealSpline)(x)
-    rs.rspl(x)
+    #rs.rspl(x)
+    splev!(rs.h, rs.hh, rs.rspl.t, rs.rspl.c, rs.rspl.k, x)
 end
 
 """
@@ -648,6 +653,80 @@ Find the roots of the spline `rs`.
 """
 function roots(rs::RealSpline)
     Dierckx.roots(rs.rspl)
+end
+
+
+"""
+    splev(t, c, k, x)
+
+Evaluate a spline s(x) of degree k, given in its b-spline representation.
+
+c    t    : array,length n, which contains the position of the knots.
+c    c    : array,length n, which contains the b-spline coefficients.
+c    k    : integer, giving the degree of s(x).
+c    x    : point to evaluate at.
+"""
+function splev!(h, hh, t, c, k, x)
+    k1 = k + 1
+    k2 = k1 + 1
+    nk1 = length(t) - k1
+    tb = t[k1]
+    te = t[nk1 + 1]
+    l = k1
+    l1 = l + 1
+    # search for knot interval t(l) <= arg < t(l+1)
+    while x < t[l] && l1 != k2
+        l1 = l
+        l -= 1
+    end
+    while x >= t[l1] && l != nk1
+        l = l1
+        l1 = l + 1
+    end
+    # evaluate the non-zero b-splines at x.
+    fpbspl!(h, hh, t, k, x, l)
+    # find the value of s(x) at x.
+    sp = 0.0
+    ll = l - k1
+    for j = 1:k1
+        ll = ll + 1
+        sp += c[ll]*h[j]
+    end
+    sp
+end
+
+"""
+    fpbspl(t, k, x, l)
+
+Evaluate the (k+1) non-zero b-splines of
+degree k at t[l] <= x < t[l+1] using the stable recurrence
+relation of de boor and cox.
+
+c    t    : array,length n, which contains the position of the knots.
+c    k    : integer, giving the degree of s(x).
+c    x    : point to evaluate at.
+c    l    :
+"""
+function fpbspl!(h, hh, t, k, x, l)
+    h[1] = one(x)
+    for j = 1:k
+        for i = 1:j
+            hh[i] = h[i]
+        end
+        h[1] = 0.0
+        for i = 1:j
+            li = l+i
+            lj = li-j
+            if t[li] != t[lj]
+                f = hh[i]/(t[li] - t[lj]) 
+                h[i] = h[i] + f*(t[li] - x)
+                h[i+1] = f*(x - t[lj])
+            else
+                h[i+1] = 0.0 
+            end
+        end
+    end
+    return h
 end
 
 end
