@@ -66,4 +66,8 @@ end
     include(joinpath(testdir, "test_kerr.jl"))
 end
 
+@testset "LinearOps" begin
+    include(joinpath(testdir, "test_linops.jl"))
+end
+
 end

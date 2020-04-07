@@ -9,14 +9,16 @@ import Luna.PhysData: wlfreq
 
 function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray,
                           n::AbstractArray, frame_vel::Number)
-    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)));
-    ky = reshape(Maths.fftfreq(x), (1, length(y)));
-    βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
-    βsq = FFTW.fftshift(βsq, (2, 3))
-    βsq[βsq .< 0] .= 0
-    β = .-sqrt.(βsq)
-    β1 = -1/frame_vel
-    return @. im*(β-β1*grid.ω) 
+    kx = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, 1, length(x)))
+    ky = reshape(FFTW.fftshift(Maths.fftfreq(y)), (1, length(y)))
+    kperp2 = @. kx^2 + ky^2
+    idcs = CartesianIndices((length(ky), length(kx)))
+    k2 = zero(grid.ω)
+    k2[2:end] = (n[2:end] .* grid.ω[2:end] ./ PhysData.c).^2
+    β1 = 1/frame_vel
+    out = Array{ComplexF64}(undef, (length(grid.ω), length(ky), length(kx)))
+    _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
+    return out
 end
 
 function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray, nfun)
@@ -27,28 +29,30 @@ function make_const_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArra
 end
 
 function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray,
-                          n::AbstractArray, frame_vel::Number, β0ref::Number)
-    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)))
-    ky = reshape(Maths.fftfreq(x), (1, length(y)))
-    βsq = @. (n*grid.ω/PhysData.c)^2 - kx^2 - ky^2
-    βsq = FFTW.fftshift(βsq, (2, 3))
-    βsq[βsq .< 0] .= 0
-    β = sqrt.(βsq)
+                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+    kx = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, 1, length(x)))
+    ky = reshape(FFTW.fftshift(Maths.fftfreq(y)), (1, length(y)))
+    kperp2 = @. kx^2 + ky^2
+    idcs = CartesianIndices((length(ky), length(kx)))
+    k2 = zero(grid.ω)
+    k2[grid.sidx] = (n[grid.sidx].*grid.ω[grid.sidx]./PhysData.c).^2
     β1 = 1/frame_vel
-    return @. -im*(β-β1*(grid.ω-grid.ω0)-β0ref) 
+    out = zeros(ComplexF64, (length(grid.ω), length(ky), length(kx)))
+    _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, β0ref; thg=thg)
+    return out
 end
 
 function make_const_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun,     
                           thg=false)
     n = zero(grid.ω)
-    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
+    n[grid.sidx] = nfun.(wlfreq.(grid.ω[grid.sidx]))
     β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
     if thg
         β0const = 0.0
     else
-        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
+        β0const = grid.ω0/PhysData.c * nfun(wlfreq(grid.ω0))
     end
-    make_const_linop(grid, x, y, n, 1/β1, β0const)
+    make_const_linop(grid, x, y, n, 1/β1, β0const; thg=thg)
 end
 
 """
@@ -59,9 +63,9 @@ refractive index as a function of frequency `ω` and (kwarg) propagation distanc
 """
 function make_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray, nfun)
     kx = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, 1, length(x)))
-    ky = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, length(y)))
+    ky = reshape(FFTW.fftshift(Maths.fftfreq(y)), (1, length(y)))
     kperp2 = @. kx^2 + ky^2
-    idcs = CartesianIndices((length(kx), length(ky)))
+    idcs = CartesianIndices((length(ky), length(kx)))
     k2 = zero(grid.ω)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
@@ -77,7 +81,8 @@ function _fill_linop_xy!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idc
         for iω in eachindex(grid.ω)
             βsq = k2[iω] - kperp2[1, ii]
             if βsq < 0
-                out[iω, ii] = 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
             else
                 out[iω, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
             end
@@ -87,30 +92,31 @@ end
 
 function make_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun; thg=false)
     kx = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, 1, length(x)))
-    ky = reshape(FFTW.fftshift(Maths.fftfreq(x)), (1, length(y)))
+    ky = reshape(FFTW.fftshift(Maths.fftfreq(y)), (1, length(y)))
     kperp2 = @. kx^2 + ky^2
-    idcs = CartesianIndices((length(kx), length(ky)))
+    idcs = CartesianIndices((length(ky), length(kx)))
     k2 = zero(grid.ω)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
-        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, thg, βref)
+        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, βref; thg=thg)
     end
 end
 
-function _fill_linop_xy!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, thg, βref)
+function _fill_linop_xy!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, βref; thg)
     for ii in idcs
-        for iω in grid.sidx
+        for iω in eachindex(grid.ω)
             βsq = k2[iω] - kperp2[1, ii]
             if βsq < 0
-                out[iω, ii] = 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
             else
                 out[iω, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
-                if !thg
-                    out[iω, ii] -= -im*βref
-                end
+            end
+            if !thg
+                out[iω, ii] -= -im*βref
             end
         end
     end
