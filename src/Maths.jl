@@ -564,10 +564,11 @@ function (f::FastFinder)(x0::Number)
     end
 end
 
-struct RealSpline{sT,hT}
+struct RealSpline{sT,hT,fT}
     rspl::sT
     h::hT
     hh::hT
+    ifun::fT
 end
 
 struct CmplxSpline{sT}
@@ -589,10 +590,36 @@ function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Complex
                 Dierckx.Spline1D(x, imag(y), bc="extrapolate", k=3, s=0.0))
 end
 
-function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Real
+function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing) where T <: Real
+    if any(diff(x) .== 0)
+        error("entries in x must be unique")
+    end
+    if !issorted(x)
+        idcs = sortperm(x)
+        x = x[idcs]
+        y = y[idcs]
+    end
     h = zeros(eltype(y), 4)
     hh = similar(h)
-    RealSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0), h, hh)
+    rspl = Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0)
+    x = rspl.t[4:end - 3]
+    if ifun === nothing
+        δx = x[2] - x[1]
+        if all(diff(x) .≈ δx)
+            # x is uniformly spaced - use fast lookup
+            xmax = maximum(x)
+            xmin = minimum(x)
+            N = length(x)
+            ffast(x0) = x0 <= xmin ? 2 :
+                        x0 >= xmax ? N : 
+                        ceil(Int, (x0-xmin)/(xmax-xmin)*(N-1))+1
+            ifun = ffast
+        else
+            # x is not uniformly spaced - use brute-force lookup
+            ifun = FastFinder(x)
+        end
+    end
+    RealSpline(rspl, h, hh, ifun)
 end
 
 """
@@ -611,7 +638,7 @@ Evaluate the `RealSpline` at coordinate(s) `x`
 """
 function (rs::RealSpline)(x)
     #rs.rspl(x)
-    splev!(rs.h, rs.hh, rs.rspl.t, rs.rspl.c, rs.rspl.k, x)
+    splev!(rs.h, rs.hh, rs.rspl.t, rs.rspl.c, rs.rspl.k, x, rs.ifun)
 end
 
 """
@@ -666,7 +693,7 @@ c    c    : array,length n, which contains the b-spline coefficients.
 c    k    : integer, giving the degree of s(x).
 c    x    : point to evaluate at.
 """
-function splev!(h, hh, t, c, k, x)
+function splev!(h, hh, t, c, k, x, ifun)
     k1 = k + 1
     k2 = k1 + 1
     nk1 = length(t) - k1
@@ -675,14 +702,15 @@ function splev!(h, hh, t, c, k, x)
     l = k1
     l1 = l + 1
     # search for knot interval t(l) <= arg < t(l+1)
-    while x < t[l] && l1 != k2
-        l1 = l
-        l -= 1
-    end
-    while x >= t[l1] && l != nk1
-        l = l1
-        l1 = l + 1
-    end
+    #while x < t[l] && l1 != k2
+    #    l1 = l
+    #    l -= 1
+    #end
+    #while x >= t[l1] && l != nk1
+    #    l = l1
+    #    l1 = l + 1
+    #end
+    l = ifun(x) - 1 + 3
     # evaluate the non-zero b-splines at x.
     fpbspl!(h, hh, t, k, x, l)
     # find the value of s(x) at x.
