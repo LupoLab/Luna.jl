@@ -149,8 +149,8 @@ end
     @test ff.(x3[end:-1:1]) == fslow.(x3[end:-1:1])
     @test ff.(x3) == fslow.(x3)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
-    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 2.6e-6
-    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 1.1e-3
+    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
 end
 
 @testset "BSpline" begin
@@ -165,7 +165,7 @@ end
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
     # test direct finite differences
     @test abs(invoke(Maths.derivative, Tuple{Any,Any,Integer}, spl, 1.3, 1) - cos(1.3)) < 1.7e-7
-    @test maximum(cos.(x2) .- invoke.(Maths.derivative, Tuple{Any,Any,Integer}, spl, x2, 1)) < 3.4e-3
+    @test maximum(cos.(x2) .- invoke.(Maths.derivative, Tuple{Any,Any,Integer}, spl, x2, 1)) < 2.1e-6
     # test roots
     yr = x.^2 .- 1.0
     splr = Maths.BSpline(x, yr)
