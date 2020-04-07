@@ -51,18 +51,13 @@ end
 
 @testset "3D, field" begin
 grid = Grid.RealGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
-Dx = 2R/Nx
-nx = collect(range(0, length=Nx))
-x = @. (nx-Nx/2) * Dx
-Dy = 2R/Ny
-ny = collect(range(0, length=Ny))
-y = @. (ny-Ny/2) * Dy
+xygrid = Grid.FreeGrid(R, Nx, R, Ny)
 
-linop = LinearOps.make_const_linop(grid, x, y, PhysData.ref_index_fun(gas, pres))
-linopf = LinearOps.make_linop(grid, x, y, nfun)
+linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
+linopf = LinearOps.make_linop(grid, xygrid, nfun)
 out = similar(linop)
 
-@test size(linop) == (length(grid.ω), length(y), length(x))
+@test size(linop) == (length(grid.ω), Ny, Nx)
 
 linopf(out, 0.0)
 @test all(imag(out) .≈ imag(linop))
@@ -75,19 +70,14 @@ end
 @testset "3D, env" begin
 grid = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 grid_thg = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12; thg=true)
-Dx = 2R/Nx
-nx = collect(range(0, length=Nx))
-x = @. (nx-Nx/2) * Dx
-Dy = 2R/Ny
-ny = collect(range(0, length=Ny))
-y = @. (ny-Ny/2) * Dy
+xygrid = Grid.FreeGrid(R, Nx, R, Ny)
 
 for gi in (grid, grid_thg)
-    linop = LinearOps.make_const_linop(gi, x, y, PhysData.ref_index_fun(gas, pres))
-    linopf = LinearOps.make_linop(gi, x, y, nfun)
+    linop = LinearOps.make_const_linop(gi, xygrid, PhysData.ref_index_fun(gas, pres))
+    linopf = LinearOps.make_linop(gi, xygrid, nfun)
     out = similar(linop)
 
-    @test size(linop) == (length(gi.ω), length(y), length(x))
+    @test size(linop) == (length(gi.ω), Ny, Nx)
 
     linopf(out, 0.0)
     @test all(imag(out) .≈ imag(linop))
