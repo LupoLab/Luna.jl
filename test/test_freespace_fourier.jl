@@ -14,28 +14,21 @@ pres = 4
 λ0 = 800e-9
 
 w0 = 2e-3
-energy = 1.5e-3
+energy = 1.5e-9
 L = 2
 
 R = 6e-3
 N = 128
 
 grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+xygrid = Grid.FreeGrid(R, N)
 
-Dx = 2R/N
-n = collect(range(0, length=N))
-x = @. (n-N/2) * Dx
-y = copy(x)
-
-r = sqrt.(reshape(x, (1, 1, N)).^2 .+ reshape(y, (1, N)).^2)
-
-xr = Array{Float64}(undef, length(grid.t), length(y), length(x))
-FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=FFTW.MEASURE)
-
+x = xygrid.x
+y = xygrid.y
 energyfun = NonlinearRHS.energy_free(x, y)
 
 function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ) .* Maths.gauss.(r, w0/2)
+    It = Maths.gauss(t, fwhm=τ) .* Maths.gauss.(xygrid.r, w0/2)
     ω0 = 2π*PhysData.c/λ0
     Et = @. sqrt(It)*cos(ω0*t)
 end
@@ -54,13 +47,10 @@ normfun = NonlinearRHS.norm_free(grid.ω, x, y, PhysData.ref_index_fun(gas, pres
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
-Eω, transform, FTo = Luna.setup(grid, FT, x, y, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, xygrid, energyfun, densityfun, normfun, responses, inputs)
 
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 21, (length(grid.ω), N, N))
-
-xwin = Maths.planck_taper(x, -R, -0.8R, 0.8R, R)
-xywin = reshape(xwin, (1, length(xwin))) .* reshape(xwin, (1, 1, length(xwin)))
 
 Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf, init_dz=1e-1)
 
