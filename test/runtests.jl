@@ -58,4 +58,12 @@ end
     include(joinpath(testdir, "test_scans.jl"))
 end
 
+@testset "Raman" begin
+    include(joinpath(testdir, "test_raman.jl"))
+end
+
+@testset "Kerr" begin
+    include(joinpath(testdir, "test_kerr.jl"))
+end
+
 end
