@@ -6,7 +6,12 @@ import Luna.PhysData: wlfreq
 #=================================================#
 #===============    FREE SPACE     ===============#
 #=================================================#
+"""
+    make_const_linop(grid, xygrid, n, frame_vel)
 
+Make constant linear operator for full 3D propagation. `n` is the refractive index (array)
+and frame_vel is the velocity of the reference frame.
+"""
 function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
                           n::AbstractArray, frame_vel::Number)
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
@@ -52,7 +57,7 @@ function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun,
 end
 
 """
-    make_linop(grid, x, y, nfun)
+    make_linop(grid, xygrid, nfun)
 
 Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` should return the
 refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
@@ -117,7 +122,12 @@ end
 #=================================================#
 #==============   RADIAL SYMMETRY   ==============#
 #=================================================#
+"""
+    make_const_linop(grid, q::QDHT, n, frame_vel)
 
+Make constant linear operator for radial free-space. `n` is the refractive index (array)
+and frame_vel is the velocity of the reference frame.
+"""
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
                           n::AbstractArray, frame_vel::Number)
     out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
@@ -157,6 +167,13 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
     return out
 end
 
+"""
+    make_linop(grid, q::QDHT, nfun)
+
+Make z-dependent linear operator for radial free-space propagation. `nfun(ω; z)` should
+return the refractive index as a function of frequency `ω` and (kwarg) propagation
+distance `z`.
+"""
 function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     kr2 = q.k.^2
     k2 = zero(grid.ω)
@@ -215,10 +232,14 @@ end
 #===============   MODE AVERAGE   ================#
 #=================================================#
 
-"Limit α so that we do not get overflow in exp(α*dz)."
+"""
+    αlim!(α)
+
+Limit α so that we do not get overflow in exp(α*dz)
+"""
 function αlim!(α)
     # magic number: this is 130 dB/cm
-    # a test script sensitive this is test_main_rect_env.jl
+    # a test script sensitive to this is test_main_rect_env.jl
     clamp!(α, 0.0, 3000.0)
 end
 
