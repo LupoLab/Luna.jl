@@ -11,12 +11,12 @@ import Luna: Maths
     e(x) = @. exp(x)
 
     x = [1, 2, 3, 4, 5]
-    @test_broken isapprox(Maths.derivative(e, 1, 5), exp(1), rtol=1e-6)
-    @test_broken isapprox(Maths.derivative.(e, x, 5), exp.(x), rtol=1e-6)
+    @test isapprox(Maths.derivative(e, 1, 5), exp(1), rtol=1e-6)
+    @test isapprox(Maths.derivative.(e, x, 5), exp.(x), rtol=1e-6)
 
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 1), 2*exp(2))
     @test isapprox(Maths.derivative(x -> exp.(2x), 1, 2), 4*exp(2))
-    @test_broken isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
+    @test isapprox(Maths.derivative(x -> exp.(-x.^2), 0, 1), 0, atol=1e-14)
 end
 
 @testset "Moments" begin
@@ -148,8 +148,8 @@ end
     @test ff.(x3[end:-1:1]) == fslow.(x3[end:-1:1])
     @test ff.(x3) == fslow.(x3)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
-    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
-    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 2.6e-6
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 1.1e-3
 end
 
 @testset "New Spline" begin
@@ -159,8 +159,23 @@ end
     @test all(abs.(spl.(x) .- y) .< 3e-16)
     x2 = range(0.0, 2π, length=300)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
+    # these use the actual spline derivative
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
-    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2e-3
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+    # test direct finite differences
+    @test abs(invoke(Maths.derivative, Tuple{Any,Any,Integer}, spl, 1.3, 1) - cos(1.3)) < 1.7e-7
+    @test maximum(cos.(x2) .- invoke.(Maths.derivative, Tuple{Any,Any,Integer}, spl, x2, 1)) < 3.4e-3
+    # test roots
+    yr = x.^2 .- 1.0
+    splr = Maths.spline(x, yr)
+    @test Maths.roots(splr) == [1.0]
+    # test complex
+    yi = sin.(x .+ π/6)
+    yc = complex.(y, yi)
+    splc = Maths.spline(x, complex.(y, yi))
+    @test all(abs.(splc.(x) .- yc) .< 5e-16)
+    @test maximum(abs.(splc.(x2) .- complex.(sin.(x2), sin.(x2 .+ π/6)))) < 2.6e-7
+    @test abs(Maths.derivative(splc, 1.3, 1) - complex(cos(1.3), cos(1.3 + π/6))) < 2.5e-7
 end
 
 @testset "randgauss" begin

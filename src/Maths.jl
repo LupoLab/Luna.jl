@@ -596,8 +596,8 @@ end
 
 Evaluate the `CmplxSpline` at coordinate(s) `x`
 """
-function (cs::CmplxSpline)(x)
-    complex(cs.rspl(x), cs.ispl(x))
+function (cs::CmplxSpline)(x; )
+    complex.(cs.rspl(x), cs.ispl(x))
 end
 
 """
@@ -607,6 +607,47 @@ Evaluate the `RealSpline` at coordinate(s) `x`
 """
 function (rs::RealSpline)(x)
     rs.rspl(x)
+end
+
+"""
+    derivative(rs::RealSpline, x, order::Integer)
+
+Calculate derivative of the spline `rs`. For `order == 1` this uses an optimised routine.
+For `order > 1` this falls back to the generic finite difference based method.
+"""
+function derivative(rs::RealSpline, x, order::Integer)
+    if order == 0
+        return rs(x)
+    elseif order == 1
+        return Dierckx.derivative(rs.rspl, x )
+    else
+        invoke(derivative, Tuple{Any,Any,Integer}, rs, x, order)
+    end
+end
+
+"""
+    derivative(cs::CmplxSpline, x, order::Integer)
+
+Calculate derivative of the spline `cs`. For `order == 1` this uses an optimised routine.
+For `order > 1` this falls back to the generic finite difference based method.
+"""
+function derivative(cs::CmplxSpline, x, order::Integer)
+    if order == 0
+        return cs(x)
+    elseif order == 1
+        return complex.(Dierckx.derivative(cs.rspl, x ), Dierckx.derivative(cs.ispl, x ))
+    else
+        invoke(derivative, Tuple{Any,Any,Integer}, cs, x, order)
+    end
+end
+
+"""
+    roots(rs::RealSpline)
+
+Find the roots of the spline `rs`.
+"""
+function roots(rs::RealSpline)
+    Dierckx.roots(rs.rspl)
 end
 
 end
