@@ -130,6 +130,7 @@ end
 
 function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
                energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     xt = zeros(Float64, length(grid.t), length(q.r))
     FT = FFTW.plan_rfft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
@@ -140,11 +141,15 @@ function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
     xo = Array{Float64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_rfft(xo, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
+    Utils.saveFFTwisdom()
     Eωk, transform, FT
 end
 
 function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
                energyfun, densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
     xt = zeros(ComplexF64, length(grid.t), length(q.r))
     FT = FFTW.plan_fft(xt, 1, flags=FFTW.PATIENT)
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
@@ -155,6 +160,9 @@ function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
     xo = Array{ComplexF64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_fft(xo, 1, flags=FFTW.PATIENT)
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
+    Utils.saveFFTwisdom()
     Eωk, transform, FT
 end
 

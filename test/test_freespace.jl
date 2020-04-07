@@ -14,7 +14,7 @@ pres = 1.2
 λ0 = 800e-9
 
 w0 = 40e-6
-energy = 2e-3
+energy = 2e-9
 L = 0.6
 
 R = 4e-3
@@ -64,7 +64,6 @@ Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, respons
 
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
-error()
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 ω = grid.ω
