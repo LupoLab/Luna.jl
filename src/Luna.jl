@@ -4,10 +4,21 @@ import Logging
 import LinearAlgebra: mul!, ldiv!
 import Random: MersenneTwister
 
-"Lock on the HDF5 library for multi-threaded execution."
+"""
+    HDF5LOCK
+
+Lock on the HDF5 library for multi-threaded execution.
+"""
 const HDF5LOCK = ReentrantLock()
-"Macro to wait for and then release HDF5LOCK. Any call to HDF5.jl needs to be
-preceeded by @hlock."
+
+"""
+    @hlock
+
+Wait for HDF5LOCK, execute the expression, and release H5DFLOCK.
+
+!!! warning
+    For thread safety, any call to functions from HDF5.jl needs to be preceeded by @hlock.
+"""
 macro hlock(expr)
     quote
         try
@@ -19,8 +30,27 @@ macro hlock(expr)
     end
 end
 
+"""
+    Luna.settings
+
+Dictionary of global settings for `Luna`.
+"""
 settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT)
 
+"""
+    set_fftw_mode(mode)
+
+Set FFTW planning mode for all FFTW transform planning in `Luna`.
+
+Possible values for `mode` are `"estimate"`, `"measure"`, `"patient"`, and `"exhaustive"`.
+The initial value upon loading `Luna` is `"patient"`
+
+# Examples
+```jldoctest
+julia> Luna.set_fftw_mode("patient")
+0x00000020
+```
+"""
 function set_fftw_mode(mode)
     flag = getfield(FFTW, Symbol(uppercase(mode)))
     settings["fftw_flag"] = flag
