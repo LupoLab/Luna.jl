@@ -4,6 +4,7 @@ import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
+import Luna.PhysData: wlfreq
 
 import PyPlot:pygui, plt
 
@@ -41,8 +42,13 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop = LinearOps.make_const_linop(grid, x, y, PhysData.ref_index_fun(gas, pres))
-normfun = NonlinearRHS.norm_free(grid.ω, x, y, PhysData.ref_index_fun(gas, pres))
+linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
+normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas, pres))
+nfun = let rif=PhysData.ref_index_fun(gas, pres)
+    (ω; z) -> rif(wlfreq(ω))
+end
+normfunz = NonlinearRHS.norm_free(grid, xygrid, nfun)
+error()
 
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )

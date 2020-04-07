@@ -17,7 +17,7 @@ function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
     idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
     k2 = zero(grid.ω)
-    k2[2:end] = (n[2:end] .* grid.ω[2:end] ./ PhysData.c).^2
+    k2[2:end] .= (n[2:end] .* grid.ω[2:end] ./ PhysData.c).^2
     β1 = 1/frame_vel
     out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
     _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
@@ -36,7 +36,7 @@ function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
     idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
     k2 = zero(grid.ω)
-    k2[grid.sidx] = (n[grid.sidx].*grid.ω[grid.sidx]./PhysData.c).^2
+    k2[grid.sidx] .= (n[grid.sidx].*grid.ω[grid.sidx]./PhysData.c).^2
     β1 = 1/frame_vel
     out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
     _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, β0ref; thg=thg)
@@ -69,7 +69,7 @@ function make_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end] ./ PhysData.c).^2
+        k2[2:end] .= (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end] ./ PhysData.c).^2
         _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
     end
 end
@@ -96,7 +96,7 @@ function make_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun; thg=false)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
         _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, βref; thg=thg)
     end
@@ -180,7 +180,7 @@ function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end]./PhysData.c).^2
+        k2[2:end] .= (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end]./PhysData.c).^2
         _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
     end
 end
@@ -205,7 +205,7 @@ function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
         βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
         _fill_linop_r!(out, grid, β1, k2, kr2, q.N, βref, thg)
     end

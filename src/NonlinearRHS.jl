@@ -413,12 +413,9 @@ Make function to return normalisation factor for radial symmetry without re-calc
 every step. 
 """
 function const_norm_radial(grid, q, nfun)
-    ω = grid.ω
-    βsq = @. (nfun(2π*PhysData.c/ω)*ω/PhysData.c)^2 - (q.k^2)'
-    βsq[βsq .<= 0] .= 0
-    out = @. sqrt(βsq)/(PhysData.μ_0*ω)
-    out[ω .== 0, :] .= 1
-    out[out .== 0] .= 1
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_radial(grid, q, nfunω)
+    out = copy(normfun(0.0))
     function norm(z)
         return out
     end
@@ -429,21 +426,24 @@ end
     norm_radial(ω, q, nfun)
 
 Make function to return normalisation factor for radial symmetry. 
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
 """
 function norm_radial(grid, q, nfun)
     ω = grid.ω
     out = zeros(Float64, (length(ω), q.N))
     kr2 = q.k.^2
-    n = ones(Float64, length(ω))
+    k2 = zeros(Float64, length(ω))
     function norm(z)
-        n[grid.sidx] = nfun.(ω[grid.sidx], z=z)
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         for ir = 1:q.N
-            for iω = 1:length(ω)
+            for iω in eachindex(ω)
                 if ω[iω] == 0
                     out[iω, ir] = 1.0
                     continue
                 end
-                βsq = (n[iω]*ω[iω]/PhysData.c)^2 - kr2[ir]
+                βsq = k2[iω] - kr2[ir]
                 if βsq <= 0
                     out[iω, ir] = 1.0
                     continue
@@ -562,27 +562,55 @@ function (t::TransFree)(nl, Eωk, z)
 end
 
 """
-    norm_free(ω, x, y, nfun)
+    const_norm_free(grid, xygrid, nfun)
 
-Make function to return normalisation factor for 3D propagation. 
-
-TODO: Make z-dependent
+Make function to return normalisation factor for 3D propagation without re-calculating at
+every step.
 """
-function norm_free(ω, x, y, nfun)
-    kx = reshape(Maths.fftfreq(x), (1, 1, length(x)))
-    ky = reshape(Maths.fftfreq(x), (1, length(y)))
-    n = nfun.(2π*PhysData.c./ω)
-    βsq = @. (n*ω/PhysData.c)^2 - kx^2 - ky^2
-    βsq = FFTW.fftshift(βsq, (2, 3))
-    βsq[βsq .< 0] .= 0
-    out = @. sqrt.(βsq)/(PhysData.μ_0*ω)
-    out[ω .== 0, :, :] .= 1
-    out[out .== 0] .= 1
+function const_norm_free(grid, xygrid, nfun)
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_free(grid, xygrid, nfunω)
+    out = copy(normfun(0.0))
     function norm(z)
         return out
     end
     return norm
 end
+
+"""
+    norm_free(grid, xygrid, nfun)
+
+Make function to return normalisation factor for 3D propagation.
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+"""
+function norm_free(grid, xygrid, nfun)
+    ω = grid.ω
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    function norm(z)
+        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        for ii in idcs
+            for iω in eachindex(ω)
+                if ω[iω] == 0
+                    out[iω, ii] = 1.0
+                    continue
+                end
+                βsq = k2[iω] - kperp2[ii]
+                if βsq <= 0
+                    out[iω, ii] = 1.0
+                    continue
+                end
+                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+            end
+        end
+        return out
+    end
+end
+
 
 function energy_free(x, y)
     Dx = abs(x[2] - x[1])
