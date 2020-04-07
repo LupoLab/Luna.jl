@@ -590,7 +590,7 @@ function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Complex
                 Dierckx.Spline1D(x, imag(y), bc="extrapolate", k=3, s=0.0))
 end
 
-function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing) where T <: Real
+function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing, order=3) where T <: Real
     if any(diff(x) .== 0)
         error("entries in x must be unique")
     end
@@ -599,10 +599,11 @@ function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing) where T
         x = x[idcs]
         y = y[idcs]
     end
-    h = zeros(eltype(y), 4)
+
+    rspl = Dierckx.Spline1D(x, real(y), bc="extrapolate", k=order, s=0.0)
+    h = zeros(eltype(y), rspl.k + 1)
     hh = similar(h)
-    rspl = Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0)
-    x = rspl.t[4:end - 3]
+    x = rspl.t[rspl.k + 1 : end - rspl.k]
     if ifun === nothing
         δx = x[2] - x[1]
         if all(diff(x) .≈ δx)
@@ -710,7 +711,7 @@ function splev!(h, hh, t, c, k, x, ifun)
     #    l = l1
     #    l1 = l + 1
     #end
-    l = ifun(x) - 1 + 3
+    l = ifun(x) - 1 + k
     # evaluate the non-zero b-splines at x.
     fpbspl!(h, hh, t, k, x, l)
     # find the value of s(x) at x.
