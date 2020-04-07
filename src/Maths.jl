@@ -699,6 +699,9 @@ Evaluate a spline s(x) of degree k, given in its b-spline representation.
 - `k::Integer`: the degree of s(x)
 - `x::Real`: the point to evaluate at
 - `ifun::Function`: a function to find the index `i` s.t. `t[i] > x`
+
+Adapted from splev.f from Dierckx
+http://www.netlib.org/dierckx/index.html
 """
 function splev!(h, hh, t, c, k, x, ifun)
     k1 = k + 1
@@ -709,14 +712,6 @@ function splev!(h, hh, t, c, k, x, ifun)
     l = k1
     l1 = l + 1
     # search for knot interval t(l) <= arg < t(l+1)
-    #while x < t[l] && l1 != k2
-    #    l1 = l
-    #    l -= 1
-    #end
-    #while x >= t[l1] && l != nk1
-    #    l = l1
-    #    l1 = l + 1
-    #end
     l = ifun(x) - 1 + k
     # evaluate the non-zero b-splines at x.
     fpbspl!(h, hh, t, k, x, l)
@@ -744,6 +739,9 @@ relation of de boor and cox.
 - `k::Integer`: the degree of s(x)
 - `x::Real`: the point to evaluate at
 - `l::Integer`: the active knot location: `t[l] <= x < t[l+1]`
+
+Adapted from fpbspl.f from Dierckx
+http://www.netlib.org/dierckx/index.html
 """
 function fpbspl!(h, hh, t, k, x, l)
     h[1] = one(x)
