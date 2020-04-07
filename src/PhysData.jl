@@ -285,7 +285,7 @@ end
 
 Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
 """
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp, lookup=nothing)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
     n = ref_index_fun(material, P, T)
     dispersion_func(order, n)
 end
