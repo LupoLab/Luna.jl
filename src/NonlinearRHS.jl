@@ -611,24 +611,47 @@ function norm_free(grid, xygrid, nfun)
     end
 end
 
-
-function energy_free(x, y)
-    Dx = abs(x[2] - x[1])
-    Dy = abs(y[2] - y[1])
-    function energyfun(t, Et)
+function energy_free(grid::Grid.RealGrid, xygrid)
+    δx = xygrid.x[2] - xygrid.x[1]
+    δy = xygrid.y[2] - xygrid.y[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
+    function energy_t(t, Et)
         Eta = Maths.hilbert(Et)
-        intg = sum(abs2.(Eta)) * Dx * Dy * abs(t[2] - t[1])
-        return PhysData.c*PhysData.ε_0/2 *intg
+        return  prefac_t * sum(abs2.(Eta)) 
     end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = grid.ω[end]
+    δkx = xygrid.kx[2] - xygrid.kx[1]
+    Δkx = length(xygrid.kx)*δkx
+    δky = xygrid.ky[2] - xygrid.ky[1]
+    Δky = length(xygrid.ky)*δky
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
 end
 
-function energy_free_env(x, y)
-    Dx = abs(x[2] - x[1])
-    Dy = abs(y[2] - y[1])
-    function energyfun(t, Et)
-        intg = sum(abs2.(Et)) * Dx * Dy * abs(t[2] - t[1])
-        return PhysData.c*PhysData.ε_0/2 *intg
+function energy_free(grid::Grid.EnvGrid, xygrid)
+    δx = xygrid.x[2] - xygrid.x[1]
+    δy = xygrid.y[2] - xygrid.y[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
+    function energy_t(t, Et)
+        return  prefac_t * sum(abs2.(Et)) 
     end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    δkx = xygrid.kx[2] - xygrid.kx[1]
+    Δkx = length(xygrid.kx)*δkx
+    δky = xygrid.ky[2] - xygrid.ky[1]
+    Δky = length(xygrid.ky)*δky
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
 end
 
 end

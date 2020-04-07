@@ -26,7 +26,7 @@ xygrid = Grid.FreeGrid(R, N)
 
 x = xygrid.x
 y = xygrid.y
-energyfun = NonlinearRHS.energy_free(x, y)
+energyfun, energyfunω = NonlinearRHS.energy_free(grid, xygrid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ) .* Maths.gauss.(xygrid.r, w0/2)
@@ -44,11 +44,6 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
 normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas, pres))
-nfun = let rif=PhysData.ref_index_fun(gas, pres)
-    (ω; z) -> rif(wlfreq(ω))
-end
-normfunz = NonlinearRHS.norm_free(grid, xygrid, nfun)
-error()
 
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
