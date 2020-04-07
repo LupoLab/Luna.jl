@@ -6,6 +6,7 @@ import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
+import Dierckx
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -561,6 +562,51 @@ function (f::FastFinder)(x0::Number)
         f.ilast = f.N
         return f.N
     end
+end
+
+struct RealSpline{sT}
+    rspl::sT
+end
+
+struct CmplxSpline{sT}
+    rspl::sT
+    ispl::sT
+end
+
+Broadcast.broadcastable(rs::RealSpline) = Ref(rs)
+Broadcast.broadcastable(cs::CmplxSpline) = Ref(cs)
+
+"""
+    spline(x, y)
+
+Construct a `RealSpline` or `CmplxSpline` to interpolate the values `y` on axis `x`.
+
+"""
+function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Complex
+    CmplxSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0),
+                Dierckx.Spline1D(x, imag(y), bc="extrapolate", k=3, s=0.0))
+end
+
+function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Real
+    RealSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0))
+end
+
+"""
+    (cs::CmplxSpline)(x)
+
+Evaluate the `CmplxSpline` at coordinate(s) `x`
+"""
+function (cs::CmplxSpline)(x)
+    complex(cs.rspl(x), cs.ispl(x))
+end
+
+"""
+    (cs::RealSpline)(x)
+
+Evaluate the `RealSpline` at coordinate(s) `x`
+"""
+function (rs::RealSpline)(x)
+    rs.rspl(x)
 end
 
 end
