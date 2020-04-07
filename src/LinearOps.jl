@@ -63,15 +63,16 @@ function make_linop(grid::Grid.RealGrid, x::AbstractArray, y::AbstractArray, nfu
     kperp2 = @. kx^2 + ky^2
     idcs = CartesianIndices((length(kx), length(ky)))
     k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end] ./ PhysData.c).^2
-        _fill_linop!(out, grid, β1, k2, kperp2, idcs)
+        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
     end
 end
 
 # Internal routine -- function barrier aids with JIT compilation
-function _fill_linop!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idcs)
+function _fill_linop_xy!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idcs)
     for ii in idcs
         for iω in eachindex(grid.ω)
             βsq = k2[iω] - kperp2[1, ii]
@@ -90,15 +91,16 @@ function make_linop(grid::Grid.EnvGrid, x::AbstractArray, y::AbstractArray, nfun
     kperp2 = @. kx^2 + ky^2
     idcs = CartesianIndices((length(kx), length(ky)))
     k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
-        _fill_linop!(out, grid, β1, k2, kperp2, idcs, thg, βref)
+        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, thg, βref)
     end
 end
 
-function _fill_linop!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, thg, βref)
+function _fill_linop_xy!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, thg, βref)
     for ii in idcs
         for iω in grid.sidx
             βsq = k2[iω] - kperp2[1, ii]
@@ -120,12 +122,12 @@ end
 
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
                           n::AbstractArray, frame_vel::Number)
-    βsq = (n.*grid.ω./PhysData.c).^2 .- (q.k.^2)'
-    βsq[βsq .< 0] .= 0
-    β = .-sqrt.(βsq)
-    β1 = -1/frame_vel
-    # TODO loss
-    return @. im*(β-β1*grid.ω)
+    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    kr2 = q.k.^2
+    β1 = 1/frame_vel 
+    _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
+    return out
 end
 
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
@@ -135,7 +137,7 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     make_const_linop(grid, q, n, 1/β1)
 end
 
-function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun, thg=false)
+function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
     n = zero(grid.ω)
     n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
     β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
@@ -144,35 +146,37 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun, thg=false)
     else
         β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
     end
-    make_const_linop(grid, q, n, 1/β1, β0const)
+    make_const_linop(grid, q, n, 1/β1, β0const; thg=thg)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
-                          n::AbstractArray, frame_vel::Number, β0ref::Number)
-    βsq = (n.*grid.ω./PhysData.c).^2 .- (q.k.^2)'
-    βsq[βsq .< 0] .= 0
-    β = sqrt.(βsq)
+                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    kr2 = q.k.^2
     β1 = 1/frame_vel
-    # TODO loss
-    return @. -im*(β - β1*(grid.ω - grid.ω0) - β0ref)
+    _fill_linop_r!(out, grid, β1, k2, kr2, q.N, β0ref, thg)
+    return out
 end
 
 function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
-    kr2 = (q.k.^2)'
+    kr2 = q.k.^2
     k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
-        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω./PhysData.c).^2
-        _fill_linop!(out, grid, β1, k2, kr2, q.N)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end]./PhysData.c).^2
+        _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
     end
 end
 
-function _fill_linop!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
+function _fill_linop_r!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
     for ir = 1:Nr
         for iω = 1:length(grid.ω)
             βsq = k2[iω] - kr2[ir]
             if βsq < 0
-                out[iω, ir] = 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
             else
                 out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
             end
@@ -181,27 +185,29 @@ function _fill_linop!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
 end
 
 function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
-    kr2 = (q.k.^2)'
+    kr2 = q.k.^2
     k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, λ -> nfun(wlfreq(λ), z=z))(grid.referenceλ)
-        k2[2:end] = (nfun.(grid.ω[2:end]; z=z) .* grid.ω./PhysData.c).^2
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
         βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
-        _fill_linop!(out, grid, β1, k2, kr2, q.N, βref, thg)
+        _fill_linop_r!(out, grid, β1, k2, kr2, q.N, βref, thg)
     end
 end
 
-function _fill_linop!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
+function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
     for ir = 1:Nr
         for iω = 1:length(grid.ω)
             βsq = k2[iω] - kr2[ir]
             if βsq < 0
-                out[iω, ir] = 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
             else
                 out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
-                if !thg
-                    out[iω, ir] -= -im*βref
-                end
+            end
+            if !thg
+                out[iω, ir] -= -im*βref
             end
         end
     end
