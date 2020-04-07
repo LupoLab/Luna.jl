@@ -163,6 +163,8 @@ end
     # these use the actual spline derivative
     @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+    # test second derivative
+    @test maximum(-sin.(x2) - Maths.derivative.(spl, x2, 2)) < 2.0e-4
     # test direct finite differences
     @test abs(invoke(Maths.derivative, Tuple{Any,Any,Integer}, spl, 1.3, 1) - cos(1.3)) < 1.7e-7
     @test maximum(cos.(x2) .- invoke.(Maths.derivative, Tuple{Any,Any,Integer}, spl, x2, 1)) < 2.1e-6
@@ -177,6 +179,7 @@ end
     @test all(abs.(splc.(x) .- yc) .< 5e-16)
     @test maximum(abs.(splc.(x2) .- complex.(sin.(x2), sin.(x2 .+ π/6)))) < 2.6e-7
     @test abs(Maths.derivative(splc, 1.3, 1) - complex(cos(1.3), cos(1.3 + π/6))) < 2.5e-7
+    @test abs(Maths.derivative(splc, 1.3, 2) - complex(-sin(1.3), -sin(1.3 + π/6))) < 2.5e-3
     # test Julia evaluation vs original Dierckx
     @test all(spl.(x2) .== spl.rspl.(x2))
 end
