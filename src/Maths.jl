@@ -585,9 +585,9 @@ Broadcast.broadcastable(cs::CmplxSpline) = Ref(cs)
 Construct a `RealSpline` or `CmplxSpline` to interpolate the values `y` on axis `x`.
 
 """
-function spline(x::AbstractVector, y::AbstractVector{T}) where T <: Complex
-    CmplxSpline(Dierckx.Spline1D(x, real(y), bc="extrapolate", k=3, s=0.0),
-                Dierckx.Spline1D(x, imag(y), bc="extrapolate", k=3, s=0.0))
+function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing, order=3) where T <: Complex
+    CmplxSpline(spline(x, real(y), ifun=ifun, order=order),
+                spline(x, imag(y), ifun=ifun, order=order))
 end
 
 function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing, order=3) where T <: Real
@@ -599,7 +599,6 @@ function spline(x::AbstractVector, y::AbstractVector{T}; ifun = nothing, order=3
         x = x[idcs]
         y = y[idcs]
     end
-
     rspl = Dierckx.Spline1D(x, real(y), bc="extrapolate", k=order, s=0.0)
     h = zeros(eltype(y), rspl.k + 1)
     hh = similar(h)
@@ -668,7 +667,7 @@ function derivative(cs::CmplxSpline, x, order::Integer)
     if order == 0
         return cs(x)
     elseif order == 1
-        return complex.(Dierckx.derivative(cs.rspl, x ), Dierckx.derivative(cs.ispl, x ))
+        return complex.(derivative(cs.rspl, x, order), derivative(cs.ispl, x, order))
     else
         invoke(derivative, Tuple{Any,Any,Integer}, cs, x, order)
     end
