@@ -1,5 +1,6 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
+import Dierckx
 
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
@@ -114,7 +115,7 @@ end
     @test all(pl[8 .< x] .== 0)
 end
 
-@testset "Spline" begin
+@testset "CSpline" begin
     import Random: shuffle
     x = range(0.0, 2π, length=100)
     y = sin.(x)
@@ -152,10 +153,10 @@ end
     @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 1.1e-3
 end
 
-@testset "New Spline" begin
+@testset "BSpline" begin
     x = range(0.0, 2π, length=100)
     y = sin.(x)
-    spl = Maths.spline(x, y)
+    spl = Maths.BSpline(x, y)
     @test all(abs.(spl.(x) .- y) .< 3e-16)
     x2 = range(0.0, 2π, length=300)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
@@ -167,15 +168,17 @@ end
     @test maximum(cos.(x2) .- invoke.(Maths.derivative, Tuple{Any,Any,Integer}, spl, x2, 1)) < 3.4e-3
     # test roots
     yr = x.^2 .- 1.0
-    splr = Maths.spline(x, yr)
+    splr = Maths.BSpline(x, yr)
     @test Maths.roots(splr) == [1.0]
     # test complex
     yi = sin.(x .+ π/6)
     yc = complex.(y, yi)
-    splc = Maths.spline(x, complex.(y, yi))
+    splc = Maths.BSpline(x, complex.(y, yi))
     @test all(abs.(splc.(x) .- yc) .< 5e-16)
     @test maximum(abs.(splc.(x2) .- complex.(sin.(x2), sin.(x2 .+ π/6)))) < 2.6e-7
     @test abs(Maths.derivative(splc, 1.3, 1) - complex(cos(1.3), cos(1.3 + π/6))) < 2.5e-7
+    # test Julia evaluation vs original Dierckx
+    @test all(spl.(x2) .== spl.rspl.(x2))
 end
 
 @testset "randgauss" begin

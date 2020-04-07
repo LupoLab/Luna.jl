@@ -366,7 +366,7 @@ end
 function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     P = collect(range(Pmin, Pmax, length=N))
     ρ = density.(gas, P, T)
-    Maths.spline(P, ρ)
+    Maths.CSpline(P, ρ)
 end
 
 function ionisation_potential(material; unit=:SI)
@@ -420,7 +420,7 @@ function lookup_glass(material::Symbol)
     if material == :SiO2
         ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
         kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
-        spl = Maths.spline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+        spl = Maths.BSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
@@ -1205,7 +1205,7 @@ end
  returns the refractive index directly"
 function lookup_metal(material::Symbol)
     data = data_metal(material)::Array{Float64,2}
-    nspl = Maths.spline(data[:,1], data[:,2] .+ im.*data[:,3])
+    nspl = Maths.BSpline(data[:,1], data[:,2] .+ im.*data[:,3])
     return nspl
 end
 
