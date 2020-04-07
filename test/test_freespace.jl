@@ -1,5 +1,6 @@
 import Luna
 import Luna: Grid, Maths, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Hankel, Plotting
+import Luna.PhysData: wlfreq
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -55,7 +56,13 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 
 linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index_fun(gas, pres))
 
-normfun = NonlinearRHS.norm_radial(grid.ω, q, PhysData.ref_index_fun(gas, pres))
+normfun = NonlinearRHS.const_norm_radial(grid, q, PhysData.ref_index_fun(gas, pres))
+nfun = let rif=PhysData.ref_index_fun(gas, pres)
+    (ω; z) -> rif(wlfreq(ω))
+end
+normfunz = NonlinearRHS.norm_radial(grid, q, nfun)
+
+error()
 
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )

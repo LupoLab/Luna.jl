@@ -18,6 +18,7 @@ import Cubature
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid, Hankel
+import Luna.PhysData: wlfreq
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -406,19 +407,50 @@ function (t::TransRadial)(nl, Eω, z)
 end
 
 """
-    norm_radial(ω, q, nfun)
+    const_norm_radial(ω, q, nfun)
 
-Make function to return normalisation factor for radial symmetry. 
-
-TODO: Make z-dependent
+Make function to return normalisation factor for radial symmetry without re-calculating at
+every step. 
 """
-function norm_radial(ω, q, nfun)
+function const_norm_radial(grid, q, nfun)
+    ω = grid.ω
     βsq = @. (nfun(2π*PhysData.c/ω)*ω/PhysData.c)^2 - (q.k^2)'
-    βsq[βsq .< 0] .= 0
+    βsq[βsq .<= 0] .= 0
     out = @. sqrt(βsq)/(PhysData.μ_0*ω)
     out[ω .== 0, :] .= 1
     out[out .== 0] .= 1
     function norm(z)
+        return out
+    end
+    return norm
+end
+
+"""
+    norm_radial(ω, q, nfun)
+
+Make function to return normalisation factor for radial symmetry. 
+"""
+function norm_radial(grid, q, nfun)
+    ω = grid.ω
+    out = zeros(Float64, (length(ω), q.N))
+    kr2 = q.k.^2
+    n = ones(Float64, length(ω))
+    function norm(z)
+        n[grid.sidx] = nfun.(ω[grid.sidx], z=z)
+        for ir = 1:q.N
+            for iω = 1:length(ω)
+                if ω[iω] == 0
+                    out[iω, ir] = 1.0
+                    continue
+                end
+                βsq = (n[iω]*ω[iω]/PhysData.c)^2 - kr2[ir]
+                if βsq <= 0
+                    out[iω, ir] = 1.0
+                    continue
+                end
+                out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+            end
+        end
         return out
     end
     return norm
