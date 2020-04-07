@@ -62,10 +62,6 @@ inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, responses, inputs)
 
-Ert = FT \ (q \ Eω)
-println(energyfun(grid.t, Ert))
-println(energyfun_ω(grid.ω, Eω))
-
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
 error()
