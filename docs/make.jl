@@ -18,5 +18,6 @@ makedocs(
 deploydocs(
     repo = "lupo@luna.lupo-lab.com:/home/lupo/lunadocs",
     branch = "master",
-    devurl = "./"
+    devurl = "./",
+    deploy_config = cfg
 )
