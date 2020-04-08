@@ -63,14 +63,14 @@ end
 
 function fwhm_t(grid)
     function addstat!(d, Eω, Et, z, dz)
-        d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), :nearest, minmax=:min)
-        d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), :nearest, minmax=:max)
+        d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:min)
+        d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:max)
     end
 end
 
 function fwhm_t(grid, N)
     function addstat!(d, Eω, Et, z, dz)
-        d["fwhm_t"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), :nearest) for i=1:N]
+        d["fwhm_t"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear) for i=1:N]
     end
 end
 
@@ -93,9 +93,37 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
     end
     frac = similar(to)
     function addstat!(d, Eω, Et, z, dz)
-        # note: oversampling returns its arguments without any work done if factor=1
+        # note: oversampling returns its arguments without any work done if factor==1
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
-        ionfrac!(frac, real(Eto)/sqrt(ε_0*c*aeff(z)/2))
+        @. Eto /= sqrt(ε_0*c*aeff(z)/2)
+        ionfrac!(frac, real(Eto))
+        d["electrondensity"] = maximum(frac)*dfun(z)
+    end
+end
+
+function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
+                         modes::NTuple{N, Modes.AbstractMode},
+                         components=:y; oversampling=1) where N
+    to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
+    δt = to[2] - to[1]
+    function ionfrac!(out, Et)
+        ionrate!(out, Et)
+        Maths.cumtrapz!(out, δt) # in-place cumulative integration
+        @. out = 1 - exp(-out)
+    end
+    tospace = Modes.ToSpace(modes, components=components)
+    frac = similar(to)
+    npol = components == :xy ? 2 : 1  
+    Et0 = zeros(ComplexF64, (length(to), npol))
+    function addstat!(d, Eω, Et, z, dz)
+        # note: oversampling returns its arguments without any work done if factor==1
+        to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+        Modes.to_space!(Et0, Eto, (0, 0), tospace; z=z)
+        if npol > 1
+            ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
+        else
+            ionfrac!(frac, real(Et0[:, 1]))
+        end
         d["electrondensity"] = maximum(frac)*dfun(z)
     end
 end

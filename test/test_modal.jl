@@ -33,7 +33,9 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-densityfun(z) = PhysData.std_dens * pres
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -49,7 +51,8 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
-                               Stats.energy(grid, energyfunω, length(modes))
+                               Stats.energy(grid, energyfunω, length(modes)),
+                               Stats.electrondensity(grid, ionrate, densityfun, modes)
                                )
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
@@ -90,4 +93,10 @@ end
 plt.xlabel("Distance (cm)")
 plt.ylabel("Energy (μJ)")
 plt.legend()
+
+##
+plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["electrondensity"]*1e-6)
+plt.xlabel("Distance (cm)")
+plt.ylabel("Electron Density (cm\$^{-3}\$)")
 
