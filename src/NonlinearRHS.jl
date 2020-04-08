@@ -20,6 +20,7 @@ import FFTW
 import Cubature
 import LinearAlgebra: mul!
 import NumericalIntegration: integrate, SimpsonEven, Trapezoidal
+import Base: show
 import Luna: PhysData, Modes, Maths, Grid
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
@@ -168,6 +169,16 @@ mutable struct TransModal{IT, ET, EfT, TT, FTT, rT, gT, dT, nT, lT, lfT}
     mfcn::Int
 end
 
+function show(io::IO, t::TransModal)
+    grid = "grid type: $(typeof(t.grid))"
+    nmodes = "no. of modes: $(t.nmodes)"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    full = "full: $(t.full)"
+    out = join(["TransModal", nmodes, grid, samples, full, resp], "\n  ")
+    print(io, out)
+end
+
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # Exyfun - returns Exys as function of z
 # Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
@@ -212,8 +223,6 @@ end
 function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
     TransModal(ComplexF64, grid, args...; kwargs...)
 end
-
-show(io::IO, t::TransModal) = print(io, "TransModal{$(t.nmodes) modes}")
 
 function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
@@ -300,6 +309,14 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     densityfun::dT
     normfun::nT
     aeff::aT # function which returns effective area
+end
+
+function show(io::IO, t::TransModeAvg)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    out = join(["TransModal", grid, samples, resp], "\n  ")
+    print(io, out)
 end
 
 function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, aeff)

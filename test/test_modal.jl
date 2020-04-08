@@ -24,7 +24,7 @@ modes = (
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun, energyfunω = NonlinearRHS.energy_modal()
+energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
@@ -38,8 +38,8 @@ densityfun(z) = PhysData.std_dens * pres
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-             #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
@@ -47,7 +47,8 @@ inputs = ((1,(in1,)),)
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                               modes, :Ey; full=false)
 
-statsfun = Stats.collect_stats(Stats.ω0(grid),
+statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
                                Stats.energy(grid, energyfunω, length(modes))
                                )
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
