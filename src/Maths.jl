@@ -63,7 +63,7 @@ function rms_width(x::Vector, y; dim = 1)
 end
 
 """
-    fwhm(x, y [, method, baseline]; minmax=:min)
+    fwhm(x, y; method=:linear, baseline=false, minmax=:min)
 
 Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 
@@ -76,47 +76,49 @@ half the global maximum, but at half of the span of `y`.
 `minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
 """
-function fwhm(x, y, method=:spline, baseline=false; minmax=:min)
+function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
         val = minimum(y) + 0.5*(maximum(y) - minimum(y))
     else
         val = 0.5*maximum(y)
     end
-    if method in (:spline, :nearest)
-        maxidx = argmax(y)
-        xmax = x[maxidx]
-        left, right = try
-            if minmax == :min
-                lefti = findlast((x .< xmax) .& (y .< val))
-                righti = findfirst((x .> xmax) .& (y .< val))
-                left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
-                right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
-            else
-                lefti = findfirst((x .< xmax) .& (y .> val))
-                righti = findlast((x .> xmax) .& (y .> val))
-                left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
-                right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
-            end
-            (method == :nearest) && return abs(right - left)
-            left, right
-        catch
-            return NaN
-        end
-        #spline method
-        try
-            spl = CSpline(x, y)
-            lb = xmax - 2*(xmax-left)
-            ub = xmax + 2*(right-xmax)
-            f(x) = spl(x) - val
-            lfine = fzero(f, lb, xmax)
-            rfine = fzero(f, xmax, ub)
-            return abs(rfine - lfine)
-        catch
-            return NaN
-        end
-    else
+    if !(method in (:spline, :linear, :nearest))
         error("Unknown FWHM method $method")
+    end
+    maxidx = argmax(y)
+    xmax = x[maxidx]
+    left, right = try
+        if minmax == :min
+            lefti = findlast((x .< xmax) .& (y .< val))
+            righti = findfirst((x .> xmax) .& (y .< val))
+            (method == :nearest) && return abs(x[lefti] - x[righti])
+            left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
+            right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
+        else
+            lefti = findfirst((x .< xmax) .& (y .> val))
+            righti = findlast((x .> xmax) .& (y .> val))
+            (method == :nearest) && return abs(x[lefti] - x[righti])
+            left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
+            right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
+        end
+        (method == :linear) && return abs(right - left)
+        left, right
+    catch
+        return NaN
+    end
+    #spline method
+    minmax == :max && error("Spline method only supports min FWHM")
+    try
+        spl = CSpline(x, y)
+        lb = xmax - 2*(xmax-left)
+        ub = xmax + 2*(right-xmax)
+        f(x) = spl(x) - val
+        lfine = fzero(f, lb, xmax)
+        rfine = fzero(f, xmax, ub)
+        return abs(rfine - lfine)
+    catch
+        return NaN
     end
 end
 
