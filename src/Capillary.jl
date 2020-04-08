@@ -127,16 +127,16 @@ end
 dimlimits(m::MarcatilliMode; z=0) = (:polar, (0.0, 0.0), (m.a(z), 2π))
 
 # we use polar coords, so xs = (r, θ)
-function field(m::MarcatilliMode; z=0)
+function field(m::MarcatilliMode, xs; z=0)
     if m.kind == :HE
-        return (xs) -> besselj(m.n-1, xs[1]*m.unm/m.a(z)) .* SVector(
+        return (besselj(m.n-1, xs[1]*m.unm/m.a(z)) .* SVector(
             cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
             sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ))
-            )
+            ))
     elseif m.kind == :TE
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(-sin(xs[2]), cos(xs[2]))
+        return besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(-sin(xs[2]), cos(xs[2]))
     elseif m.kind == :TM
-        return (xs) -> besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(cos(xs[2]), sin(xs[2]))
+        return besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(cos(xs[2]), sin(xs[2]))
     end
 end
 

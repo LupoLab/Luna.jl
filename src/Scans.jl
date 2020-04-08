@@ -6,12 +6,16 @@ import Base: length
 """
     @scaninit(name="scan")
 
-Initialise a scan for this file by parsing command line arguments and creating a Scan object.
-The scan name (added to file names via @ScanHDF5Output) can also be given.
+Initialise a scan for this file by parsing command line arguments and creating a `Scan` object
+in the variable `__SCAN__`. The scan name (added to file names via `@ScanHDF5Output`)
+can also be given.
 
 # Examples
 ```julia
-@scaninit "energy_scan_5bar"
+julia> push!(ARGS, "--local")
+julia> @scaninit "scantest"
+julia> __SCAN__
+Luna.Scans.Scan("scantest", :local, (0, 0), nothing, Dict{Symbol,Any}(), Any[], IdDict{Any,Any}(), false)
 ```
 """
 macro scaninit(name="scan")
@@ -128,7 +132,12 @@ function Scan(name, args)
     Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
 end
 
-# The length of a scan is the product of the lengths of the arrays to be scanned over
+"""
+    length(s::Scan)
+
+Compute the total number of simulations in a scan, which is is the product
+of the lengths of the arrays to be scanned over.
+"""
 length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
 
 """
@@ -249,10 +258,10 @@ Recursively interpolate scan variables into a scan expression.
 # Examples
 ```jldoctest
 julia> for i in eachindex(ARGS)
-    pop!(ARGS)
-end
+           pop!(ARGS) # remove existing command line args
+       end
 julia> push!(ARGS, "--local")
-julia> __SCANIDX__ = 1
+julia> __SCANIDX__ = 1 # pretend we're in a @scan block
 julia> @scaninit
 julia> @scanvar energy = range(0.1e-6, 1.5e-6, length=16);
 julia> ex = Expr(:\$, :energy)
@@ -288,11 +297,11 @@ end
 Run the enclosed expression as a scan.
 
 Depending on `__SCAN__.mode`, different things happen:
-* :batch, :range, :local -> run enclosed expression as many times as required, using values
+* `:batch`, `:range`, `:local` -> run enclosed expression as many times as required, using values
     from the cartesian product `__SCAN__.values`. If `__SCAN__.parallel` is true, these runs
     are done on different threads.
-* :cirrus -> make PBS job script for batched run on cirrus
-* :condor -> make HTCondor job script for batched run on HWLX0003
+* `:cirrus` -> make PBS job script for batched run on cirrus
+* `:condor` -> make HTCondor job script for batched run on HWLX0003
 """
 macro scan(ex)
     body = interpolate!(ex)
