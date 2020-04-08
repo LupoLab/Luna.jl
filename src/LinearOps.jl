@@ -1,6 +1,7 @@
 module LinearOps
 import FFTW
-import Luna: Modes, Grid, PhysData, Hankel, Maths
+import Hankel
+import Luna: Modes, Grid, PhysData, Maths
 import Luna.PhysData: wlfreq
 
 #=================================================#

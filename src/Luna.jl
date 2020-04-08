@@ -1,5 +1,6 @@
 module Luna
 import FFTW
+import Hankel
 import Logging
 import LinearAlgebra: mul!, ldiv!
 import Random: MersenneTwister
@@ -60,7 +61,6 @@ include("Utils.jl")
 include("Scans.jl")
 include("Output.jl")
 include("Maths.jl")
-include("Hankel.jl")
 include("PhysData.jl")
 include("Grid.jl")
 include("RK45.jl")

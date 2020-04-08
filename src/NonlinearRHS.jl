@@ -14,10 +14,11 @@ Types of decomposition that are available:
 """
 module NonlinearRHS
 import FFTW
+import Hankel
 import Cubature
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, Modes, Maths, Grid, Hankel
+import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
