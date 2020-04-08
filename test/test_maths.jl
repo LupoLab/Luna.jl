@@ -182,6 +182,13 @@ end
     @test abs(Maths.derivative(splc, 1.3, 2) - complex(-sin(1.3), -sin(1.3 + π/6))) < 2.5e-3
     # test Julia evaluation vs original Dierckx
     @test all(spl.(x2) .== spl.rspl.(x2))
+    # test full spline Derivatives
+    spl1 = Maths.differentiate_spline(spl, 1)
+    @test maximum(abs.(cos.(x2) .- spl1.(x2))) < 5.1e-6
+    spl2 = Maths.differentiate_spline(spl, 2)
+    @test isapprox(-sin.(x2), spl2.(x2),  rtol=3e-5)
+    spl3 = Maths.differentiate_spline(spl, 3)
+    @test isapprox(-cos.(x2), spl3.(x2),  rtol=8e-4)
 end
 
 @testset "randgauss" begin

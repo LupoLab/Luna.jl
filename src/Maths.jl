@@ -647,14 +647,15 @@ end
 """
     derivative(rs::RealBSpline, x, order::Integer)
 
-Calculate derivative of the spline `rs`. For `order == 1` this uses an optimised routine.
-For `order > 1` this falls back to the generic finite difference based method.
+Calculate derivative of the spline `rs`. For `1 <= order < k` (where `k` is the spline order)
+this uses an optimised routine.
+For `order >= k` this falls back to the generic finite difference based method.
 """
 function derivative(rs::RealBSpline, x, order::Integer)
     if order == 0
         return rs(x)
-    elseif order == 1
-        return Dierckx.derivative(rs.rspl, x)
+    elseif order < rs.rspl.k
+        return Dierckx.derivative(rs.rspl, x, order)
     else
         invoke(derivative, Tuple{Any,Any,Integer}, rs, x, order)
     end
@@ -663,17 +664,28 @@ end
 """
     derivative(cs::CmplxBSpline, x, order::Integer)
 
-Calculate derivative of the spline `cs`. For `order == 1` this uses an optimised routine.
-For `order > 1` this falls back to the generic finite difference based method.
+Calculate derivative of the spline `cs`. For `1 <= order < k` (where `k` is the spline order)
+this uses an optimised routine.
+For `order >= k` this falls back to the generic finite difference based method.
 """
 function derivative(cs::CmplxBSpline, x, order::Integer)
-    if order == 0
-        return cs(x)
-    elseif order == 1
-        return complex(derivative(cs.rspl, x, order), derivative(cs.ispl, x, order))
-    else
-        invoke(derivative, Tuple{Any,Any,Integer}, cs, x, order)
+    complex(derivative(cs.rspl, x, order), derivative(cs.ispl, x, order))
+end
+
+"""
+    differentiate_spline(rs::RealBSpline; order::Integer=1)
+
+Return a new spline which is the derivative of `rs` and has the same support.
+Higher orders are obtained by repeated spline differentiation.
+"""
+function differentiate_spline(rs::RealBSpline, order::Integer)
+    x = Dierckx.get_knots(rs.rspl)
+    dspl = rs
+    for i = 1:order
+        dy = derivative.(dspl, x, 1)
+        dspl = BSpline(x, dy, order=rs.rspl.k)
     end
+    dspl
 end
 
 """
