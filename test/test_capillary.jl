@@ -156,4 +156,21 @@ end
                             dimlimits=()->(:polar, (0.0, 0.0), (m.a, 2π)), field=()->nothing)
     @test Modes.α(m3, 2e15) == 0.2
 end
+
+@testset "to_space" begin
+    ms = (Capillary.MarcatilliMode(125e-6, :He, 1.0),
+          Capillary.MarcatilliMode(125e-6, :He, 1.0, m=2, ϕ=π/2))
+    components = :xy
+    xs = (10e-6, π/7)
+    ts = Modes.ToSpace(ms, components=components)
+    Emω = Array{ComplexF64,2}(undef, 8192, 2)
+    fill!(Emω, 0.3+0.5im)
+    Erω1 = Modes.to_space(Emω, xs, ts)
+    Erω! = copy(Erω1)
+    Modes.to_space!(Erω!, Emω, xs, ts)
+    Erω2 = Modes.to_space(Emω, xs, ms, components=components)
+    @test all(Erω2 .== Erω!)
+    @test all(Erω1 .== Erω!)
+end
+
 end
