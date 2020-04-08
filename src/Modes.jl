@@ -203,7 +203,7 @@ julia> η[1] ≈ 1
 true
 ```
 """
-function overlap(m::AbstractMode, r, E; dim)
+function overlap(m::AbstractMode, r, E; dim, norm=true)
     f = field(m) # f((r, θ)) returns field [Ex(r, θ), Ey(r, θ)] of the mode
     dl = dimlimits(m) # integration limits
     # sample the modal field at the same coords as E - select y polarisation component 
@@ -214,7 +214,7 @@ function overlap(m::AbstractMode, r, E; dim)
     # Generate output array: same shape as input, except length in space is 1
     shape = collect(size(E))
     shape[dim] = 1
-    integral = ones(Tuple(shape)) # make output array
+    integral = zeros(eltype(E), Tuple(shape)) # make output array
 
     # Indices to iterate over all other dimensions (e.g. polarisation, frequency)
     idxlo = CartesianIndices(size(E)[1:dim-1])
@@ -222,10 +222,11 @@ function overlap(m::AbstractMode, r, E; dim)
     for hi in idxhi
         for lo in idxlo
                 # normalisation factor for the other field
-                normE = sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal()))
+                normE = norm ? sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal())) :
+                               1
                 # E[lo, :, hi] is a vector
                 integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
-                integral[lo, 1, hi] = abs2.(integrate(r, integrand, Trapezoidal()))
+                integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
         end
     end
     return integral
