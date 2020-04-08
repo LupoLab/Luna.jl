@@ -53,13 +53,22 @@ unm = besselj_zero(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
 Etr2 = Et2 .* Er2
 
-# et, eω = NonlinearRHS.energy_
-
 Etr = Etr1 .+ Etr2
 Eωr = FFTW.rfft(Etr, 1)
+
+ert, ekω = NonlinearRHS.energy_radial(grid, q)
+energy1 = ert(grid.t, Etr1)
+energy2 = ert(grid.t, Etr2)
 
 m1 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1)
 m2 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2)
 Eωm1 = Modes.overlap(m1, q.r, Eωr; dim=2, norm=false)
 Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
-@test Eωm1[:, 1] ≈ Eω1
+
+
+Etm1 = FFTW.irfft(Eωm1[:, 1], length(grid.t))
+Etm2 = FFTW.irfft(Eωm2[:, 1], length(grid.t))
+
+et = NonlinearRHS.energy_modal()
+@test isapprox(et(grid.t, Etm1), energy1, rtol=1e-3)
+@test isapprox(et(grid.t, Etm2), energy2, rtol=1e-3)

@@ -223,7 +223,7 @@ function overlap(m::AbstractMode, r, E; dim, norm=true)
         for lo in idxlo
                 # normalisation factor for the other field
                 normE = norm ? sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal())) :
-                               1
+                               1/sqrt(c*ε_0/2)
                 # E[lo, :, hi] is a vector
                 integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
                 integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
