@@ -143,6 +143,23 @@ function linterpx(x1, x2, y1, y2, val)
 end
 
 """
+    hwhwm(f, x0=0; direction=:fwd)
+
+Find the value `x` where the function `f(x)` drops to half of its maximum, which is located
+at `x0`. For `direction==:fwd`, search in the region `x > x0`, for :bwd, search in `x < x0`.
+"""
+function hwhm(f, x0=0; direction=:fwd)
+    m = f(x0)
+    fhalf(x) = f(x) - 0.5*m
+    if direction == :fwd
+        xhw = fzero(fhalf, x0, Inf)
+    elseif direction == :bwd
+        xhw = fzero(fhalf, -Inf, x0)
+    end
+    return abs(xhw - x0)
+end
+
+"""
     cumtrapz!([out, ] y, x; dim=1)
 
 Trapezoidal integration for multi-dimensional arrays or vectors, in-place or with output array.

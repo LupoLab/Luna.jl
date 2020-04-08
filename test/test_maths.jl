@@ -116,21 +116,25 @@ end
 end
 
 @testset "fwhm" begin
-fw = 0.2
-x = collect(range(-1, stop=1, length=2048))
-δx = x[2] - x[1]
-y = Maths.gauss(x, fwhm=fw)
-@test isapprox(Maths.fwhm(x, y), fw, rtol=1e-4)
-@test isapprox(Maths.fwhm(x, y, method=:spline), fw, rtol=1e-4)
-@test abs(Maths.fwhm(x, y, method=:nearest) - fw) < δx
+    fw = 0.2
+    x = collect(range(-1, stop=1, length=2048))
+    δx = x[2] - x[1]
+    y = Maths.gauss(x, fwhm=fw)
+    @test isapprox(Maths.fwhm(x, y), fw, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, method=:spline), fw, rtol=1e-4)
+    @test abs(Maths.fwhm(x, y, method=:nearest) - fw) < δx
 
-fw = 0.1
-sep = 0.5
-y = Maths.gauss(x, fwhm=fw, x0=-sep/2) + Maths.gauss(x, fwhm=fw, x0=sep/2)
-@test isapprox(Maths.fwhm(x, y, minmax=:min), fw, rtol=1e-4)
-@test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
+    fw = 0.1
+    sep = 0.5
+    y = Maths.gauss(x, fwhm=fw, x0=-sep/2) + Maths.gauss(x, fwhm=fw, x0=sep/2)
+    @test isapprox(Maths.fwhm(x, y, minmax=:min), fw, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
+
+    hw = 1
+    f(x) = Maths.gauss(x, fwhm=2*hw)
+    @test Maths.hwhm(f, 0) ≈ hw
+    @test Maths.hwhm(f, 0; direction=:bwd) ≈ hw
 end
-
 @testset "CSpline" begin
     import Random: shuffle
     x = range(0.0, 2π, length=100)

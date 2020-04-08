@@ -74,10 +74,24 @@ function fwhm_t(grid, N)
     end
 end
 
+function fwhm_r(grid, modes; components=:y)
+    tospace = Modes.ToSpace(modes, components=components)
+    npol = components == :xy ? 2 : 1  
+    Eω0 = zeros(ComplexF64, (length(grid.ω), npol))
+
+    function addstat!(d, Eω, Et, z, dz)
+        function f(r)
+            Modes.to_space!(Eω0, Eω, (r, 0), tospace; z=z)
+            sum(abs2.(Eω0))
+        end
+        d["fwhm_r"] = 2*Maths.hwhm(f)
+    end
+end
+
 """
     electrondensity(grid, ionrate, dfun, aeff; oversampling=1)
 
-Create stats function to calculate the maximum electron density.
+Create stats function to calculate the maximum electron density in mode average.
 
 If oversampling > 1, the field is oversampled before the calculation
 !!! warning
@@ -101,6 +115,15 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
     end
 end
 
+"""
+    electrondensity(grid, ionrate, dfun, modes; oversampling=1)
+
+Create stats function to calculate the maximum electron density for multimode simulations.
+
+If oversampling > 1, the field is oversampled before the calculation
+!!! warning
+    Oversampling can lead to a significant performance hit
+"""
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
                          modes::NTuple{N, Modes.AbstractMode},
                          components=:y; oversampling=1) where N

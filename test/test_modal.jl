@@ -40,8 +40,8 @@ end
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+            #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
@@ -52,7 +52,8 @@ Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses,
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω, length(modes)),
-                               Stats.electrondensity(grid, ionrate, densityfun, modes)
+                               Stats.fwhm_r(grid, modes)
+                            #    Stats.electrondensity(grid, ionrate, densityfun, modes)
                                )
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
@@ -95,8 +96,18 @@ plt.ylabel("Energy (μJ)")
 plt.legend()
 
 ##
+if haskey(output["stats"], "electrondensity")
+    plt.figure()
+    plt.plot(output["stats"]["z"].*1e2, output["stats"]["electrondensity"]*1e-6)
+    plt.xlabel("Distance (cm)")
+    plt.ylabel("Electron Density (cm\$^{-3}\$)")
+end
+
+##
 plt.figure()
-plt.plot(output["stats"]["z"].*1e2, output["stats"]["electrondensity"]*1e-6)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_r"]*1e6)
+plt.axhline(0.93675*a*1e6, linestyle="--", label="FWHM of EH11")
 plt.xlabel("Distance (cm)")
-plt.ylabel("Electron Density (cm\$^{-3}\$)")
+plt.ylabel("Radial FWHM (μm)")
+plt.legend()
 
