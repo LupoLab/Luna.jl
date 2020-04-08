@@ -1,24 +1,19 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes, Raman
 import Logging
 import FFTW
-import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
 
-# import DSP.Unwrap: unwrap
-
-import PyPlot:pygui, plt
-
 a = 13e-6
-gas = :Ar
+gas = :H2
 pres = 5
 
-τ = 30e-15
+τ = 20e-15
 λ0 = 800e-9
+energy = 1e-6
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(200e-2, 800e-9, (180e-9, 3000e-9), 4e-12)
 
-# m = Capillary.MarcatilliMode(a, gas, pres)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
@@ -33,21 +28,17 @@ end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
-
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
+             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
 
-linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
+linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-in1 = (func=gausspulse, energy=1e-6)
+in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(
-    grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
@@ -76,10 +67,12 @@ for ii = 1:size(Etout, 2)
     energy[ii] = energyfun(t, Etout[:, ii])
 end
 
+import PyPlot:pygui, plt
 pygui(true)
 plt.figure()
 plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
 plt.clim(-6, 0)
+plt.xlim(0.2, 0.5)
 plt.colorbar()
 
 plt.figure()

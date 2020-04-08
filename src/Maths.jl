@@ -1,9 +1,11 @@
 module Maths
 import FiniteDifferences
-import LinearAlgebra
+import LinearAlgebra: Tridiagonal, mul!, ldiv!
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
+import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
+import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -12,7 +14,7 @@ function derivative(f, x, order::Integer)
     else
         # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(9, order), y->f(y*scale), x/scale, adapt=4)/scale^order
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+4, order), y->f(y*scale), x/scale, adapt=4)/scale^order
     end
 end
 
@@ -25,6 +27,11 @@ end
 function gauss(x; x0 = 0, power = 2, fwhm)
     σ = fwhm / (2 * (2 * log(2))^(1 / power))
     return gauss(x, σ, x0 = x0, power=power)
+end
+
+function randgauss(μ, σ, args...; seed=nothing)
+    rng = MersenneTwister(seed)
+    σ*randn(rng, args...) .+ μ
 end
 
 "nth moment of the vector y"
@@ -215,14 +222,68 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
-Hilbert transform - find analytic signal from real signal
+    hilbert(x; dim=1)
+
+Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
-    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    xf = FFTW.fft(x, dim)
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
-    xf[idxlo, 1:ceil(Int, size(xf, dim) / 2), idxhi] .= 0
-    return 2 .* FFTW.ifft(FFTW.ifftshift(xf, dim), dim)
+    xf[idxlo, 2:n1, idxhi] .*= 2
+    xf[idxlo, (n1+1):n2, idxhi] .= 0
+    return FFTW.ifft(xf, dim)
+end
+
+"""
+    plan_hilbert!(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
+"""
+function plan_hilbert!(x; dim=1)
+    loadFFTwisdom()
+    FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    saveFFTwisdom()
+    xf = Array{ComplexF64}(undef, size(FT))
+    idxlo = CartesianIndices(size(xf)[1:dim - 1])
+    idxhi = CartesianIndices(size(xf)[dim + 1:end])
+    n1 = size(xf, dim)÷2
+    n2 = size(xf, dim)
+    xc = complex(x)
+    function hilbert!(out, x)
+        copyto!(xc, x)
+        mul!(xf, FT, xc)
+        xf[idxlo, 2:n1, idxhi] .*= 2
+        xf[idxlo, (n1+1):n2, idxhi] .= 0
+        ldiv!(out, FT, xf)
+    end
+    return hilbert!
+end
+
+"""
+    plan_hilbert(x; dim=1)
+
+Pre-plan a Hilbert transform.
+
+Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` without allocation.
+
+!!! warning
+    The closure returned always returns a reference to the same array buffer, which could lead
+    to unexpected results if it is called from more than one location. To avoid this the array
+    should either: (i) only be used in the same code segment; (ii) only be used transiently
+    as part of a larger computation; (iii) copied.
+"""
+function plan_hilbert(x; dim=1)
+    out = complex(x)
+    hilbert! = plan_hilbert!(x, dim=dim)
+    function hilbert(x)
+        hilbert!(out, x)
+    end
+    return hilbert
 end
 
 """
@@ -337,13 +398,13 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
-"
-Simple cubic spline
-http://mathworld.wolfram.com/CubicSpline.html
-Boundary conditions extrapolate with initially constant gradient
+"""
+    CSpline
 
-If given, ifun(x0) should return the index of the first element in x which is bigger than x0.
-"
+Simple cubic spline, see e.g.:
+http://mathworld.wolfram.com/CubicSpline.html Boundary        
+conditions extrapolate with initially constant gradient
+"""
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     x::Vx
     y::Vy
@@ -354,11 +415,21 @@ end
 # make  broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
+"""
+    CSpline(x, y [, ifun])
+
+Construct a `CSpline` to interpolate the values `y` on axis `x`.
+
+If given, `ifun(x0)` should return the index of the first element in x which is bigger
+than x0. Otherwise, it defaults two one of two options:
+1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
+2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
+"""
 function CSpline(x, y, ifun=nothing)
     if any(diff(x) .== 0)
         error("entries in x must be unique")
     end
-    if any(diff(x) .<= 0)
+    if !issorted(x)
         idcs = sortperm(x)
         x = x[idcs]
         y = y[idcs]
@@ -374,7 +445,7 @@ function CSpline(x, y, ifun=nothing)
     d[1] = 2.0
     d[end] = 2.0
     dl = fill(1.0, length(y) - 1)
-    M = LinearAlgebra.Tridiagonal(dl, d, dl)
+    M = Tridiagonal(dl, d, dl)
     D = M \ R
     if ifun === nothing
         δx = x[2] - x[1]
@@ -389,15 +460,17 @@ function CSpline(x, y, ifun=nothing)
             ifun = ffast
         else
             # x is not uniformly spaced - use brute-force lookup
-            fslow(x0) = x0 <= x[1] ? 2 :
-                        x0 >= x[end] ? length(x) :
-                        findfirst(x -> x>x0, x)
-            ifun = fslow
+            ifun = FastFinder(x)
         end
     end
     CSpline(x, y, D, ifun)
 end
 
+"""
+    (c::CSpline)(x0)
+
+Evaluate the `CSpline` at coordinate `x0`
+"""
 function (c::CSpline)(x0)
     i = c.ifun(x0)
     x0 == c.x[i] && return c.y[i]
@@ -407,6 +480,87 @@ function (c::CSpline)(x0)
         + c.D[i - 1]*t 
         + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
+end
+
+"""
+    FastFinder
+
+Callable type which accelerates index finding for the case where inputs are usually in order.
+"""
+mutable struct FastFinder{xT, xeT}
+    x::xT
+    mi::xeT
+    ma::xeT
+    N::Int
+    ilast::Int
+    xlast::xeT
+end
+
+"""
+    FastFinder(x)
+
+Construct a `FastFinder` to find indices in the array `x`.
+
+!!! warning
+    `x` must be sorted in ascending order for `FastFinder` to work.
+"""
+function FastFinder(x::AbstractArray)
+    issorted(x) || error("Input array for FastFinder must be sorted in ascending order.")
+    if any(diff(x) .== 0)
+        error("Entries in input array for FastFinder must be unique.")
+    end
+    FastFinder(x, x[1], x[end], length(x), 0, typemin(x[1]))
+end
+
+"""
+    (f::FastFinder)(x0)
+
+Find the first index in `f.x` which is larger than `x0`.
+
+This is similar to [`findfirst`](@ref), but it starts at the index which was last used.
+If the new value `x0` is close to the previous `x0`, this is much faster than `findfirst`.
+"""
+function (f::FastFinder)(x0::Number)
+    # Default cases if we're out of bounds
+    if x0 <= f.x[1]
+        f.xlast = x0
+        f.ilast = 1
+        return 2
+    elseif x0 >= f.x[end]
+        f.xlast = x0
+        f.ilast = f.N
+        return f.N
+    end
+    if f.ilast == 0 # first call -- f.xlast is not set properly so comparisons won't work
+        # return using brute-force method instead
+        f.ilast = findfirst(x -> x>x0, f.x)
+        return f.ilast
+    end
+    if x0 == f.xlast # same value as before - no work to be done
+        return f.ilast
+    elseif x0 < f.xlast # smaller than previous value - go through array backwards
+        f.xlast = x0
+        for i = f.ilast:-1:1
+            if f.x[i] < x0
+                f.ilast = i+1 # found last idx where x < x0 -> at i+1, x > x0
+                return i+1
+            end
+        end
+        # we only get to this point if we haven't found x0 - return the lower bound (2)
+        f.ilast = 1
+        return 2
+    else # larger than previous value - just pick up where we left off
+        f.xlast = x0
+        for i = f.ilast:f.N
+            if f.x[i] > x0
+                f.ilast = i
+                return i
+            end
+        end
+        # we only get to this point if we haven't found x0 - return the upper bound (N)
+        f.ilast = f.N
+        return f.N
+    end
 end
 
 end

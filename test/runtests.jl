@@ -46,8 +46,24 @@ end
     include(joinpath(testdir, "test_tools.jl"))
 end
 
+@testset "Utils" begin
+    include(joinpath(testdir, "test_utils.jl"))
+end
+
 @testset "Gradients" begin
     include(joinpath(testdir, "test_gradient.jl"))
+end
+
+@testset "Scans" begin
+    include(joinpath(testdir, "test_scans.jl"))
+end
+
+@testset "Raman" begin
+    include(joinpath(testdir, "test_raman.jl"))
+end
+
+@testset "Kerr" begin
+    include(joinpath(testdir, "test_kerr.jl"))
 end
 
 end

@@ -14,19 +14,19 @@ abstract type AbstractMode end
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
 "Maximum dimensional limits of validity for this mode"
-function dimlimits(m::AbstractMode)
+function dimlimits(m::AbstractMode; z=0.0)
     error("abstract method called")
 end
 
 "Create function of coords that returns (xs) -> (Ex, Ey)"
-function field(m::AbstractMode)
+function field(m::AbstractMode; z=0.0)
     error("abstract method called")
 end
 
 "Get mode normalization constant"
-function N(m::AbstractMode)
-    f = field(m)
-    dl = dimlimits(m)
+function N(m::AbstractMode; z=0.0)
+    f = field(m, z=z)
+    dl = dimlimits(m, z=z)
     function Nfunc(xs)
         E = f(xs)
         ret = sqrt(ε_0/μ_0)*dot(E, E)
@@ -37,8 +37,8 @@ function N(m::AbstractMode)
 end
 
 "Create function that returns normalised (xs) -> |E|"
-function absE(m::AbstractMode)
-    func = let sN = sqrt(N(m)), f = field(m)
+function absE(m::AbstractMode; z=0.0)
+    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             norm(f(xs) ./ sN)
         end
@@ -46,8 +46,8 @@ function absE(m::AbstractMode)
 end
 
 "Create function that returns normalised (xs) -> (Ex, Ey)"
-function Exy(m)
-    func = let sN = sqrt(N(m)), f = field(m)
+function Exy(m::AbstractMode; z=0.0)
+    func = let sN = sqrt(N(m, z=z)), f = field(m, z=z)
         function func(xs)
             f(xs) ./ sN
         end
@@ -55,9 +55,9 @@ function Exy(m)
 end
 
 "Get effective area of mode"
-function Aeff(m::AbstractMode)
-    em = absE(m)
-    dl = dimlimits(m)
+function Aeff(m::AbstractMode; z=0.0)
+    em = absE(m, z=z)
+    dl = dimlimits(m, z=z)
     # Numerator
     function Aeff_num(xs)
         e = em(xs)
@@ -75,36 +75,36 @@ function Aeff(m::AbstractMode)
 end
 
 "full complex refractive index of a mode"
-function neff(m::AbstractMode, ω; z=0)
+function neff(m::AbstractMode, ω; z=0.0)
     error("abstract method called")
 end
 
-function β(m::AbstractMode, ω; z=0)
+function β(m::AbstractMode, ω; z=0.0)
     return ω/c*real(neff(m, ω, z=z))
 end
 
-function α(m::AbstractMode, ω; z=0)
+function α(m::AbstractMode, ω; z=0.0)
     return 2*ω/c*imag(neff(m, ω, z=z))
 end
 
-function losslength(m::AbstractMode, ω; z=0)
+function losslength(m::AbstractMode, ω; z=0.0)
     return 1/α(m, ω, z=z)
 end
 
-function transmission(m::AbstractMode, ω, L; z=0)
+function transmission(m::AbstractMode, ω, L; z=0.0)
     return exp(-α(m, ω)*L)
 end
 
-function dB_per_m(m::AbstractMode, ω; z=0)
+function dB_per_m(m::AbstractMode, ω; z=0.0)
     return 10/log(10).*α(m, ω)
 end
 
-function dispersion_func(m::AbstractMode, order; z=0)
+function dispersion_func(m::AbstractMode, order; z=0.0)
     βn(ω) = Maths.derivative(ω -> β(m, ω, z=z), ω, order)
     return βn
 end
 
-function dispersion(m::AbstractMode, order, ω; z=0)
+function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 

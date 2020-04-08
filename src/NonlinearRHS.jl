@@ -36,7 +36,7 @@ end
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
-    scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
+    scale = No/N # Scale factor makes up for difference in FFT array length
     fill!(Aωo, 0)
     copy_scale_both!(Aωo, Aω, N÷2, scale)
     mul!(Ato, IFTplan, Aωo)
@@ -55,7 +55,7 @@ end
 function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
-    scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
+    scale = N/No # Scale factor makes up for difference in FFT array length
     mul!(Aωo, FTplan, Ato)
     copy_scale_both!(Aω, Aωo, N÷2, scale)
 end
@@ -122,11 +122,12 @@ function norm_modal(ω)
 end
 
 "Normalisation factor for mode-averaged field."
-function norm_mode_average(ω, βfun!)
+function norm_mode_average(ω, βfun!, Aeff)
     out = zero(ω)
+    pre = @. PhysData.c^(3/2)*sqrt(2*PhysData.ε_0)/ω
     function norm(z)
         βfun!(out, ω, z)
-        out .*= PhysData.c^2 .* PhysData.ε_0 ./ ω
+        out .*= pre/sqrt(Aeff(z))
         return out
     end
     return norm
@@ -138,11 +139,13 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
-mutable struct TransModal{IT, ET, TT, FTT, rT, gT, dT, nT, lT}
+mutable struct TransModal{IT, ET, EfT, TT, FTT, rT, gT, dT, nT, lT, lfT}
     nmodes::Int
     indices::IT
+    dlfun::lfT
     dimlimits::lT
     full::Bool
+    Exyfun::EfT
     Exys::ET
     Ems::Array{Float64,2}
     Emω::Array{ComplexF64,2}
@@ -166,12 +169,12 @@ mutable struct TransModal{IT, ET, TT, FTT, rT, gT, dT, nT, lT}
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
-# R - max radial extent
+# Exyfun - returns Exys as function of z
 # Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+function TransModal(tT, grid, nmodes, dlfun, Exyfun, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
     # npol is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
     if components == :Ey
         indices = 2
@@ -185,7 +188,6 @@ function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components,
     else
         error("components must be one of :Ex, :Ey or :Exy")
     end
-    nmodes = length(Exys)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     Ems = Array{Float64,2}(undef, nmodes, npol)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
@@ -196,22 +198,29 @@ function TransModal(tT, grid, dimlimits, Exys, FT, resp, densityfun, components,
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
     IFT = inv(FT)
-    TransModal(nmodes, indices, dimlimits, full, Exys, Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω, FT,
-                     resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
+    Exys = Exyfun(z=0.0)
+    dimlimits = dlfun(z=0.0)
+    TransModal(nmodes, indices, dlfun, dimlimits, full, Exyfun, Exys,
+               Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
+               FT, resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
 end
 
-function TransModal(grid::Grid.RealGrid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    TransModal(Float64, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+function TransModal(grid::Grid.RealGrid, args...; kwargs...)
+    TransModal(Float64, grid, args...; kwargs...)
 end
 
-function TransModal(grid::Grid.EnvGrid, dimlimits, Exys, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    TransModal(ComplexF64, grid, dimlimits, Exys, FT, resp, densityfun, components, normfun, rtol=rtol, atol=atol, mfcn=mfcn, full=full)
+function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
+    TransModal(ComplexF64, grid, args...; kwargs...)
 end
 
-function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z)
+show(io::IO, t::TransModal) = print(io, "TransModal{$(t.nmodes) modes}")
+
+function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
     t.ncalls = 0
     t.z = z
+    t.Exys .= t.Exyfun(z=z)
+    t.dimlimits = t.dlfun(z=z)
 end
 
 function pointcalc!(fval, xs, t::TransModal)
@@ -265,19 +274,22 @@ end
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
     if t.full
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t), t.dimlimits[2], t.dimlimits[3], 
-                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
-                                    error_norm=Cubature.L2)
+        val, err = Cubature.pcubature_v(
+            length(Eω)*2,
+            (x, fval) -> pointcalc!(fval, x, t),
+            t.dimlimits[2], t.dimlimits[3], 
+            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
-        val, err = Cubature.pcubature_v(length(Eω)*2, (x, fval) -> pointcalc!(fval, x, t),
-                                    (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
-                                    reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn,
-                                    error_norm=Cubature.L2)
+        val, err = Cubature.pcubature_v(
+            length(Eω)*2,
+            (x, fval) -> pointcalc!(fval, x, t),
+            (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
+            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
-struct TransModeAvg{TT, FTT, rT, gT, dT, nT}
+struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     Pto::Array{TT,1}
     Eto::Array{TT,1}
     Eωo::Array{ComplexF64,1}
@@ -287,28 +299,30 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT}
     grid::gT
     densityfun::dT
     normfun::nT
+    aeff::aT # function which returns effective area
 end
 
-function TransModeAvg(TT, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, aeff)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun)
+    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, normfun, aeff)
 end
 
-function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun)
-    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, normfun, aeff)
+    TransModeAvg(Float64, grid, FT, resp, densityfun, normfun, aeff)
 end
 
-function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun)
-    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun)
+function TransModeAvg(grid::Grid.EnvGrid, FT, resp, densityfun, normfun, aeff)
+    TransModeAvg(ComplexF64, grid, FT, resp, densityfun, normfun, aeff)
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
+    t.Eto ./= sqrt(PhysData.ε_0*PhysData.c*t.aeff(z)/2)
     Et_to_Pt!(t.Pto, t.Eto, t.resp)
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
@@ -316,41 +330,9 @@ function (t::TransModeAvg)(nl, Eω, z)
 end
 
 "Calculate energy from modal field E(t)"
-function energy_modal()
-    function energyfun(t, Et)
-        Eta = Maths.hilbert(Et)
-        return abs(integrate(t, abs2.(Eta), SimpsonEven()))
-    end
-    return energyfun
-end
+energy_modal() = _energy_modal
 
-"Calculate energy from modal envelope field E(t)"
-function energy_env_modal()
-    function energyfun(t, Et)
-        return abs(integrate(t, abs2.(Et), SimpsonEven()))
-    end
-    return energyfun
-end
-
-"Calculate energy from field E(t) for mode-averaged field"
-function energy_mode_avg(m)
-    aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
-        Eta = Maths.hilbert(Et)
-        intg = abs(integrate(t, abs2.(Eta), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*aeff/2
-    end
-    return energyfun
-end
-
-"Calculate energy from envelope field E(t) for mode-averaged field"
-function energy_env_mode_avg(m)
-    aeff = Modes.Aeff(m)
-    function energyfun(t, Et)
-        intg = abs(integrate(t, abs2.(Et), SimpsonEven()))
-        return intg * PhysData.c*PhysData.ε_0*aeff/2
-    end
-    return energyfun
-end
+_energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
+_energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
 
 end

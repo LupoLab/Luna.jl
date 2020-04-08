@@ -25,8 +25,7 @@ import Luna: Output
     normfun = NonlinearRHS.norm_modal(grid.ω)
 
     modes = (
-         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-         α=ω->0),
+         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     in1 = (func=gausspulse, energy=1e-6)
     inputs = ((1,(in1,)),)
@@ -35,13 +34,11 @@ import Luna: Output
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
 
     modes = (
-        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-                        α=ω->0),
-        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2),
-                        α=ω->0)
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false)
     )
     in1 = (func=gausspulse, energy=1e-6/2.0)
     # same field in each mode
@@ -51,7 +48,7 @@ import Luna: Output
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputp)
+    Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10)
 
     Iω = dropdims(abs2.(output.data["Eω"]), dims=2)
     Iωp = dropdims(sum(abs2.(outputp.data["Eω"]), dims=2), dims=2)

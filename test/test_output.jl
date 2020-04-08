@@ -5,6 +5,7 @@ import Luna: Output
     import HDF5
     import Luna: Utils
     fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+    isfile(fpath) && rm(fpath)
     shape = (1024, 4, 2)
     n = 11
     stat = randn()
@@ -14,7 +15,7 @@ import Luna: Output
     t = collect(range(t0, stop=t1, length=n))
     ω = randn((1024,))
     wd = dirname(@__FILE__)
-    gitc = read(`git -C $wd rev-parse --short HEAD`, String)
+    gitc = Utils.git_commit()
     o = Output.HDF5Output(fpath, t0, t1, n, shape, yname="y", tname="t", statsfun)
     extra = Dict()
     extra["ω"] = ω
@@ -34,7 +35,7 @@ import Luna: Output
     @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open(fpath, "r") do file
         @test all(read(file["t"]) == t)
-        global yr = reinterpret(ComplexF64, read(file["y"]))
+        global yr = read(file["y"])
         @test all([all(yr[:, :, :, ii] == y0) for ii=1:n])
         @test all(ω == read(file["ω"]))
         @test gitc == read(file["git_commit"])
@@ -50,7 +51,7 @@ import Luna: Output
     @test all(yr .== o["y"])
     @test 100 == o["meta"]["meta1"]
     rm(fpath)
-    rm(splitdir(fpath)[1])
+    rm(splitdir(fpath)[1], force=true)
 end
 
 @testset "Memory" begin
@@ -64,7 +65,7 @@ end
     t = collect(range(t0, stop=t1, length=n))
     ω = randn((1024,))
     wd = dirname(@__FILE__)
-    gitc = read(`git -C $wd rev-parse --short HEAD`, String)
+    gitc = Utils.git_commit()
     o = Output.MemoryOutput(t0, t1, n, shape, statsfun, yname="y", tname="t")
     extra = Dict()
     extra["ω"] = ω
@@ -95,6 +96,8 @@ end
     @test "src" == o.data["meta"]["meta2"]
 end
 
+fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
 @testset "HDF5 vs Memory" begin
     import Luna
     import Luna: Grid, Capillary, PhysData, Nonlinear, NonlinearRHS, Output, Stats, Maths, LinearOps, Modes
@@ -106,14 +109,15 @@ end
     pres = 5
     τ = 30e-15
     λ0 = 800e-9
-    grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres), α=ω->0)
-    energyfun = NonlinearRHS.energy_mode_avg(m)
+    grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    aeff(z) = Modes.Aeff(m, z=z)
+    energyfun = NonlinearRHS.energy_modal()
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
+    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
         ω0 = 2π*PhysData.c/λ0
@@ -121,33 +125,32 @@ end
     end
     in1 = (func=gausspulse, energy=1e-6)
     inputs = (in1, )
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
+    Eω, transform, FT = Luna.setup(
+        grid, energyfun, densityfun, normfun, responses, inputs, aeff)
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
-    fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     hdf5 = Output.HDF5Output(fpath, 0, grid.zmax, 201, (length(grid.ω),), statsfun)
     hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 201, (length(grid.ω),), statsfun,
                               compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    function output(args...)
-        hdf5(args...)
-        hdf5c(args...)
-        mem(args...)
+    function output(args...; kwargs...)
+        hdf5(args...; kwargs...)
+        hdf5c(args...; kwargs...)
+        mem(args...; kwargs...)
     end
     for o in (hdf5, hdf5c, mem)
-        o(Dict("ω" => grid.ω, "λ0" => λ0))
+        o(Dict("λ0" => λ0))
         o("τ", τ)
     end
     Luna.run(Eω, grid, linop, transform, FT, output)
     HDF5.h5open(hdf5.fpath, "r") do file
-        @test read(file["ω"]) == mem.data["ω"]
+        @test read(file["λ0"]) == mem.data["λ0"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))
         @test Eω == mem.data["Eω"]
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
-    rm(hdf5c.fpath)
-    rm(hdf5.fpath)
-    rm(splitdir(fpath)[1])
 end
+rm(fpath)
+rm(fpath_comp)
+rm(splitdir(fpath)[1], force=true)

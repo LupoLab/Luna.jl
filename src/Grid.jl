@@ -152,4 +152,12 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     return EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
+function to_dict(g::GT) where GT <: AbstractGrid
+    d = Dict{String, Any}()
+    for field in fieldnames(GT)
+        d[string(field)] = getfield(g, field)
+    end
+    d
+end
+
 end
