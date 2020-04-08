@@ -5,6 +5,12 @@ import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf
 
+"""
+    ω0(grid)
+
+Create stats function to calculate the centre of mass (first moment) of the spectral power
+density.
+"""
 function ω0(grid)
     addstat! = let ω=grid.ω
         function addstat!(d, Eω, Et, z, dz)
@@ -14,20 +20,28 @@ function ω0(grid)
     return addstat!
 end
 
+"""
+    energy(grid, energyfun_ω)
+
+Create stats function to calculate the total energy.
+"""
 function energy(grid, energyfun_ω)
     function addstat!(d, Eω, Et, z, dz)
-        d["energy"] = energyfun_ω(grid.ω, Eω)
+        if ndims(Eω) > 1
+            d["energy"] = [energyfun_ω(grid.ω, Eω[:, i]) for i=1:size(Eω, 2)]
+        else
+            d["energy"] = energyfun_ω(grid.ω, Eω)
+        end
     end
     return addstat!
 end
 
-function energy(grid, energyfun_ω, N)
-    function addstat!(d, Eω, Et, z, dz)
-        d["energy"] = [energyfun_ω(grid.ω, Eω[:, i]) for i=1:N]
-    end
-    return addstat!
-end
+"""
+    energy_λ(grid, energyfun_ω, λlims; label)
 
+Create stats function to calculate the energy in a wavelength region given by `λlims`.
+If `label` is omitted, the stats dataset is named by the wavelength limits.
+"""
 function energy_λ(grid, energyfun_ω, λlims; label=nothing, winwidth=0)
     λlims = collect(λlims)
     ωmin, ωmax = extrema(wlfreq.(λlims))
@@ -39,41 +53,64 @@ function energy_λ(grid, energyfun_ω, λlims; label=nothing, winwidth=0)
     energy_window(grid, energyfun_ω, window; label=label)
 end
 
+"""
+    energy_window(grid, energyfun_ω, window; label)
+
+Create stats function to calculate the energy filtered by a `window`. The stats dataset will
+be named `energy_[label]`.
+"""
 function energy_window(grid, energyfun_ω, window; label)
     key = "energy_$label"
     function addstat!(d, Eω, Et, z, dz)
-        d[key] = energyfun_ω(grid.ω, Eω.*window)
+        if ndims(Eω) > 1
+            d[key] = [energyfun_ω(grid.ω, Eω[:, i].*window) for i=1:size(Eω, 2)]
+        else
+            d[key] = energyfun_ω(grid.ω, Eω.*window)
+        end
     end
     return addstat!
 end
 
+"""
+    peakpower(grid)
+
+Create stats function to calculate the peak power.
+"""
 function peakpower(grid)
     function addstat!(d, Eω, Et, z, dz)
-        d["peakpower"] = maximum(abs2.(Et))
+        if ndims(Et) > 1
+            d["peakpower"] = dropdims(maximum(abs2.(Et), dims=1), dims=1)
+        else
+            d["peakpower"] = maximum(abs2.(Et))
+        end
     end
     return addstat!
 end
 
-function peakpower(grid, N)
-    function addstat!(d, Eω, Et, z, dz)
-        d["peakpower"] = [maximum(abs2.(Et[:, i])) for i=1:N]
-    end
-    return addstat!
-end
+"""
+    fwhm_t(grid)
 
+Create stats function to calculate the temporal FWHM (pulse duration) for mode average.
+"""
 function fwhm_t(grid)
     function addstat!(d, Eω, Et, z, dz)
-        d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:min)
-        d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:max)
+        if ndims(Et) > 1
+            d["fwhm_t_min"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear)
+                              for i=1:size(Et, 2)]
+            d["fwhm_t_max"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear, minmax=:max)
+                              for i=1:size(Et, 2)]
+        else
+            d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:min)
+            d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:max)
+        end
     end
 end
 
-function fwhm_t(grid, N)
-    function addstat!(d, Eω, Et, z, dz)
-        d["fwhm_t"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear) for i=1:N]
-    end
-end
+"""
+    fwhm_r(grid, modes; components=:y)
 
+Create stats function to calculate the radial FWHM (aka beam size) in a modal propagation.
+"""
 function fwhm_r(grid, modes; components=:y)
     tospace = Modes.ToSpace(modes, components=components)
     npol = components == :xy ? 2 : 1  
