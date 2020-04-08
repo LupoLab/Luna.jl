@@ -268,15 +268,43 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=nothing)
     end
 end
 
-"Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
-    n = ref_index_fun(material, P, T; lookup=lookup)
-    β(ω) = @. ω/c * real(n(2π*c/ω))
-    βn(λ) = Maths.derivative(β, 2π*c/λ, order)
+"""
+    dispersion_func(order, n)
+
+Get a function that calculates dispersion of order `order` for a refractive index given by
+`n(λ)`.
+"""
+function dispersion_func(order, n)
+    β(ω) = @. ω/c * real(n(wlfreq(ω)))
+    βn(λ) = Maths.derivative(β, wlfreq(λ), order)
     return βn
 end
 
-"Get dispersion."
+"""
+    dispersion_func(order, material, P=1, T=roomtemp; lookup=nothing)
+
+Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
+"""
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
+    n = ref_index_fun(material, P, T)
+    dispersion_func(order, n)
+end
+
+"""
+    dispersion(order, material, λ, P=1, T=roomtemp; lookup=nothing)
+
+Calculate the dispersion of order `order` of a given `material` at a wavelength `λ`.
+
+For gases the pressure `P` (default:atmosphere) and the temperature `T` (default: room temp)
+can also be specified. `lookup::Bool` determines whether a lookup table or a Sellmeier 
+expansion is used for the refractive index (default is material dependent).
+
+# Examples
+```jldoctest
+julia> dispersion(2, :BK7, 400e-9) * 1e30 * 1e-3 # convert to fs^2/mm
+122.03632107303108
+```
+"""
 function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
     return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end

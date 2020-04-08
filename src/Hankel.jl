@@ -4,6 +4,8 @@ import SpecialFunctions: besselj
 import LinearAlgebra: mul!, ldiv!, dot
 import Base: *, \
 
+J₀₀ = besselj(0, 0)
+
 """
     Quasi-discrete Hankel transform, after:
     [1] L. Yu, M. Huang, M. Chen, W. Chen, W. Huang, and Z. Zhu, Optics Letters 23, (1998)
@@ -15,6 +17,7 @@ import Base: *, \
 mutable struct QDHT
     N::Int64 # Number of samples
     T::Array{Float64, 2} # Transform matrix
+    J1sq::Array{Float64, 1} # J₁² factors
     K::Float64 # Highest spatial frequency
     k::Vector{Float64} # Spatial frequency grid
     R::Float64 # Aperture size (largest real-space coordinate)
@@ -43,7 +46,7 @@ function QDHT(R, N; dim=1)
 
     scaleR = 2*(R/S)^2 ./ J₁sq
     scaleK = 2*(K/S)^2 ./ J₁sq
-    QDHT(N, T, K, k, R, r, scaleR, scaleK, dim)
+    QDHT(N, T, J₁sq, K, k, R, r, scaleR, scaleK, dim)
 end
 
 "Forward transform"
@@ -71,14 +74,36 @@ function \(Q::QDHT, A)
 end
 
 "Radial integral"
-function integrateR(A, Q)
-    return dimdot(Q.scaleR, A)
+function integrateR(A, Q; dim=1)
+    return dimdot(Q.scaleR, A; dim=dim)
 end
 
 "Integral in conjugate space"
-function integrateK(A, Q)
-    return dimdot(Q.scaleK, A)
+function integrateK(A, Q; dim=1)
+    return dimdot(Q.scaleK, A; dim=dim)
 end
+
+"Compute on-axis sample from transformed array"
+onaxis(A, Q) = J₀₀ .* integrateK(A, Q; dim=Q.dim)
+
+function symmetric(A, Q::QDHT; dim=Q.dim)
+    s = collect(size(A))
+    N = s[dim]
+    s[dim] = 2N + 1
+    out = Array{eltype(A)}(undef, Tuple(s))
+    idxlo = CartesianIndices(size(A)[1:dim-1])
+    idxhi = CartesianIndices(size(A)[dim+1:end])
+    out[idxlo, 1:N, idxhi] .= A[idxlo, N:-1:1, idxhi]
+    out[idxlo, N+1, idxhi] .= squeeze(onaxis(Q*A, Q), dims=dim)
+    out[idxlo, (N+2):(2N+1), idxhi] .= A[idxlo, :, idxhi]
+    return out
+end
+
+squeeze(A::Number; dims) = A
+squeeze(A::AbstractArray; dims) = dropdims(A, dims=dims)
+
+Rsymmetric(Q) = vcat(-Q.r[end:-1:1], 0, Q.r)
+
 
 "Matrix-vector multiplication along specific dimension of array V"
 function dot!(out, M, V; dim=1)
@@ -92,7 +117,7 @@ end
 function _dot!(out, M, V, idxlo, idxhi)
     for lo in idxlo
         for hi in idxhi
-            view(out, lo, :, hi) .= M * view(V, lo, :, hi)
+            mul!(view(out, lo, :, hi), M, view(V, lo, :, hi))
         end
     end
 end
@@ -102,7 +127,7 @@ function dimdot(v, A; dim=1)
     dims = collect(size(A))
     dims[dim] = 1
     out = Array{eltype(A)}(undef, Tuple(dims))
-    dimdot!(out, v, A; dim=1)
+    dimdot!(out, v, A; dim=dim)
     return out
 end
 
