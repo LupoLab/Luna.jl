@@ -45,7 +45,7 @@ in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                              modes, :Ey; full=false)
+                              modes, :y; full=false)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),

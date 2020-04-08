@@ -7,6 +7,7 @@ import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Roots: fzero
+import Dierckx
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -15,7 +16,7 @@ function derivative(f, x, order::Integer)
     else
         # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+4, order), y->f(y*scale), x/scale, adapt=4)/scale^order
+        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+6, order), y->f(y*scale), x/scale, adapt=2)/scale^order
     end
 end
 
@@ -491,6 +492,52 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
 end
 
 """
+    check_spline_args(x, y)
+
+Ensure that the x array contains unique and sorted values (while preserving the
+relaionship between the x and y values).
+"""
+function check_spline_args(x, y)
+    if any(diff(x) .== 0)
+        error("entries in x must be unique")
+    end
+    if !issorted(x)
+        idcs = sortperm(x)
+        x = x[idcs]
+        y = y[idcs]
+    end
+    x, y
+end
+
+"""
+     make_spline_ifun(x, ifun)
+
+If `ifun != nothing` then `ifun(x0)` should return the index of the first element in x
+which is bigger than x0. Otherwise, it defaults two one of two options:
+1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
+2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
+"""
+function make_spline_ifun(x, ifun)
+    if ifun === nothing
+        δx = x[2] - x[1]
+        if all(diff(x) .≈ δx)
+            # x is uniformly spaced - use fast lookup
+            xmax = maximum(x)
+            xmin = minimum(x)
+            N = length(x)
+            ffast(x0) = x0 <= xmin ? 2 :
+                        x0 >= xmax ? N : 
+                        ceil(Int, (x0-xmin)/(xmax-xmin)*(N-1))+1
+            ifun = ffast
+        else
+            # x is not uniformly spaced - use brute-force lookup
+            ifun = FastFinder(x)
+        end
+    end
+    ifun
+end
+
+"""
     CSpline
 
 Simple cubic spline, see e.g.:
@@ -518,14 +565,7 @@ than x0. Otherwise, it defaults two one of two options:
 2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
 """
 function CSpline(x, y, ifun=nothing)
-    if any(diff(x) .== 0)
-        error("entries in x must be unique")
-    end
-    if !issorted(x)
-        idcs = sortperm(x)
-        x = x[idcs]
-        y = y[idcs]
-    end
+    x, y = check_spline_args(x, y)
     R = similar(y)
     R[1] = y[2] - y[1]
     for i in 2:(length(y)-1)
@@ -539,23 +579,7 @@ function CSpline(x, y, ifun=nothing)
     dl = fill(1.0, length(y) - 1)
     M = Tridiagonal(dl, d, dl)
     D = M \ R
-    if ifun === nothing
-        δx = x[2] - x[1]
-        if all(diff(x) .≈ δx)
-            # x is uniformly spaced - use fast lookup
-            xmax = maximum(x)
-            xmin = minimum(x)
-            N = length(x)
-            ffast(x0) = x0 <= xmin ? 2 :
-                        x0 >= xmax ? N : 
-                        ceil(Int, (x0-xmin)/(xmax-xmin)*(N-1))+1
-            ifun = ffast
-        else
-            # x is not uniformly spaced - use brute-force lookup
-            ifun = FastFinder(x)
-        end
-    end
-    CSpline(x, y, D, ifun)
+    CSpline(x, y, D, make_spline_ifun(x, ifun))
 end
 
 """
@@ -653,6 +677,199 @@ function (f::FastFinder)(x0::Number)
         f.ilast = f.N
         return f.N
     end
+end
+
+struct RealBSpline{sT,hT,fT}
+    rspl::sT
+    h::hT
+    hh::hT
+    ifun::fT
+end
+
+struct CmplxBSpline{sT}
+    rspl::sT
+    ispl::sT
+end
+
+Broadcast.broadcastable(rs::RealBSpline) = Ref(rs)
+Broadcast.broadcastable(cs::CmplxBSpline) = Ref(cs)
+
+"""
+    BSpline(x, y)
+
+Construct a `RealBSpline` or `CmplxSpline` of given `order` (1 to 5, default=3)
+to interpolate the values `y` on axis `x`.
+
+If given, `ifun(x0)` should return the index of the first element in x which is bigger
+than x0. Otherwise, it defaults two one of two options:
+1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
+2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
+
+# Note
+For accurate derivatives use 5th order splines
+"""
+function BSpline(x::AbstractVector{Tx}, y::AbstractVector{T}; ifun = nothing, order=3) where {Tx <: Real, T <: Real}
+    check_spline_args(x, y)
+    rspl = Dierckx.Spline1D(x, y, bc="extrapolate", k=order, s=0.0)
+    h = zeros(eltype(y), order + 1)
+    hh = similar(h)
+    RealBSpline(rspl, h, hh, make_spline_ifun(Dierckx.get_knots(rspl), ifun))
+end
+
+function BSpline(x::AbstractVector{Tx}, y::AbstractVector{T}; kwargs...) where {Tx <: Real, T <: Complex}
+    CmplxBSpline(BSpline(x, real(y); kwargs...),
+                 BSpline(x, imag(y); kwargs...))
+end
+
+"""
+    (cs::RealBSpline)(x)
+
+Evaluate the `RealBSpline` at coordinate(s) `x`
+"""
+function (rs::RealBSpline)(x)
+    splev!(rs.h, rs.hh, rs.rspl.t, rs.rspl.c, rs.rspl.k, x, rs.ifun)
+end
+
+"""
+    (cs::CmplxSpline)(x)
+
+Evaluate the `CmplxBSpline` at coordinate(s) `x`
+"""
+function (cs::CmplxBSpline)(x)
+    complex(cs.rspl(x), cs.ispl(x))
+end
+
+"""
+    derivative(rs::RealBSpline, x, order::Integer)
+
+Calculate derivative of the spline `rs`. For `1 <= order < k` (where `k` is the spline order)
+this uses an optimised routine.
+For `order >= k` this falls back to the generic finite difference based method.
+"""
+function derivative(rs::RealBSpline, x, order::Integer)
+    if order == 0
+        return rs(x)
+    elseif order < rs.rspl.k
+        return Dierckx.derivative(rs.rspl, x, order)
+    else
+        invoke(derivative, Tuple{Any,Any,Integer}, rs, x, order)
+    end
+end
+
+"""
+    derivative(cs::CmplxBSpline, x, order::Integer)
+
+Calculate derivative of the spline `cs`. For `1 <= order < k` (where `k` is the spline order)
+this uses an optimised routine.
+For `order >= k` this falls back to the generic finite difference based method.
+"""
+function derivative(cs::CmplxBSpline, x, order::Integer)
+    complex(derivative(cs.rspl, x, order), derivative(cs.ispl, x, order))
+end
+
+"""
+    differentiate_spline(rs::RealBSpline; order::Integer=1)
+
+Return a new spline which is the derivative of `rs` and has the same support.
+Higher orders are obtained by repeated spline differentiation.
+"""
+function differentiate_spline(rs::RealBSpline, order::Integer)
+    x = Dierckx.get_knots(rs.rspl)
+    dspl = rs
+    for i = 1:order
+        dy = derivative.(dspl, x, 1)
+        dspl = BSpline(x, dy, order=rs.rspl.k)
+    end
+    dspl
+end
+
+"""
+    roots(rs::RealBSpline)
+
+Find the roots of the spline `rs`.
+"""
+function roots(rs::RealBSpline)
+    Dierckx.roots(rs.rspl)
+end
+
+
+"""
+    splev!(h, hh, t, c, k, x, ifun)
+
+Evaluate a spline s(x) of degree k, given in its b-spline representation.
+
+# Arguments
+- `h::ArrayPT<:Real,1}`: work space
+- `hh::ArrayPT<:Real,1}`: work space
+- `t::Array{T<:Real,1}`: the positions of the knots
+- `c::Array{T<:Real,1}`: the b-spline coefficients
+- `k::Integer`: the degree of s(x)
+- `x::Real`: the point to evaluate at
+- `ifun::Function`: a function to find the index `i` s.t. `t[i] > x`
+
+Adapted from splev.f from Dierckx
+http://www.netlib.org/dierckx/index.html
+"""
+function splev!(h, hh, t, c, k, x, ifun)
+    k1 = k + 1
+    k2 = k1 + 1
+    nk1 = length(t) - k1
+    tb = t[k1]
+    te = t[nk1 + 1]
+    l = k1
+    l1 = l + 1
+    # search for knot interval t(l) <= arg < t(l+1)
+    l = ifun(x) - 1 + k
+    # evaluate the non-zero b-splines at x.
+    fpbspl!(h, hh, t, k, x, l)
+    # find the value of s(x) at x.
+    sp = 0.0
+    ll = l - k1
+    for j = 1:k1
+        ll = ll + 1
+        sp += c[ll]*h[j]
+    end
+    sp
+end
+
+"""
+    fpbspl!(h, hh, t, k, x, l)
+
+Evaluate the (k+1) non-zero b-splines of
+degree k at t[l] <= x < t[l+1] using the stable recurrence
+relation of de boor and cox.
+
+# Arguments
+- `h::ArrayPT<:Real,1}`: work space
+- `hh::ArrayPT<:Real,1}`: work space
+- `t::Array{T<:Real,1}`: the positions of the knots
+- `k::Integer`: the degree of s(x)
+- `x::Real`: the point to evaluate at
+- `l::Integer`: the active knot location: `t[l] <= x < t[l+1]`
+
+Adapted from fpbspl.f from Dierckx
+http://www.netlib.org/dierckx/index.html
+"""
+function fpbspl!(h, hh, t, k, x, l)
+    h[1] = one(x)
+    for j = 1:k
+        for i = 1:j
+            hh[i] = h[i]
+        end
+        h[1] = 0.0
+        for i = 1:j
+            li = l+i
+            lj = li-j
+            if t[li] != t[lj]
+                f = hh[i]/(t[li] - t[lj]) 
+                h[i] = h[i] + f*(t[li] - x)
+                h[i+1] = f*(x - t[lj])
+            else
+                h[i+1] = 0.0 
+            end
+        end
+    end
+    return h
 end
 
 end
