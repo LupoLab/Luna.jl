@@ -232,7 +232,7 @@ Convert from modal fields to real space using provided `ToSpace` struct.
 - `ts::ToSpace`: the corresponding `ToSpace` struct
 - `z::Real`: the axial position
 """
-function to_space!(Erω, Emω, xs, ts::ToSpace; z=0.0)
+@noinline function to_space!(Erω, Emω, xs, ts::ToSpace; z=0.0)
     if ts.nmodes != size(Emω,2)
         error("the number of modes must match the number of modal fields")
     end
@@ -245,20 +245,20 @@ function to_space!(Erω, Emω, xs, ts::ToSpace; z=0.0)
     if dimlims[1] == :cartesian
         # for the cartesian case
         # if either coordinate is outside dimlimits we return 0
-        if xs[1] <= dimlimits[2][1] || xs[1] >= dimlimits[3][1]
+        if xs[1] <= dimlims[2][1] || xs[1] >= dimlims[3][1]
             fill!(Erω, 0.0)
             return
-        elseif xs[2] <= dimlimits[2][2] || xs[2] >= dimlimits[3][2]
+        elseif xs[2] <= dimlims[2][2] || xs[2] >= dimlims[3][2]
             fill!(Erω, 0.0)
             return
         end
-    elseif dimlimits[1] == :polar
+    elseif dimlims[1] == :polar
         # for the polar case
         # if the r coordinate is negative we error
         if xs[1] < 0.0
             error("polar coordinate r cannot be smaller than 0")
         # if r is greater or equal to the boundary we return 0
-        elseif xs[1] >= dimlimits[3][1]
+        elseif xs[1] >= dimlims[3][1]
             fill!(Erω, 0.0)
             return
         end

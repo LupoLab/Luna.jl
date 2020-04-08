@@ -139,15 +139,10 @@ function Et_to_Pt!(Pt, Et, responses)
     end
 end
 
-mutable struct TransModal{IT, ET, EfT, TT, FTT, rT, gT, dT, nT, lT, lfT}
-    nmodes::Int
-    indices::IT
-    dlfun::lfT
-    dimlimits::lT
+mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
+    ts::tsT
     full::Bool
-    Exyfun::EfT
-    Exys::ET
-    Ems::Array{Float64,2}
+    dimlimits::lT
     Emω::Array{ComplexF64,2}
     Erω::Array{ComplexF64,2}
     Erωo::Array{ComplexF64,2}
@@ -169,39 +164,20 @@ mutable struct TransModal{IT, ET, EfT, TT, FTT, rT, gT, dT, nT, lT, lfT}
 end
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
-# Exyfun - returns Exys as function of z
-# Exys - nmodes length collection of functions returning normalised Ex,Ey field given r,θ  
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModal(tT, grid, nmodes, dlfun, Exyfun, FT, resp, densityfun, components, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    # npol is the number of vector components, either 1 (linear pol) or 2 (full X-Y vec)
-    if components == :Ey
-        indices = 2
-        npol = 1
-    elseif components == :Ex
-        indices = 1
-        npol = 1
-    elseif components == :Exy
-        indices = 1:2
-        npol = 2
-    else
-        error("components must be one of :Ex, :Ey or :Exy")
-    end
-    Emω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
-    Ems = Array{Float64,2}(undef, nmodes, npol)
-    Erω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
-    Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
-    Er = Array{tT,2}(undef, length(grid.to), npol)
-    Pr = Array{tT,2}(undef, length(grid.to), npol)
-    Prω = Array{ComplexF64,2}(undef, length(grid.ω), npol)
-    Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), npol)
-    Prmω = Array{ComplexF64,2}(undef, length(grid.ω), nmodes)
+function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
+    Erω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
+    Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
+    Er = Array{tT,2}(undef, length(grid.to), ts.npol)
+    Pr = Array{tT,2}(undef, length(grid.to), ts.npol)
+    Prω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
+    Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
+    Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
-    Exys = Exyfun(z=0.0)
-    dimlimits = dlfun(z=0.0)
-    TransModal(nmodes, indices, dlfun, dimlimits, full, Exyfun, Exys,
-               Ems, Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
+    TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
                FT, resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
 end
 
@@ -213,17 +189,16 @@ function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
     TransModal(ComplexF64, grid, args...; kwargs...)
 end
 
-show(io::IO, t::TransModal) = print(io, "TransModal{$(t.nmodes) modes}")
+show(io::IO, t::TransModal) = print(io, "TransModal{$(t.ts.nmodes) modes}")
 
-function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
+@noinline function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
     t.ncalls = 0
     t.z = z
-    t.Exys .= t.Exyfun(z=z)
-    t.dimlimits = t.dlfun(z=z)
+    t.dimlimits = Modes.dimlimits(t.ts.ms[1], z=z)
 end
 
-function pointcalc!(fval, xs, t::TransModal)
+@noinline function pointcalc!(fval, xs, t::TransModal)
     # TODO: parallelize this in Julia 1.3
     for i in 1:size(xs, 2)
         x1 = xs[1, i]
@@ -252,11 +227,8 @@ function pointcalc!(fval, xs, t::TransModal)
                 pre = 1.0
             end
         end
-        # get the field at r,θ
-        for i = 1:t.nmodes
-            t.Ems[i,:] .= t.Exys[i]((x1, x2))[t.indices] # field matrix (nmodes x npol)
-        end
-        mul!(t.Erω, t.Emω, t.Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
+        x = (x1,x2)
+        Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
         fill!(t.Pr, 0.0)
@@ -266,7 +238,7 @@ function pointcalc!(fval, xs, t::TransModal)
         t.Prω .*= t.grid.ωwin.*t.normfun(t.z)
         # now project back to each mode
         # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
-        mul!(t.Prmω, t.Prω, transpose(t.Ems))
+        mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))
         fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
     end
 end
