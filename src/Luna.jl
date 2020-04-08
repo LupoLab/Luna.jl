@@ -167,6 +167,20 @@ function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
     @. Eω += FFTamp * exp(1im*φ)
 end
 
+transtype(t::NonlinearRHS.TransModeAvg) = "mode average"
+transtype(t::NonlinearRHS.TransModal) = "multimode"
+transtype(t) = "unknown"
+
+linoptype(l::AbstractArray) = "constant"
+linoptype(l) = "variable"
+
+gridtype(g::Grid.RealGrid) = "field-resolved"
+gridtype(g::Grid.EnvGrid) = "envelope"
+gridtype(g) = "unknown"
+
+simtype(g, t, l) = Dict("field" => gridtype(g),
+                        "transform" => transtype(t),
+                        "linop" => linoptype(l))
 
 function run(Eω, grid,
              linop, transform, FT, output;
@@ -189,6 +203,7 @@ function run(Eω, grid,
     end
 
     output(Grid.to_dict(grid), group="grid")
+    output(simtype(grid, transform, linop), group="simulation_type")
 
     RK45.solve_precon(
         transform, linop, Eω, z, dz, grid.zmax, stepfun=stepfun,
