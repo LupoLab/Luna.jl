@@ -39,19 +39,21 @@ end
 @test isapprox(sum, 1, rtol=1e-4)
 
 a = 100e-6
-q = Hankel.QDHT(a, 128)
+q = Hankel.QDHT(2a, 512)
 grid = Grid.RealGrid(1, 800e-9, (200e-9, 2000e-9), 0.5e-12)
 It1 = Maths.gauss(grid.t, fwhm=30e-15)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 unm = besselj_zero(0, 1)
 Er1 = besselj.(0, unm*q.r/a)'
+Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1
 It2 = 4*Maths.gauss(grid.t, fwhm=15e-15)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/400e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 unm = besselj_zero(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
+Er2[q.r .> a] .= 0
 Etr2 = Et2 .* Er2
 
 Etr = Etr1 .+ Etr2

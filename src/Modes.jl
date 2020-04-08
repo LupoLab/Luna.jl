@@ -199,7 +199,7 @@ julia> r = collect(range(0, a, length=512));
 julia> Er = besselj.(0, unm*r/a);
 
 julia> η = Modes.overlap(m, r, Er; dim=1);
-julia> η[1] ≈ 1
+julia> abs2(η[1]) ≈ 1
 true
 ```
 """
