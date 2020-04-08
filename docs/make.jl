@@ -10,5 +10,6 @@ makedocs(
 )
 
 deploydocs(
-    repo = "github.com/chrisbrahms/Luna.git",
+    repo = "lupo@luna.lupo-lab.com:/home/lupo/lunadocs",
+    branch = "master"
 )
