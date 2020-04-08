@@ -43,17 +43,18 @@ settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT)
 
 Set FFTW planning mode for all FFTW transform planning in `Luna`.
 
-Possible values for `mode` are `"estimate"`, `"measure"`, `"patient"`, and `"exhaustive"`.
-The initial value upon loading `Luna` is `"patient"`
+Possible values for `mode` are `:estimate`, `:measure`, `:patient`, and `:exhaustive`.
+The initial value upon loading `Luna` is `:patient`
 
 # Examples
 ```jldoctest
-julia> Luna.set_fftw_mode("patient")
+julia> Luna.set_fftw_mode(:patient)
 0x00000020
 ```
 """
 function set_fftw_mode(mode)
-    flag = getfield(FFTW, Symbol(uppercase(mode)))
+    s = uppercase(string(mode))
+    flag = getfield(FFTW, Symbol(s))
     settings["fftw_flag"] = flag
 end
 

@@ -4,7 +4,7 @@ import Logging: @info
 testdir = dirname(@__FILE__)
 
 import Luna: set_fftw_mode
-set_fftw_mode("estimate")
+set_fftw_mode(:estimate)
 
 @testset "All" begin
 
