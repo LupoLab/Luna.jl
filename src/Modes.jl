@@ -185,38 +185,64 @@ macro arbitrary(exprs...)
     end
 end
 
-function indices(components)
-    if components == :xy
-        return 1:2
-    elseif components == :x
-        return 1
-    elseif components == :y
-        return 2
-    else
-        error("components $components not recognised")
-    end
+struct ToSpace{mT,iT}
+    ms::mT
+    indices::iT
+    nmodes::Int
+    npol::Int
+    Ems::Array{Float64,2}
 end
 
 """
-    Em_to_Erω!(Erω, Emω, ms, xs; z=0.0, components=:xy)
+    ToSpace(ms; components=:xy)
 
-Convert from modal fields to real space.
+Construct a `ToSpace` for high performance conversion between modal fields and real space.
 
 # Arguments
-- `Erω::Array{ComplexF64}`: a dimension nω x 2 array where the real space frequency domain
+- `ms::Tuple`: a tuple of modes
+- `components::Symbol`: which polarisation components to return: :x, :y, :xy
+"""
+function ToSpace(ms; components=:xy)
+    if components == :xy
+        indices = 1:2
+    elseif components == :x
+        indices = 1
+    elseif components == :y
+        indices = 2
+    else
+        error("components $components not recognised")
+    end
+    nmodes = length(ms)
+    npol = length(indices)
+    Ems = Array{Float64,2}(undef, nmodes, npol)
+    ToSpace(ms, indices, nmodes, npol, Ems)
+end
+
+"""
+    to_space!(Erω, Emω, xs, ts::ToSpace; z=0.0)
+
+Convert from modal fields to real space using provided `ToSpace` struct.
+
+# Arguments
+- `Erω::Array{ComplexF64}`: a dimension nω x npol array where the real space frequency domain
                             field will be written to
 - `Emω::Array{ComplexF64}`: a dimension nω x nmodes array containing the frequency domain
                             modal fields
-- `ms::Tuple`: a tuple of modes
 - `xs:Tuple`: the transverse coordinates, `x,y` for cartesian, `r,θ` for polar
+- `ts::ToSpace`: the corresponding `ToSpace` struct
 - `z::Real`: the axial position
-- `components::Symbol`: which polarisation components to return: :x, :y, :xy
 """
-function Em_to_Erω!(Erω, Emω, ms, xs; z=0.0, components=:xy)
+function to_space!(Erω, Emω, xs, ts::ToSpace; z=0.0)
+    if ts.nmodes != size(Emω,2)
+        error("the number of modes must match the number of modal fields")
+    end
+    if ts.npol != size(Erω,2)
+        error("the number of output fields must match the number of polarisation components")
+    end
     # we assume all dimlimits are the same
-    dimlims = dimlimits(ms[1])
+    dimlims = dimlimits(ts.ms[1], z=z)
     # handle limits
-    if dimlimits[1] == :cartesian
+    if dimlims[1] == :cartesian
         # for the cartesian case
         # if either coordinate is outside dimlimits we return 0
         if xs[1] <= dimlimits[2][1] || xs[1] >= dimlimits[3][1]
@@ -238,34 +264,47 @@ function Em_to_Erω!(Erω, Emω, ms, xs; z=0.0, components=:xy)
         end
     end
     # get the field at x1, x2
-    nmodes = size(Emω,2)
-    if nmodes != length(ms)
-        error("the number of modes must match the number of modal fields")
+    for i = 1:ts.nmodes
+        ts.Ems[i,:] .= Exy(ts.ms[i], xs, z=z)[ts.indices] # field matrix (nmodes x npol)
     end
-    idx = indices(components)
-    npol = length(idx)
-    if npol != size(Erω,2)
-        error("the number of output fields must be $npol for $components polarisation")
-    end
-    Ems = Array{Float64,2}(undef, nmodes, npol)
-    for i = 1:nmodes
-        Ems[i,:] .= Exy(ms[i], xs, z=z)[idx] # field matrix (nmodes x npol)
-    end
-    mul!(Erω, Emω, Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
+    mul!(Erω, Emω, ts.Ems) # matrix product (nω x nmodes) * (nmodes x npol) -> (nω x npol)
 end
 
 """
-    Em_to_Eω(Emω, ms, xs; z=0.0, components=:xy)
+    to_space(Emω, xs, ts::ToSpace; z=0.0)
 
-Convert from modal fields to real space. Returns Erω::Array{ComplexF64,2} an nω x npol array
-containing the real space frequency domain field.
+Convert from modal fields to real space using provided `ToSpace` struct.
 
-See `Em_to_Erω!`(@ref) for argument descriptions.
+# Arguments
+- `Emω::Array{ComplexF64}`: a dimension nω x nmodes array containing the frequency domain
+                            modal fields
+- `xs:Tuple`: the transverse coordinates, `x,y` for cartesian, `r,θ` for polar
+- `ts::ToSpace`: the corresponding `ToSpace` struct
+- `z::Real`: the axial position
 """
-function Em_to_Erω(Emω, ms, xs; z=0.0, components=:xy)
+function to_space(Emω, xs, ts::ToSpace; z=0.0)
+    Erω = Array{ComplexF64,2}(undef, size(Emω,1), ts.npol)
+    to_space!(Erω, Emω, xs, ts, z=z)
+    Erω
+end
 
-    Erω = Array{ComplexF64,2}(undef, size(Emω,1), length(indices(components)))
-    Em_to_Erω!(Erω, Emω, ms, xs, z=z, components=components)
+"""
+    to_space(Emω, xs, ms; components=:xy, z=0.0)
+
+Convert from modal fields to real space.
+
+# Arguments
+- `Emω::Array{ComplexF64}`: a dimension nω x nmodes array containing the frequency domain
+                            modal fields
+- `xs:Tuple`: the transverse coordinates, `x,y` for cartesian, `r,θ` for polar
+- `ms::Tuple`: a tuple of modes
+- `components::Symbol`: which polarisation components to return: :x, :y, :xy
+- `z::Real`: the axial position
+"""
+function to_space(Emω, xs, ms; components=:xy, z=0.0)
+    ts = ToSpace(ms, components=components)
+    Erω = Array{ComplexF64,2}(undef, size(Emω,1), ts.npol)
+    to_space!(Erω, Emω, xs, ts, z=z)
     Erω
 end
 
