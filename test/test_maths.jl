@@ -189,6 +189,25 @@ end
     @test isapprox(-sin.(x2), spl2.(x2),  rtol=3e-5)
     spl3 = Maths.differentiate_spline(spl, 3)
     @test isapprox(-cos.(x2), spl3.(x2),  rtol=8e-4)
+    # test other orders
+    spl_k1 = Maths.BSpline(x, y, order=1)
+    @test all(abs.(spl_k1.(x) .- y) .< 3e-16)
+    @test maximum(spl_k1.(x2) - sin.(x2)) < 6e-4
+    spl_k2 = Maths.BSpline(x, y, order=2)
+    @test all(abs.(spl_k2.(x) .- y) .< 3.4e-16)
+    @test maximum(spl_k2.(x2) - sin.(x2)) < 2e-5
+    spl_k4 = Maths.BSpline(x, y, order=4)
+    @test all(abs.(spl_k4.(x) .- y) .< 4.5e-16)
+    @test maximum(spl_k4.(x2) - sin.(x2)) < 2e-8
+    spl_k5 = Maths.BSpline(x, y, order=5)
+    @test all(abs.(spl_k5.(x) .- y) .< 4.5e-16)
+    @test maximum(spl_k5.(x2) - sin.(x2)) < 1.1e-10
+    # check 5th order spline derivatives
+    @test abs(Maths.derivative(spl_k5, 1.3, 1) - cos(1.3)) < 2e-11
+    @test abs(Maths.derivative(spl_k5, 1.3, 2) + sin(1.3)) < 1.9e-8
+    @test abs(Maths.derivative(spl_k5, 1.3, 3) + cos(1.3)) < 1.6e-7
+    @test abs(Maths.derivative(spl_k5, 1.3, 4) - sin(1.3)) < 2e-4
+    @test abs(Maths.derivative(spl_k5, 1.3, 5) - cos(1.3)) < 3e-5
 end
 
 @testset "randgauss" begin

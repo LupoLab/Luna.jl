@@ -612,6 +612,9 @@ If given, `ifun(x0)` should return the index of the first element in x which is 
 than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
 2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
+
+# Note
+For accurate derivatives use 5th order splines
 """
 function BSpline(x::AbstractVector{Tx}, y::AbstractVector{T}; ifun = nothing, order=3) where {Tx <: Real, T <: Real}
     check_spline_args(x, y)
