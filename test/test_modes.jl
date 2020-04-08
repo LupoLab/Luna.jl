@@ -1,6 +1,7 @@
 import Test: @test
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
+import LinearAlgebra: norm
 import FFTW
 import Luna: Modes, Maths, Capillary, Grid, PhysData, Hankel, NonlinearRHS
 
@@ -65,10 +66,17 @@ m2 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2)
 Eωm1 = Modes.overlap(m1, q.r, Eωr; dim=2, norm=false)
 Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
 
-
 Etm1 = FFTW.irfft(Eωm1[:, 1], length(grid.t))
 Etm2 = FFTW.irfft(Eωm2[:, 1], length(grid.t))
 
 et = NonlinearRHS.energy_modal()
 @test isapprox(et(grid.t, Etm1), energy1, rtol=1e-3)
 @test isapprox(et(grid.t, Etm2), energy2, rtol=1e-3)
+
+En1 = Eω1/norm(Eω1)
+Emn1 = Eωm1/norm(Eωm1)
+@test all(isapprox.(En1, Emn1, atol=1e-3*maximum(abs.(Emn1))))
+
+En2 = Eω2/norm(Eω2)
+Emn2 = Eωm2/norm(Eωm2)
+@test all(isapprox.(En2, Emn2, atol=1e-3*maximum(abs.(Emn2))))

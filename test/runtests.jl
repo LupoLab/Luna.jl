@@ -92,4 +92,9 @@ end
     include(joinpath(testdir, "test_linops.jl"))
 end
 
+@testset "Modes" begin
+    @info("================= test_modes.jl")
+    include(joinpath(testdir, "test_modes.jl"))
+end
+
 end
