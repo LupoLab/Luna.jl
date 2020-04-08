@@ -73,21 +73,22 @@ function neff(m::RectMode, ω; z=0)
 end
 
 # here we use cartesian coords, so xs = (x, y)
-function field(m::RectMode; z=0)
+function field(m::RectMode, xs; z=0)
     if isodd(m.m)
-        Ea = (x) -> cos(m.m*π*x/(2*m.a(z)))
+        Ea = cos(m.m*π*xs[1]/(2*m.a(z)))
     else
-        Ea = (x) -> sin(m.m*π*x/(2*m.a(z)))
+        Ea = sin(m.m*π*xs[1]/(2*m.a(z)))
     end
     if isodd(m.n)
-        Eb = (x) -> cos(m.n*π*x/(2*m.b(z)))
+        Eb = cos(m.n*π*xs[2]/(2*m.b(z)))
     else
-        Eb = (x) -> sin(m.n*π*x/(2*m.b(z)))
+        Eb = sin(m.n*π*xs[2]/(2*m.b(z)))
     end
+    E = Ea*Eb
     if m.pol == :x
-        return (xs) -> SVector(Ea(xs[1])*Eb(xs[2]), 0.0)
+        return SVector(E, 0.0)
     else
-        return (xs) -> SVector(0.0, Ea(xs[1])*Eb(xs[2]))
+        return SVector(0.0, E)
     end
 end
 

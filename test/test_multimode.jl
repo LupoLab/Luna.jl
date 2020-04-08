@@ -40,7 +40,7 @@ import Test: @test, @testset, @test_throws
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Ey; full=false)
+                                modes, :y; full=false)
     outputr = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputr, status_period=10)
@@ -90,7 +90,7 @@ end
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Ey; full=true)
+                                modes, :y; full=true)
     outputf = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputf, status_period=10)

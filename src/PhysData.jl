@@ -64,15 +64,15 @@ eV_to_m(eV) = wlfreq(electron*eV/ħ)
 "Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
 room temperature and atmospheric pressure"
 function γ_Börzsönyi(B1, C1, B2, C2)
-    return μm -> @. (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
+    return μm -> (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 "Adapted Sellmeier expansion for helium made to fit high frequency data
 Phys. Rev. A 92, 033821 (2015)"
 function γ_JCT(B1, C1, B2, C2, B3, C3)
-    return @. μm -> @. (B1 * μm^2 / (μm^2 - C1)
-                        + B2 * μm^2 / (μm^2 - C2)
-                        + B3 * μm^2 / (μm^2 - C3))
+    return μm -> (B1 * μm^2 / (μm^2 - C1)
+                  + B2 * μm^2 / (μm^2 - C2)
+                  + B3 * μm^2 / (μm^2 - C3))
 end
 
 "
@@ -154,21 +154,21 @@ function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
         # TODO: Deal with sqrt of negative values better (somehow...)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 0.6961663/(1-(0.0684043/μm)^2)
              + 0.4079426/(1-(0.1162414/μm)^2)
              + 0.8974794/(1-(9.896161/μm)^2)
              ))
     elseif material == :BK7
         # ref index info (SCHOTT catalogue)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 1.03961212/(1-0.00600069867/μm^2)
              + 0.231792344 / (1-0.0200179144/μm^2)
              + 1.01046945/(1-103.560653/μm^2)
              ))
     elseif material == :CaF2
         # Appl. Opt. 41, 5275-5281 (2002)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 0.443749998/(1-0.00178027854/μm^2)
              + 0.444930066/(1-0.00788536061/μm^2)
              + 0.150133991/(1-0.0124119491/μm^2)
@@ -176,7 +176,7 @@ function sellmeier_glass(material::Symbol)
              ))
     elseif material == :KBr
         # J. Phys. Chem. Ref. Data 5, 329-528 (1976)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 0.39408
              + 0.79221/(1-(0.146/μm)^2)
              + 0.01981/(1-(0.173/μm)^2)
@@ -186,7 +186,7 @@ function sellmeier_glass(material::Symbol)
              ))
     elseif material == :BaF2
         # J. Phys. Chem. Ref. Data 9, 161-289 (1980)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 0.33973
              + 0.81070/(1-(0.10065/μm)^2)
              + 0.19652/(1-(29.87/μm)^2)
@@ -194,7 +194,7 @@ function sellmeier_glass(material::Symbol)
              ))
     elseif material == :Si
         # J. Opt. Soc. Am., 47, 244-246 (1957)
-        return μm -> @. sqrt(Complex(1
+        return μm -> sqrt(complex(1
              + 10.6684293/(1-(0.301516485/μm)^2)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
@@ -213,7 +213,7 @@ function χ1_fun(gas::Symbol)
     γ = sellmeier_gas(gas)
     f = let γ=γ, gas=gas
         function χ1(λ, P, T)
-            γ(λ.*1e6)*density(gas, P, T)
+            γ(λ*1e6)*density(gas, P, T)
         end
     end
     return f
@@ -222,7 +222,7 @@ end
 function χ1_fun(gas::Symbol, P, T)
     γ = sellmeier_gas(gas)
     dens = density(gas, P, T)
-    return λ -> γ(λ.*1e6)*dens
+    return λ -> γ(λ*1e6)*dens
 end
 
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
@@ -233,29 +233,33 @@ end
 
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, P=1, T=roomtemp)
-    return ref_index_fun(material, P, T)(λ)
+function ref_index(material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
+    return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
 "Get function which returns refractive index."
-function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
+function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + χ1(λ))
     elseif material in glass
-        nglass = let sell = sellmeier_glass(material)
-            function nglass(λ)
-                return sell(λ.*1e6)
-            end
+        if isnothing(lookup)
+            lookup = (material == :SiO2)
         end
-        return nglass
+        if lookup
+            spl = lookup_glass(material)
+            return λ -> spl(λ*1e6)
+        else
+            sell = sellmeier_glass(material)
+            return λ -> sell(λ*1e6)
+        end
     elseif material in metal
-        nmetal = let lookup = lookup_metal(material)
+        nmetal = let spl = lookup_metal(material)
             function nmetal(λ)
-                if any(λ .> 1.0)
+                if λ > 1
                     throw(DomainError(λ, "Wavelength must be given in metres"))
                 end
-                return lookup(λ.*1e6)
+                return spl(λ*1e6)
             end
         end
         return nmetal
@@ -265,16 +269,16 @@ function ref_index_fun(material::Symbol, P=1, T=roomtemp)::Function
 end
 
 "Get a function which gives dispersion."
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp)
-    n = ref_index_fun(material, P, T)
+function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
+    n = ref_index_fun(material, P, T; lookup=lookup)
     β(ω) = @. ω/c * real(n(2π*c/ω))
     βn(λ) = Maths.derivative(β, 2π*c/λ, order)
     return βn
 end
 
 "Get dispersion."
-function dispersion(order, material::Symbol, λ, P=1, T=roomtemp)
-    return dispersion_func(order, material, P, T).(λ)
+function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
+    return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
 "Get reflection coefficients"
@@ -346,11 +350,11 @@ function γ3_gas(material::Symbol; source=nothing)
     end
 end
 
-function χ3_gas(material::Symbol, P, T=roomtemp; source=:Lehmeier)
+function χ3_gas(material::Symbol, P, T=roomtemp; source=nothing)
     return γ3_gas(material, source=source) .* density.(material, P, T)
 end
 
-function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=:Lehmeier)
+function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)
     n0 = ref_index(material, λ, P, T)
     return @. 3/4 * χ3_gas(material, P, T, source=source) / (ε_0*c*n0^2)
 end
@@ -364,10 +368,6 @@ function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     ρ = density.(gas, P, T)
     Maths.CSpline(P, ρ)
 end
-
-dsplines = Dict([(gi, densityspline(gi, Pmax=50, N=2^14)) for gi in gas])
-
-fastdensity(gas::Symbol, P) = dsplines[gas](P)
 
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
@@ -420,7 +420,7 @@ function lookup_glass(material::Symbol)
     if material == :SiO2
         ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
         kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
-        spl = Maths.CSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+        spl = Maths.BSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
@@ -1205,7 +1205,7 @@ end
  returns the refractive index directly"
 function lookup_metal(material::Symbol)
     data = data_metal(material)::Array{Float64,2}
-    nspl = Maths.CSpline(data[:,1], data[:,2] .+ im.*data[:,3])
+    nspl = Maths.BSpline(data[:,1], data[:,2] .+ im.*data[:,3])
     return nspl
 end
 
