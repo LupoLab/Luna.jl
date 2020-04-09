@@ -34,7 +34,7 @@ import Luna: Output
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10, init_dz=1e-3)
 
     modes = (
         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
@@ -48,7 +48,7 @@ import Luna: Output
     statsfun = Stats.collect_stats((Stats.ω0(grid), ))
     outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10)
+    Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10, init_dz=1e-3)
 
     Iω = dropdims(abs2.(output.data["Eω"]), dims=2)
     Iωp = dropdims(sum(abs2.(outputp.data["Eω"]), dims=2), dims=2)
