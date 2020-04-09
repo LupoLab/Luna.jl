@@ -40,12 +40,20 @@ function _solveprop(args;
     densityfun(z) = dens0
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τfwhm)
-        Et = @. sqrt(It)*cos(ω0*t)
+        Et = @. sqrt(It)
+        if fieldkind == :full
+            @. Et *= cos(ω0*t)
+        end
+        Et
     end
     function sechpulse(t)
         τ0 = τfwhm/1.763
         It = sech(t/τ0)
-        Et = @. sqrt(It)*cos(ω0*t)
+        Et = @. sqrt(It)
+        if fieldkind == :full
+            @. Et *= cos(ω0*t)
+        end
+        Et
     end
     if shape == :gaussian
         in1 = (func=gausspulse, energy=energy)
@@ -93,22 +101,39 @@ function _solveprop(args;
     return (output=output, args=args, grid=grid) 
 end
 
-function plotprop(solution; tlims=(-30e-15, 30e-15))
+function plotprop(solution; tlims=(-30e-15, 30e-15), flims=(0.0, 2e15))
     grid = solution.grid
     output = solution.output
+    env = (haskey(solution.args, :fieldkind) && solution.args[:fieldkind] == :env)
     ω = grid.ω
     t = grid.t
+    f = ω./2π
+    if env
+        f = FFTW.fftshift(f, 1)
+    end
     zout = output.data["z"]
     Eout = output.data["Eω"]
-    Etout = FFTW.irfft(Eout, length(grid.t), 1)
+    if env
+        Etout = FFTW.ifft(Eout, 1)
+    else
+        Etout = FFTW.irfft(Eout, length(grid.t), 1)
+    end
     Ilog = log10.(Maths.normbymax(abs2.(Eout)))
+    if env
+        Ilog = FFTW.fftshift(Ilog, 1)
+    end
     idcs = @. (t < tlims[2]) & (t > [tlims[1]])
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
-    It = abs2.(Maths.hilbert(Eto))
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16, dim=1)
+    if env
+        It = abs2.(Eto)
+    else
+        It = abs2.(Maths.hilbert(Eto))
+    end
     pygui(true)
     plt.figure()
-    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
+    plt.pcolormesh(f.*1e-15, zout, transpose(Ilog))
     plt.clim(-6, 0)
+    plt.xlim(flims[1]/1e15, flims[2]/1e15)
     plt.colorbar()
     plt.figure()
     plt.pcolormesh(to*1e15, zout, transpose(It))
