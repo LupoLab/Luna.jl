@@ -1,26 +1,25 @@
-"Functions which define the modal decomposition. This includes
+"""
+    NonlinearRHS
 
-    1. Mode normalisation
-    2. Modal decomposition of Pₙₗ
-    3. Calculation of (modal) energy
+Functions which define the modal decomposition.
 
-Wishlist of types of decomposition we want to use:
-
-Done:
+Types of decomposition that are available:
     1. Mode-averaged waveguide
     2. Multi-mode waveguide (with or without polarisation)
         a. Azimuthal symmetry (radial integral only)
         b. Full 2-D integral
-To Do:
     3. Free space
         a. Azimuthal symmetry (Hankel transform)
-        b. Full 2-D (Fourier transform)"
+        b. Full 2-D (Fourier transform)
+"""
 module NonlinearRHS
 import FFTW
+import Hankel
 import Cubature
-import LinearAlgebra: mul!
+import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
+import Luna.PhysData: wlfreq
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -133,9 +132,16 @@ function norm_mode_average(ω, βfun!, Aeff)
     return norm
 end
 
+"Accumulate responses induced by Et in Pt"
 function Et_to_Pt!(Pt, Et, responses)
     for resp in responses
         resp(Pt, Et)
+    end
+end
+
+function Et_to_Pt!(Pt, Et, responses, idcs)
+    for i in idcs
+        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses)
     end
 end
 
@@ -306,5 +312,319 @@ energy_modal() = _energy_modal
 
 _energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
 _energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
+
+"""
+    TransRadial
+
+Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation
+"""
+struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
+    QDHT::HTT # Hankel transform (space to k-space)
+    FT::FTT # Fourier transform (time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    densityfun::dT # callable which returns density
+    Pto::Array{TT,2} # Buffer array for NL polarisation on oversampled time grid
+    Eto::Array{TT,2} # Buffer array for field on oversampled time grid
+    Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
+    Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
+    idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
+end
+
+function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), HT.N))
+    Eto = zeros(TT, (length(grid.to), HT.N))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    idcs = CartesianIndices(size(Pto)[2:end])
+    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
+end
+
+"""
+    TransRadial(grid, HT, FT, responses, densityfun, normfun)
+
+Construct a `TransRadial` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `HT::QDHT` : the Hankel transform which defines the spatial grid
+- `FT::FFTW.Plan` : the time-frequency Fourier transform for the oversampled time grid
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_radial`](@ref)
+"""
+function TransRadial(grid::Grid.RealGrid, args...)
+    TransRadial(Float64, grid, args...)
+end
+
+function TransRadial(grid::Grid.EnvGrid, args...)
+    TransRadial(ComplexF64, grid, args...)
+end
+
+"""
+    (t::TransRadial)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field `Eω` and
+place the result in `nl`
+"""
+function (t::TransRadial)(nl, Eω, z)
+    fill!(t.Pto, 0)
+    to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
+    ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
+    to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
+    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+"""
+    const_norm_radial(ω, q, nfun)
+
+Make function to return normalisation factor for radial symmetry without re-calculating at
+every step. 
+"""
+function const_norm_radial(grid, q, nfun)
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_radial(grid, q, nfunω)
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+"""
+    norm_radial(ω, q, nfun)
+
+Make function to return normalisation factor for radial symmetry. 
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+"""
+function norm_radial(grid, q, nfun)
+    ω = grid.ω
+    out = zeros(Float64, (length(ω), q.N))
+    kr2 = q.k.^2
+    k2 = zeros(Float64, length(ω))
+    function norm(z)
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        for ir = 1:q.N
+            for iω in eachindex(ω)
+                if ω[iω] == 0
+                    out[iω, ir] = 1.0
+                    continue
+                end
+                βsq = k2[iω] - kr2[ir]
+                if βsq <= 0
+                    out[iω, ir] = 1.0
+                    continue
+                end
+                out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+            end
+        end
+        return out
+    end
+    return norm
+end
+
+function energy_radial(grid::Grid.RealGrid, q)
+    function energy_t(t, Et)
+        Eta = Maths.hilbert(Et)
+        tintg = integrate(t, abs2.(Eta), SimpsonEven())
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
+    end
+
+    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π/(grid.ω[end]^2)
+    function energy_ω(ω, Eω)
+        ωintg = integrate(ω, abs2.(Eω), SimpsonEven())
+        return prefac*Hankel.integrateK(ωintg, q)
+    end
+    return energy_t, energy_ω
+end
+
+function energy_radial(grid::Grid.EnvGrid, q)
+    function energy_t(t, Et)
+        tintg = integrate(t, abs2.(Et), SimpsonEven())
+        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2)
+    function energy_ω(ω, Eω)
+        ωintg = dropdims(sum(abs2.(Eω); dims=1), dims=1)
+        return prefac*Hankel.integrateK(ωintg, q)
+    end
+    return energy_t, energy_ω
+end
+
+"""
+    TransFree
+
+Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation
+"""
+mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
+    FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    densityfun::dT # callable which returns density
+    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 3} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    scale::Float64 # scale factor to be applied during oversampling
+    idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
+end
+
+function TransFree(TT, scale, grid, FT, Ny, Nx, responses, densityfun, normfun)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
+    Eto = zeros(TT, (length(grid.to), Ny, Nx))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    idcs = CartesianIndices((Ny, Nx))
+    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale, idcs)
+end
+
+"""
+    TransFree(grid, FT, Ny, Nx, responses, densityfun, normfun)
+
+Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
+- `Nx::Int` : number of spatial points in `x` direction
+- `Ny::Int` : number of spatial points in `y` direction
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
+"""
+function TransFree(grid::Grid.RealGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = (No-1)/(N-1)
+    TransFree(Float64, scale, grid, args...)
+end
+
+function TransFree(grid::Grid.EnvGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = No/N
+    TransFree(ComplexF64, scale, grid, args...)
+end
+
+"""
+    (t::TransFree)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the field `Eω`
+and place the result in `nl`.
+"""
+function (t::TransFree)(nl, Eωk, z)
+    fill!(t.Pto, 0)
+    fill!(t.Eωo, 0)
+    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+"""
+    const_norm_free(grid, xygrid, nfun)
+
+Make function to return normalisation factor for 3D propagation without re-calculating at
+every step.
+"""
+function const_norm_free(grid, xygrid, nfun)
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_free(grid, xygrid, nfunω)
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+"""
+    norm_free(grid, xygrid, nfun)
+
+Make function to return normalisation factor for 3D propagation.
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+"""
+function norm_free(grid, xygrid, nfun)
+    ω = grid.ω
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    function norm(z)
+        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        for ii in idcs
+            for iω in eachindex(ω)
+                if ω[iω] == 0
+                    out[iω, ii] = 1.0
+                    continue
+                end
+                βsq = k2[iω] - kperp2[ii]
+                if βsq <= 0
+                    out[iω, ii] = 1.0
+                    continue
+                end
+                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+            end
+        end
+        return out
+    end
+end
+
+function energy_free(grid::Grid.RealGrid, xygrid)
+    δx = xygrid.x[2] - xygrid.x[1]
+    δy = xygrid.y[2] - xygrid.y[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
+    function energy_t(t, Et)
+        Eta = Maths.hilbert(Et)
+        return  prefac_t * sum(abs2.(Eta)) 
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = grid.ω[end]
+    δkx = xygrid.kx[2] - xygrid.kx[1]
+    Δkx = length(xygrid.kx)*δkx
+    δky = xygrid.ky[2] - xygrid.ky[1]
+    Δky = length(xygrid.ky)*δky
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
+
+function energy_free(grid::Grid.EnvGrid, xygrid)
+    δx = xygrid.x[2] - xygrid.x[1]
+    δy = xygrid.y[2] - xygrid.y[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
+    function energy_t(t, Et)
+        return  prefac_t * sum(abs2.(Et)) 
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    δkx = xygrid.kx[2] - xygrid.kx[1]
+    Δkx = length(xygrid.kx)*δkx
+    δky = xygrid.ky[2] - xygrid.ky[1]
+    Δky = length(xygrid.ky)*δky
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
 
 end
