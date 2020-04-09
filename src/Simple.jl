@@ -2,7 +2,7 @@ module Simple
 import Luna
 import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
 import FFTW
-import PyPlot:pygui, plt
+import PyPlot: pygui, plt
 
 function solveprop(;kwargs...)
     _solveprop(kwargs; kwargs...)
@@ -23,7 +23,7 @@ function _solveprop(args;
         if power == nothing
             error("only one of `energy` or `power` may be specified")
         else
-            energy = power_to_energy(power, shape)
+            error("not yet implemented") #energy = power_to_energy(power, shape)
         end
     end
     if fieldkind == :full
@@ -89,14 +89,13 @@ function _solveprop(args;
     else
         output = Output.HDF5Output(filename, 0, grid.zmax, zpoints, (length(grid.ω),), statsfun)
     end
-    args["grid"] = grid
-    output(args)
     Luna.run(Eω, grid, linop, transform, FT, output)
-    return output
+    return (output=output, args=args, grid=grid) 
 end
 
-function plotprop(output; tlims=(-30e-15, 30e-15))
-    grid = output["grid"]
+function plotprop(solution; tlims=(-30e-15, 30e-15))
+    grid = solution.grid
+    output = solution.output
     ω = grid.ω
     t = grid.t
     zout = output.data["z"]
@@ -106,13 +105,6 @@ function plotprop(output; tlims=(-30e-15, 30e-15))
     idcs = @. (t < tlims[2]) & (t > [tlims[1]])
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=16)
     It = abs2.(Maths.hilbert(Eto))
-    Itlog = log10.(Maths.normbymax(It))
-    zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
-    Et = Maths.hilbert(Etout)
-    energy = zeros(length(zout))
-    for ii = 1:size(Etout, 2)
-        energy[ii] = energyfun(t, Etout[:, ii])
-    end
     pygui(true)
     plt.figure()
     plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
@@ -121,14 +113,7 @@ function plotprop(output; tlims=(-30e-15, 30e-15))
     plt.figure()
     plt.pcolormesh(to*1e15, zout, transpose(It))
     plt.colorbar()
-    plt.xlim(-30, 30)
-    plt.figure()
-    plt.plot(zout.*1e2, energy.*1e6)
-    plt.xlabel("Distance [cm]")
-    plt.ylabel("Energy [μJ]")
-    plt.figure()
-    plt.plot(to*1e15, Eto[:, 121])
-    plt.xlim(-20, 20)    
+    plt.xlim(tlims[1]/1e-15, tlims[2]/1e-15)
 end
 
 end
