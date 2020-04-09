@@ -2,7 +2,7 @@ using Documenter
 import Luna
 import Luna: Scans
 
-github_repository = "lunadocs"
+github_repository = "luna"
 github_event_name = get(ENV, "GITHUB_EVENT_NAME", "") 
 github_ref        = get(ENV, "GITHUB_REF",        "") 
 
@@ -16,8 +16,7 @@ makedocs(
 )
 
 deploydocs(
-    repo = "lupo@luna.lupo-lab.com:/home/lupo/lunadocs",
+    repo = "lupo@luna.lupo-lab.com:/home/jtravs/webapps/luna",
     branch = "master",
-    devurl = "./",
     deploy_config = cfg
 )
