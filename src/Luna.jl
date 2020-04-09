@@ -38,6 +38,7 @@ include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
 include("Raman.jl")
+include("Field.jl")
 include("Simple.jl")
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)

@@ -62,6 +62,10 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     return RealGrid(zmax, referenceλ, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
+function RealGrid(;zmax, referenceλ, λ_lims, trange, δt=1)
+    RealGrid(zmax, referenceλ, λ_lims, trange, δt)
+end
+
 struct EnvGrid{T} <: AbstractGrid
     zmax::Float64
     referenceλ::Float64
@@ -150,6 +154,10 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
 
     return EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+end
+
+function EnvGrid(;zmax, referenceλ, λ_lims, trange, δt=1, thg=false)
+    EnvGrid(zmax, referenceλ, λ_lims, trange, δt=δt, thg=thg)
 end
 
 function to_dict(g::GT) where GT <: AbstractGrid
