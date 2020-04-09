@@ -30,13 +30,13 @@ end
 fac = 0.45
 w0 = fac*a
 Er = Maths.gauss(r, w0/sqrt(2))
-sum = 0
+s = 0
 for mi = 1:10
     m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=mi)
     η = Modes.overlap(m, r, Er, dim=1)[1]
-    global sum += abs2(η[1])
+    global s += abs2(η[1])
 end
-@test isapprox(sum, 1, rtol=1e-4)
+@test isapprox(s, 1, rtol=1e-4)
 
 a = 100e-6
 q = Hankel.QDHT(2a, 512)
