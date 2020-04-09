@@ -1,6 +1,7 @@
-import Luna: PhysData, Grid, LinearOps, Hankel
+import Luna: PhysData, Grid, LinearOps
 import Test: @testset, @test
 import Luna.PhysData: wlfreq
+import Hankel
 
 R = 5e-3
 Nr = 256

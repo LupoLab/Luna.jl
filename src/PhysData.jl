@@ -286,7 +286,7 @@ end
 Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
 """
 function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
-    n = ref_index_fun(material, P, T)
+    n = ref_index_fun(material, P, T, lookup=lookup)
     dispersion_func(order, n)
 end
 
@@ -448,7 +448,7 @@ function lookup_glass(material::Symbol)
     if material == :SiO2
         ndat = CSV.read(joinpath(Utils.datadir(), "silica_n.csv"))
         kdat = CSV.read(joinpath(Utils.datadir(), "silica_k.csv"))
-        spl = Maths.CSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
+        spl = Maths.BSpline(1e6*eV_to_m.(ndat[:, 1]), ndat[:, 2] + 1im * kdat[:, 2])
     else
         throw(DomainError(material, "Unknown metal $material"))
     end
@@ -1233,7 +1233,7 @@ end
  returns the refractive index directly"
 function lookup_metal(material::Symbol)
     data = data_metal(material)::Array{Float64,2}
-    nspl = Maths.CSpline(data[:,1], data[:,2] .+ im.*data[:,3])
+    nspl = Maths.BSpline(data[:,1], data[:,2] .+ im.*data[:,3])
     return nspl
 end
 

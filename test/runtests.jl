@@ -4,7 +4,7 @@ import Logging: @info
 testdir = dirname(@__FILE__)
 
 import Luna: set_fftw_mode
-set_fftw_mode("estimate")
+set_fftw_mode(:estimate)
 
 @testset "All" begin
 
@@ -95,6 +95,16 @@ end
 @testset "Modes" begin
     @info("================= test_modes.jl")
     include(joinpath(testdir, "test_modes.jl"))
+end
+
+@testset "Radial Propagation" begin
+    @info("================= test_radial.jl")
+    include(joinpath(testdir, "test_radial.jl"))
+end
+
+@testset "Full 3D Propagation" begin
+    @info("================= test_full_freespace.jl")
+    include(joinpath(testdir, "test_full_freespace.jl"))
 end
 
 end

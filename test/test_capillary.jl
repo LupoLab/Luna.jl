@@ -105,23 +105,23 @@ end
     ω = wlfreq(800e-9)
     @test isapprox(Capillary.β(m, ω), 7857864.43728568, rtol=1e-15)
     @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744310817186e-9, rtol=1e-13)
-    @test isapprox(Capillary.dispersion(m, 2, ω), -1.68385315313058e-29, rtol=1e-7)
-    @test_broken isapprox(Capillary.dispersion(m, 3, ω), 8.43934205839032e-44, rtol=1e-6)
-    @test_broken isapprox(Capillary.dispersion(m, 4, ω), -1.13290569432975e-58, rtol=1e-4)
-    @test_broken isapprox(Capillary.dispersion(m, 5, ω), 2.45045893668943e-73, rtol=1e-3)
-    @test_broken isapprox(Capillary.zdw(m), 7.288460357934073e-07, rtol=1e-8)
+    @test isapprox(Capillary.dispersion(m, 2, ω), -1.68385315313058e-29, rtol=5e-8)
+    @test isapprox(Capillary.dispersion(m, 3, ω), 8.43934205839032e-44, rtol=5e-7)
+    @test isapprox(Capillary.dispersion(m, 4, ω), -1.13290569432975e-58, rtol=5e-6)
+    @test isapprox(Capillary.dispersion(m, 5, ω), 2.45045893668943e-73, rtol=5e-5)
+    @test isapprox(Capillary.zdw(m), 7.288460357934073e-07, rtol=5e-9)
 
     rfg = ref_index_fun(:Ar, 2.0, roomtemp)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> 1.45
     m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
     @test isapprox(Capillary.β(m, ω), 7857863.48006503, rtol=1e-15)
-    @test_broken isapprox(Capillary.dispersion(m, 1, ω), 3.33744262246032e-9, rtol=1e-14)
-    @test_broken isapprox(Capillary.dispersion(m, 2, ω), -1.68286833115421e-29, rtol=1e-7)
-    @test_broken isapprox(Capillary.dispersion(m, 3, ω), 8.43469324575104e-44, rtol=1e-6)
-    @test_broken isapprox(Capillary.dispersion(m, 4, ω), -1.13224995913863e-58, rtol=1e-5)
-    @test_broken isapprox(Capillary.dispersion(m, 5, ω), 2.44896534856203e-73, rtol=1e-4)
-    @test_broken isapprox(Capillary.zdw(m), 7.288488367356287e-07, rtol=1e-8)
+    @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744262246032e-9, rtol=1e-13)
+    @test isapprox(Capillary.dispersion(m, 2, ω), -1.68286833115421e-29, rtol=1e-7)
+    @test isapprox(Capillary.dispersion(m, 3, ω), 8.43469324575104e-44, rtol=1e-6)
+    @test isapprox(Capillary.dispersion(m, 4, ω), -1.13224995913863e-58, rtol=1e-5)
+    @test isapprox(Capillary.dispersion(m, 5, ω), 2.44896534856203e-73, rtol=1e-4)
+    @test isapprox(Capillary.zdw(m), 7.288488367356287e-07, rtol=1e-8)
     @test isapprox(Capillary.α(m, ω), 2.21505888048642, rtol=1e-14)
 
     rfg = ref_index_fun(:Ar, 2.0, roomtemp)
@@ -129,12 +129,12 @@ end
     cladn = (ω; z) -> 0.036759+im*5.5698
     m = Capillary.MarcatilliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
     @test isapprox(Capillary.β(m, ω), 7857861.48263403, rtol=1e-15)
-    @test_broken isapprox(Capillary.dispersion(m, 1, ω), 3.33744432288277e-9, rtol=1e-14)
-    @test isapprox(Capillary.dispersion(m, 2, ω), -1.90000438857902e-29, rtol=1e-6)
-    @test_broken isapprox(Capillary.dispersion(m, 3, ω), 8.80439075111799e-44, rtol=1e-6)
-    @test_broken isapprox(Capillary.dispersion(m, 4, ω), -1.21093130760499e-58, rtol=1e-5)
-    @test_broken isapprox(Capillary.dispersion(m, 5, ω), 2.64991119379223e-73, rtol=1e-3)
-    @test_broken isapprox(Capillary.zdw(m), 7.224394530976951e-07, rtol=1e-8)
+    @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744432288277e-9, rtol=1e-13)
+    @test isapprox(Capillary.dispersion(m, 2, ω), -1.90000438857902e-29, rtol=5e-8)
+    @test isapprox(Capillary.dispersion(m, 3, ω), 8.80439075111799e-44, rtol=5e-7)
+    @test isapprox(Capillary.dispersion(m, 4, ω), -1.21093130760499e-58, rtol=1e-5)
+    @test isapprox(Capillary.dispersion(m, 5, ω), 2.64991119379223e-73, rtol=5e-5)
+    @test isapprox(Capillary.zdw(m), 7.224394530976951e-07, rtol=5e-9)
     @test isapprox(Capillary.α(m, ω), 0.0290115788131925, rtol=1e-14)
     @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
 end
@@ -156,4 +156,21 @@ end
                             dimlimits=()->(:polar, (0.0, 0.0), (m.a, 2π)), field=()->nothing)
     @test Modes.α(m3, 2e15) == 0.2
 end
+
+@testset "to_space" begin
+    ms = (Capillary.MarcatilliMode(125e-6, :He, 1.0),
+          Capillary.MarcatilliMode(125e-6, :He, 1.0, m=2, ϕ=π/2))
+    components = :xy
+    xs = (10e-6, π/7)
+    ts = Modes.ToSpace(ms, components=components)
+    Emω = Array{ComplexF64,2}(undef, 8192, 2)
+    fill!(Emω, 0.3+0.5im)
+    Erω1 = Modes.to_space(Emω, xs, ts)
+    Erω! = copy(Erω1)
+    Modes.to_space!(Erω!, Emω, xs, ts)
+    Erω2 = Modes.to_space(Emω, xs, ms, components=components)
+    @test all(Erω2 .== Erω!)
+    @test all(Erω1 .== Erω!)
+end
+
 end

@@ -6,3 +6,5 @@ deps/deps.jl
 *.h5
 .vscode/settings.json
 Manifest.toml
+_git2_*
+docs/build

@@ -1,5 +1,6 @@
 module Luna
 import FFTW
+import Hankel
 import Logging
 import LinearAlgebra: mul!, ldiv!
 import Random: MersenneTwister
@@ -42,17 +43,18 @@ settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT)
 
 Set FFTW planning mode for all FFTW transform planning in `Luna`.
 
-Possible values for `mode` are `"estimate"`, `"measure"`, `"patient"`, and `"exhaustive"`.
-The initial value upon loading `Luna` is `"patient"`
+Possible values for `mode` are `:estimate`, `:measure`, `:patient`, and `:exhaustive`.
+The initial value upon loading `Luna` is `:patient`
 
 # Examples
 ```jldoctest
-julia> Luna.set_fftw_mode("patient")
+julia> Luna.set_fftw_mode(:patient)
 0x00000020
 ```
 """
 function set_fftw_mode(mode)
-    flag = getfield(FFTW, Symbol(uppercase(mode)))
+    s = uppercase(string(mode))
+    flag = getfield(FFTW, Symbol(s))
     settings["fftw_flag"] = flag
 end
 
@@ -60,7 +62,6 @@ include("Utils.jl")
 include("Scans.jl")
 include("Output.jl")
 include("Maths.jl")
-include("Hankel.jl")
 include("PhysData.jl")
 include("Grid.jl")
 include("RK45.jl")
@@ -108,13 +109,7 @@ end
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false)
-    Exyfun(;z) = [Modes.Exy(mode, z=z) for mode in modes]
-    dlfun(;z) = Modes.dimlimits(modes[1], z=z)
-    if components == :Exy
-        npol = 2
-    else
-        npol = 1
-    end
+    ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
     FTt = FFTW.plan_rfft(xt, 1, flags=settings["fftw_flag"])
@@ -124,10 +119,10 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     end
     x = Array{Float64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
-    xo = Array{Float64}(undef, length(grid.to), npol)
+    xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo,
-                                 responses, densityfun, components, normfun,
+    transform = NonlinearRHS.TransModal(grid, ts, FTo,
+                                 responses, densityfun, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -138,13 +133,7 @@ end
 # for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs,
                modes, components; full=false)
-    Exyfun(;z) = [Modes.Exy(mode, z=z) for mode in modes]
-    dlfun(;z) = Modes.dimlimits(modes[1], z=z)
-    if components == :Exy
-        npol = 2
-    else
-        npol = 1
-    end
+    ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
     FTt = FFTW.plan_fft(xt, 1, flags=settings["fftw_flag"])
@@ -154,10 +143,10 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     end
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
-    xo = Array{ComplexF64}(undef, length(grid.to), npol)
+    xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModal(grid, length(modes), dlfun, Exyfun, FTo,
-                                 responses, densityfun, components, normfun,
+    transform = NonlinearRHS.TransModal(grid, ts, FTo,
+                                 responses, densityfun, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
