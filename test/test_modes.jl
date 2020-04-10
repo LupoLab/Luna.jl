@@ -9,13 +9,14 @@ a = 100e-6
 m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
 r = collect(range(0, a, length=2^16))
 unm = besselj_zero(0, 1)
-Er = besselj.(0, unm*r/a)
+Er = besselj.(0, unm*r/a) # spatial profile of the HE11 mode - overlap should be perfect
 η = Modes.overlap(m, r, Er; dim=1)
 @test abs2(η[1]) ≈ 1
 unm = besselj_zero(0, 2)
-Er = besselj.(0, unm*r/a)
+Er = besselj.(0, unm*r/a) # spatial profile of HE12 - overlap should be 0
 η = Modes.overlap(m, r, Er; dim=1)
 @test isapprox(abs2(η[1]), 0, atol=1e-18)
+# Check that we reproduce the optimal coupling for Gaussian beams at w₀ = 0.64a
 fac = collect(range(0.3, stop=0.9, length=128))
 ηn = zero(fac)
 r = collect(range(0, 4a, length=2^16))
@@ -27,6 +28,8 @@ for i in eachindex(fac)
 end
 @test 0.63 < fac[argmax(ηn)] < 0.65
 
+#= Testing that the sum of all modes is 1, i.e. the normalised overlap preserves the
+    total energy =#
 fac = 0.45
 w0 = fac*a
 Er = Maths.gauss(r, w0/sqrt(2))
