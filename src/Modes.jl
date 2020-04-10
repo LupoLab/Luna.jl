@@ -205,12 +205,14 @@ true
 ```
 """
 function overlap(m::AbstractMode, r, E; dim, norm=true)
-    f = field(m) # f((r, θ)) returns field [Ex(r, θ), Ey(r, θ)] of the mode
     dl = dimlimits(m) # integration limits
     # sample the modal field at the same coords as E - select y polarisation component 
-    Er = [f((ri, 0))[2] for ri in r] 
+    Er = [Exy(m, (ri, 0))[2] for ri in r]  #field [Ex(r, θ), Ey(r, θ)] of the mode
     Er[r .> dl[3][1]] .= 0 
-    normEr = sqrt(2π*integrate(r, r.*abs2.(Er), Trapezoidal())) # normalisation factor
+    #= normalisation factor - we want the integral of the modal intensity over the waveguide
+        to be 1, but the  fields Exy(...) are normalised to produce modal power,
+        so they include the factor of cε₀/2 =#
+    normEr = 1/sqrt(c*ε_0/2) 
 
     # Generate output array: same shape as input, except length in space is 1
     shape = collect(size(E))
