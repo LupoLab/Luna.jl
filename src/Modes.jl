@@ -2,6 +2,7 @@ module Modes
 import Roots: fzero
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
+import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
@@ -183,6 +184,55 @@ macro arbitrary(exprs...)
     quote
         $Tname()
     end
+end
+
+"""
+    overlap(m::AbstractMode, r, E; dim)
+
+Calculate mode overlap between radially symmetric field and radially symmetric mode.
+
+# Examples
+```jldoctest
+julia> a = 100e-6;
+julia> m = Capillary.MarcatilliMode(a, :He, 1.0);
+julia> unm = besselj_zero(0, 1);
+julia> r = collect(range(0, a, length=512));
+julia> Er = besselj.(0, unm*r/a);
+
+julia> η = Modes.overlap(m, r, Er; dim=1);
+julia> abs2(η[1]) ≈ 1
+true
+```
+"""
+function overlap(m::AbstractMode, r, E; dim, norm=true)
+    dl = dimlimits(m) # integration limits
+    # sample the modal field at the same coords as E - select y polarisation component 
+    Er = [Exy(m, (ri, 0))[2] for ri in r]  #field [Ex(r, θ), Ey(r, θ)] of the mode
+    Er[r .> dl[3][1]] .= 0 
+    #= normalisation factor - we want the integral of the modal intensity over the waveguide
+        to be 1, but the  fields Exy(...) are normalised to produce modal power,
+        so they include the factor of cε₀/2 =#
+    normEr = 1/sqrt(c*ε_0/2) 
+
+    # Generate output array: same shape as input, except length in space is 1
+    shape = collect(size(E))
+    shape[dim] = 1
+    integral = zeros(eltype(E), Tuple(shape)) # make output array
+
+    # Indices to iterate over all other dimensions (e.g. polarisation, frequency)
+    idxlo = CartesianIndices(size(E)[1:dim-1])
+    idxhi = CartesianIndices(size(E)[dim+1:end])
+    for hi in idxhi
+        for lo in idxlo
+                # normalisation factor for the other field
+                normE = norm ? sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal())) :
+                               1/sqrt(c*ε_0/2)
+                # E[lo, :, hi] is a vector
+                integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
+                integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
+        end
+    end
+    return integral
 end
 
 struct ToSpace{mT,iT}
