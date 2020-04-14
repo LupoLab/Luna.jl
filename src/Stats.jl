@@ -92,10 +92,9 @@ end
 
 Create stats function to calculate the peak intensity for a single (averaged) mode.
 """
-function peakintensity(grid, mode::Modes.AbstractMode)
-    fac(z) = sum(abs2.(Modes.Exy(mode, (0, 0); z=z)))
+function peakintensity(grid, aeff)
     function addstat!(d, Eω, Et, z, dz)
-        d["peakintensity"] = c*ε_0/2*fac(z)*maximum(abs2.(Et))
+        d["peakintensity"] = maximum(abs2.(Et))/aeff(z)
     end
 end
 

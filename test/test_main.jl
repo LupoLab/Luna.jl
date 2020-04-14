@@ -58,7 +58,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.energy(grid, energyfunω),
                                Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
                                Stats.peakpower(grid),
-                               Stats.peakintensity(grid, m),
+                               Stats.peakintensity(grid, aeff),
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
