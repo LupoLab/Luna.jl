@@ -110,15 +110,16 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
         return NaN
     end
     #spline method
-    minmax == :max && error("Spline method only supports min FWHM")
     try
-        spl = CSpline(x, y)
-        lb = xmax - 2*(xmax-left)
-        ub = xmax + 2*(right-xmax)
-        f(x) = spl(x) - val
-        lfine = fzero(f, lb, xmax)
-        rfine = fzero(f, xmax, ub)
-        return abs(rfine - lfine)
+        spl = BSpline(x, y .- val)
+        r = roots(spl)
+        rleft = r[r .< xmax]
+        rright = r[r .> xmax]
+        if minmax == :min
+            return abs(minimum(rright) - maximum(rleft))
+        else
+            return abs(maximum(rright) - minimum(rleft))
+        end
     catch
         return NaN
     end
