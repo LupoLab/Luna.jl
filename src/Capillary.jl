@@ -56,6 +56,34 @@ function MarcatilliMode(afun, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, cl
     MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
+"""
+    make_marcatilli_modes(afun, coren, modelist; kwargs...)
+
+Make an `Array` of Marcatilli modes with parameters specified in `modelist` which should be
+an iterable of `NamedTuple` each with fields:
+- `n`
+- `m`
+- `kind`
+- `φ`
+corresponding to the parameters for `MarcatilliMode`.
+"""
+function make_marcatilli_modes(afun, coren, modelist; model=:full, clad=:SiO2, loss=true)
+    rfs = ref_index_fun(clad)
+    cladn = (ω; z) -> rfs(wlfreq(ω))
+    [MarcatilliMode(afun, m.n, m.m, m.kind, m.ϕ, coren, cladn, model=model, loss=loss) for m in modelist]
+end
+
+function make_marcatilli_modes(afun, gas, P, modelist; T=roomtemp, kwargs...)
+    rfg = ref_index_fun(gas, P, T)
+    coren = (ω; z) -> rfg(wlfreq(ω))
+    make_marcatilli_modes(afun, coren, modelist; kwargs...)
+end
+
+function make_marcatilli_modes(a::Number, args...; kwargs...)
+    afun(z) = a
+    make_marcatilli_modes(afun, args...; kwargs...)
+end
+
 "complex effective index of Marcatilli mode with dielectric core and arbitrary
  (metal or dielectric) cladding.
 
