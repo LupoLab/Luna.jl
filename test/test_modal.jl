@@ -54,6 +54,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.energy(grid, energyfunω),
                                Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
                                Stats.peakpower(grid),
+                               Stats.peakintensity(grid, modes),
                                Stats.fwhm_t(grid),
                                Stats.fwhm_r(grid, modes),
                                Stats.electrondensity(grid, ionrate, densityfun, modes)
@@ -61,7 +62,7 @@ statsfun = Stats.collect_stats(grid, Eω,
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
-Luna.run(Eω, grid, linop, transform, FT, output)
+Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
 ω = grid.ω
 t = grid.t
@@ -118,6 +119,12 @@ end
 plt.xlabel("Distance (cm)")
 plt.ylabel("Peak power (GW)")
 plt.legend()
+
+##
+plt.figure()
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["peakintensity"].*1e-4.*1e-12)
+plt.xlabel("Distance (cm)")
+plt.ylabel("Peak intensity (TW/cm\$^2\$)")
 
 ##
 plt.figure()

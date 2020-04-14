@@ -88,6 +88,37 @@ function peakpower(grid)
 end
 
 """
+    peakintensity(grid, mode)
+
+Create stats function to calculate the peak intensity for a single (averaged) mode.
+"""
+function peakintensity(grid, mode::Modes.AbstractMode)
+    fac(z) = sum(abs2.(Modes.Exy(mode, (0, 0); z=z)))
+    function addstat!(d, Eω, Et, z, dz)
+        d["peakintensity"] = c*ε_0/2*fac(z)*maximum(abs2.(Et))
+    end
+end
+
+"""
+    peakintensity(grid, mode)
+
+Create stats function to calculate the peak intensity for a single mode.
+"""
+function peakintensity(grid, modes::NTuple{N, Modes.AbstractMode}; components=:y) where N
+    tospace = Modes.ToSpace(modes, components=components)
+    npol = tospace.npol
+    Et0 = zeros(ComplexF64, (length(grid.t), npol))
+    function addstat!(d, Eω, Et, z, dz)
+        Modes.to_space!(Et0, Et, (0, 0), tospace; z=z)
+        if npol > 1
+            d["peakintensity"] = c*ε_0/2 * maximum(sum(abs2.(Et0), dims=2))
+        else
+            d["peakintensity"] = c*ε_0/2 * maximum(abs2.(Et0))
+        end
+    end
+end
+
+"""
     fwhm_t(grid)
 
 Create stats function to calculate the temporal FWHM (pulse duration) for mode average.
