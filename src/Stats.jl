@@ -102,7 +102,7 @@ end
 """
     peakintensity(grid, mode)
 
-Create stats function to calculate the peak intensity for a single mode.
+Create stats function to calculate the peak intensity for several modes.
 """
 function peakintensity(grid, modes::NTuple{N, Modes.AbstractMode}; components=:y) where N
     tospace = Modes.ToSpace(modes, components=components)
