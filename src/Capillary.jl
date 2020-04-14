@@ -29,10 +29,10 @@ struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
 end
 
 function show(io::IO, m::MarcatilliMode)
-    a = "radius (z=0): $(m.a(0))"
-    loss = "loss: " * (m.loss == Val(true) ? "true" : "false")
-    model = "model: "*string(m.model)
-    out = join(["MarcatilliMode", "kind: "*mode_string(m), a, loss, model], "\n  ")
+    a = "a(z=0)=$(m.a(0))"
+    loss = "loss=" * (m.loss == Val(true) ? "true" : "false")
+    model = "model="*string(m.model)
+    out = "MarcatilliMode{"*join([mode_string(m), a, loss, model], ", ")*"}"
     print(io, out)
 end
 

@@ -172,13 +172,13 @@ end
 
 function show(io::IO, t::TransModal)
     grid = "grid type: $(typeof(t.grid))"
-    nmodes = "no. of modes: $(t.ts.nmodes)"
+    modes = "modes: $(t.ts.nmodes)\n"*" "^4*join([string(mi) for mi in t.ts.ms], "\n    ")
     p = t.ts.indices == 1:2 ? "x,y" : t.ts.indices == 1 ? "x" : "y"
     pol = "polarisation: $p"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     full = "full: $(t.full)"
-    out = join(["TransModal", nmodes, pol, grid, samples, full, resp], "\n  ")
+    out = join(["TransModal", modes, pol, grid, samples, full, resp], "\n  ")
     print(io, out)
 end
 
