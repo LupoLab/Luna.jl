@@ -21,7 +21,7 @@ import Luna: Output
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
 
     modes = (
@@ -31,7 +31,9 @@ import Luna: Output
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :y; full=true)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+    statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=10, init_dz=1e-3)
@@ -45,7 +47,9 @@ import Luna: Output
     inputs = ((1, (in1,)), (2, (in1,)))
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :xy; full=true)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+    statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω))
     outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10, init_dz=1e-3)

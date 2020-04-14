@@ -90,38 +90,42 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
     end
     maxidx = argmax(y)
     xmax = x[maxidx]
-    left, right = try
-        if minmax == :min
-            lefti = findlast((x .< xmax) .& (y .< val))
-            righti = findfirst((x .> xmax) .& (y .< val))
-            (method == :nearest) && return abs(x[lefti] - x[righti])
-            left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
-            right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
-        else
-            lefti = findfirst((x .< xmax) .& (y .> val))
-            righti = findlast((x .> xmax) .& (y .> val))
-            (method == :nearest) && return abs(x[lefti] - x[righti])
-            left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
-            right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
+    if method in (:nearest, :linear)
+        try
+            if minmax == :min
+                lefti = findlast((x .< xmax) .& (y .< val))
+                righti = findfirst((x .> xmax) .& (y .< val))
+                (method == :nearest) && return abs(x[lefti] - x[righti])
+                left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
+                right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
+            else
+                lefti = findfirst((x .< xmax) .& (y .> val))
+                righti = findlast((x .> xmax) .& (y .> val))
+                (method == :nearest) && return abs(x[lefti] - x[righti])
+                left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
+                right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
+            end
+            return abs(right - left)
+        catch
+            return NaN
         end
-        (method == :linear) && return abs(right - left)
-        left, right
-    catch
-        return NaN
-    end
-    #spline method
-    try
-        spl = BSpline(x, y .- val)
-        r = roots(spl)
-        rleft = r[r .< xmax]
-        rright = r[r .> xmax]
-        if minmax == :min
-            return abs(minimum(rright) - maximum(rleft))
-        else
-            return abs(maximum(rright) - minimum(rleft))
+    elseif method == :spline
+        #spline method
+        try
+            spl = BSpline(x, y .- val)
+            r = roots(spl)
+            rleft = r[r .< xmax]
+            rright = r[r .> xmax]
+            if minmax == :min
+                return abs(minimum(rright) - maximum(rleft))
+            else
+                return abs(maximum(rright) - minimum(rleft))
+            end
+        catch
+            return NaN
         end
-    catch
-        return NaN
+    else
+        error("Unknown FWHM method $method")
     end
 end
 

@@ -173,7 +173,7 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
     end
     tospace = Modes.ToSpace(modes, components=components)
     frac = similar(to)
-    npol = components == :xy ? 2 : 1  
+    npol = tospace.npol
     Et0 = zeros(ComplexF64, (length(to), npol))
     function addstat!(d, Eω, Et, z, dz)
         # note: oversampling returns its arguments without any work done if factor==1
@@ -191,6 +191,18 @@ end
 function density(dfun)
     function addstat!(d, Eω, Et, z, dz)
         d["density"] = dfun(z)
+    end
+end
+
+function core_radius(a::Number)
+    function addstat!(d, Eω, Et, z, dz)
+        d["core_radius"] = a
+    end
+end
+
+function core_radius(afun)
+    function addstat!(d, Eω, Et, z, dz)
+        d["core_radius"] = afun(z)
     end
 end
 
