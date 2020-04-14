@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
 import Dierckx
+import Random: seed!
 
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
@@ -137,6 +138,19 @@ end
     f(x) = Maths.gauss(x, fwhm=2*hw)
     @test Maths.hwhm(f, 0) ≈ hw
     @test Maths.hwhm(f, 0; direction=:bwd) ≈ hw
+
+    # Test that FWHM max still works with noise-burst pulses
+    x = collect(range(-0.5, stop=1.5, length=2^14))
+    y = zero(x)
+    seed!(123)
+    for i = 1:10000
+        y .+= rand()*Maths.gauss(x, x0=rand(), fwhm=rand()/1000)
+    end
+    m = 1.1*maximum(y)
+    y .+= m*Maths.gauss(x, x0=-0.05, fwhm=0.05)
+    y .+= m*Maths.gauss(x, x0=1.05, fwhm=0.05)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max), 0.05 + 1.1, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max, method=:spline), 0.05 + 1.1, rtol=1e-4)
 end
 
 @testset "CSpline" begin

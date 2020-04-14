@@ -113,7 +113,7 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
         #spline method
         try
             spl = BSpline(x, y .- val)
-            r = roots(spl)
+            r = roots(spl; maxn=10000)
             rleft = r[r .< xmax]
             rright = r[r .> xmax]
             if minmax == :min
@@ -121,7 +121,7 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
             else
                 return abs(maximum(rright) - minimum(rleft))
             end
-        catch
+        catch e
             return NaN
         end
     else
@@ -149,7 +149,7 @@ function linterpx(x1, x2, y1, y2, val)
 end
 
 """
-    hwhwm(f, x0=0; direction=:fwd)
+    hwhm(f, x0=0; direction=:fwd)
 
 Find the value `x` where the function `f(x)` drops to half of its maximum, which is located
 at `x0`. For `direction==:fwd`, search in the region `x > x0`, for :bwd, search in `x < x0`.
@@ -820,8 +820,8 @@ end
 
 Find the roots of the spline `rs`.
 """
-function roots(rs::RealBSpline)
-    Dierckx.roots(rs.rspl)
+function roots(rs::RealBSpline; maxn::Int=128)
+    Dierckx.roots(rs.rspl; maxn=maxn)
 end
 
 
