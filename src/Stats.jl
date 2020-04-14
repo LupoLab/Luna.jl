@@ -88,9 +88,10 @@ function peakpower(grid)
 end
 
 """
-    peakintensity(grid, mode)
+    peakintensity(grid, aeff)
 
-Create stats function to calculate the peak intensity for a single (averaged) mode.
+Create stats function to calculate the mode-averaged peak intensity given the effective area
+`aeff(z)`.
 """
 function peakintensity(grid, aeff)
     function addstat!(d, Eω, Et, z, dz)
