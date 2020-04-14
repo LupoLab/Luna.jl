@@ -5,6 +5,7 @@ import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
+import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Dierckx
 
@@ -247,7 +248,7 @@ Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` i
 """
 function plan_hilbert!(x; dim=1)
     loadFFTwisdom()
-    FT = FFTW.plan_fft(x, dim, flags=FFTW.PATIENT)
+    FT = FFTW.plan_fft(x, dim, flags=Luna.settings["fftw_flag"])
     saveFFTwisdom()
     xf = Array{ComplexF64}(undef, size(FT))
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
@@ -504,6 +505,15 @@ function (c::CSpline)(x0)
         + c.D[i - 1]*t 
         + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
+end
+
+"Calculate frequency vector k from samples x for FFT"
+function fftfreq(x)
+    Dx = abs(x[2] - x[1])
+    all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
+    N = length(x)
+    n = collect(range(0, length=N))
+    (n .- N/2) .* 2π/(N*Dx)
 end
 
 """
