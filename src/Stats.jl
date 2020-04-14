@@ -113,7 +113,7 @@ Create stats function to calculate the radial FWHM (aka beam size) in a modal pr
 """
 function fwhm_r(grid, modes; components=:y)
     tospace = Modes.ToSpace(modes, components=components)
-    npol = components == :xy ? 2 : 1  
+    npol = tospace.npol
     Eω0 = zeros(ComplexF64, (length(grid.ω), npol))
 
     function addstat!(d, Eω, Et, z, dz)
