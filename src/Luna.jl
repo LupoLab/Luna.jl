@@ -205,7 +205,7 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     end
     xo = Array{Float64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_rfft(xo, (1, 2, 3), flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
+    transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -226,7 +226,7 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     end
     xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
+    transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -274,10 +274,6 @@ function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
     @. Eω += FFTamp * exp(1im*φ)
 end
 
-transtype(t::NonlinearRHS.TransModeAvg) = "mode average"
-transtype(t::NonlinearRHS.TransModal) = "multimode"
-transtype(t) = "unknown"
-
 linoptype(l::AbstractArray) = "constant"
 linoptype(l) = "variable"
 
@@ -286,14 +282,13 @@ gridtype(g::Grid.EnvGrid) = "envelope"
 gridtype(g) = "unknown"
 
 simtype(g, t, l) = Dict("field" => gridtype(g),
-                        "transform" => transtype(t),
+                        "transform" => string(t),
                         "linop" => linoptype(l))
 
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=Inf, init_dz=1e-4,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
-             stats=true,
              status_period=1)
 
 

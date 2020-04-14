@@ -172,11 +172,13 @@ end
 
 function show(io::IO, t::TransModal)
     grid = "grid type: $(typeof(t.grid))"
-    nmodes = "no. of modes: $(t.nmodes)"
+    nmodes = "no. of modes: $(t.ts.nmodes)"
+    p = t.ts.indices == 1:2 ? "x,y" : t.ts.indices == 1 ? "x" : "y"
+    pol = "polarisation: $p"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     full = "full: $(t.full)"
-    out = join(["TransModal", nmodes, grid, samples, full, resp], "\n  ")
+    out = join(["TransModal", nmodes, pol, grid, samples, full, resp], "\n  ")
     print(io, out)
 end
 
@@ -293,7 +295,7 @@ function show(io::IO, t::TransModeAvg)
     grid = "grid type: $(typeof(t.grid))"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
-    out = join(["TransModal", grid, samples, resp], "\n  ")
+    out = join(["TransModeAvg", grid, samples, resp], "\n  ")
     print(io, out)
 end
 
@@ -369,6 +371,16 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
     Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
     idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
+end
+
+function show(io::IO, t::TransRadial)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    nr = "radial points: $(t.QDHT.N)"
+    R = "aperture: $(t.QDHT.R)"
+    out = join(["TransRadial", grid, samples, nr, R, resp], "\n  ")
+    print(io, out)
 end
 
 function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
@@ -504,11 +516,12 @@ end
 
 Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation
 """
-mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
+mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
+    xygrid::xygT
     densityfun::dT # callable which returns density
     Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
     Eto::Array{TT, 3} # buffer for oversampled time-domain field
@@ -518,13 +531,26 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
     idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
 end
 
-function TransFree(TT, scale, grid, FT, Ny, Nx, responses, densityfun, normfun)
+function show(io::IO, t::TransFree)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
+    x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
+    out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
+    print(io, out)
+end
+
+function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
+    Ny = length(xygrid.y)
+    Nx = length(xygrid.x)
     Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
     Eto = zeros(TT, (length(grid.to), Ny, Nx))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
-    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale, idcs)
+    TransFree(FT, normfun, responses, grid, xygrid, densityfun,
+              Pto, Eto, Eωo, Pωo, scale, idcs)
 end
 
 """
