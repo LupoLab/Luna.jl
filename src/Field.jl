@@ -18,14 +18,14 @@ function (p::PulseField)(Eω, grid::Grid.RealGrid, energy_t, FT)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
     Et = @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
-    Eω .+= FFTW.rfft(sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
 function (p::PulseField)(Eω, grid::Grid.EnvGrid, energy_t, FT)
     t = grid.t .- p.τ0
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
     Et = @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
-    Eω = FFTW.fft(sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    Eω = FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
 function shotnoise!(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing; seed=nothing)
