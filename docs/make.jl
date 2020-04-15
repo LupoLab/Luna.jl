@@ -17,6 +17,7 @@ makedocs(
             "Modal decompositions" => "model/modal_decompositions.md",
             "Nonlinear responses" => "model/nonlinear_responses.md"
         ],
+        "Parameter scans" => "scans.md",
         "Modules" => [
             "$mod.jl" => "modules/$mod.md" for mod in (
                 "NonlinearRHS",
@@ -33,7 +34,6 @@ makedocs(
                 "Tools"
             )
         ],
-        "Parameter scans" => "scans.md"
     ],
     format = Documenter.HTML(
         prettyurls = false
