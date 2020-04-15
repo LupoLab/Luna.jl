@@ -41,7 +41,9 @@ function MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn; model=:full, loss=tr
 end
 
 "convenience constructor assuming single gas filling"
-function MarcatilliMode(afun, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, gas, P;
+                        n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full,
+                        clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(wlfreq(ω))
@@ -49,8 +51,17 @@ function MarcatilliMode(afun, gas, P; n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, mo
     MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
+"convenience constructor assuming single gas filling but custom cladding index"
+function MarcatilliMode(afun, gas, P, cladn;
+                        n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, loss=true)
+    rfg = ref_index_fun(gas, P, T)
+    coren = (ω; z) -> rfg(wlfreq(ω))
+    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+end
+
 "convenience constructor for non-constant core index"
-function MarcatilliMode(afun, coren; n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
+function MarcatilliMode(afun, coren;
+                        n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(wlfreq(ω))
     MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
@@ -75,7 +86,7 @@ end
 
 # Dispatch on loss to make neff type stable
 # m.loss = Val{true}() (returns ComplexF64)
-function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a) where Ta where Tcl where Tco
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a) where {Ta, Tcl, Tco}
     if m.model == :full
         k = ω/c
         return sqrt(complex(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
@@ -88,7 +99,7 @@ function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a)
 end
 
 # m.loss = Val{false}() (returns Float64)
-function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω, εcl, εco, vn, a) where Ta where Tcl where Tco
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω, εcl, εco, vn, a) where {Ta, Tcl, Tco}
     if m.model == :full
         k = ω/c
         return real(sqrt(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
