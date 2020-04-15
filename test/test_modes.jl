@@ -87,7 +87,7 @@ Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
 Etm1 = FFTW.irfft(Eωm1[:, 1], length(grid.t))
 Etm2 = FFTW.irfft(Eωm2[:, 1], length(grid.t))
 
-et = NonlinearRHS.energy_modal()
+et, eω = NonlinearRHS.energy_modal(grid)
 # check that the non-normalised overlap integral preserves the total energy
 @test isapprox(et(grid.t, Etm1), energy1, rtol=1e-3)
 @test isapprox(et(grid.t, Etm2), energy2, rtol=1e-3)

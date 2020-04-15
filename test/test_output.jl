@@ -112,7 +112,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
@@ -127,7 +127,9 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(
         grid, energyfun, densityfun, normfun, responses, inputs, aeff)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+    statsfun = Stats.collect_stats(grid, Eω,
+                                   Stats.ω0(grid),
+                                   Stats.energy(grid, energyfunω))
     hdf5 = Output.HDF5Output(fpath, 0, grid.zmax, 201, (length(grid.ω),), statsfun)
     hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 201, (length(grid.ω),), statsfun,
                               compression=true)
@@ -141,13 +143,26 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
         o(Dict("λ0" => λ0))
         o("τ", τ)
     end
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
     HDF5.h5open(hdf5.fpath, "r") do file
         @test read(file["λ0"]) == mem.data["λ0"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))
         @test Eω == mem.data["Eω"]
         @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
         @test read(file["z"]) == mem.data["z"]
+        @test read(file["grid"]) == Grid.to_dict(grid)
+        @test read(file["simulation_type"]["field"]) == "field-resolved"
+        @test read(file["simulation_type"]["transform"]) == string(transform)
+    end
+    HDF5.h5open(hdf5c.fpath, "r") do file
+        @test read(file["λ0"]) == mem.data["λ0"]
+        Eω = reinterpret(ComplexF64, read(file["Eω"]))
+        @test Eω == mem.data["Eω"]
+        @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
+        @test read(file["z"]) == mem.data["z"]
+        @test read(file["grid"]) == Grid.to_dict(grid)
+        @test read(file["simulation_type"]["field"]) == "field-resolved"
+        @test read(file["simulation_type"]["transform"]) == string(transform)
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
 end

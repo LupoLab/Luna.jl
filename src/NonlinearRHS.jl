@@ -1,21 +1,8 @@
-"""
-    NonlinearRHS
-
-Functions which define the modal decomposition.
-
-Types of decomposition that are available:
-    1. Mode-averaged waveguide
-    2. Multi-mode waveguide (with or without polarisation)
-        a. Azimuthal symmetry (radial integral only)
-        b. Full 2-D integral
-    3. Free space
-        a. Azimuthal symmetry (Hankel transform)
-        b. Full 2-D (Fourier transform)
-"""
 module NonlinearRHS
 import FFTW
 import Hankel
 import Cubature
+import Base: show
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
@@ -169,6 +156,18 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     mfcn::Int
 end
 
+function show(io::IO, t::TransModal)
+    grid = "grid type: $(typeof(t.grid))"
+    modes = "modes: $(t.ts.nmodes)\n"*" "^4*join([string(mi) for mi in t.ts.ms], "\n    ")
+    p = t.ts.indices == 1:2 ? "x,y" : t.ts.indices == 1 ? "x" : "y"
+    pol = "polarisation: $p"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    full = "full: $(t.full)"
+    out = join(["TransModal", modes, pol, grid, samples, full, resp], "\n  ")
+    print(io, out)
+end
+
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
@@ -194,8 +193,6 @@ end
 function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
     TransModal(ComplexF64, grid, args...; kwargs...)
 end
-
-show(io::IO, t::TransModal) = print(io, "TransModal{$(t.ts.nmodes) modes}")
 
 @noinline function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.Emω .= Emω
@@ -280,6 +277,14 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     aeff::aT # function which returns effective area
 end
 
+function show(io::IO, t::TransModeAvg)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    out = join(["TransModeAvg", grid, samples, resp], "\n  ")
+    print(io, out)
+end
+
 function TransModeAvg(TT, grid, FT, resp, densityfun, normfun, aeff)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(TT, length(grid.to))
@@ -308,10 +313,32 @@ function (t::TransModeAvg)(nl, Eω, z)
 end
 
 "Calculate energy from modal field E(t)"
-energy_modal() = _energy_modal
+function energy_modal(grid::Grid.RealGrid)
+    function energy_t(t, Et)
+        Eta = Maths.hilbert(Et)
+        return integrate(grid.t, abs2.(Eta), SimpsonEven())
+    end
 
-_energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
-_energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
+    prefac = 2π/(grid.ω[end]^2)
+    function energy_ω(ω, Eω)
+        prefac*integrate(ω, abs2.(Eω), SimpsonEven())
+    end
+    return energy_t, energy_ω
+end
+
+function energy_modal(grid::Grid.EnvGrid)
+    function energy_t(t, Et)
+        return integrate(grid.t, abs2.(Et), SimpsonEven())
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    prefac = 2π*δω/(Δω^2)
+    function energy_ω(ω, Eω)
+        prefac*sum(abs2.(Eω))
+    end
+    return energy_t, energy_ω
+end
 
 """
     TransRadial
@@ -330,6 +357,16 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
     Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
     idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
+end
+
+function show(io::IO, t::TransRadial)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    nr = "radial points: $(t.QDHT.N)"
+    R = "aperture: $(t.QDHT.R)"
+    out = join(["TransRadial", grid, samples, nr, R, resp], "\n  ")
+    print(io, out)
 end
 
 function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
@@ -460,16 +497,12 @@ function energy_radial(grid::Grid.EnvGrid, q)
     return energy_t, energy_ω
 end
 
-"""
-    TransFree
-
-Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation
-"""
-mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
+mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
+    xygrid::xygT
     densityfun::dT # callable which returns density
     Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
     Eto::Array{TT, 3} # buffer for oversampled time-domain field
@@ -479,25 +512,37 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, dT, iT}
     idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
 end
 
-function TransFree(TT, scale, grid, FT, Ny, Nx, responses, densityfun, normfun)
+function show(io::IO, t::TransFree)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
+    x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
+    out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
+    print(io, out)
+end
+
+function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
+    Ny = length(xygrid.y)
+    Nx = length(xygrid.x)
     Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
     Eto = zeros(TT, (length(grid.to), Ny, Nx))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
-    TransFree(FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, scale, idcs)
+    TransFree(FT, normfun, responses, grid, xygrid, densityfun,
+              Pto, Eto, Eωo, Pωo, scale, idcs)
 end
 
 """
-    TransFree(grid, FT, Ny, Nx, responses, densityfun, normfun)
+    TransFree(grid, xygrid, FT, responses, densityfun, normfun)
 
 Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
 
 # Arguments
 - `grid::AbstractGrid` : the grid used in the simulation
+- `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
 - `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
-- `Nx::Int` : number of spatial points in `x` direction
-- `Ny::Int` : number of spatial points in `y` direction
 - `responses` : `Tuple` of response functions
 - `densityfun` : callable which returns the gas density as a function of `z`
 - `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
