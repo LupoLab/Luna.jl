@@ -1,0 +1,25 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ master ]
+    tags: '*'
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: 1.4
+      - name: Install dependencies
+        env:
+          PYTHON: # remove PYTHON env variable to make sure packages are installed
+        run: julia --project=docs/ -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master")); Pkg.add(PackageSpec(url="https://github.com/chrisbrahms/Documenter.jl", rev="master")); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate();'
+      - name: Build and deploy
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # For authentication with SSH deploy key
+        run: julia --project=docs/ docs/make.jl
