@@ -1,6 +1,5 @@
 using Documenter
-import Luna
-import Luna: Scans
+using Luna
 
 github_repository = "luna"
 github_event_name = get(ENV, "GITHUB_EVENT_NAME", "") 
@@ -14,14 +13,30 @@ makedocs(
     pages = Any[
         "Home" => "index.md",
         "The numerical model" => [
-            "General description" => "model.md",
-            "Modal decompositions" => "modal_decompositions.md",
-            "Nonlinear responses" => "nonlinear_responses.md"
+            "General description" => "model/model.md",
+            "Modal decompositions" => "model/modal_decompositions.md",
+            "Nonlinear responses" => "model/nonlinear_responses.md"
         ],
-        "Scans" => "scans.md"
+        "Modules" => [
+            "$mod.jl" => "modules/$mod.md" for mod in (
+                "NonlinearRHS",
+                "LinearOps",
+                "Modes",
+                "Capillary",
+                "Nonlinear",
+                "PhysData",
+                "Plotting",
+                "Stats",
+                "Ionisation",
+                "Raman",
+                "Output",
+                "Tools"
+            )
+        ],
+        "Parameter scans" => "scans.md"
     ],
     format = Documenter.HTML(
-        prettyurls = get(ENV, "CI", nothing) == "true"
+        prettyurls = false
     )
 )
 
