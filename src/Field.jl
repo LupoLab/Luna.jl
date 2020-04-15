@@ -2,7 +2,7 @@ module Field
 import Luna
 import Luna: Grid, Maths, PhysData
 
-struct PulseField
+struct PulseField{iT}
     λ0::Float64         # central wavelength
     energy::Float64     # pulse energy
     ϕ::Float64          # CEO phase
