@@ -9,6 +9,7 @@ import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 import Luna.PhysData: wlfreq
+import Base: show
 
 export MarcatilliMode, dimlimits, neff, field, N, Aeff
 
@@ -26,6 +27,16 @@ struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
     loss::LT # Val{true}() or Val{false}() - whether to include the loss
     aeff_intg::Float64 # Pre-calculated integral fraction for effective area
 end
+
+function show(io::IO, m::MarcatilliMode)
+    a = "a(z=0)=$(m.a(0))"
+    loss = "loss=" * (m.loss == Val(true) ? "true" : "false")
+    model = "model="*string(m.model)
+    out = "MarcatilliMode{"*join([mode_string(m), a, loss, model], ", ")*"}"
+    print(io, out)
+end
+
+mode_string(m::MarcatilliMode) = string(m.kind)*string(m.n)*string(m.m)
 
 function MarcatilliMode(a::Number, args...; kwargs...)
     afun(z) = a

@@ -29,7 +29,7 @@ end
 end
 
 @testset "ODE Solver" begin
-    @info("================= test_rect_rk45.jl")
+    @info("================= test_rk45.jl")
     include(joinpath(testdir, "test_rk45.jl"))
 end
 

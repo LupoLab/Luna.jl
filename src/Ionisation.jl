@@ -28,7 +28,7 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
                 (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
                 *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
             else
-                0
+                zero(E)
             end
         end
         function ionrate!(out, E)
