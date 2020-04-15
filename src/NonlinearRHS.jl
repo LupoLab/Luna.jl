@@ -1,17 +1,3 @@
-"""
-    NonlinearRHS
-
-Functions which define the modal decomposition.
-
-Types of decomposition that are available:
-    1. Mode-averaged waveguide
-    2. Multi-mode waveguide (with or without polarisation)
-        a. Azimuthal symmetry (radial integral only)
-        b. Full 2-D integral
-    3. Free space
-        a. Azimuthal symmetry (Hankel transform)
-        b. Full 2-D (Fourier transform)
-"""
 module NonlinearRHS
 import FFTW
 import Hankel
@@ -511,11 +497,6 @@ function energy_radial(grid::Grid.EnvGrid, q)
     return energy_t, energy_ω
 end
 
-"""
-    TransFree
-
-Transform E(ω) -> Pₙₗ(ω) for full 3D free-space propagation
-"""
 mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
@@ -554,15 +535,14 @@ function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
 end
 
 """
-    TransFree(grid, FT, Ny, Nx, responses, densityfun, normfun)
+    TransFree(grid, xygrid, FT, responses, densityfun, normfun)
 
 Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
 
 # Arguments
 - `grid::AbstractGrid` : the grid used in the simulation
+- `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
 - `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
-- `Nx::Int` : number of spatial points in `x` direction
-- `Ny::Int` : number of spatial points in `y` direction
 - `responses` : `Tuple` of response functions
 - `densityfun` : callable which returns the gas density as a function of `z`
 - `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
