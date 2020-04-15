@@ -78,6 +78,10 @@ include("Tools.jl")
 include("Plotting.jl")
 include("Raman.jl")
 
+export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
+       Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
+       Tools, Plotting, Raman
+
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     xo = Array{Float64}(undef, length(grid.to))
