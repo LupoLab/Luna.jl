@@ -9,8 +9,8 @@ pygui(true)
     a = 20e-6
     m = Capillary.MarcatilliMode(a, :Air, 0, (ω; z) -> 1.45)
     w = 0.7e-6
-    arm = Antiresonant.Zeisberger(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w)
-    arm2 = Antiresonant.Zeisberger(m; wallthickness=w)
+    arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w)
+    arm2 = Antiresonant.ZeisbergerMode(m; wallthickness=w)
 
     @test Modes.N(m) == Modes.N(arm) == Modes.N(arm2)
     @test Modes.Aeff(m) == Modes.Aeff(arm) == Modes.Aeff(arm2)

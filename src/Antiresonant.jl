@@ -5,18 +5,18 @@ import Luna.PhysData: c
 @reexport using Luna.Modes
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 
-struct Zeisberger{mT<:Capillary.MarcatilliMode} <: AbstractMode
+struct ZeisbergerMode{mT<:Capillary.MarcatilliMode} <: AbstractMode
     m::mT
     wallthickness::Float64
 end
 
-function Zeisberger(args...; wallthickness, kwargs...)
-    return Zeisberger(Capillary.MarcatilliMode(args...; kwargs...), wallthickness)
+function ZeisbergerMode(args...; wallthickness, kwargs...)
+    return ZeisbergerMode(Capillary.MarcatilliMode(args...; kwargs...), wallthickness)
 end
 
-Zeisberger(m::Capillary.MarcatilliMode; wallthickness) = Zeisberger(m, wallthickness)
+ZeisbergerMode(m::Capillary.MarcatilliMode; wallthickness) = ZeisbergerMode(m, wallthickness)
 
-neff(m::Zeisberger, ω; z=0) = _neff(m.m, ω, m.wallthickness; z=z)
+neff(m::ZeisbergerMode, ω; z=0) = _neff(m.m, ω, m.wallthickness; z=z)
 
 "get the effective complex refractive index for AR-PCF. 
  We follow https://www.nature.com/articles/s41598-017-12234-5"
@@ -59,7 +59,7 @@ function _neff(m::Capillary.MarcatilliMode, ω, wallthickness; z=0)
 end
 
 for fun in (:Aeff, :field, :N, :dimlimits)
-    @eval ($fun)(m::Zeisberger, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
+    @eval ($fun)(m::ZeisbergerMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
 end
 
 end
