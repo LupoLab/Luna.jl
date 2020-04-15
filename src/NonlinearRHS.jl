@@ -307,12 +307,6 @@ function (t::TransModeAvg)(nl, Eω, z)
     nl .*= t.grid.ωwin.*t.densityfun(z).*(-im.*t.grid.ω./2)./t.normfun(z)
 end
 
-"Calculate energy from modal field E(t)"
-energy_modal() = _energy_modal
-
-_energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
-_energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
-
 """
     TransRadial
 
@@ -427,37 +421,6 @@ function norm_radial(grid, q, nfun)
         return out
     end
     return norm
-end
-
-function energy_radial(grid::Grid.RealGrid, q)
-    function energy_t(t, Et)
-        Eta = Maths.hilbert(Et)
-        tintg = integrate(t, abs2.(Eta), SimpsonEven())
-        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
-    end
-
-    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π/(grid.ω[end]^2)
-    function energy_ω(ω, Eω)
-        ωintg = integrate(ω, abs2.(Eω), SimpsonEven())
-        return prefac*Hankel.integrateK(ωintg, q)
-    end
-    return energy_t, energy_ω
-end
-
-function energy_radial(grid::Grid.EnvGrid, q)
-    function energy_t(t, Et)
-        tintg = integrate(t, abs2.(Et), SimpsonEven())
-        return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
-    end
-
-    δω = grid.ω[2] - grid.ω[1]
-    Δω = length(grid.ω)*δω
-    prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2)
-    function energy_ω(ω, Eω)
-        ωintg = dropdims(sum(abs2.(Eω); dims=1), dims=1)
-        return prefac*Hankel.integrateK(ωintg, q)
-    end
-    return energy_t, energy_ω
 end
 
 """
@@ -582,49 +545,6 @@ function norm_free(grid, xygrid, nfun)
         end
         return out
     end
-end
-
-function energy_free(grid::Grid.RealGrid, xygrid)
-    δx = xygrid.x[2] - xygrid.x[1]
-    δy = xygrid.y[2] - xygrid.y[1]
-    δt = grid.t[2] - grid.t[1]
-    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
-    function energy_t(t, Et)
-        Eta = Maths.hilbert(Et)
-        return  prefac_t * sum(abs2.(Eta)) 
-    end
-
-    δω = grid.ω[2] - grid.ω[1]
-    Δω = grid.ω[end]
-    δkx = xygrid.kx[2] - xygrid.kx[1]
-    Δkx = length(xygrid.kx)*δkx
-    δky = xygrid.ky[2] - xygrid.ky[1]
-    Δky = length(xygrid.ky)*δky
-    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
-    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
-
-    return energy_t, energy_ω
-end
-
-function energy_free(grid::Grid.EnvGrid, xygrid)
-    δx = xygrid.x[2] - xygrid.x[1]
-    δy = xygrid.y[2] - xygrid.y[1]
-    δt = grid.t[2] - grid.t[1]
-    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
-    function energy_t(t, Et)
-        return  prefac_t * sum(abs2.(Et)) 
-    end
-
-    δω = grid.ω[2] - grid.ω[1]
-    Δω = length(grid.ω)*δω
-    δkx = xygrid.kx[2] - xygrid.kx[1]
-    Δkx = length(xygrid.kx)*δkx
-    δky = xygrid.ky[2] - xygrid.ky[1]
-    Δky = length(xygrid.ky)*δky
-    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
-    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
-
-    return energy_t, energy_ω
 end
 
 end
