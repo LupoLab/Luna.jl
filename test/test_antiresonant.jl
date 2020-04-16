@@ -1,4 +1,4 @@
-import Test: @test, @testset
+import Test: @test, @testset, @test_throws
 import Luna: Antiresonant, Capillary, Modes
 import Luna.PhysData: wlfreq
 
@@ -25,5 +25,8 @@ pygui(true)
     @test Modes.neff(arm, 2.5e15) == 0.9999193518567425 + 1.87925966056515e-6im
     arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w, loss=false)
     @test Modes.neff(arm, 2.5e15) == 0.9999193518567425
+    arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w, loss=0.5)
+    @test Modes.neff(arm, 2.5e15) == 0.9999193518567425 + 0.5*1.87925966056515e-6im
+    @test_throws ArgumentError Antiresonant.ZeisbergerMode(a, :Air, 0; wallthickness=w, loss=0.5im)
 end
 
