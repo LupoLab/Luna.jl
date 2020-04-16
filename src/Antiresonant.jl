@@ -19,8 +19,7 @@ Create a capillary-like mode with the effective index given by eq. (15) in [1].
 `wallthickness` (mandatory kwarg) sets the thickness of the anti-resonant struts and
 `loss` (optional, defaults to `true`) can be either a `Bool` (to switch on/off loss
 completely) or a `Real` (to up/down-scale the loss given by the model).
- Other kwargs are passed on to the
-constructor of a [`MarcatilliMode`](@ref).
+ Other kwargs are passed on to the constructor of a [`MarcatilliMode`](@ref).
 
 [1] Zeisberger, M., Schmidt, M.A. Analytic model for the complex effective index of the
 leaky modes of tube-type anti-resonant hollow core fibers. Sci Rep 7, 11761 (2017).
@@ -88,7 +87,7 @@ end
 #= If ncl and nco are real, the type of neff depends on whether loss is included.
     Despatching on the type makes sure the type can be inferred by the compiler =#
 __neff(A, B, C, D, σ, nco, loss::Val{true}) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*D*σ^4)
-__neff(A, B, C, D, σ, nco, loss::Val{false}) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4)
+__neff(A, B, C, D, σ, nco, loss::Val{false}) = real(nco*(1 - A*σ^2 - B*σ^3 - C*σ^4))
 __neff(A, B, C, D, σ, nco, loss::Number) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss*D*σ^4)
 
 end
