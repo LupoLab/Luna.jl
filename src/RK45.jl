@@ -345,7 +345,11 @@ function stepcontrolP!(s)
     if s.ok
         s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
     else
-        s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+        if !isfinite(s.err)
+            s.dtn = s.dt/2
+        else
+            s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+        end
     end
     steplims!(s)
 end
@@ -364,7 +368,11 @@ function stepcontrolPI!(s)
         s.dtn = fac * s.dt
         s.errlast = s.err
     else
-        s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+        if !isfinite(s.err)
+            s.dtn = s.dt/2
+        else
+            s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
+        end
     end
     steplims!(s)
 end

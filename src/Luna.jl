@@ -301,10 +301,12 @@ end
 
 function run(Eω, grid,
              linop, transform, FT, output;
-             min_dz=0, max_dz=Inf, init_dz=1e-4,
+             min_dz=0, max_dz=nothing, init_dz=1e-4,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
-
+    if max_dz == nothing
+        max_dz = grid.zmax/2
+    end
 
     Et = FT \ Eω
 

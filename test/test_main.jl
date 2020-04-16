@@ -1,13 +1,7 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
+using Luna
 import Logging
 import FFTW
-import NumericalIntegration: integrate, SimpsonEven
 Logging.disable_logging(Logging.BelowMinLevel)
-
-# import DSP.Unwrap: unwrap
-
-import PyPlot:pygui, plt
 
 a = 13e-6
 gas = :Ar
@@ -18,7 +12,6 @@ pres = 5
 
 grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-# m = Capillary.MarcatilliMode(a, gas, pres)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
@@ -65,12 +58,14 @@ statsfun = Stats.collect_stats(grid, Eω,
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
-##
+
+import PyPlot:pygui, plt
+
 ω = grid.ω
 t = grid.t
 
-zout = output.data["z"]
-Eout = output.data["Eω"]
+zout = output["z"]
+Eout = output["Eω"]
 
 Etout = FFTW.irfft(Eout, length(grid.t), 1)
 

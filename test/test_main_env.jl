@@ -1,11 +1,7 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
+using Luna
 import Logging
 import FFTW
-import NumericalIntegration: integrate, SimpsonEven, Trapezoidal
 Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
 
 a = 13e-6
 gas = :Ar
@@ -57,12 +53,14 @@ output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
+import PyPlot:pygui, plt
+
 ω = grid.ω
 t = grid.t
 f = FFTW.fftshift(ω, 1)./2π.*1e-15
 
-zout = output.data["z"]
-Eout = output.data["Eω"]
+zout = output["z"]
+Eout = output["Eω"]
 
 Etout = FFTW.ifft(Eout, 1)
 
@@ -131,7 +129,8 @@ plt.ylabel("Peak power (GW)")
 
 ##
 plt.figure()
-plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t"].*1e15)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t_min"].*1e15)
+plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_t_max"].*1e15)
 plt.xlabel("Distance (cm)")
 plt.ylabel("FWHM (fs)")
 
