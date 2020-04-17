@@ -345,8 +345,8 @@ function stepcontrolP!(s)
     if s.ok
         s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
     else
-        if !isfinite(s.err)
-            s.dtn = s.dt/2
+        if !isfinite(s.err) # check for NaN or Inf
+            s.dtn = s.dt/2  # if we have one then we're in bug trouble so halve the step size
         else
             s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
         end
@@ -368,8 +368,8 @@ function stepcontrolPI!(s)
         s.dtn = fac * s.dt
         s.errlast = s.err
     else
-        if !isfinite(s.err)
-            s.dtn = s.dt/2
+        if !isfinite(s.err) # check for NaN or Inf
+            s.dtn = s.dt/2  # if we have one then we're in bug trouble so halve the step size
         else
             s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
         end
