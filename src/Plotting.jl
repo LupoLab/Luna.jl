@@ -1,5 +1,6 @@
 module Plotting
 import Luna: Maths
+import Luna.PhysData: wlfreq, c, ε_0
 import PyPlot: ColorMap, plt, pygui
 import FFTW
 
@@ -16,6 +17,16 @@ function cmap_white(cmap, N=512, n=8)
     ColorMap(clist_i)
 end
 
+function subplotgrid(N, kwargs...)
+    rows = ceil(Int, sqrt(N))
+    cols = ceil(Int, N/rows)
+    fig, axs = plt.subplots(rows, cols, kwargs...)
+    for axi in permutedims(axs, (2, 1))[N+1:end]
+        axi.remove()
+    end
+    fig, axs
+end
+
 function stats(output)
     stats = output["stats"]
 
@@ -26,52 +37,98 @@ function stats(output)
         pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm\$^2\$)"))
     haskey(stats, "fwhm_t_min") && push!(pstats, (1e15*stats["fwhm_t_min"], "FWHM (fs)"))
     haskey(stats, "electrondensity") && push!(
-        pstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-1}\$"))
+        pstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-1}\$)"))
 
     z = output["stats"]["z"]*1e2
 
-    ffig = plt.figure("Pulse stats")
-    ffig.set_size_inches(8, 12)
     Npl = length(pstats)
+    ffig, axs = subplotgrid(Npl)
+    ffig.set_label("Pulse stats")
+    ffig.set_size_inches(8, 8)
     for n in 1:Npl
-        plt.subplot(Npl, 1, n)
+        ax = axs[n]
         s = pstats[n]
-        plt.plot(z, s[1])
-        plt.xlabel("Distance (cm)")
-        plt.ylabel(s[2])
+        ax.plot(z, s[1])
+        ax.set_xlabel("Distance (cm)")
+        ax.set_ylabel(s[2])
     end
     ffig.tight_layout()
 end
 
-function prop_2D(output; trange=(-50e-15, 50e-15))
-    ω = output["grid"]["ω"]
-    t = output["grid"]["t"]
+function getEω(output)
+    if output["simulation_type"]["field"] == "field-resolved"
+        idcs = output["grid"]["sidx"]
+        ω = output["grid"]["ω"][idcs]
+        Eω = output["Eω"][idcs, CartesianIndices(size(output["Eω"])[2:end])]
+        return ω, Eω
+    else
+        idcs = FFTW.fftshift(output["grid"]["sidx"])
+        Eωs = FFTW.fftshift(output["Eω"], 1)
+        ω = output["grid"]["ω"][idcs]
+        Eω = Eωs[idcs, CartesianIndices(size(output["Eω"])[2:end])]
+        return ω, Eω
+    end
+end
 
+function getEt(output; trange, oversampling=4)
+    if output["simulation_type"]["field"] == "field-resolved"
+        t = output["grid"]["t"]
+        Etout = FFTW.irfft(output["Eω"], length(t), 1)
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+        cidcs = CartesianIndices(size(Etout)[2:end])
+        to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
+        Et = Maths.hilbert(Eto)
+        return to, Et
+    else
+        t = output["grid"]["t"]
+        Etout = FFTW.ifft(output["Eω"], length(t), 1)
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+        cidcs = CartesianIndices(size(Etout)[2:end])
+        to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
+        return to, Eto
+    end
+end
+
+function prop_2D(output, specaxis=:f;
+                 λrange=(150e-9, 2000e-9), trange=(-50e-15, 50e-15),
+                 dBmin=-60)
     z = output["z"]*1e2
-    Eout = output["Eω"]
+    ω, Eω = getEω(output)
+    t, Et = getEt(output, trange=trange)
+    It = abs2.(Et)
 
-    Etout = FFTW.irfft(Eout, length(t), 1)
-
-    Ilog = log10.(Maths.normbymax(abs2.(Eout)))
-
-    idcs = @. (t < max(trange...)) & (t > min(trange...))
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, :], factor=4)
-    It = abs2.(Maths.hilbert(Eto))
-
-    Et = Maths.hilbert(Etout)
-
+    if specaxis == :f
+        specx = ω./2π.*1e-15
+        Ilog = log10.(Maths.normbymax(abs2.(Eω)))
+        speclims = (1e-15*c/maximum(λrange), 1e-15*c/minimum(λrange))
+        speclabel = "Frequency (PHz)"
+    elseif specaxis == :ω
+        specx = ω*1e-15
+        Ilog = log10.(Maths.normbymax(abs2.(Eω)))
+        speclims = (1e-15*wlfreq(maximum(λrange)), 1e-15*wlfreq(minimum(λrange)))
+        speclabel = "Angular frequency (rad/fs)"
+    elseif specaxis == :λ
+        specx = wlfreq.(ω) .* 1e9
+        Ilog = log10.(Maths.normbymax(ω.^2 .* abs2.(Eω)))
+        speclims = λrange .* 1e9
+        speclabel = "Wavelength (nm)"
+    else
+        error("Unknown specaxis $specaxis")
+    end
 
     pfig = plt.figure("Propagation")
     pfig.set_size_inches(12, 4)
     plt.subplot(1, 2, 1)
-    plt.pcolormesh(ω./2π.*1e-15, z, transpose(Ilog))
-    plt.clim(-6, 0)
-    plt.colorbar()
+    plt.pcolormesh(specx, z, 10*transpose(Ilog))
+    plt.clim(dBmin, 0)
+    cb = plt.colorbar()
+    cb.set_label("SED (dB)")
     plt.ylabel("Distance (cm)")
-    plt.xlabel("Frequency (PHz)")
+    plt.xlabel(speclabel)
+    plt.xlim(speclims...)
 
     plt.subplot(1, 2, 2)
-    plt.pcolormesh(to*1e15, z, transpose(It))
+    plt.pcolormesh(t*1e15, z, transpose(It))
     plt.colorbar()
     plt.xlim(trange.*1e15)
     plt.xlabel("Time (fs)")
