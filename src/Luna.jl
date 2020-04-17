@@ -305,7 +305,7 @@ function run(Eω, grid,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
     if max_dz == nothing
-        max_dz = grid.zmax/2
+        max_dz = grid.zmax/2 # default to making sure we at least sample the length
     end
 
     Et = FT \ Eω
