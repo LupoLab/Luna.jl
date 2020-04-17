@@ -90,7 +90,7 @@ function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a)
     if m.model == :full
         k = ω/c
         n = sqrt(complex(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
-        return (real(n) < 1e-3) ? 1e-3 + 0.0im : n
+        return (real(n) < 1e-3) ? (1e-3 + im*imag(n)) : n
     elseif m.model == :reduced
         return ((1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
                     + im*(c^3*m.unm^2)/(a^3*ω^3)*vn)
