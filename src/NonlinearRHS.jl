@@ -117,7 +117,6 @@ function norm_mode_average(ω, βfun!, Aeff)
     function norm(z)
         βfun!(out, ω, z)
         out .*= pre/sqrt(Aeff(z))
-        out[ω .< 1e14] .= 1e15
         return out
     end
     return norm
