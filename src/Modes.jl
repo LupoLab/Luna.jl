@@ -120,6 +120,11 @@ function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
     return 2π*c/ω0
 end
 
+function β_ret(m::AbstractMode, ω; z=0, λ0)
+    ω0 = 2π*c/λ0
+    β.(m, ω; z=z) .- dispersion(m, 1, ω0; z=z)*(ω.-ω0) .- β(m, ω0; z=z)
+end
+
 "Check that function accepts z keyword argument and add it if necessary"
 function chkzkwarg(func)
     try
@@ -132,57 +137,6 @@ function chkzkwarg(func)
         else
             throw(e)
         end
-    end
-end
-
-"""
-Macro to create a delegated mode, which takes its methods from an existing mode except
-for those which are overwritten
-    Arguments:
-        mex: Expression which evaluates to a valid Mode(<:AbstractMode)
-        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
-    (Note: technically, exprs is a tuple of assignment expressions, which we are turning
-    into key-value pairs by only considering the two arguments to the = operator)
-"""
-macro delegated(mex, exprs...)
-    Tname = Symbol(:DelegatedMode, gensym())
-    @eval struct $Tname{mT}<:AbstractMode
-        m::mT # wrapped mode
-    end
-    funs = [kw.args[1] for kw in exprs]
-    for mfun in (:α, :β, :field, :dimlimits)
-        if mfun in funs
-            dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
-        else
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = ($mfun)(dm.m, args...; kwargs...)
-        end
-    end
-    quote
-        $Tname($(esc(mex))) # create mode from expression (evaluted in the caller by esc)
-    end
-end
-
-"""
-Macro to create a "fully delegated" or arbitrary mode from the four required functions,
-α, β, field and dimlimits.
-    Arguments:
-        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
-"""
-macro arbitrary(exprs...)
-    Tname = Symbol(:ArbitraryMode, gensym())
-    @eval struct $Tname<:AbstractMode end
-    funs = [kw.args[1] for kw in exprs]
-    for mfun in (:α, :β, :field, :dimlimits)
-        if mfun in funs
-            dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
-        else
-            error("Must define $mfun for arbitrary mode!")
-        end
-    end
-    quote
-        $Tname()
     end
 end
 
