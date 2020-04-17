@@ -8,9 +8,6 @@ import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
 
-import PyPlot: pygui, plt
-pygui(true)
-
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     N = size(Aω, 1)
