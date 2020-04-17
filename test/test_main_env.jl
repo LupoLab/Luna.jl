@@ -1,5 +1,4 @@
 using Luna
-import Luna.PhysData: ref_index_fun, wlfreq
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven, Trapezoidal
