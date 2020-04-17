@@ -8,6 +8,9 @@ import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
 
+import PyPlot: pygui, plt
+pygui(true)
+
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     N = size(Aω, 1)
@@ -114,6 +117,7 @@ function norm_mode_average(ω, βfun!, Aeff)
     function norm(z)
         βfun!(out, ω, z)
         out .*= pre/sqrt(Aeff(z))
+        out[ω .< 1e14] .= 1e15
         return out
     end
     return norm
