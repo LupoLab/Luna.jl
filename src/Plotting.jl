@@ -1,5 +1,5 @@
 module Plotting
-import Luna: Maths
+using Luna
 import Luna.PhysData: wlfreq, c, ε_0
 import PyPlot: ColorMap, plt, pygui
 import FFTW
@@ -25,6 +25,14 @@ function subplotgrid(N, kwargs...)
         axi.remove()
     end
     fig, axs
+end
+
+function makegrid(output)
+    if output["simulation_type"]["field"] == "field-resolved"
+        Grid.from_dict(Grid.RealGrid, output["grid"])
+    else
+        Grid.from_dict(Grid.EnvGrid, output["grid"])
+    end
 end
 
 function stats(output)
@@ -55,39 +63,43 @@ function stats(output)
     ffig.tight_layout()
 end
 
-function getEω(output)
-    if output["simulation_type"]["field"] == "field-resolved"
-        idcs = output["grid"]["sidx"]
-        ω = output["grid"]["ω"][idcs]
-        Eω = output["Eω"][idcs, CartesianIndices(size(output["Eω"])[2:end])]
-        return ω, Eω
-    else
-        idcs = FFTW.fftshift(output["grid"]["sidx"])
-        Eωs = FFTW.fftshift(output["Eω"], 1)
-        ω = output["grid"]["ω"][idcs]
-        Eω = Eωs[idcs, CartesianIndices(size(output["Eω"])[2:end])]
-        return ω, Eω
-    end
+function getEω(grid::Grid.RealGrid, output)
+    ω = grid.ω[grid.sidx]
+    Eω = output["Eω"][grid.sidx, CartesianIndices(size(output["Eω"])[2:end])]
+    return ω, Eω
 end
 
-function getEt(output; trange, oversampling=4)
-    if output["simulation_type"]["field"] == "field-resolved"
-        t = output["grid"]["t"]
-        Etout = FFTW.irfft(output["Eω"], length(t), 1)
-        idcs = @. (t < max(trange...)) & (t > min(trange...))
-        cidcs = CartesianIndices(size(Etout)[2:end])
-        to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
-        Et = Maths.hilbert(Eto)
-        return to, Et
-    else
-        t = output["grid"]["t"]
-        Etout = FFTW.ifft(output["Eω"], length(t), 1)
-        idcs = @. (t < max(trange...)) & (t > min(trange...))
-        cidcs = CartesianIndices(size(Etout)[2:end])
-        to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
-        return to, Eto
-    end
+function getEω(grid::Grid.EnvGrid, output)
+    idcs = FFTW.fftshift(grid.sidx)
+    Eωs = FFTW.fftshift(output["Eω"], 1)
+    ω = grid.ω[idcs]
+    Eω = Eωs[idcs, CartesianIndices(size(output["Eω"])[2:end])]
+    return ω, Eω
 end
+
+getEω(output) = getEω(makegrid(output), output)
+
+
+function getEt(grid::Grid.RealGrid, output; trange, oversampling=4)
+    t = grid.t
+    Etout = FFTW.irfft(output["Eω"], length(t), 1)
+    idcs = @. (t < max(trange...)) & (t > min(trange...))
+    cidcs = CartesianIndices(size(Etout)[2:end])
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
+    Et = Maths.hilbert(Eto)
+    return to, Et
+end
+
+function getEt(grid::Grid.EnvGrid, output; trange, oversampling=4)
+    t = grid.t
+    Etout = FFTW.ifft(output["Eω"], length(t), 1)
+    idcs = @. (t < max(trange...)) & (t > min(trange...))
+    cidcs = CartesianIndices(size(Etout)[2:end])
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
+    return to, Eto
+end
+
+getEt(output; kwargs...) = getEt(makegrid(output), output; kwargs...)
 
 function prop_2D(output, specaxis=:f;
                  λrange=(150e-9, 2000e-9), trange=(-50e-15, 50e-15),

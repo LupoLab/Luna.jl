@@ -22,6 +22,10 @@ struct RealGrid <: TimeGrid
     towin::Array{Float64, 1}
 end
 
+function RealGrid(;zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    RealGrid(zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
+end
+
 function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
@@ -77,6 +81,10 @@ struct EnvGrid{T} <: TimeGrid
     ωwin::Array{Float64, 1}
     twin::Array{Float64, 1}
     towin::Array{Float64, 1}
+end
+
+function EnvGrid(;zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
 end
 
 function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
@@ -196,6 +204,36 @@ function to_dict(g::GT) where GT <: AbstractGrid
         d[string(field)] = getfield(g, field)
     end
     d
+end
+
+function from_dict(gridtype::DataType, d)
+    kwargs = (Symbol(k) => v for (k, v) in pairs(d))
+    grid = gridtype(;kwargs...)
+
+    # Make sure the grid is valid
+    validate(grid)
+    return grid
+end
+
+function validate(grid::AbstractGrid)
+    δt = grid.t[2] - grid.t[1]
+    δto = grid.to[2] - grid.to[1]
+    @assert δt/δto ≈ length(grid.to)/length(grid.t)
+    @assert length(grid.towin) == length(grid.to)
+    @assert length(grid.ωwin) == length(grid.ω)
+    @assert length(grid.sidx) == length(grid.ω)
+    if grid isa EnvGrid
+        δω = grid.ω[2] - grid.ω[1]
+        Δω = length(grid.ω)*δω
+        @assert δt == π/Δω
+        @assert length(grid.t) == length(grid.ω)
+        @assert length(grid.to) == length(grid.ωo)
+    else
+        Δω = maximum(grid.ω)
+        @assert δt ≈ π/Δω
+        @assert length(grid.t) == 2*(length(grid.ω)-1)
+        @assert length(grid.to) == 2*(length(grid.ωo)-1)
+    end
 end
 
 end
