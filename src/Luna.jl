@@ -67,6 +67,7 @@ include("Grid.jl")
 include("RK45.jl")
 include("Modes.jl")
 include("Capillary.jl")
+include("Antiresonant.jl")
 include("RectModes.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
@@ -80,7 +81,7 @@ include("Raman.jl")
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
-       Tools, Plotting, Raman
+       Tools, Plotting, Raman, Antiresonant
 
 function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()

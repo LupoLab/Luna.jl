@@ -107,4 +107,9 @@ end
     include(joinpath(testdir, "test_full_freespace.jl"))
 end
 
+@testset "Antiresonant modes" begin
+    @info("================= test_antiresonant.jl")
+    include(joinpath(testdir, "test_antiresonant.jl"))
+end
+
 end

@@ -139,24 +139,6 @@ end
     @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
 end
 
-@testset "delegation" begin
-    m = Modes.@delegated(Capillary.MarcatilliMode(75e-6, :He, 5.9))
-    @test Modes.Aeff(m) ≈ 8.42157534886545e-09
-    @test abs(1e9*Modes.zdw(m) - 562) < 1
-    m2 = Modes.@delegated(Capillary.MarcatilliMode(75e-6, :He, 1.0), α=(ω)->0.2)
-    @test Modes.α(m2, 2e15) == 0.2
-    @test Modes.α(m2, wlfreq(800e-9)) == 0.2
-
-    cm = Capillary.MarcatilliMode(75e-6, :He, 5.9)
-    dm = Modes.@delegated(cm)
-    @test Modes.Aeff(dm) ≈ 8.42157534886545e-09
-
-    # fully delegated test
-    m3 = Modes.@arbitrary(α=(ω)->0.2, β=(ω)->0.2,
-                            dimlimits=()->(:polar, (0.0, 0.0), (m.a, 2π)), field=()->nothing)
-    @test Modes.α(m3, 2e15) == 0.2
-end
-
 @testset "to_space" begin
     ms = (Capillary.MarcatilliMode(125e-6, :He, 1.0),
           Capillary.MarcatilliMode(125e-6, :He, 1.0, m=2, ϕ=π/2))
