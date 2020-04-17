@@ -1,5 +1,4 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes, Raman
+using Luna
 import Logging
 import FFTW
 Logging.disable_logging(Logging.BelowMinLevel)
@@ -17,7 +16,7 @@ grid = Grid.RealGrid(200e-2, 800e-9, (180e-9, 3000e-9), 4e-12)
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -40,7 +39,13 @@ inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω),
+                               Stats.peakpower(grid),
+                               Stats.peakintensity(grid, aeff),
+                               Stats.fwhm_t(grid),
+                               Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
@@ -48,8 +53,8 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 ω = grid.ω
 t = grid.t
 
-zout = output.data["z"]
-Eout = output.data["Eω"]
+zout = output["z"]
+Eout = output["Eω"]
 
 Etout = FFTW.irfft(Eout, length(grid.t), 1)
 
