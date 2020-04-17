@@ -12,7 +12,7 @@ pres = 5
 
 L = 15e-2
 
-grid = Grid.EnvGrid(L, 800e-9, (300e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 coren, densityfun = Capillary.gradient(gas, L, pres, pres);
 m = Capillary.MarcatilliMode(a, coren, loss=false);
