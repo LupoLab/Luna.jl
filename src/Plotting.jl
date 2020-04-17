@@ -1,5 +1,5 @@
 module Plotting
-using Luna
+import Luna: Grid, Maths
 import Luna.PhysData: wlfreq, c, ε_0
 import PyPlot: ColorMap, plt, pygui
 import FFTW
