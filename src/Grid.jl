@@ -22,6 +22,19 @@ struct RealGrid <: TimeGrid
     towin::Array{Float64, 1}
 end
 
+"""
+    RealGrid(zmax, referenceλ, λ_lims, trange; δt=1)
+
+Time grid for simulations with real-valued (field-resolved) fields
+
+# Arguments
+- `zmax::Real` : Total distance to propagate
+- `referenceλ::Real` : Reference wavelength (e.g. centre wavelength of input pulse)
+- `λ_lims::Tuple{Real, Real}` : Wavelength limits of the frequency window
+- `trange::Real` : Total extent of the time window required
+- `δt::Real` : Sample spacing in time. The value actually used is either δt or the value
+    required to satisfy `trange` and `λ_lims`, whichever is smaller.
+"""
 function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
@@ -79,7 +92,21 @@ struct EnvGrid{T} <: TimeGrid
     towin::Array{Float64, 1}
 end
 
-function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
+"""
+    EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
+
+Time grid for simulations with envelope (a.k.a. analytic) fields
+
+# Arguments
+- `zmax::Real` : Total distance to propagate
+- `referenceλ::Real` : Reference wavelength (e.g. centre wavelength of input pulse)
+- `λ_lims::Tuple{Real, Real}` : Wavelength limits of the frequency window
+- `trange::Real` : Total extent of the time window required
+- `δt::Real` : Sample spacing in time. The value actually used is either δt or the value
+    required to satisfy `trange` and `λ_lims`, whichever is smaller.
+- `thg::Bool` : Whether the grid should include space for the third hamonic (default: false)
+"""
+function EnvGrid(zmax, referenceλ, λ_lims, trange, δt=1; thg=false)
     fmin = PhysData.c/maximum(λ_lims)
     fmax = PhysData.c/minimum(λ_lims)
     fmax_win = 1.1*fmax # extended frequency window to accommodate apodisation
@@ -164,6 +191,13 @@ struct FreeGrid <: SpaceGrid
     xywin::Array{Float64, 3}
 end
 
+"""
+    FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
+
+Spatial grid for full 3D freespace propagation with `x`/`y` half-width `Rx`/`Ry` and
+`Nx`/`Ny` samples. `window_factor` determines by how much the grid size is extended to fit
+a filtering window.
+"""
 function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
     Rxw = Rx * (1 + window_factor)
     Ryw = Ry * (1 + window_factor)

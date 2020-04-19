@@ -1,8 +1,8 @@
 # Modal decompositions
 
-## Single-mode guided
-
 ## Multi-mode guided
+
+## Single-mode guided
 
 ## Radially symmetric free-space
 

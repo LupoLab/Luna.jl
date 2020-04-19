@@ -21,6 +21,7 @@ makedocs(
         "Modules" => [
             "$mod.jl" => "modules/$mod.md" for mod in (
                 "NonlinearRHS",
+                "Grid",
                 "LinearOps",
                 "Modes",
                 "Capillary",
