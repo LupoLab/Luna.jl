@@ -28,7 +28,7 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
                 (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
                 *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
             else
-                0
+                zero(E)
             end
         end
         function ionrate!(out, E)
@@ -94,22 +94,33 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
     if isfile(fpath)
         @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
         pidlock = mkpidlock(lockpath)
-        E, rate = @hlock HDF5.h5open(fpath, "r") do file
-            (read(file["E"]), read(file["rate"]))
-        end
+        rate = loadPPTaccel(fpath)
         close(pidlock)
-        makePPTaccel(E, rate)
+        return rate
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=sum_tol, N=N)
         @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
         pidlock = mkpidlock(lockpath)
+        if isfile(fpath) # makePPTcache takes a while - has another process saved first?
+            rate = loadPPTaccel(fpath)
+            close(pidlock)
+            return rate
+        end
         @hlock HDF5.h5open(fpath, "cw") do file
             file["E"] = E
             file["rate"] = rate
         end
         close(pidlock)
-        makePPTaccel(E, rate)
+        return makePPTaccel(E, rate)
     end
+end
+
+function loadPPTaccel(fpath)
+    isfile(fpath) || error("PPT cache file $fpath not found!")
+    E, rate = @hlock HDF5.h5open(fpath, "r") do file
+        (read(file["E"]), read(file["rate"]))
+    end
+    makePPTaccel(E, rate)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16)

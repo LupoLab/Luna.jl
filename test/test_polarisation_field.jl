@@ -19,42 +19,51 @@ import Luna: Output
         ω0 = 2π*PhysData.c/λ0
         Et = @. sqrt(It)*cos(ω0*t)
     end
-    dens0 = PhysData.density(gas, pres)
-    densityfun(z) = dens0
+    densityfun = let dens0=PhysData.density(gas, pres)
+        z -> dens0
+    end
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
     modes = (
-         Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-         α=ω->0),
+         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     in1 = (func=gausspulse, energy=1e-6)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Ey; full=true)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+                                modes, :y; full=true)
+    statsfun = Stats.collect_stats(grid, Eω,
+                                Stats.ω0(grid),
+                                Stats.peakintensity(grid, modes),
+                                Stats.fwhm_r(grid, modes),
+                                Stats.energy(grid, energyfunω))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
 
     modes = (
-        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0),
-                        α=ω->0),
-        Modes.@delegated(Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2),
-                        α=ω->0)
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false)
     )
     in1 = (func=gausspulse, energy=1e-6/2.0)
     # same field in each mode
     inputs = ((1, (in1,)), (2, (in1,)))
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Exy; full=true)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+                                modes, :xy; full=true)
+    statsfun = Stats.collect_stats(grid, Eω,
+                                Stats.ω0(grid),
+                                Stats.peakintensity(grid, modes, components=:xy),
+                                Stats.fwhm_r(grid, modes, components=:xy),
+                                Stats.energy(grid, energyfunω))
     outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputp)
+    Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10)
 
     Iω = dropdims(abs2.(output.data["Eω"]), dims=2)
     Iωp = dropdims(sum(abs2.(outputp.data["Eω"]), dims=2), dims=2)
 
     @test norm(Iω - Iωp)/norm(Iω) < 1.07e-12
+    @test all(output["stats"]["peakintensity"] .≈ outputp["stats"]["peakintensity"])
+    @test all(output["stats"]["energy"] .≈ sum(outputp["stats"]["energy"], dims=1))
+    @test all(output["stats"]["fwhm_r"] .≈ outputp["stats"]["fwhm_r"])
 end

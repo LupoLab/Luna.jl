@@ -14,7 +14,7 @@ import Test: @test, @testset, @test_throws
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
         ω0 = 2π*PhysData.c/λ0
@@ -29,21 +29,23 @@ import Test: @test, @testset, @test_throws
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(
         grid, energyfun, densityfun, normfun, responses, inputs, aeff)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+    statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Ey; full=false)
+                                modes, :y; full=false)
     outputr = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputr)
+    Luna.run(Eω, grid, linop, transform, FT, outputr, status_period=10)
 
     Iω = abs2.(output.data["Eω"])
     Iωr = abs2.(dropdims(outputr.data["Eω"], dims=2))
@@ -61,10 +63,10 @@ end
     pres = 5
     τ = 30e-15
     λ0 = 800e-9
-    grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+    grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     function gausspulse(t)
         It = Maths.gauss(t, fwhm=τ)
         ω0 = 2π*PhysData.c/λ0
@@ -79,21 +81,23 @@ end
     inputs = (in1, )
     Eω, transform, FT = Luna.setup(
         grid, energyfun, densityfun, normfun, responses, inputs, aeff)
-    statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+    statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω))
     output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
-    energyfun = NonlinearRHS.energy_modal()
+    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
-                                modes, :Ey; full=true)
+                                modes, :y; full=true)
     outputf = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
-    Luna.run(Eω, grid, linop, transform, FT, outputf)
+    Luna.run(Eω, grid, linop, transform, FT, outputf, status_period=10)
 
     Iω = abs2.(output.data["Eω"])
     Iωf = abs2.(dropdims(outputf.data["Eω"], dims=2))

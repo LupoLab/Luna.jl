@@ -1,34 +1,266 @@
 module LinearOps
 import FFTW
-import Luna: Modes, Grid, PhysData
+import Hankel
+import Luna: Modes, Grid, PhysData, Maths
 import Luna.PhysData: wlfreq
 
-"Limit α so that we do not get overflow in exp(α*dz)."
+#=================================================#
+#===============    FREE SPACE     ===============#
+#=================================================#
+"""
+    make_const_linop(grid, xygrid, n, frame_vel)
+
+Make constant linear operator for full 3D propagation. `n` is the refractive index (array)
+and frame_vel is the velocity of the reference frame.
+"""
+function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
+                          n::AbstractArray, frame_vel::Number)
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    k2[2:end] .= (n[2:end] .* grid.ω[2:end] ./ PhysData.c).^2
+    β1 = 1/frame_vel
+    out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
+    return out
+end
+
+function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
+    n = zero(grid.ω)
+    n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    make_const_linop(grid, xygrid, n, 1/β1)
+end
+
+function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
+                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    k2[grid.sidx] .= (n[grid.sidx].*grid.ω[grid.sidx]./PhysData.c).^2
+    β1 = 1/frame_vel
+    out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, β0ref; thg=thg)
+    return out
+end
+
+function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun,     
+                          thg=false)
+    n = zero(grid.ω)
+    n[grid.sidx] = nfun.(wlfreq.(grid.ω[grid.sidx]))
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    if thg
+        β0const = 0.0
+    else
+        β0const = grid.ω0/PhysData.c * nfun(wlfreq(grid.ω0))
+    end
+    make_const_linop(grid, xygrid, n, 1/β1, β0const; thg=thg)
+end
+
+"""
+    make_linop(grid, xygrid, nfun)
+
+Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` should return the
+refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
+"""
+function make_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[2:end] .= (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end] ./ PhysData.c).^2
+        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
+    end
+end
+
+# Internal routine -- function barrier aids with JIT compilation
+function _fill_linop_xy!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idcs)
+    for ii in idcs
+        for iω in eachindex(grid.ω)
+            βsq = k2[iω] - kperp2[ii]
+            if βsq < 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+            else
+                out[iω, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+            end
+        end
+    end
+end
+
+function make_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun; thg=false)
+    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+        _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, βref; thg=thg)
+    end
+end
+
+function _fill_linop_xy!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, βref; thg)
+    for ii in idcs
+        for iω in eachindex(grid.ω)
+            βsq = k2[iω] - kperp2[ii]
+            if βsq < 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+            else
+                out[iω, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+            end
+            if !thg
+                out[iω, ii] -= -im*βref
+            end
+        end
+    end
+end
+
+#=================================================#
+#==============   RADIAL SYMMETRY   ==============#
+#=================================================#
+"""
+    make_const_linop(grid, q::QDHT, n, frame_vel)
+
+Make constant linear operator for radial free-space. `n` is the refractive index (array)
+and frame_vel is the velocity of the reference frame.
+"""
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
+                          n::AbstractArray, frame_vel::Number)
+    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    kr2 = q.k.^2
+    β1 = 1/frame_vel 
+    _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
+    return out
+end
+
+function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
+    n = zero(grid.ω)
+    n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    make_const_linop(grid, q, n, 1/β1)
+end
+
+function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
+    n = zero(grid.ω)
+    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
+    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    if thg
+        β0const = 0.0
+    else
+        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
+    end
+    make_const_linop(grid, q, n, 1/β1, β0const; thg=thg)
+end
+
+function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
+                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    kr2 = q.k.^2
+    β1 = 1/frame_vel
+    _fill_linop_r!(out, grid, β1, k2, kr2, q.N, β0ref, thg)
+    return out
+end
+
+"""
+    make_linop(grid, q::QDHT, nfun)
+
+Make z-dependent linear operator for radial free-space propagation. `nfun(ω; z)` should
+return the refractive index as a function of frequency `ω` and (kwarg) propagation
+distance `z`.
+"""
+function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
+    kr2 = q.k.^2
+    k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[2:end] .= (nfun.(grid.ω[2:end]; z=z) .* grid.ω[2:end]./PhysData.c).^2
+        _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
+    end
+end
+
+function _fill_linop_r!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
+    for ir = 1:Nr
+        for iω = 1:length(grid.ω)
+            βsq = k2[iω] - kr2[ir]
+            if βsq < 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+            else
+                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+            end
+        end
+    end
+end
+
+function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
+    kr2 = q.k.^2
+    k2 = zero(grid.ω)
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+        _fill_linop_r!(out, grid, β1, k2, kr2, q.N, βref, thg)
+    end
+end
+
+function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
+    for ir = 1:Nr
+        for iω = 1:length(grid.ω)
+            βsq = k2[iω] - kr2[ir]
+            if βsq < 0
+                # negative βsq -> evanescent fields -> attenuation
+                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+            else
+                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+            end
+            if !thg
+                out[iω, ir] -= -im*βref
+            end
+        end
+    end
+end
+
+#=================================================#
+#===============   MODE AVERAGE   ================#
+#=================================================#
+
+"""
+    αlim!(α)
+
+Limit α so that we do not get overflow in exp(α*dz)
+"""
 function αlim!(α)
     # magic number: this is 130 dB/cm
-    # a test script sensitive this is test_main_rect_env.jl
+    # a test script sensitive to this is test_main_rect_env.jl
     clamp!(α, 0.0, 3000.0)
 end
 
-function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, frame_vel)
+function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     β = similar(grid.ω)
     βfun!(β, grid.ω, 0)
     α = similar(grid.ω)
     αfun!(α, grid.ω, 0)
     αlim!(α)
-    β1 = 1/frame_vel(0)
     linop = @. -im*(β-β1*grid.ω) - α/2
     linop[1] = 0
     return linop
 end
 
-function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, frame_vel, β0ref)
+function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     β = similar(grid.ω)
     βfun!(β, grid.ω, 0)
     α = similar(grid.ω)
     αfun!(α, grid.ω, 0)
     αlim!(α)
-    β1 = 1/frame_vel(0)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
     linop[.!grid.sidx] .= 0
     return linop
@@ -52,8 +284,7 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
     function αfun!(out, ω, z)
         out .= αconst
     end
-    frame_vel(z) = 1/β1const
-    make_const_linop(grid, βfun!, αfun!, frame_vel, β0const), βfun!, frame_vel, αfun!
+    make_const_linop(grid, βfun!, αfun!, β1const, β0const), βfun!, β1const, αfun!
 end
 
 function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
@@ -69,49 +300,13 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function αfun!(out, ω, z)
         out .= αconst
     end
-    frame_vel(z) = 1/β1const
-    make_const_linop(grid, βfun!, αfun!, frame_vel), βfun!, frame_vel, αfun!
-end
-
-function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
-    nmodes = length(modes)
-    linops = zeros(ComplexF64, length(grid.ω), nmodes)
-    for i = 1:nmodes
-        βconst = zero(grid.ω)
-        βconst[2:end] = Modes.β.(modes[i], grid.ω[2:end])
-        βconst[1] = 1
-        α = zeros(length(grid.ω))
-        α[2:end] .= Modes.α.(modes[i], grid.ω[2:end])
-        αlim!(α)
-        linops[:,i] = im.*(-βconst .+ grid.ω./vel) .- α./2
-    end
-    linops
-end
-
-function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
-    vel = 1/Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
-    if thg
-        βref = 0.0
-    else
-        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
-    end
-    nmodes = length(modes)
-    linops = zeros(ComplexF64, length(grid.ω), nmodes)
-    for i = 1:nmodes
-        βconst = zero(grid.ω)
-        βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
-        βconst[.!grid.sidx] .= 1
-        α = Modes.α.(modes[i], grid.ω)
-        αlim!(α)
-        linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0)./vel .- βref) .- α./2
-    end
-    linops
+    make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
 end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function linop!(out, z)
-        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[2:end], z=z))
+        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(
+            Modes.neff.(mode, grid.ω[2:end], z=z))
         out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
         out[1] = 0
     end
@@ -142,6 +337,46 @@ function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false
     return linop!, βfun!
 end
 
+#=================================================#
+#=================   MULTIMODE   =================#
+#=================================================#
+
+function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
+    β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
+    nmodes = length(modes)
+    linops = zeros(ComplexF64, length(grid.ω), nmodes)
+    for i = 1:nmodes
+        βconst = zero(grid.ω)
+        βconst[2:end] = Modes.β.(modes[i], grid.ω[2:end])
+        βconst[1] = 1
+        α = zeros(length(grid.ω))
+        α[2:end] .= Modes.α.(modes[i], grid.ω[2:end])
+        αlim!(α)
+        linops[:,i] = im.*(-βconst .+ grid.ω.*β1) .- α./2
+    end
+    linops
+end
+
+function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
+    β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
+    if thg
+        βref = 0.0
+    else
+        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
+    end
+    nmodes = length(modes)
+    linops = zeros(ComplexF64, length(grid.ω), nmodes)
+    for i = 1:nmodes
+        βconst = zero(grid.ω)
+        βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
+        βconst[.!grid.sidx] .= 1
+        α = Modes.α.(modes[i], grid.ω)
+        αlim!(α)
+        linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0).*β1 .- βref) .- α./2
+    end
+    linops
+end
+
 function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     function linop!(out, z)
         β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
@@ -160,16 +395,16 @@ end
 function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     function linop!(out, z)
         β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
-        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
         nmodes = length(modes)
         fill!(out, 0.0)
         for i = 1:nmodes
             out[grid.sidx, i] .= -im.*(
-                grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
+                grid.ω[grid.sidx]./PhysData.c.*conj.(
+                    Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
                 .- (grid.ω[grid.sidx] .- grid.ω0) .* β1
                 )
             if !thg
-                out[grid.sidx, i] .-= -im.*βref
+                out[grid.sidx, i] .-= -im.*Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
             end
         end
     end

@@ -88,20 +88,20 @@ function saveFFTwisdom()
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
-function save_dict_h5(fpath, d, force=false, rmold=false)
-    if isfile(fpath) & rmold
+function save_dict_h5(fpath, d; force=false, rmold=false)
+    if isfile(fpath) && rmold
         rm(fpath)
     end
 
     function dict2h5(k::AbstractString, v, parent)
-        if HDF5.exists(parent, k) & !force
+        if HDF5.exists(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = v
     end
 
     function dict2h5(k::AbstractString, v::Nothing, parent)
-        if HDF5.exists(parent, k) & !force
+        if HDF5.exists(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = Float64[]
