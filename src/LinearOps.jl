@@ -266,6 +266,12 @@ function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     return linop
 end
 
+"""
+    make_const_linop(grid, mode, λ0)
+
+Make constant linear operator for mode-averaged propagation in mode `mode` with a reference
+wavelength `λ0`.
+"""
 function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
     β1const = Modes.dispersion(mode, 1, wlfreq(λ0))
     if thg

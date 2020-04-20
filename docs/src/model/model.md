@@ -17,3 +17,24 @@ where ``\mathcal{T}_\perp`` is a transform from (transverse) real space to recip
 E(t, \mathbf{r}_\perp, z)  = \mathcal{T}_\perp^{-1}\Big[E(\omega, \mathbf{k}_\perp, z)\Big]\,,
 ```
 where ``\mathcal{T}_\perp^{-1}`` is simply the inverse of ``\mathcal{T}_\perp`` so transforms from transverse reciprocal space to real space. The chief difference between variations of the UPPE implemented in `Luna` is the definition of ``\mathbf{k}_\perp`` and ``\mathcal{T}_\perp``, that is, the choice of [Modal decompositions](@ref) of the field.
+
+## A note on sign conventions
+In optics, a plane wave is usually written as
+```math
+E(t, \mathbf{r}) = \mathrm{e}^{i(\mathbf{k}\cdot\mathbf{r} - \omega t)}
+```
+and hence a general field, the superposition of many plane waves, is
+```math
+E(t, \mathbf{r}) = \int_{-\infty}^\infty \tilde{E}(\omega, \mathbf{k})\mathrm{e}^{i(\mathbf{k}\cdot\mathbf{r} - \omega t)}\,\mathrm{d}\omega\mathrm{d}^3\mathbf{k}\,,
+```
+which means that for the *time-domain* Fourier transform, the sign convention is *opposite* to that used in mathematics, with the forward and inverse transforms given by
+```math
+\tilde{E}(\omega) = \mathcal{F}_t\left[E(t)\right] = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^\infty \!\! E(t)\mathrm{e}^{i\omega t}\,\mathrm{d} t 
+\\
+\\
+E(t) = \mathcal{F}^{-1}_\omega\left[E(\omega)\right] = \frac{1}{\sqrt{2\pi}}\int_{-\infty}^\infty\!\! E(\omega)\mathrm{e}^{-i\omega t}\,\mathrm{d} \omega \,.
+```
+In this convention with one sign in the exponent for space and the opposite for time, positive group-velocity dispersion (GVD) is indeed a positive parabola (``1/2\,,\beta_2(\omega-\omega_0)^2`` with positive ``\beta_2``), waves with positive wave vectors move to larger ``\mathbf{r}`` for larger times ``t`` and so forth. However, fast Fourier transforms (FFTs) use the mathematics convention. For complex (envelope) fields, this could be circumvented by simply using `ifft` instead of `fft` and vice versa, but this is not possible for real-valued fields using real FFTs (rFFT). The sign conventions in `Luna` are:
+
+1. All *physical* expressions and quantities (propagation constants, dispersion, nonlinear phases etc.) are given in the **optics convention**, i.e. as they would be found in a textbook.
+2. The *fields* in the actual simulation are given in the **mathematics convention** as required by for FFTs. This leads to the appearance in additional minus signs in the linear operator, see e.g. [`make_const_linop`](@ref LinearOps.make_const_linop). Similarly, to e.g. add some dispersion to a field used in or returned by a `Luna` simulation, the sign of that dispersion has to be flipped in comparison to the optics convention.
