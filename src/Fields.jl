@@ -1,33 +1,57 @@
-module Field
+module Fields
 import Luna
 import Luna: Grid, Maths, PhysData
+import NumericalIntegration: integrate, SimpsonEven
+import Random: MersenneTwister
 
+"""
+    PulseField(λ0, energy, ϕ, τ0, Itshape)
+
+Represents a pulse with shape defined by `Itshape`.
+
+# Fields
+- `λ0::Float64`: the central field wavelength
+- `energy::Float64`: the pulse energy
+- `ϕ::Float64`: the CEO phase
+- `τ0::Float64`: the temproal shift from grid time 0
+- `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
+"""
 struct PulseField{iT}
-    λ0::Float64         # central wavelength
-    energy::Float64     # pulse energy
-    ϕ::Float64          # CEO phase
-    τ0::Float64         # delay from grid time 0
-    Itshape::iT         # function to get shape of intensity/power in time domain
+    λ0::Float64
+    energy::Float64
+    ϕ::Float64
+    τ0::Float64
+    Itshape::iT
 end
 
+"""
+    GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
+
+Construct a Gaussian shaped pulse with FWHM `τfwhm`, and other parameters as defined
+for [`PulseField`](@ref).
+"""
 function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
     PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm))
 end
 
+"Add the field to `Eω` for the provided `grid`, `energy_t` function at Fourier transform `FT`"
 function (p::PulseField)(Eω, grid::Grid.RealGrid, energy_t, FT)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
     Et = @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
-    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(grid.t, Et)) .* Et)
 end
 
 function (p::PulseField)(Eω, grid::Grid.EnvGrid, energy_t, FT)
     t = grid.t .- p.τ0
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
     Et = @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
-    Eω = FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(grid.t, Et)) .* Et)
 end
 
+"Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
+The optional parameters `energy_t` and `FT` are unused and are present for interface
+compatibility with [`PulseField`](@ref)."
 function shotnoise!(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing; seed=nothing)
     rng = MersenneTwister(seed)
     δω = grid.ω[2] - grid.ω[1]

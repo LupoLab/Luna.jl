@@ -1,29 +1,23 @@
 using Luna
-import Logging
 import FFTW
-Logging.disable_logging(Logging.BelowMinLevel)
 
 a = 13e-6
 gas = :Ar
 pres = 5
+flength = 15e-2
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 1e-6
 
-grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 5e-12)
+grid = Grid.EnvGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false, model=:full)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)
-end
+energyfun, energyfunω = Fields.energy_modal(grid)
 
 densityfun = let dens0=PhysData.density(gas, pres)
     f(z) = dens0
@@ -39,11 +33,10 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
             # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = (in1, )
+inputs = (Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy), )
 
 Eω, transform, FT = Luna.setup(
-    grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
