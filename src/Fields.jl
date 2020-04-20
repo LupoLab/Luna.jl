@@ -4,6 +4,8 @@ import Luna: Grid, Maths, PhysData
 import NumericalIntegration: integrate, SimpsonEven
 import Random: MersenneTwister
 
+abstract type AbstractField end
+
 """
     PulseField(λ0, energy, ϕ, τ0, Itshape)
 
@@ -16,7 +18,7 @@ Represents a pulse with shape defined by `Itshape`.
 - `τ0::Float64`: the temproal shift from grid time 0
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
-struct PulseField{iT}
+struct PulseField{iT} <: AbstractField
     λ0::Float64
     energy::Float64
     ϕ::Float64
@@ -95,7 +97,7 @@ function shotnoise!(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing; seed=
 end
 
 "Calculate energy from modal field E(t)"
-function energy_modal(grid::Grid.RealGrid)
+function energyfuncs(grid::Grid.RealGrid)
     function energy_t(Et)
         Eta = Maths.hilbert(Et)
         return integrate(grid.t, abs2.(Eta), SimpsonEven())
@@ -108,7 +110,7 @@ function energy_modal(grid::Grid.RealGrid)
     return energy_t, energy_ω
 end
 
-function energy_modal(grid::Grid.EnvGrid)
+function energyfuncs(grid::Grid.EnvGrid)
     function energy_t(Et)
         return integrate(grid.t, abs2.(Et), SimpsonEven())
     end
@@ -122,7 +124,7 @@ function energy_modal(grid::Grid.EnvGrid)
     return energy_t, energy_ω
 end
 
-function energy_radial(grid::Grid.RealGrid, q)
+function energyfuncs(grid::Grid.RealGrid, q::Hankel.QDHT)
     function energy_t(Et)
         Eta = Maths.hilbert(Et)
         tintg = integrate(grid.t, abs2.(Eta), SimpsonEven())
@@ -137,7 +139,7 @@ function energy_radial(grid::Grid.RealGrid, q)
     return energy_t, energy_ω
 end
 
-function energy_radial(grid::Grid.EnvGrid, q)
+function energyfuncs(grid::Grid.EnvGrid, q::Hankel.QDHT)
     function energy_t(Et)
         tintg = integrate(grid.t, abs2.(Et), SimpsonEven())
         return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
@@ -153,7 +155,7 @@ function energy_radial(grid::Grid.EnvGrid, q)
     return energy_t, energy_ω
 end
 
-function energy_free(grid::Grid.RealGrid, xygrid)
+function energyfuncs(grid::Grid.RealGrid, xygrid::Grid.FreeGrid)
     δx = xygrid.x[2] - xygrid.x[1]
     δy = xygrid.y[2] - xygrid.y[1]
     δt = grid.t[2] - grid.t[1]
@@ -175,7 +177,7 @@ function energy_free(grid::Grid.RealGrid, xygrid)
     return energy_t, energy_ω
 end
 
-function energy_free(grid::Grid.EnvGrid, xygrid)
+function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     δx = xygrid.x[2] - xygrid.x[1]
     δy = xygrid.y[2] - xygrid.y[1]
     δt = grid.t[2] - grid.t[1]
