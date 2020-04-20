@@ -25,13 +25,34 @@ struct PulseField{iT}
 end
 
 """
-    GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
+    GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
 
-Construct a Gaussian shaped pulse with FWHM `τfwhm`, and other parameters as defined
-for [`PulseField`](@ref).
+Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`,
+superGaussian parameter `m=1` and other parameters as defined for [`PulseField`](@ref).
 """
-function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
-    PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm))
+function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
+    PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
+end
+
+"""
+    SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
+
+Construct a Sech^2(t/τw) shaped pulse with natural width `τw`,
+and other parameters as defined for [`PulseField`](@ref).
+"""
+function SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
+    PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
+end
+
+"""
+    SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
+
+Construct a Sech^2 shaped pulse with intensity/power FWHM `τfwhm`,
+and other parameters as defined for [`PulseField`](@ref).
+"""
+function SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
+    τw = τfwhm/(2*log(1 + sqrt(2)))
+    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
 end
 
 "Add the field to `Eω` for the provided `grid`, `energy_t` function at Fourier transform `FT`"
