@@ -61,8 +61,8 @@ Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, respons
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
 Ert = FT \ (q \ Eω)
-println(energyfun(grid.t, Ert))
-println(energyfun_ω(grid.ω, Eω))
+println(energyfun(Ert))
+println(energyfun_ω(Eω))
 error()
 
 Luna.run(Eω, grid, linop, transform, FT, output)
@@ -90,7 +90,7 @@ Ir = zeros(Float64, (length(q.r), length(zout)))
 
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 3)
-    energy[ii] = energyfun(t, Etout[:, :, ii]);
+    energy[ii] = energyfun(Etout[:, :, ii]);
     Ir[:, ii] = integrate(ω, Iωr[:, :, ii], SimpsonEven());
 end
 

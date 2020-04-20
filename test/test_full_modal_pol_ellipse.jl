@@ -32,7 +32,7 @@ function gausspulse(t)
 end
 
 Etlin = gausspulse(grid.t)
-cenergy = energyfun(grid.t, Etlin)
+cenergy = energyfun(Etlin)
 Etlin = sqrt(energy)/sqrt(cenergy) .* Etlin
 
 Et = [Etlin zero(grid.t)]

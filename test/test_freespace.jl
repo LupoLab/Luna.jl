@@ -93,7 +93,7 @@ Ir = zeros(Float64, (length(q.r), length(zout)))
 Et = Maths.hilbert(Etout)
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 3)
-    energy[ii] = energyfun(t, Etout[:, :, ii]);
+    energy[ii] = energyfun(Etout[:, :, ii]);
     Ir[:, ii] = integrate(grid.ω, Iωr[:, :, ii], SimpsonEven());
 end
 

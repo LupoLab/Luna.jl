@@ -69,9 +69,9 @@ zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii])
+    energy[ii] = energyfun(Etout[:, ii])
 end
-energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
+energyω = [energyfunω(Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
 plt.figure()

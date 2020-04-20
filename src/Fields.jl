@@ -39,14 +39,14 @@ function (p::PulseField)(Eω, grid::Grid.RealGrid, energy_t, FT)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
     Et = @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
-    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(grid.t, Et)) .* Et)
+    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
 function (p::PulseField)(Eω, grid::Grid.EnvGrid, energy_t, FT)
     t = grid.t .- p.τ0
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
     Et = @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
-    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(grid.t, Et)) .* Et)
+    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
 "Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
@@ -75,57 +75,57 @@ end
 
 "Calculate energy from modal field E(t)"
 function energy_modal(grid::Grid.RealGrid)
-    function energy_t(t, Et)
+    function energy_t(Et)
         Eta = Maths.hilbert(Et)
         return integrate(grid.t, abs2.(Eta), SimpsonEven())
     end
 
     prefac = 2π/(grid.ω[end]^2)
-    function energy_ω(ω, Eω)
-        prefac*integrate(ω, abs2.(Eω), SimpsonEven())
+    function energy_ω(Eω)
+        prefac*integrate(grid.ω, abs2.(Eω), SimpsonEven())
     end
     return energy_t, energy_ω
 end
 
 function energy_modal(grid::Grid.EnvGrid)
-    function energy_t(t, Et)
+    function energy_t(Et)
         return integrate(grid.t, abs2.(Et), SimpsonEven())
     end
 
     δω = grid.ω[2] - grid.ω[1]
     Δω = length(grid.ω)*δω
     prefac = 2π*δω/(Δω^2)
-    function energy_ω(ω, Eω)
+    function energy_ω(Eω)
         prefac*sum(abs2.(Eω))
     end
     return energy_t, energy_ω
 end
 
 function energy_radial(grid::Grid.RealGrid, q)
-    function energy_t(t, Et)
+    function energy_t(Et)
         Eta = Maths.hilbert(Et)
-        tintg = integrate(t, abs2.(Eta), SimpsonEven())
+        tintg = integrate(grid.t, abs2.(Eta), SimpsonEven())
         return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
     end
 
     prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π/(grid.ω[end]^2)
-    function energy_ω(ω, Eω)
-        ωintg = integrate(ω, abs2.(Eω), SimpsonEven())
+    function energy_ω(Eω)
+        ωintg = integrate(grid.ω, abs2.(Eω), SimpsonEven())
         return prefac*Hankel.integrateK(ωintg, q)
     end
     return energy_t, energy_ω
 end
 
 function energy_radial(grid::Grid.EnvGrid, q)
-    function energy_t(t, Et)
-        tintg = integrate(t, abs2.(Et), SimpsonEven())
+    function energy_t(Et)
+        tintg = integrate(grid.t, abs2.(Et), SimpsonEven())
         return 2π*PhysData.c*PhysData.ε_0/2 * Hankel.integrateR(tintg, q)
     end
 
     δω = grid.ω[2] - grid.ω[1]
     Δω = length(grid.ω)*δω
     prefac = 2π*PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2)
-    function energy_ω(ω, Eω)
+    function energy_ω(Eω)
         ωintg = dropdims(sum(abs2.(Eω); dims=1), dims=1)
         return prefac*Hankel.integrateK(ωintg, q)
     end
@@ -137,7 +137,7 @@ function energy_free(grid::Grid.RealGrid, xygrid)
     δy = xygrid.y[2] - xygrid.y[1]
     δt = grid.t[2] - grid.t[1]
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
-    function energy_t(t, Et)
+    function energy_t(Et)
         Eta = Maths.hilbert(Et)
         return  prefac_t * sum(abs2.(Eta)) 
     end
@@ -149,7 +149,7 @@ function energy_free(grid::Grid.RealGrid, xygrid)
     δky = xygrid.ky[2] - xygrid.ky[1]
     Δky = length(xygrid.ky)*δky
     prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
-    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
 
     return energy_t, energy_ω
 end
@@ -159,7 +159,7 @@ function energy_free(grid::Grid.EnvGrid, xygrid)
     δy = xygrid.y[2] - xygrid.y[1]
     δt = grid.t[2] - grid.t[1]
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
-    function energy_t(t, Et)
+    function energy_t(Et)
         return  prefac_t * sum(abs2.(Et)) 
     end
 
@@ -170,7 +170,7 @@ function energy_free(grid::Grid.EnvGrid, xygrid)
     δky = xygrid.ky[2] - xygrid.ky[1]
     Δky = length(xygrid.ky)*δky
     prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
-    energy_ω(ω, Eω) = prefac * sum(abs2.(Eω))
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
 
     return energy_t, energy_ω
 end

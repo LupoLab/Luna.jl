@@ -74,7 +74,7 @@ Iωyx = abs2.(Eωyx);
 Iyx = zeros(Float64, (length(y), length(x), length(zout)));
 energy = zeros(length(zout));
 for ii = 1:size(Etyx, 4)
-    energy[ii] = energyfun(t, Etyx[:, :, :, ii]);
+    energy[ii] = energyfun(Etyx[:, :, :, ii]);
     Iyx[:, :, ii] = (grid.ω[2]-grid.ω[1]) .* sum(Iωyx[:, :, :, ii], dims=1);
 end
 

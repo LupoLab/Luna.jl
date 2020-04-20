@@ -77,8 +77,8 @@ Itlog = log10.(Maths.normbymax(It))
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 Et = Maths.hilbert(Etout)
-energy = [energyfun(t, Etout[:, ii]) for ii=1:size(Etout, 2)]
-energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
+energy = [energyfun(Etout[:, ii]) for ii=1:size(Etout, 2)]
+energyω = [energyfunω(Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
 ##
