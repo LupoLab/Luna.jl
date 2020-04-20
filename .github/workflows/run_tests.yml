@@ -11,4 +11,8 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
           version: 1
+      - name: Install dependencies
+        env:
+          PYTHON: # remove PYTHON env variable to make sure packages are installed
+        run: julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"));'
       - uses: julia-actions/julia-runtest@master
