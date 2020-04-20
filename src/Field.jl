@@ -50,10 +50,32 @@ function shotnoise!(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing; seed=
 end
 
 "Calculate energy from modal field E(t)"
-energy_modal() = _energy_modal
-_energy_modal(t, Et::Array{T, N}) where T <: Real where N = _energy_modal(t, Maths.hilbert(Et))
-_energy_modal(t, Et::Array{T, N}) where T <: Complex where N = abs(integrate(t, abs2.(Et), SimpsonEven()))
+function energy_modal(grid::Grid.RealGrid)
+    function energy_t(t, Et)
+        Eta = Maths.hilbert(Et)
+        return integrate(grid.t, abs2.(Eta), SimpsonEven())
+    end
 
+    prefac = 2π/(grid.ω[end]^2)
+    function energy_ω(ω, Eω)
+        prefac*integrate(ω, abs2.(Eω), SimpsonEven())
+    end
+    return energy_t, energy_ω
+end
+
+function energy_modal(grid::Grid.EnvGrid)
+    function energy_t(t, Et)
+        return integrate(grid.t, abs2.(Et), SimpsonEven())
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    prefac = 2π*δω/(Δω^2)
+    function energy_ω(ω, Eω)
+        prefac*sum(abs2.(Eω))
+    end
+    return energy_t, energy_ω
+end
 
 function energy_radial(grid::Grid.RealGrid, q)
     function energy_t(t, Et)
