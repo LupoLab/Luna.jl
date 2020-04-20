@@ -67,6 +67,7 @@ include("Grid.jl")
 include("RK45.jl")
 include("Modes.jl")
 include("Capillary.jl")
+include("Antiresonant.jl")
 include("RectModes.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
@@ -79,7 +80,11 @@ include("Plotting.jl")
 include("Raman.jl")
 include("Field.jl")
 
-function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs, aeff)
+export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
+       Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
+       Tools, Plotting, Raman, Antiresonant
+
+function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     xo = Array{Float64}(undef, length(grid.to))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
@@ -209,7 +214,7 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     end
     xo = Array{Float64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_rfft(xo, (1, 2, 3), flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
+    transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -231,7 +236,7 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     end
     xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransFree(grid, FTo, length(y), length(x),
+    transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -247,32 +252,48 @@ function make_init(grid, inputs, energy_t, FT)
     return out
 end
 
+linoptype(l::AbstractArray) = "constant"
+linoptype(l) = "variable"
+
+gridtype(g::Grid.RealGrid) = "field-resolved"
+gridtype(g::Grid.EnvGrid) = "envelope"
+gridtype(g) = "unknown"
+
+simtype(g, t, l) = Dict("field" => gridtype(g),
+                        "transform" => string(t),
+                        "linop" => linoptype(l))
+
+function dumps(t, l)
+    io = IOBuffer()
+    dump(io, t)
+    tr = String(take!(io))
+    io = IOBuffer()
+    dump(io, l)
+    lo = String(take!(io))
+    Dict("transform" => tr, "linop" => lo)
+end
+
 function run(Eω, grid,
              linop, transform, FT, output;
-             min_dz=0, max_dz=Inf, init_dz=1e-4,
+             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
-
 
     Et = FT \ Eω
 
     z = 0.0
 
-    window! = let window=grid.ωwin, twindow=grid.twin, FT=FT, Et=Et
-        function window!(Eω)
-            Eω .*= window
-            ldiv!(Et, FT, Eω)
-            Et .*= twindow
-            mul!(Eω, FT, Et)
-        end
-    end
-
     function stepfun(Eω, z, dz, interpolant)
-        window!(Eω)
+        Eω .*= grid.ωwin
+        ldiv!(Et, FT, Eω)
+        Et .*= grid.twin
+        mul!(Eω, FT, Et)
         output(Eω, z, dz, interpolant)
     end
 
     output(Grid.to_dict(grid), group="grid")
+    output(simtype(grid, transform, linop), group="simulation_type")
+    output(dumps(transform, linop), group="dumps")
 
     RK45.solve_precon(
         transform, linop, Eω, z, init_dz, grid.zmax, stepfun=stepfun,

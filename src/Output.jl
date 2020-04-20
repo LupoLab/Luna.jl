@@ -318,7 +318,7 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
                 error("File $(o.fpath) already has dataset $(key)")
             end
         end
-        isa(val, BitArray) && (v = Array{Bool, 1}(val))
+        isa(val, BitArray) && (val = Array{Bool, 1}(val))
         if !isnothing(group)
             if !HDF5.exists(parent, group)
                 HDF5.g_create(parent, group)

@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
 import Dierckx
+import Random: seed!
 
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
@@ -115,11 +116,48 @@ end
     @test all(pl[8 .< x] .== 0)
 end
 
+@testset "fwhm" begin
+    fw = 0.2
+    x = collect(range(-1, stop=1, length=2048))
+    δx = x[2] - x[1]
+    y = Maths.gauss(x, fwhm=fw)
+    @test isapprox(Maths.fwhm(x, y), fw, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, method=:spline), fw, rtol=1e-4)
+    @test Maths.fwhm(x, y, method=:spline) == Maths.fwhm(x, y, method=:spline, minmax=:max)
+    @test abs(Maths.fwhm(x, y, method=:nearest) - fw) < δx
+
+    fw = 0.1
+    sep = 0.5
+    y = Maths.gauss(x, fwhm=fw, x0=-sep/2) + Maths.gauss(x, fwhm=fw, x0=sep/2)
+    @test isapprox(Maths.fwhm(x, y, minmax=:min), fw, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:min), fw, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:max), fw+sep, rtol=1e-4)
+
+    hw = 1
+    f(x) = Maths.gauss(x, fwhm=2*hw)
+    @test Maths.hwhm(f, 0) ≈ hw
+    @test Maths.hwhm(f, 0; direction=:bwd) ≈ hw
+
+    # Test that FWHM max still works with noise-burst pulses
+    x = collect(range(-0.5, stop=1.5, length=2^14))
+    y = zero(x)
+    seed!(123)
+    for i = 1:10000
+        y .+= rand()*Maths.gauss(x, x0=rand(), fwhm=rand()/1000)
+    end
+    m = 1.1*maximum(y)
+    y .+= m*Maths.gauss(x, x0=-0.05, fwhm=0.05)
+    y .+= m*Maths.gauss(x, x0=1.05, fwhm=0.05)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max), 0.05 + 1.1, rtol=1e-4)
+    @test isapprox(Maths.fwhm(x, y, minmax=:max, method=:spline), 0.05 + 1.1, rtol=1e-4)
+end
+
 @testset "CSpline" begin
     import Random: shuffle
     x = range(0.0, 2π, length=100)
     y = sin.(x)
-    spl = Maths.CSpline(x, y)
+    spl = Maths.CSpline(x, y);
     fslow(x0) = x0 <= spl.x[1] ? 2 :
                 x0 >= spl.x[end] ? length(spl.x) :
                 findfirst(x -> x>x0, spl.x)
