@@ -3,6 +3,7 @@ import Luna
 import Luna: Grid, Maths, PhysData
 import NumericalIntegration: integrate, SimpsonEven
 import Random: MersenneTwister
+import Hankel
 
 abstract type AbstractField end
 
@@ -52,10 +53,10 @@ end
 Construct a Sech^2 shaped pulse with intensity/power FWHM `τfwhm`,
 and other parameters as defined for [`PulseField`](@ref).
 """
-function SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
-    τw = τfwhm/(2*log(1 + sqrt(2)))
-    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
-end
+#function SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
+#    τw = τfwhm/(2*log(1 + sqrt(2)))
+#    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
+#end
 
 "Add the field to `Eω` for the provided `grid`, `energy_t` function at Fourier transform `FT`"
 function (p::PulseField)(Eω, grid::Grid.RealGrid, energy_t, FT)
