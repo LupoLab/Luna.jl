@@ -377,7 +377,8 @@ function arbitrary(;kwargs...)
             dfun = kw[mfun]
             @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(args...; kwargs...)
         else
-            error("At least `neff`, `field`, and `dimlimits` have to be specified!")
+            err = "method $mfun not defined for this mode"
+            @eval $mfun(dm::$mT, args...; kwargs...) = error($err)
         end
     end
     for mfun in (:Aeff, :N)
