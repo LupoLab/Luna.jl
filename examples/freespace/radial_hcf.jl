@@ -1,28 +1,24 @@
-import Luna
-import Luna: Grid, Maths, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Plotting
+using Luna
 import Luna.PhysData: wlfreq
-import Logging
 import FFTW
 import Hankel
 import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
 
-import PyPlot:pygui, plt
-
+a = 15e-6
 gas = :Ar
-pres = 1.2
+pres = 5.0
 
-τ = 20e-15
+τ = 30e-15
 λ0 = 800e-9
 
-w0 = 40e-6
-energy = 2e-9
-L = 0.6
+w0 = 0.64*a
+energy = 1e-6
+L = 0.15
 
-R = 4e-3
-N = 1024
+R = a
+N = 32
 
-grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+grid = Grid.RealGrid(L, λ0, (200e-9, 3000e-9), 0.6e-12)
 q = Hankel.QDHT(R, N, dim=2)
 
 energyfun, energyfun_ω = Fields.energyfuncs(grid, q)
@@ -40,11 +36,12 @@ linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index_fun(gas, pres))
 
 normfun = NonlinearRHS.const_norm_radial(grid, q, PhysData.ref_index_fun(gas, pres))
 
-inputs = Fields.GaussGaussField(λ0=λ0, τfwhm=τ, energy=energy, w0=w0, propz=-0.3)
+inputs = Fields.GaussGaussField(λ0=λ0, τfwhm=τ, energy=energy, w0=w0)
 
 Eω, transform, FT = Luna.setup(grid, q, densityfun, normfun, responses, inputs)
 
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+#output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
 output = Output.MemoryOutput(0, grid.zmax, 201)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
@@ -85,30 +82,23 @@ idcs = [argmin(abs.(zout .- point)) for point in points]
 Epoints = [Hankel.symmetric(Et[:, :, idxi], q) for idxi in idcs]
 rsym = Hankel.Rsymmetric(q);
 
+import PyPlot:pygui, plt
 pygui(true)
-Iλ0 = Iωr[ω0idx, :, :]
-λ0 = 2π*PhysData.c/grid.ω[ω0idx]
-w1 = w0*sqrt(1+(L/2*λ0/(π*w0^2))^2)
-# w1 = w0
-Iλ0_analytic = Maths.gauss.(q.r, w1/2)*(w0/w1)^2 # analytical solution (in paraxial approx)
-plt.figure()
-plt.plot(q.r*1e3, Maths.normbymax(Iλ0[:, end]))
-plt.plot(q.r*1e3, Maths.normbymax(Iλ0_analytic), "--")
 
 plt.figure()
 plt.pcolormesh(zout*1e2, q.r*1e3, Iωr[ω0idx, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
-plt.xlabel("z (m)")
-plt.ylabel("r (m)")
+plt.xlabel("z (cm)")
+plt.ylabel("r (mm)")
 plt.title("I(r, ω=ω0)")
 
 plt.figure()
 plt.pcolormesh(zout*1e2, q.r*1e3, It[length(grid.t)÷2, :, :])
 plt.colorbar()
 plt.ylim(0, 4)
-plt.xlabel("z (m)")
-plt.ylabel("r (m)")
+plt.xlabel("z (cm)")
+plt.ylabel("r (mm)")
 plt.title("I(r, t=0)")
 
 plt.figure()
@@ -117,15 +107,15 @@ plt.pcolormesh(zout*1e2, q.r*1e3, Ir)
 plt.colorbar()
 plt.ylim(0, R*1e3)
 # plt.clim(-6, 0)
-plt.xlabel("z (m)")
-plt.ylabel("r (m)")
+plt.xlabel("z (cm)")
+plt.ylabel("r (mm)")
 plt.title("\$\\int I(r, \\omega) d\\omega\$")
 
 plt.figure()
 plt.pcolormesh(zout*1e2, grid.ω*1e-15/2π, Iω0log)
 plt.colorbar()
 plt.clim(0, -6)
-plt.xlabel("z (m)")
+plt.xlabel("z (cm)")
 plt.ylabel("f (PHz)")
 plt.title("I(r=0, ω)")
 

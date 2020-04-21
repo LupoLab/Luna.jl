@@ -126,10 +126,12 @@ end
 
 "Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
 and Fourier transform `FT`"
-function (s::SpatioTemporalField)(Eωk, grid, spacegrid::Hankel.QDH, energy_t, FT)
-    Et = make_Et(s.timefield, grid) .* sqrt.(Isshape.(spacegrid.r)')
+function (s::SpatioTemporalField)(Eωk, grid, spacegrid::Hankel.QDHT, energy_t, FT)
+    Et = make_Et(s.timefield, grid) .* sqrt.(s.Isshape.(spacegrid.r)')
     lEωk = spacegrid * (FT * (sqrt(s.timefield.energy)/sqrt(energy_t(Et)) .* Et))
-    prop!(lEωk, z, grid, spacegrid)
+    if s.propz != 0.0
+        prop!(lEωk, s.propz, grid, spacegrid)
+    end
     Eωk .+= lEωk
 end
 
