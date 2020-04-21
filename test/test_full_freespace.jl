@@ -49,7 +49,7 @@ inputs = (in1, )
 
 Eω, transform, FT = Luna.setup(grid, xygrid, energyfun, densityfun, normfun, responses, inputs)
 
-output = Output.MemoryOutput(0, grid.zmax, 21, (length(grid.ω), N, N))
+output = Output.MemoryOutput(0, grid.zmax, 21)
 
 Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf, init_dz=1e-1)
 

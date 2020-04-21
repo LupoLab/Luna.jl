@@ -63,6 +63,7 @@ end
 function loadFFTwisdom()
     fpath = joinpath(cachedir(), "FFTWcache")
     lockpath = joinpath(cachedir(), "FFTWlock")
+    isdir(cachedir()) || mkpath(cachedir())
     if isfile(fpath)
         Logging.@info("Found FFTW wisdom at $fpath")
         pidlock = mkpidlock(lockpath)

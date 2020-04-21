@@ -55,7 +55,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

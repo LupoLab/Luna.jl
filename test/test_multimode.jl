@@ -32,7 +32,7 @@ import Test: @test, @testset, @test_throws
     statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-    output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+    output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
@@ -43,7 +43,7 @@ import Test: @test, @testset, @test_throws
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :y; full=false)
-    outputr = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    outputr = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputr, status_period=10)
 
@@ -84,7 +84,7 @@ end
     statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-    output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+    output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
@@ -95,7 +95,7 @@ end
     inputs = ((1,(in1,)),)
     Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                                 modes, :y; full=true)
-    outputf = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    outputf = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputf, status_period=10)
 
