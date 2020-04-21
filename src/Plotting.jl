@@ -39,6 +39,7 @@ function subplotgrid(N, portrait=true; title=nothing)
             axi.remove()
         end
     end
+    fig.set_size_inches(cols*4, rows*2.5)
     fig, N > 1 ? axs : [axs]
 end
 
@@ -95,7 +96,7 @@ function stats(output; kwargs...)
     Npl = length(pstats)
     if Npl > 0
         pfig, axs = subplotgrid(Npl, title="Pulse stats")
-        pfig.set_size_inches(8, 8)
+        # pfig.set_size_inches(8, 8)
         for n in 1:Npl
             ax = axs[n]
             data, label = pstats[n]
@@ -104,7 +105,7 @@ function stats(output; kwargs...)
             ax.set_xlabel("Distance (cm)")
             ax.set_ylabel(label)
             multimode && (ndims(data) > 1) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes)
+            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
         end
         pfig.tight_layout()
     end
@@ -112,7 +113,7 @@ function stats(output; kwargs...)
     Npl = length(fstats)
     if Npl > 0
         ffig, axs = subplotgrid(Npl, title="Other stats")
-        ffig.set_size_inches(8, 8)
+        # ffig.set_size_inches(8, 8)
         for n in 1:Npl
             ax = axs[n]
             data, label = fstats[n]
@@ -121,7 +122,7 @@ function stats(output; kwargs...)
             ax.set_xlabel("Distance (cm)")
             ax.set_ylabel(label)
             multimode && (ndims(data) > 1) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes)
+            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
         end
         ffig.tight_layout()
     end
