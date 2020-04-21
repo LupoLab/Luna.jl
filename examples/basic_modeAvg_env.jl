@@ -25,9 +25,8 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-densityfun = let dens0=PhysData.density(gas, pres)
-    f(z) = dens0
-end
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 

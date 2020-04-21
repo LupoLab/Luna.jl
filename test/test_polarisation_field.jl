@@ -19,9 +19,8 @@ import Luna: Output
         ω0 = 2π*PhysData.c/λ0
         Et = @. sqrt(It)*cos(ω0*t)
     end
-    densityfun = let dens0=PhysData.density(gas, pres)
-        z -> dens0
-    end
+    dens0 = PhysData.density(gas, pres)
+    densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
