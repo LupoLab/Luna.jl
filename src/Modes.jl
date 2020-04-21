@@ -312,4 +312,95 @@ function to_space(Emω, xs, ms; components=:xy, z=0.0)
     Erω
 end
 
+struct DelegatedMode{mT, idT} <: AbstractMode
+    mode::mT # wrapper mode
+    id::idT # unique identifier type to distinguish different DelegatedModes
+end
+
+function DelegatedMode(mode)
+    DelegatedMode(mode, Val(gensym()))
+end
+
+"""
+    delegated(mode, kwargs...)
+
+Create a delegated mode, which takes its methods from an existing mode except
+for those which are overwritten
+# Arguments:
+- `mode::AbstractMode`: The wrapped mode to which non-specified methods are delegated
+- `kwargs`: functions that override: `neff`, `field`, `dimlimits`, `Aeff`, or `N`.
+
+The functions given should have the **same signature** as the mode methods, i.e. take
+an `AbstractMode` as their first argument, **even if** they do not do anything with it. This
+is to ensure that the delegated functions can access the data of the wrapped mode if necessary.
+
+To override `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
+"""
+function delegated(mode; kwargs...)
+    dmode = DelegatedMode(mode)
+    mT = typeof(dmode) # this is unique for each instance by virtue of the id field
+    kw = Dict(kwargs)
+    for mfun in (:neff, :field, :dimlimits)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(dm.mode, args...; kwargs...)
+        else
+            @eval $mfun(dm::$mT, args...; kwargs...) = $mfun(dm.mode, args...; kwargs...)
+        end
+    end
+    for mfun in (:Aeff, :N)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(dm.mode, args...; kwargs...)
+        elseif (!haskey(kw, :dimlimits)) && (!haskey(kw, :field))
+            #= if dimlimits and field have not been changed, Aeff and N are the same too,
+                so we can safely delegate them to the wrapped mode (likely faster) =#
+            @eval $mfun(dm::$mT, args...; kwargs...) = $mfun(dm.mode, args...; kwargs...)
+        end
+    end
+    dmode
+end
+
+"""
+    arbitrary(kwargs...)
+
+Create an arbitrary mode, which takes its methods from given functions. 
+
+The functions given should have the same signature as defined `Luna.Modes`, **except** that
+the first argument (the `AbstractMode`) is omitted, e.g. for `neff` the function should be
+of the form `n(ω; z) = ...`
+
+To define `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
+"""
+function arbitrary(;kwargs...)
+    dmode = DelegatedMode(nothing)
+    mT = typeof(dmode)
+    kw = Dict(kwargs)
+    for mfun in (:neff, :field, :dimlimits)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(args...; kwargs...)
+        else
+            err = "method $mfun not defined for this mode"
+            @eval $mfun(dm::$mT, args...; kwargs...) = error($err)
+        end
+    end
+    for mfun in (:Aeff, :N)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(args...; kwargs...)
+        end
+    end
+    dmode
+end
+
+"""
+    neff_from_αβ(α, β)
+
+Create a closure converting the functions `α(ω; z)` and `β(ω; z)` into an effective index.
+"""
+neff_from_αβ(α, β) = (ω; z=0) -> c/ω * (β(ω; z=z) + 0.5im*α(ω; z=z))
+
 end

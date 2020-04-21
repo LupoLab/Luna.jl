@@ -7,9 +7,8 @@ import Luna: Scans, Utils, @hlock
 
 
 "Output handler for writing only to memory"
-mutable struct MemoryOutput{sT, N, S}
+mutable struct MemoryOutput{sT, S}
     save_cond::sT
-    ydims::NTuple{N, Int64}  # Dimensions of one array to be saved
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
@@ -17,17 +16,14 @@ mutable struct MemoryOutput{sT, N, S}
     statsfun::S  # Callable, returns dictionary of statistics
 end
 
-function MemoryOutput(tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
+function MemoryOutput(tmin, tmax, saveN::Integer, statsfun=nostats;
                       yname="Eω", tname="z", script=nothing)
     save_cond = GridCondition(tmin, tmax, saveN)
-    MemoryOutput(save_cond, ydims, yname, tname, statsfun, script)
+    MemoryOutput(save_cond, yname, tname, statsfun, script)
 end
 
-function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats, script=nothing)
-    dims = init_dims(ydims, save_cond)
+function MemoryOutput(save_cond, yname, tname, statsfun=nostats, script=nothing)
     data = Dict{String, Any}()
-    data[yname] = Array{ComplexF64}(undef, dims)
-    data[tname] = Array{Float64}(undef, (dims[end],))
     data["stats"] = Dict{String, Any}()
     data["meta"] = Dict{String, Any}()
     data["meta"]["sourcecode"] = Utils.sourcecode()
@@ -35,7 +31,13 @@ function MemoryOutput(save_cond, ydims, yname, tname, statsfun=nostats, script=n
     if !isnothing(script)
         data["meta"]["script_code"] = script
     end
-    MemoryOutput(save_cond, ydims, yname, tname, 0, data, statsfun)
+    MemoryOutput(save_cond, yname, tname, 0, data, statsfun)
+end
+
+function initialise(o::MemoryOutput, y)
+    dims = init_dims(size(y), o.save_cond)
+    o.data[o.yname] = Array{ComplexF64}(undef, dims)
+    o.data[o.tname] = Array{Float64}(undef, (dims[end],))
 end
 
 "getindex works interchangeably so when switching from one Output to
@@ -55,13 +57,14 @@ show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))"
 function (o::MemoryOutput)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     append_stats!(o, o.statsfun(y, t, dt))
+    !haskey(o.data, o.yname) && initialise(o, y)
     while save
         s = size(o.data[o.yname])
         if s[end] < o.saved+1
             o.data[o.yname] = fastcat(o.data[o.yname], yfun(ts))
             push!(o.data[o.tname], ts)
         else
-            idcs = fill(:, length(o.ydims))
+            idcs = fill(:, ndims(y))
             o.data[o.yname][idcs..., o.saved+1] = yfun(ts)
             o.data[o.tname][o.saved+1] = ts
         end
@@ -132,34 +135,26 @@ function fastcat(A, v)
 end
 
 "Output handler for writing to an HDF5 file"
-mutable struct HDF5Output{sT, N, S}
+mutable struct HDF5Output{sT, S}
     fpath::AbstractString  # Path to output file
     save_cond::sT  # callable, determines when data is saved and where it is interpolated
-    ydims::NTuple{N, Int64}  # Dimensions of one array to be saved
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
     saved::Integer  # How many points have been saved so far
     statsfun::S  # Callable, returns dictionary of statistics
     stats_tmp::Vector{Dict{String, Any}}  # Temporary storage for statistics between saves
+    compression::Bool # whether to use compression
 end
 
 "Simple constructor"
-function HDF5Output(fpath, tmin, tmax, saveN::Integer, ydims, statsfun=nostats;
+function HDF5Output(fpath, tmin, tmax, saveN::Integer, statsfun=nostats;
                     yname="Eω", tname="z", compression=false, script=nothing)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression, script)
+    HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script)
 end
 
-"Internal constructor - creates datasets in the file"
-function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression, script=nothing)
-    idims = init_dims(ydims, save_cond)
-    cdims = collect(idims)
-    # cdims[1] *= 2 # Allow for interleaving of real, imag, real, imag...
-    dims = Tuple(cdims)
-    chdims = (dims[1:end-1]..., 1) # Chunk size is that of one z-point
-    mdims = copy(cdims)
-    mdims[end] = -1
-    maxdims = Tuple(mdims)
+"Internal constructor - creates the file"
+function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script=nothing)
     if isfile(fpath)
         Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
         rm(fpath)
@@ -167,15 +162,6 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
     fdir, fname = splitdir(fpath)
     isdir(fdir) || mkpath(fdir)
     @hlock HDF5.h5open(fpath, "cw") do file
-        if compression
-            HDF5.d_create(file, yname, HDF5.datatype(ComplexF64), (dims, maxdims),
-                          "chunk", chdims, "blosc", 3)
-        else
-            HDF5.d_create(file, yname, HDF5.datatype(ComplexF64), (dims, maxdims),
-                          "chunk", chdims)
-        end
-        HDF5.d_create(file, tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
-                      "chunk", (1,))
         HDF5.g_create(file, "stats")
         HDF5.g_create(file, "meta")
         file["meta"]["sourcecode"] = Utils.sourcecode()
@@ -185,7 +171,29 @@ function HDF5Output(fpath, save_cond, ydims, yname, tname, statsfun, compression
         end
     end
     stats0 = Vector{Dict{String, Any}}()
-    HDF5Output(fpath, save_cond, ydims, yname, tname, 0, statsfun, stats0)
+    HDF5Output(fpath, save_cond, yname, tname, 0, statsfun, stats0, compression)
+end
+
+function initialise(o::HDF5Output, y)
+    ydims = size(y)
+    idims = init_dims(ydims, o.save_cond)
+    cdims = collect(idims)
+    dims = Tuple(cdims)
+    chdims = (dims[1:end-1]..., 1) # Chunk size is that of one z-point
+    mdims = copy(cdims)
+    mdims[end] = -1
+    maxdims = Tuple(mdims)
+    @hlock HDF5.h5open(o.fpath, "r+") do file
+        if o.compression
+            HDF5.d_create(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
+                          "chunk", chdims, "blosc", 3)
+        else
+            HDF5.d_create(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
+                          "chunk", chdims)
+        end
+        HDF5.d_create(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
+                      "chunk", (1,))
+    end
 end
 
 "Here, getindex also opens and closes the file.
@@ -219,9 +227,10 @@ function (o::HDF5Output)(y, t, dt, yfun)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
+            !HDF5.exists(file, o.yname) && initialise(o, y)
             while save
-                idcs = fill(:, length(o.ydims))
                 s = collect(size(file[o.yname]))
+                idcs = fill(:, length(s)-1)
                 if s[end] < o.saved+1
                     s[end] += 1
                     HDF5.set_dims!(file[o.yname], Tuple(s))

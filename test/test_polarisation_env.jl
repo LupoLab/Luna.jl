@@ -37,7 +37,7 @@ import Luna: Output
                                 Stats.peakintensity(grid, modes, components=:xy),
                                 Stats.fwhm_r(grid, modes, components=:xy),
                                 Stats.energy(grid, energyfunω))
-    output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=10, init_dz=1e-3)
 
@@ -55,7 +55,7 @@ import Luna: Output
                                 Stats.peakintensity(grid, modes, components=:xy),
                                 Stats.fwhm_r(grid, modes, components=:xy),
                                 Stats.energy(grid, energyfunω))
-    outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    outputp = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10, init_dz=1e-3)
 

@@ -53,7 +53,7 @@ normfun = NonlinearRHS.const_norm_radial(grid, q, PhysData.ref_index_fun(gas, pr
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, responses, inputs)
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
+output = Output.MemoryOutput(0, grid.zmax, 201)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 Erout = (q \ output.data["Eω"])
