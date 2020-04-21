@@ -190,17 +190,17 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
     Eω, transform, FT
 end
 
-function doinputs_fs!(E, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
                    inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
     energy_t = Fields.energyfuncs(grid, spacegrid)[1]
     for input! in inputs
-        input!(E, grid, spacegrid, energy_t, FT)
+        input!(Eωk, grid, spacegrid, energy_t, FT)
     end
 end
 
-function doinputs_fs!(E, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
                    inputs::Fields.SpatioTemporalField)
-    doinputs_fs!(E, grid, spacegrid, FT, (inputs,))
+    doinputs_fs!(Eωk, grid, spacegrid, FT, (inputs,))
 end
 
 function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
@@ -209,8 +209,8 @@ function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
     xt = zeros(Float64, length(grid.t), length(q.r))
     FT = FFTW.plan_rfft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
-    doinputs_fs!(Eω, grid, q, FT, inputs)
     Eωk = q * Eω
+    doinputs_fs!(Eωk, grid, q, FT, inputs)
     xo = Array{Float64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
@@ -226,8 +226,8 @@ function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
     xt = zeros(ComplexF64, length(grid.t), length(q.r))
     FT = FFTW.plan_fft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
-    doinputs_fs!(Eω, grid, q, FT, inputs)
     Eωk = q * Eω
+    doinputs_fs!(Eωk, grid, q, FT, inputs)
     xo = Array{ComplexF64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
