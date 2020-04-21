@@ -1,13 +1,8 @@
-import Luna
-import Luna: Grid, Maths, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Plotting
+using Luna
 import Luna.PhysData: wlfreq
-import Logging
 import FFTW
 import Hankel
 import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
 
 gas = :Ar
 pres = 1.2
@@ -85,6 +80,7 @@ idcs = [argmin(abs.(zout .- point)) for point in points]
 Epoints = [Hankel.symmetric(Et[:, :, idxi], q) for idxi in idcs]
 rsym = Hankel.Rsymmetric(q);
 
+import PyPlot:pygui, plt
 pygui(true)
 Iλ0 = Iωr[ω0idx, :, :]
 λ0 = 2π*PhysData.c/grid.ω[ω0idx]

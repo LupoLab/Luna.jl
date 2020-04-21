@@ -1,12 +1,7 @@
-import Luna
-import Luna: Grid, Maths, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Plotting
-import Logging
+using Luna
 import FFTW
 import Hankel
 import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
 
 gas = :Ar
 pres = 1.2
@@ -24,25 +19,7 @@ N = 512
 grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
 q = Hankel.QDHT(R, N, dim=2)
 
-energyfun, energyfun_ω = NonlinearRHS.energy_radial(grid, q)
-
-function prop(E, z)
-    Eω = FFTW.fft(E, 1)
-    Eωk = q * Eω
-    kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
-    kzsq[kzsq .< 0] .= 0
-    kz = sqrt.(kzsq)
-    @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
-    Eω = q \ Eωk
-    E = FFTW.ifft(Eω, 1)
-    return E
-end
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ) .* Maths.gauss(q.r, w0/2)'
-    Et = @. sqrt(It)
-    return prop(Et, -0.3)
-end
+energyfun, energyfun_ω = Fields.energyfuncs(grid, q)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -51,19 +28,14 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index_fun(gas, pres))
 
-normfun = NonlinearRHS.norm_radial(grid.ω, q, PhysData.ref_index_fun(gas, pres))
+normfun = NonlinearRHS.const_norm_radial(grid, q, PhysData.ref_index_fun(gas, pres))
 
-in1 = (func=gausspulse, energy=energy)
-inputs = (in1, )
+inputs = Fields.GaussGaussField(λ0=λ0, τfwhm=τ, energy=energy, w0=w0, propz=-0.3)
 
-Eω, transform, FT = Luna.setup(grid, q, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, q, densityfun, normfun, responses, inputs)
 
 # statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω), length(q.r)))
-Ert = FT \ (q \ Eω)
-println(energyfun(Ert))
-println(energyfun_ω(Eω))
-error()
+output = Output.MemoryOutput(0, grid.zmax, 201)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
@@ -103,11 +75,12 @@ idcs = [argmin(abs.(zout .- point)) for point in points]
 Epoints = [Hankel.symmetric(Etout[:, :, idxi], q) for idxi in idcs]
 rsym = Hankel.Rsymmetric(q);
 
+import PyPlot:pygui, plt
 pygui(true)
 Iλ0 = Iωr[ω0idx, :, :]
 w1 = w0*sqrt(1+(L/2*λ0/(π*w0^2))^2)
 # w1 = w0
-Iλ0_analytic = Maths.gauss(q.r, w1/2)*(w0/w1)^2 # analytical solution (in paraxial approx)
+Iλ0_analytic = Maths.gauss.(q.r, w1/2)*(w0/w1)^2 # analytical solution (in paraxial approx)
 plt.figure()
 plt.plot(q.r*1e3, Maths.normbymax(Iλ0[:, end]))
 plt.plot(q.r*1e3, Maths.normbymax(Iλ0_analytic), "--")

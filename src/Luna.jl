@@ -262,7 +262,7 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     x = xygrid.x
     y = xygrid.y          
     xr = Array{ComplexF64}(undef, length(grid.t), length(y), length(x))
-    FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=settings["fftw_flag"])
+    FT = FFTW.plan_fft(xr, (1, 2, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
     doinputs_fs!(Eωk, grid, xygrid, FT, inputs)
     xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))

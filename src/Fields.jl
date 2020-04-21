@@ -100,15 +100,29 @@ function shotnoise!(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing; seed=
 end
 
 """
-    SpatioTemporalField(timefield, Isshape)
+    SpatioTemporalField(λ0, energy, ϕ, τ0, Ishape)
 
-Represents a spatiotemporal pulse with temporal shape defined by `timefield`,
-and spatial intensity defined by `Isshape`.
+Represents a spatiotemporal pulse with shape defined by `Ishape`.
+
+# Fields
+- `λ0::Float64`: the central field wavelength
+- `energy::Float64`: the pulse energy
+- `ϕ::Float64`: the CEO phase
+- `τ0::Float64`: the temproal shift from grid time 0
+- `Ishape`: a callable `f(t, xs)` to get the shape of the intensity/power in the time-space domain
 """
-struct SpatioTemporalField{tT,sT} <: AbstractField
-    timefield::tT
-    Isshape::sT
+struct SpatioTemporalField{iT} <: AbstractField
+    λ0::Float64
+    energy::Float64
+    ϕ::Float64
+    τ0::Float64
+    Ishape::iT
     propz::Float64
+end
+
+"Gaussian temporal-spatial field defined radially"
+function GaussGauss(t, r::AbstractVector, fwhm, m, w0)
+    Maths.gauss.(t, fwhm=fwhm, power=2*m) .* Maths.gauss.(r, w0/2)'
 end
 
 """
@@ -120,28 +134,35 @@ propagation distance from the waist of `propz`,
 and other parameters as defined for [`TimeField`](@ref).
 """
 function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0.0)
-    SpatioTemporalField(TimeField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m)),
-                        r -> Maths.gauss(r, w0/2), propz)
+    SpatioTemporalField(λ0, energy, ϕ, τ0,
+                        (t, xs) -> GaussGauss(t, xs, τfwhm, m, w0),
+                        propz)
+end
+
+function make_Etr(s::SpatioTemporalField, grid::Grid.RealGrid, spacegrid::Hankel.QDHT)
+    t = grid.t .- s.τ0
+    ω0 = PhysData.wlfreq(s.λ0)
+    sqrt.(s.Ishape(t, spacegrid.r)) .* cos.(ω0.*t .+ s.ϕ)
+end
+
+function make_Etr(s::SpatioTemporalField, grid::Grid.EnvGrid, spacegrid::Hankel.QDHT)
+    t = grid.t .- s.τ0
+    Δω = PhysData.wlfreq(s.λ0) - grid.ω0
+    sqrt.(s.Ishape(t, spacegrid.r)) .* exp.(im .* (s.ϕ .+ Δω.*t))
 end
 
 "Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
 and Fourier transform `FT`"
-function (s::SpatioTemporalField)(Eωk, grid, spacegrid::Hankel.QDHT, energy_t, FT)
-    Et = make_Et(s.timefield, grid) .* sqrt.(s.Isshape.(spacegrid.r)')
-    lEωk = spacegrid * (FT * (sqrt(s.timefield.energy)/sqrt(energy_t(Et)) .* Et))
+function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+    Etr = make_Etr(s, grid, spacegrid)
+    lEωk = spacegrid * (FT * (sqrt(s.energy)/sqrt(energy_t(Etr)) .* Etr))
     if s.propz != 0.0
         prop!(lEωk, s.propz, grid, spacegrid)
     end
     Eωk .+= lEωk
 end
 
-# TODO propagation of this field
-function (s::SpatioTemporalField)(Eωk, grid, spacegrid::Grid.FreeGrid, energy_t, FT)
-    Et = make_Et(s.timefield, grid) .* sqrt.(Isshape.(spacegrid.r))
-    Eωk .+= spacegrid * (FT * (sqrt(s.timefield.energy)/sqrt(energy_t(Et)) .* Et))
-end
-
-function prop!(Eωk, z, grid, q)
+function prop!(Eωk, z, grid, q::Hankel.QDHT)
     kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
     kzsq[kzsq .< 0] .= 0
     kz = sqrt.(kzsq)
