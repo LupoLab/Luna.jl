@@ -8,5 +8,5 @@ import Luna: Capillary, Tools, PhysData
     @test isapprox(p.N, 2.239, rtol=1e-3)
     @test isapprox(p.Lfiss, 1.768, rtol=1e-3)
     @test isapprox(p.zdw, 378.8e-9, rtol=1e-2)
-    @test isapprox(p.P0/p.Pcr, 0.0398, rtol=1e-1)
+    @test isapprox(p.P0/p.Pcr, 0.0398, rtol=2e-2)
 end
