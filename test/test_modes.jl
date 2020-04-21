@@ -1,10 +1,51 @@
-import Test: @test
+import Test: @test, @testset, @test_throws
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
 import FFTW
 import Luna: Modes, Maths, Capillary, Grid, PhysData, Hankel, NonlinearRHS
+import Luna.PhysData: wlfreq
 
+
+@testset "delegation" begin
+    m = Modes.delegated(Capillary.MarcatilliMode(75e-6, :He, 5.9))
+    @test Modes.Aeff(m) ≈ 8.42157534886545e-09
+    @test abs(1e9*Modes.zdw(m) - 562) < 1
+    n(m, ω; z=0) = real(Modes.neff(m, ω; z=z))
+    m2 = Modes.delegated(Capillary.MarcatilliMode(75e-6, :He, 1.0), neff=n)
+    @test Modes.α(m2, 2e15) == 0
+    @test Modes.α(m2, wlfreq(800e-9)) == 0
+
+    cm = Capillary.MarcatilliMode(75e-6, :He, 5.9)
+    dm = Modes.delegated(cm)
+    @test Modes.Aeff(dm) ≈ 8.42157534886545e-09
+    
+    dm = Modes.delegated(cm, Aeff=(m; z=0) -> 0.5)
+    @test Modes.Aeff(dm) == 0.5
+    @test Modes.N(dm) == Modes.N(m)
+    @test Modes.β(dm, 2e15) == Modes.β(m, 2e15)
+
+    # fully delegated test
+    n(ω; z=0) = 1.0 + 3.0im
+    m3 = Modes.arbitrary(neff=n,
+                         dimlimits=(;z=0)->(:polar, (0.0, 0.0), (100e-6, 2π)),
+                         Aeff=(;z=0) -> 1e-5,
+                         N=(;z=0) -> 1)
+    @test Modes.α(m3, 1.5e15) == 2*3*1.5e15/PhysData.c
+    @test Modes.β(m3, 1.5e15) == 1.5e15/PhysData.c
+    @test Modes.Aeff(m3) == 1e-5
+    @test Modes.N(m3) == 1
+    @test_throws ErrorException Modes.field(m3, (0.0, 0.0))
+
+    m4 = Modes.arbitrary(neff=Modes.neff_from_αβ((ω; z=0) -> 6*ω/PhysData.c,
+                                                 (ω; z=0) -> ω/PhysData.c))
+    @test Modes.α(m4, 1.5e15) ≈ 2*3*1.5e15/PhysData.c
+    @test Modes.β(m4, 1.5e15) ≈ 1.5e15/PhysData.c
+    @test Modes.neff(m4, 1.5e15) ≈ 1.0 + 3.0im
+    @test Modes.neff(m4, 1.5e15) ≈ 1.0 + 3.0im
+end
+
+@testset "overlap" begin
 a = 100e-6
 m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
 r = collect(range(0, a, length=2^16))
@@ -37,7 +78,7 @@ s = 0
 for mi = 1:10
     m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=mi)
     η = Modes.overlap(m, r, Er, dim=1)[1]
-    global s += abs2(η[1])
+    s += abs2(η[1])
 end
 @test isapprox(s, 1, rtol=1e-4)
 
@@ -100,3 +141,4 @@ Emn1 = Eωm1/norm(Eωm1)
 En2 = Eω2/norm(Eω2)
 Emn2 = Eωm2/norm(Eωm2)
 @test all(isapprox.(En2, Emn2, atol=1e-3*maximum(abs.(Emn2))))
+end
