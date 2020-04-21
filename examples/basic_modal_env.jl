@@ -32,7 +32,7 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-dens(z) = PhysData.std_dens * pres
+dens(z) = density(gas, pres)
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)

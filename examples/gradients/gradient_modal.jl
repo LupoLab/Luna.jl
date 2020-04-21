@@ -35,8 +35,6 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-# densityfun(z) = PhysData.std_dens * pres
-
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
