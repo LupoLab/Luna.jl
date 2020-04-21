@@ -134,7 +134,7 @@ end
     GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1)
 
 Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`,
-uperGaussian parameter `m=1` and Gaussian shaped spatial profile with waist `w0`,
+superGaussian parameter `m=1` and Gaussian shaped spatial profile with waist `w0`,
 propagation distance from the waist of `propz`,
 and other parameters as defined for [`TimeField`](@ref).
 """
@@ -172,6 +172,7 @@ function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
     Eωk .+= lEωk
 end
 
+# TODO: this for FreeGrid
 function prop!(Eωk, z, grid, q::Hankel.QDHT)
     kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
     kzsq[kzsq .< 0] .= 0
