@@ -84,8 +84,8 @@ export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, Rect
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
        Tools, Plotting, Raman, Antiresonant, Fields
 
-# for a tuple of fields we assume all inputs are for mode 1
-function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.AbstractField}, FT)
+# for a tuple of TimeFields we assume all inputs are for mode 1
+function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
     energy_t = Fields.energyfuncs(grid)[1]
     for input! in inputs
@@ -94,8 +94,8 @@ function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.AbstractFiel
     return out
 end
 
-# for a single Fields.PulseField we assume a single input for mode 1
-function doinput_sm(grid, inputs::Fields.AbstractField, FT)
+# for a single Fields.TimeField we assume a single input for mode 1
+function doinput_sm(grid, inputs::Fields.TimeField, FT)
     doinput_sm(grid, (inputs,), FT)
 end
 
@@ -138,13 +138,13 @@ function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:
     end
 end
 
-# for a tuple of fields we assume all inputs are for mode 1
-function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: Fields.AbstractField}, FT)
+# for a tuple of TimeFields we assume all inputs are for mode 1
+function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
     doinput_mm!(Eω, grid, ((mode=1, fields=inputs),), FT)
 end
 
-# for a single Fields.PulseField we assume a single input for mode 1
-function doinput_mm!(Eω, grid, inputs::Fields.AbstractField, FT)
+# for a single Fields.TimeField we assume a single input for mode 1
+function doinput_mm!(Eω, grid, inputs::Fields.TimeField, FT)
     doinput_mm!(Eω, grid, ((mode=1, fields=(inputs,)),), FT)
 end
 
@@ -169,7 +169,6 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     Eω, transform, FT
 end
 
-# for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
 function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
                modes::Modes.ModeCollection, components; full=false)
     ts = Modes.ToSpace(modes, components=components)
@@ -191,17 +190,17 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
     Eω, transform, FT
 end
 
-function doinputs_fs!(E, grid, tgrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
-                   inputs::Tuple{Vararg{T} where T <: Fields.AbstractField})
-    energy_t = Fields.energyfuncs(grid, tgrid)[1]
+function doinputs_fs!(E, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+                   inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
+    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
     for input! in inputs
-        input!(E, grid, energy_t, FT)
+        input!(E, grid, spacegrid, energy_t, FT)
     end
 end
 
-function doinputs_fs!(E, grid, tgrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
-                   inputs::Fields.AbstractField)
-    doinputs_fs!(E, grid, q, FT, (inputs,))
+function doinputs_fs!(E, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+                   inputs::Fields.SpatioTemporalField)
+    doinputs_fs!(E, grid, spacegrid, FT, (inputs,))
 end
 
 function setup(grid::Grid.RealGrid, q::Hankel.QDHT,

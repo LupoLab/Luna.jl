@@ -8,9 +8,9 @@ import Hankel
 abstract type AbstractField end
 
 """
-    PulseField(λ0, energy, ϕ, τ0, Itshape)
+    TimeField(λ0, energy, ϕ, τ0, Itshape)
 
-Represents a pulse with shape defined by `Itshape`.
+Represents a temporal pulse with shape defined by `Itshape`.
 
 # Fields
 - `λ0::Float64`: the central field wavelength
@@ -19,7 +19,7 @@ Represents a pulse with shape defined by `Itshape`.
 - `τ0::Float64`: the temproal shift from grid time 0
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
-struct PulseField{iT} <: AbstractField
+struct TimeField{iT} <: AbstractField
     λ0::Float64
     energy::Float64
     ϕ::Float64
@@ -34,7 +34,7 @@ Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`,
 superGaussian parameter `m=1` and other parameters as defined for [`PulseField`](@ref).
 """
 function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
-    PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
+    TimeField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
 end
 
 """
@@ -44,7 +44,7 @@ Construct a Sech^2(t/τw) shaped pulse with natural width `τw`,
 and other parameters as defined for [`PulseField`](@ref).
 """
 function SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
-    PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
+    TimeField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
 end
 
 """
@@ -58,15 +58,15 @@ and other parameters as defined for [`PulseField`](@ref).
 #    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
 #end
 
-"Add the field to `Eω` for the provided `grid`, `energy_t` function at Fourier transform `FT`"
-function (p::PulseField)(Eω, grid::Grid.RealGrid, energy_t, FT)
+"Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`"
+function (p::TimeField)(Eω, grid::Grid.RealGrid, energy_t, FT)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
     Et = @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
     Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
-function (p::PulseField)(Eω, grid::Grid.EnvGrid, energy_t, FT)
+function (p::TimeField)(Eω, grid::Grid.EnvGrid, energy_t, FT)
     t = grid.t .- p.τ0
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
     Et = @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
@@ -96,6 +96,28 @@ function shotnoise!(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing; seed=
     φ = 2π*rand(rng, size(Eω)...)
     @. Eω += FFTamp * exp(1im*φ)
 end
+
+"""
+    SpatioTemporalField(timefield, Isshape)
+
+Represents a spatiotemporal pulse with temporal shape defined by `timefield`,
+and spatial intensity defined by `Isshape`.
+"""
+struct SpatioTemporalField{tT,sT} <: AbstractField
+    timefield::tT
+    Isshape::sT
+end
+
+"Add the field to `Eω` for the provided `grid`, `spacegrid` `energy_t` function
+and Fourier transform `FT`"
+function (s::SpatioTemporalField)(Eω, grid, spacegrid::Hankel.QDH, energy_t, FT)
+    # TODO
+end
+
+function (s::SpatioTemporalField)(Eω, grid, spacegrid::Grid.FreeGrid, energy_t, FT)
+    # TODO
+end
+
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
