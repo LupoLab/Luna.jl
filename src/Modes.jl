@@ -333,6 +333,9 @@ for those which are overwritten
 The functions given should have the **same signature** as the mode methods, i.e. take
 an `AbstractMode` as their first argument, **even if** they do not do anything with it. This
 is to ensure that the delegated functions can access the data of the wrapped mode if necessary.
+
+To override `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
 """
 function delegated(mode; kwargs...)
     dmode = DelegatedMode(mode)
@@ -367,6 +370,9 @@ Create an arbitrary mode, which takes its methods from given functions.
 The functions given should have the same signature as defined `Luna.Modes`, **except** that
 the first argument (the `AbstractMode`) is omitted, e.g. for `neff` the function should be
 of the form `n(ω; z) = ...`
+
+To define `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
 """
 function arbitrary(;kwargs...)
     dmode = DelegatedMode(nothing)
@@ -389,5 +395,12 @@ function arbitrary(;kwargs...)
     end
     dmode
 end
+
+"""
+    neff_from_αβ(α, β)
+
+Create a closure converting the functions `α(ω; z)` and `β(ω; z)` into an effective index.
+"""
+neff_from_αβ(α, β) = (ω; z=0) -> c/ω * (β(ω; z=z) + 0.5im*α(ω; z=z))
 
 end

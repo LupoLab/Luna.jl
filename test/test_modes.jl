@@ -1,4 +1,4 @@
-import Test: @test, @testset
+import Test: @test, @testset, @test_throws
 import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
@@ -29,13 +29,20 @@ import Luna.PhysData: wlfreq
     n(ω; z=0) = 1.0 + 3.0im
     m3 = Modes.arbitrary(neff=n,
                          dimlimits=(;z=0)->(:polar, (0.0, 0.0), (100e-6, 2π)),
-                         field=(;z)->nothing,
                          Aeff=(;z=0) -> 1e-5,
                          N=(;z=0) -> 1)
     @test Modes.α(m3, 1.5e15) == 2*3*1.5e15/PhysData.c
     @test Modes.β(m3, 1.5e15) == 1.5e15/PhysData.c
     @test Modes.Aeff(m3) == 1e-5
     @test Modes.N(m3) == 1
+    @test_throws ErrorException Modes.field(m3, (0.0, 0.0))
+
+    m4 = Modes.arbitrary(neff=Modes.neff_from_αβ((ω; z=0) -> 6*ω/PhysData.c,
+                                                 (ω; z=0) -> ω/PhysData.c))
+    @test Modes.α(m4, 1.5e15) ≈ 2*3*1.5e15/PhysData.c
+    @test Modes.β(m4, 1.5e15) ≈ 1.5e15/PhysData.c
+    @test Modes.neff(m4, 1.5e15) ≈ 1.0 + 3.0im
+    @test Modes.neff(m4, 1.5e15) ≈ 1.0 + 3.0im
 end
 
 @testset "overlap" begin
