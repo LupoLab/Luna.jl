@@ -10,6 +10,8 @@ import Luna: Maths, Utils
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
 "Pressure in Pascal at standard conditions (atmospheric pressure)"
 const atm = ustrip(CODATA2014.atm)
+"Pressure in Pascal of 1 bar"
+const bar = 100000
 "Boltzmann constant"
 const k_B = ustrip(CODATA2014.k_B)
 "Permittivity of vacuum"
@@ -30,10 +32,8 @@ const au_energy = ħ*c*ustrip(CODATA2014.α)/ustrip(CODATA2014.a_0)
 const au_time = ħ/au_energy
 "Atomic unit of electric field"
 const au_Efield = au_energy/(electron*ustrip(CODATA2014.a_0))
-"Room temperature in Kelvin (ca 21 deg C)"
-const roomtemp = 294
-"Density of an ideal gas at atmospheric pressure and room temperature"
-const std_dens = atm / (k_B * roomtemp) # Gas density at standard conditions
+"Room temperature in Kelvin (ca 20 deg C)"
+const roomtemp = 293.15
 "Avogadro constant"
 const N_A = ustrip(CODATA2014.N_A)
 "Amagat (Loschmidt constant)"
@@ -86,7 +86,7 @@ end
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
 susceptibility of a single particle."
 function sellmeier_gas(material::Symbol)
-    dens = density(material, 1, 273)
+    dens = density(material, 1.0, 273.15)
     if material == :He
         B1 = 4977.77e-8
         C1 = 28.54e-6
@@ -142,7 +142,7 @@ function sellmeier_gas(material::Symbol)
         C1 = 180.7
         B2 = 4903.7e-6
         C2 = 92.0
-        return γ_Peck(B1, C1, B2, C2, dens)
+        return γ_Peck(B1, C1, B2, C2, density(material, atm/bar, 273.15))
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -227,18 +227,18 @@ end
 
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
 Gases only."
-function χ1(gas::Symbol, λ, P=1, T=roomtemp)
+function χ1(gas::Symbol, λ, P=1.0, T=roomtemp)
     return χ1_fun(gas)(λ, P, T)
 end
 
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
+function ref_index(material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing)
     return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
 "Get function which returns refractive index."
-function ref_index_fun(material::Symbol, P=1, T=roomtemp; lookup=nothing)
+function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + χ1(λ))
@@ -285,13 +285,13 @@ end
 
 Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
 """
-function dispersion_func(order, material::Symbol, P=1, T=roomtemp; lookup=nothing)
+function dispersion_func(order, material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     n = ref_index_fun(material, P, T, lookup=lookup)
     dispersion_func(order, n)
 end
 
 """
-    dispersion(order, material, λ, P=1, T=roomtemp; lookup=nothing)
+    dispersion(order, material, λ, P=1.0, T=roomtemp; lookup=nothing)
 
 Calculate the dispersion of order `order` of a given `material` at a wavelength `λ`.
 
@@ -305,7 +305,7 @@ julia> dispersion(2, :BK7, 400e-9) * 1e30 * 1e-3 # convert to fs^2/mm
 122.03632107303108
 ```
 """
-function dispersion(order, material::Symbol, λ, P=1, T=roomtemp; lookup=nothing)
+function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing)
     return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
@@ -325,7 +325,7 @@ at given wavelength(s) and at room temperature.
 If source == :Bishop:
 Uses reference values to calculate γ
 If source == :Lehmeier (default):
-Uses scaling factors to calculate χ3 at 1 atmosphere and scales by density
+Uses scaling factors to calculate χ3 at 1 bar and scales by density
 to get to a single molecule i.e. the hyperpolarisability
 
 References:
@@ -347,7 +347,7 @@ function γ3_gas(material::Symbol; source=nothing)
             error("no default γ3 source for material: $material")
         end
     end
-    dens = density(material, 1, 273.15)
+    dens = density(material, atm/bar, 273.15)
     if source == :Lehmeier
         # Table 1 in [3]
         if material in (:He, :HeJ)
@@ -369,7 +369,7 @@ function γ3_gas(material::Symbol; source=nothing)
     elseif source == :Shelton
         # ref [4]
         if material == :H2
-            return 2.2060999099841444e-26 / dens
+            return 2.2060999099841444e-26 / dens # TODO: check this carefully
         else
             throw(DomainError(material, "Shelton model does not include $material"))
         end
@@ -387,8 +387,13 @@ function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)
     return @. 3/4 * χ3_gas(material, P, T, source=source) / (ε_0*c*n0^2)
 end
 
+"""
+    density(gas::Symbol, P, T=roomtemp)
+
+Number density of `gas` [m^-3] at pressure `P` [bar] and temperature `T` [K].
+"""
 function density(gas::Symbol, P, T=roomtemp)
-    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", atm*P, gas_str[gas])*N_A
+    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
 end
 
 function pressure(gas, density, T=roomtemp)

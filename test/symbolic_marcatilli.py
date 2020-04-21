@@ -39,10 +39,10 @@ def alphafull(ω, a, unm, B1, B2, C1, C2, scale, nclad):
 if __name__ == "__main__":
     ω = 2*pi*c/800e-9
     unm = 2.4048255576957724
-    scale = 4.9992223031315305e25 # 2 bar Ar at 294 K
-    B1 = 20332.29e-8/2.6907883518864814e25 # scaled to 1 bar at 273 K
+    scale = 4.933761614599279e25 # 2 bar Ar at 294 K
+    B1 = 20332.29e-8/2.6541047057884805e25 # scaled to 1 bar at 273.15 K
     C1 = 206.12e-6
-    B2 = 34458.31e-8/2.6907883518864814e25
+    B2 = 34458.31e-8/2.6541047057884805e25
     C2 = 8.066e-3
     a = 50e-6
     print("reduced")

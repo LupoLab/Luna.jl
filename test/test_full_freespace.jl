@@ -35,9 +35,7 @@ function gausspulse(t)
 end
 
 dens0 = PhysData.density(gas, pres)
-densityfun = let dens0=dens0
-    z -> dens0
-end
+densityfun(z) = dens0
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
