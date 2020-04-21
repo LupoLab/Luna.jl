@@ -54,6 +54,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.fwhm_r(grid, modes),
                                Stats.electrondensity(grid, ionrate, densityfun, modes),
                                Stats.pressure(densityfun, gas)
+                               Stats.core_radius(a)
                                )
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)

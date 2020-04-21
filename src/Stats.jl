@@ -243,6 +243,12 @@ function core_radius(afun)
     end
 end
 
+function zdw(mode; ub=200e-9, lb=3000e-9)
+    function addstat!(d, Eω, Et, z, dz)
+        d["zdw"] = Modes.zdw(mode; ub=ub, lb=lb, z=z)
+    end
+end
+
 function zdz!(d, Eω, Et, z, dz)
     d["z"] = z
     d["dz"] = dz
