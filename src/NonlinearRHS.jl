@@ -99,7 +99,11 @@ function _cpscb_core(dest, source, N, scale, idcs)
     end
 end
 
-"Normalisation factor for modal field."
+"""
+    norm_modal(ω)
+
+Make closure to return normalisation factor for modal field.
+"""
 function norm_modal(ω)
     out = -im .* ω ./ 4
     function norm(z)

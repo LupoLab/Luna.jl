@@ -43,6 +43,7 @@ The modules and functions that define and implement this decomposition for diffe
 - [RectModes.jl](@ref)
 - [Antiresonant.jl](@ref)
 - [`NonlinearRHS.TransModal`](@ref)
+- [`NonlinearRHS.norm_modal`](@ref)
 - [`LinearOps.make_const_linop`](@ref)
 - [`LinearOps.make_linop`](@ref)
 
