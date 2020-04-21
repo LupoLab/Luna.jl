@@ -132,6 +132,11 @@ function Et_to_Pt!(Pt, Et, responses, idcs)
     end
 end
 
+"""
+    TransModal
+
+Transform E(ω) -> Pₙₗ(ω) for modal fields.
+"""
 mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     ts::tsT
     full::Bool
@@ -168,10 +173,23 @@ function show(io::IO, t::TransModal)
     print(io, out)
 end
 
-"Transform E(ω) -> Pₙₗ(ω) for modal field."
-# FT - forward FFT for the grid
-# resp - tuple of nonlinear responses
-# if full is true, we integrate over whole cross section
+"""
+    TransModal(grid, ts, FT, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+
+Construct a `TransModal`, transform E(ω) -> Pₙₗ(ω) for modal fields.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `ts::Modes.ToSpace` : pre-created `ToSpace` for conversion from modal fields to space
+- `FT::FFTW.Plan` : the time-frequency Fourier transform for the oversampled time grid
+- `resp` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_modal`](@ref)
+- `rtol::Float=1e-3` : relative tolerance on the `HCubature` integration
+- `atol::Float=0.0` : absolute tolerance on the `HCubature` integration
+- `mfcn::Int=300` : maximum number of function evaluations for one modal integration
+- `full::Bool=false` : if `true`, use full 2-D mode integral, if `false`, only do radial integral
+"""
 function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
