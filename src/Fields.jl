@@ -125,6 +125,11 @@ function GaussGauss(t, r::AbstractVector, fwhm, m, w0)
     Maths.gauss.(t, fwhm=fwhm, power=2*m) .* Maths.gauss.(r, w0/2)'
 end
 
+"Gaussian temporal-spatial field defined on x-y grid"
+function GaussGauss(t, r::AbstractArray{T,3} where T, fwhm, m, w0)
+    Maths.gauss.(t, fwhm=fwhm, power=2*m) .* Maths.gauss.(r, w0/2)
+end
+
 """
     GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1)
 
@@ -139,23 +144,28 @@ function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0
                         propz)
 end
 
-function make_Etr(s::SpatioTemporalField, grid::Grid.RealGrid, spacegrid::Hankel.QDHT)
+function make_Etr(s::SpatioTemporalField, grid::Grid.RealGrid, spacegrid)
     t = grid.t .- s.τ0
     ω0 = PhysData.wlfreq(s.λ0)
     sqrt.(s.Ishape(t, spacegrid.r)) .* cos.(ω0.*t .+ s.ϕ)
 end
 
-function make_Etr(s::SpatioTemporalField, grid::Grid.EnvGrid, spacegrid::Hankel.QDHT)
+function make_Etr(s::SpatioTemporalField, grid::Grid.EnvGrid, spacegrid)
     t = grid.t .- s.τ0
     Δω = PhysData.wlfreq(s.λ0) - grid.ω0
     sqrt.(s.Ishape(t, spacegrid.r)) .* exp.(im .* (s.ϕ .+ Δω.*t))
 end
 
+transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
+
+transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
+
 "Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
 and Fourier transform `FT`"
 function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
     Etr = make_Etr(s, grid, spacegrid)
-    lEωk = spacegrid * (FT * (sqrt(s.energy)/sqrt(energy_t(Etr)) .* Etr))
+    Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
+    lEωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
         prop!(lEωk, s.propz, grid, spacegrid)
     end
