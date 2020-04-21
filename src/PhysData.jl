@@ -398,7 +398,7 @@ end
 
 function pressure(gas, density, T=roomtemp)
     density == 0 ? zero(density) :
-                   CoolProp.PropsSI("P", "T", T, "DMOLAR", density/N_A, gas_str[gas])/atm
+                   CoolProp.PropsSI("P", "T", T, "DMOLAR", density/N_A, gas_str[gas])/bar
 end
 
 function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
