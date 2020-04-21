@@ -25,9 +25,8 @@ function gausspulse(t)
     Et = @. sqrt(It)*cos(ω0*t)
 end
 
-densityfun = let dens0=PhysData.density(gas, pres)
-    z -> dens0
-end
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -54,7 +53,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

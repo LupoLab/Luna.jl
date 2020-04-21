@@ -35,7 +35,7 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_const = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_const = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_const, status_period=10)
 
 # Gradient
@@ -50,7 +50,7 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_grad = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_grad = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad, status_period=10)
 
 # Gradient array
@@ -65,7 +65,7 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
 @test all(output_grad.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
@@ -103,7 +103,7 @@ Eω, transform, FT = Luna.setup(grid, energyfun, dens, normfun, responses, input
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_const = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_const = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_const, status_period=10)
 
 # Gradient
@@ -118,7 +118,7 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_grad = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_grad = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad, status_period=10)
 
 # Gradient array
@@ -133,7 +133,7 @@ Eω, transform, FT = Luna.setup(
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
-output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
 @test all(output_grad.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])

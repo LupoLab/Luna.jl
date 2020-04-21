@@ -1,5 +1,5 @@
 module Stats
-import Luna: Maths, Grid, Modes, Utils
+import Luna: Maths, Grid, Modes, Utils, settings
 import Luna.PhysData: wlfreq, c, ε_0
 import FFTW
 import LinearAlgebra: mul!
@@ -252,7 +252,7 @@ Returns both a buffer for the analytic field and a closure to do the transform.
 function plan_analytic(grid::Grid.EnvGrid, Eω)
     Eta = similar(Eω)
     Utils.loadFFTwisdom()
-    iFT = FFTW.plan_ifft(Eω, 1, flags=FFTW.PATIENT)
+    iFT = FFTW.plan_ifft(copy(Eω), 1, flags=settings["fftw_flag"])
     Utils.saveFFTwisdom()
     function analytic!(Eta, Eω)
         mul!(Eta, iFT, Eω) # for envelope fields, we only need to do the inverse transform
@@ -267,7 +267,7 @@ function plan_analytic(grid::Grid.RealGrid, Eω)
     Eωa = zero(Eta)
     idxhi = CartesianIndices(size(Eω)[2:end]) # index over all other dimensions
     Utils.loadFFTwisdom()
-    iFT = FFTW.plan_ifft(Eωa, 1, flags=FFTW.PATIENT)
+    iFT = FFTW.plan_ifft(Eωa, 1, flags=settings["fftw_flag"])
     Utils.saveFFTwisdom()
     function analytic!(Eta, Eω)
         copyto_fft!(Eωa, Eω, idxhi) # copy across to FFT-sampled buffer

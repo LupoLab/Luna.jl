@@ -32,7 +32,8 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
-dens(z) = PhysData.std_dens * pres
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -43,7 +44,7 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, dens, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
                               modes, :y; full=false)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))

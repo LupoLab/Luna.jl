@@ -19,9 +19,8 @@ import Luna: Output
         ω0 = 2π*PhysData.c/λ0
         Et = @. sqrt(It)*cos(ω0*t)
     end
-    densityfun = let dens0=PhysData.density(gas, pres)
-        z -> dens0
-    end
+    dens0 = PhysData.density(gas, pres)
+    densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
@@ -37,7 +36,7 @@ import Luna: Output
                                 Stats.peakintensity(grid, modes),
                                 Stats.fwhm_r(grid, modes),
                                 Stats.energy(grid, energyfunω))
-    output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
 
@@ -55,7 +54,7 @@ import Luna: Output
                                 Stats.peakintensity(grid, modes, components=:xy),
                                 Stats.fwhm_r(grid, modes, components=:xy),
                                 Stats.energy(grid, energyfunω))
-    outputp = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+    outputp = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
     Luna.run(Eω, grid, linop, transform, FT, outputp, status_period=10)
 

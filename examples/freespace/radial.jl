@@ -46,9 +46,8 @@ function gausspulse(t)
     return prop(Et, -0.3)
 end
 
-densityfun = let dens0=PhysData.density(gas, pres)
-    z -> dens0
-end
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
