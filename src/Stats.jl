@@ -1,5 +1,5 @@
 module Stats
-import Luna: Maths, Grid, Modes, Utils, settings
+import Luna: Maths, Grid, Modes, Utils, settings, PhysData
 import Luna.PhysData: wlfreq, c, ε_0
 import FFTW
 import LinearAlgebra: mul!
@@ -222,6 +222,12 @@ end
 function density(dfun)
     function addstat!(d, Eω, Et, z, dz)
         d["density"] = dfun(z)
+    end
+end
+
+function pressure(dfun, gas)
+    function addstat!(d, Eω, Et, z, dz)
+        d["pressure"] = PhysData.pressure(gas, dfun(z))
     end
 end
 

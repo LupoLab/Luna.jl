@@ -22,6 +22,16 @@ struct RectMode{Ta, Tb, Tcore, Tclad} <: AbstractMode
     cladn::Tclad
 end
 
+function show(io::IO, m::RectMode)
+    a = "a(z=0)=$(m.a(0))"
+    b = "b(z=0)=$(m.b(0))"
+    pol = string(m.pol)
+    out = "RectMode{"*join([mode_string(m), a, b, "pol=$pol"], ", ")*"}"
+    print(io, out)
+end
+
+mode_string(m::RectMode) = string(m.n)*string(m.m)
+
 RectMode(a::Number, args...; kwargs...) = RectMode(z->a, args...; kwargs...)
 RectMode(afun, b::Number, args...; kwargs...) = RectMode(afun, z->b, args...; kwargs...)
 RectMode(a::Number, b::Number, args...; kwargs...) = RectMode(z->a, z->b, args...; kwargs...)
