@@ -7,6 +7,8 @@ github_ref        = get(ENV, "GITHUB_REF",        "")
 
 cfg = Documenter.GitHubActions(github_repository, github_event_name, github_ref)
 
+modulesdir = joinpath(Luna.Utils.lunadir(), "docs", "src", "modules")
+
 makedocs(
     sitename = "Luna Documentation",
     authors = "Christian Brahms and John C. Travers",
@@ -19,21 +21,7 @@ makedocs(
         ],
         "Parameter scans" => "scans.md",
         "Modules" => [
-            "$mod.jl" => "modules/$mod.md" for mod in (
-                "NonlinearRHS",
-                "Grid",
-                "LinearOps",
-                "Modes",
-                "Capillary",
-                "Nonlinear",
-                "PhysData",
-                "Plotting",
-                "Stats",
-                "Ionisation",
-                "Raman",
-                "Output",
-                "Tools"
-            )
+            "$(split(fi, ".")[1]).jl" => "modules/$fi" for fi in readdir(modulesdir)
         ],
     ],
     format = Documenter.HTML(
