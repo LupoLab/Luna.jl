@@ -5,7 +5,7 @@ gas = :H2
 pres = 5
 flength = 200e-2
 
-τ = 20e-15
+τfwhm = 20e-15
 λ0 = 800e-9
 energy = 1e-6
 
@@ -15,8 +15,6 @@ m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-
-
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -28,8 +26,7 @@ linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-in1 = (func=gausspulse, energy=energy)
-inputs = (in1, )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
@@ -40,7 +37,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakintensity(grid, aeff),
                                Stats.fwhm_t(grid),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
