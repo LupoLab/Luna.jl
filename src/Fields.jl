@@ -41,23 +41,22 @@ end
 """
     SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
 
-Construct a Sech^2(t/τw) shaped pulse with natural width `τw`,
-and other parameters as defined for [`PulseField`](@ref).
+Construct a Sech^2(t/τw) shaped pulse, specifying either the
+natural width `τw`, or the intensity/power FWHM `τfwhm`.
+Other parameters are as defined for [`PulseField`](@ref).
 """
-function SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
+function SechField(;λ0, energy, τw=nothing, τfwhm=nothing, ϕ=0.0, τ0=0.0)
+    if τfwhm != nothing
+        if τw != nothing
+            error("only one of `τw` or `τfwhm` can be specified")
+        else
+            τw = τfwhm/(2*log(1 + sqrt(2)))
+        end
+    elseif τw == nothing
+        error("one of `τw` or `τfwhm` must be specified")
+    end
     PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
 end
-
-"""
-    SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
-
-Construct a Sech^2 shaped pulse with intensity/power FWHM `τfwhm`,
-and other parameters as defined for [`PulseField`](@ref).
-"""
-#function SechField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0)
-#    τw = τfwhm/(2*log(1 + sqrt(2)))
-#    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
-#end
 
 function make_Et(p::PulseField, grid::Grid.RealGrid)
     t = grid.t .- p.τ0
