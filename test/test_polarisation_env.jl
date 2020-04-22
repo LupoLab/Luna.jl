@@ -5,19 +5,15 @@ import Luna: Output
     # compare radial single pol, to radial linear pol at 45 degrees,
     # in capillary (non birefringent) these should be identical
 
-    import Luna
-    import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
+    using Luna
     import LinearAlgebra: norm
     a = 13e-6
     gas = :Ar
     pres = 5
     τ = 30e-15
     λ0 = 800e-9
+    energy=1e-6
     grid = Grid.EnvGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    function gausspulse(t)
-        It = Maths.gauss(t, fwhm=τ)
-        Et = @. sqrt(It)
-    end
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
@@ -27,8 +23,7 @@ import Luna: Output
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
-    in1 = (func=gausspulse, energy=1e-6)
-    inputs = ((1,(in1,)),)
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy)
     Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :y; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
@@ -44,9 +39,9 @@ import Luna: Output
         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false)
     )
-    in1 = (func=gausspulse, energy=1e-6/2.0)
+    inf = (Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy/2.0),)
     # same field in each mode
-    inputs = ((1, (in1,)), (2, (in1,)))
+    inputs = ((mode=1, fields=inf), (mode=2, fields=inf))
     Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :xy; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
