@@ -40,7 +40,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.@ScanHDF5Output(0, grid.zmax, 101, (length(grid.ω),), statsfun)
 println(output["meta"]["scanvars"])
 

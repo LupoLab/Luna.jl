@@ -1,21 +1,13 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output, LinearOps, Modes
-import Logging
-import FFTW
-import NumericalIntegration: integrate, SimpsonEven
-import LinearAlgebra: mul!, ldiv!
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
+using Luna
 
 a = 13e-6
 gas = :Ar
 pres = 5
-
-τ = 30e-15
-λ0 = 800e-9
-
 L = 15e-2
+
+τfwhm = 30e-15
+λ0 = 800e-9
+energy = 1e-6
 
 coren, densityfun = Capillary.gradient(gas, L, pres, pres);
 
@@ -25,30 +17,26 @@ modes = (
 )
 nmodes = length(modes)
 
-grid = Grid.EnvGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_env_modal()
+energyfun = Fields.energyfuncs(grid)[1]
 normfun = NonlinearRHS.norm_modal(grid.ω)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)
-end
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = ((1,(in1,)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                modes, :y; full=false)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+import FFTW
+import PyPlot:pygui, plt
 
 ω = FFTW.fftshift(grid.ω)
 t = grid.t

@@ -12,7 +12,7 @@ pres = 5
 L = 5e-2
 
 # Common setup
-grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
@@ -75,7 +75,7 @@ pres = 5
 L = 5e-2
 
 # Common setup
-grid = Grid.EnvGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 

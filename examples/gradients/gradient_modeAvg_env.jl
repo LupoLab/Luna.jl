@@ -1,33 +1,22 @@
 using Luna
-import Logging
-import FFTW
-Logging.disable_logging(Logging.BelowMinLevel)
 
 a = 13e-6
 gas = :Ar
 pres = 5
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 1e-6
 
 L = 15e-2
 
-grid = Grid.EnvGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
 coren, densityfun = Capillary.gradient(gas, L, pres, pres);
 m = Capillary.MarcatilliMode(a, coren, loss=false);
 aeff(z) = Modes.Aeff(m, z=z)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)
-end
-
-# dens0 = PhysData.density(gas, pres)
-# densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -38,8 +27,7 @@ linop, βfun = LinearOps.make_linop(grid, m, λ0);
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = (in1, )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
@@ -49,10 +37,11 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakpower(grid),
                                Stats.fwhm_t(grid),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
+import FFTW
 import PyPlot:pygui, plt
 ω = grid.ω
 t = grid.t

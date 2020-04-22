@@ -46,8 +46,8 @@ inputs = ((1,(in1,)),)
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :x; full=true)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 #output = Output.HDF5Output("test_full_modal_rect.h5", 0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
