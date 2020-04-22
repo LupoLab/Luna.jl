@@ -1,18 +1,12 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
-import Logging
-import FFTW
-import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
+using Luna
 
 a = 13e-6
 gas = :Ar
 pres = 5
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 1e-6
 
 L = 15e-2
 
@@ -24,13 +18,11 @@ aL = 3a/4
 afun = let a0=a0, aL=aL, L=L
     afun(z) = a0 + (aL-a0)*z/L
 end
-# coren, dens = Capillary.gradient(gas, L, pres, pres); # dens is unused
+
 modes = (
     Capillary.MarcatilliMode(afun, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     Capillary.MarcatilliMode(afun, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
-
-
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -56,6 +48,8 @@ output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
+import FFTW
+
 ω = grid.ω
 t = grid.t
 
@@ -67,6 +61,7 @@ It = abs2.(Maths.hilbert(Etout))
 
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 
+import PyPlot:pygui, plt
 pygui(true)
 
 for i = 1:length(modes)
