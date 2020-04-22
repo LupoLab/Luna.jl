@@ -34,11 +34,7 @@ Then, make the following changes:
 
 @scan begin
 # Lots of setup work...
-gausspulse = let τ=$τ, λ=λ0
-
-end
-in1 = (func=gausspulse, energy=$energy)
-inputs = (in1, )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=$τ, energy=$energy)
 # More setup work...
 Luna.run(...) # run the simulation
 end
