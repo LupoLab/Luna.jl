@@ -99,9 +99,13 @@ function ShotNoise(seed=nothing)
     ShotNoise(MersenneTwister(seed))
 end
 
-"Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
+"""
+    (s::ShotNoise)(Eω, grid)
+
+Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
 The optional parameters `energy_t` and `FT` are unused and are present for interface
-compatibility with [`TimeField`](@ref)."
+compatibility with [`TimeField`](@ref).
+"""
 function (s::ShotNoise)(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
