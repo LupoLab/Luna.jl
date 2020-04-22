@@ -58,7 +58,11 @@ and other parameters as defined for [`PulseField`](@ref).
 #    τw = τfwhm/(2*log(1 + sqrt(2)))
 #    SechField(λ0=λ0, τw=τw, energy=energy, ϕ=ϕ, τ0=τ0)
 #end
+"""
+    make_Et(p::PulseField, grid)
 
+Create electric field for `PulseField`, either the field (for `RealGrid`) or the envelope (for `EnvGrid`)
+"""
 function make_Et(p::PulseField, grid::Grid.RealGrid)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
