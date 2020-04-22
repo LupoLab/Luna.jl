@@ -127,7 +127,7 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs, aeff)
     Eω, transform, FT
 end
 
-# for a tuple of NamedTuple's we assume all is well
+# for a tuple of NamedTuple's with tuple fields we assume all is well
 function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
     energy_t = Fields.energyfuncs(grid)[1]
     for input in inputs
