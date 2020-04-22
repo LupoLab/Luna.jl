@@ -23,7 +23,7 @@ end
 
 @testset "Moments" begin
     x = collect(range(-10, stop=10, length=513))
-    y = Maths.gauss(x, 1, x0=1)
+    y = Maths.gauss.(x, 1, x0=1)
     @test Maths.moment(x, y) ≈ 1
     @test Maths.moment(x, y, 2) ≈ 2
     @test Maths.rms_width(x, y) ≈ 1
@@ -32,7 +32,7 @@ end
     σ = [0.1, 0.5, 1.0, 1.5, 1.5]
     y = zeros(length(x), length(x0))
     for ii = 1:length(x0)
-        y[:, ii] = Maths.gauss(x, σ[ii], x0=x0[ii])
+        y[:, ii] = Maths.gauss.(x, σ[ii], x0=x0[ii])
     end
     @test_throws DomainError Maths.moment(x, y, dim=2)
     @test all(isapprox.(transpose(Maths.moment(x, y, dim=1)), x0, atol=1e-5))
@@ -46,7 +46,7 @@ end
 
 @testset "Fourier" begin
     t = collect(range(-10, stop=10, length=513))
-    Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
+    Et = Maths.gauss.(t, fwhm=4).*cos.(4*t)
     EtA = Maths.hilbert(Et)
     @test maximum(abs.(EtA)) ≈ 1
     @test all(isapprox.(real(EtA), Et, atol=1e-9))
@@ -61,12 +61,12 @@ end
     @test all(out .≈ EtA)
 
     t = collect(range(-10, stop=10, length=512))
-    Et = Maths.gauss(t, fwhm=4).*cos.(4*t)
+    Et = Maths.gauss.(t, fwhm=4).*cos.(4*t)
     to, Eto = Maths.oversample(t, Et, factor=4)
     @test 4*size(Et)[1] == size(Eto)[1]
     @test all(isapprox.(Eto[1:4:end], Et, rtol=1e-6))
 
-    Etc = Maths.gauss(t, fwhm=4).*exp.(1im*4*t)
+    Etc = Maths.gauss.(t, fwhm=4).*exp.(1im*4*t)
     to, Etco = Maths.oversample(t, Etc, factor=4)
     @test 4*size(Etc)[1] == size(Etco)[1]
     @test all(isapprox.(Etco[1:4:end], Etc, rtol=1e-6))
@@ -120,7 +120,7 @@ end
     fw = 0.2
     x = collect(range(-1, stop=1, length=2048))
     δx = x[2] - x[1]
-    y = Maths.gauss(x, fwhm=fw)
+    y = Maths.gauss.(x, fwhm=fw)
     @test isapprox(Maths.fwhm(x, y), fw, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, method=:spline), fw, rtol=1e-4)
     @test Maths.fwhm(x, y, method=:spline) == Maths.fwhm(x, y, method=:spline, minmax=:max)
@@ -128,14 +128,14 @@ end
 
     fw = 0.1
     sep = 0.5
-    y = Maths.gauss(x, fwhm=fw, x0=-sep/2) + Maths.gauss(x, fwhm=fw, x0=sep/2)
+    y = Maths.gauss.(x, fwhm=fw, x0=-sep/2) + Maths.gauss.(x, fwhm=fw, x0=sep/2)
     @test isapprox(Maths.fwhm(x, y, minmax=:min), fw, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:min), fw, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:max), fw+sep, rtol=1e-4)
 
     hw = 1
-    f(x) = Maths.gauss(x, fwhm=2*hw)
+    f(x) = Maths.gauss.(x, fwhm=2*hw)
     @test Maths.hwhm(f, 0) ≈ hw
     @test Maths.hwhm(f, 0; direction=:bwd) ≈ hw
 
@@ -144,11 +144,11 @@ end
     y = zero(x)
     seed!(123)
     for i = 1:10000
-        y .+= rand()*Maths.gauss(x, x0=rand(), fwhm=rand()/1000)
+        y .+= rand()*Maths.gauss.(x, x0=rand(), fwhm=rand()/1000)
     end
     m = 1.1*maximum(y)
-    y .+= m*Maths.gauss(x, x0=-0.05, fwhm=0.05)
-    y .+= m*Maths.gauss(x, x0=1.05, fwhm=0.05)
+    y .+= m*Maths.gauss.(x, x0=-0.05, fwhm=0.05)
+    y .+= m*Maths.gauss.(x, x0=1.05, fwhm=0.05)
     @test isapprox(Maths.fwhm(x, y, minmax=:max), 0.05 + 1.1, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, minmax=:max, method=:spline), 0.05 + 1.1, rtol=1e-4)
 end
