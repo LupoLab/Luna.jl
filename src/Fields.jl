@@ -186,8 +186,12 @@ transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
 
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
 
-"Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
-and Fourier transform `FT`"
+"""
+    (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+
+Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
+and Fourier transform `FT`
+"""
 function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
     Etr = make_Etr(s, grid, spacegrid)
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
