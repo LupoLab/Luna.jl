@@ -34,8 +34,9 @@ function subplotgrid(N, portrait=true; title=nothing)
     rows = ceil(Int, N/cols)
     portrait && ((rows, cols) = (cols, rows))
     fig, axs = plt.subplots(rows, cols, num=title)
+    axs = permutedims(axs, (2, 1))
     if cols*rows > N
-        for axi in permutedims(axs, (2, 1))[N+1:end]
+        for axi in axs[N+1:end]
             axi.remove()
         end
     end
@@ -71,7 +72,12 @@ function stats(output; kwargs...)
     stats = output["stats"]
 
     pstats = [] # pulse statistics
-    haskey(stats, "energy") && push!(pstats, (1e6stats["energy"], "Energy (μJ)"))
+    haskey(stats, "energy") && push!(pstats, (1e6*stats["energy"], "Energy (μJ)"))
+    for (k, v) in pairs(stats)
+        startswith(k, "energy_") || continue
+        str = "Energy "*replace(k[8:end], "_" => " ")*" (μJ)"
+        push!(pstats, (1e6*stats[k], str))
+    end
     haskey(stats, "peakpower") && push!(pstats, (1e-9*stats["peakpower"], "Peak power (GW)"))
     haskey(stats, "peakintensity") && push!(
         pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm\$^2\$)"))
@@ -90,7 +96,7 @@ function stats(output; kwargs...)
     haskey(stats, "core_radius") && push!(fstats, (1e6*stats["core_radius"], "Core radius (μm)"))
     haskey(stats, "zdw") && push!(fstats, (1e9*stats["zdw"], "ZDW (nm)"))
 
-    z = output["stats"]["z"]*1e2
+    z = stats["z"]*1e2
 
     multimode, modes = get_modes(output)
 
