@@ -117,4 +117,9 @@ end
     include(joinpath(testdir, "test_antiresonant.jl"))
 end
 
+@testset "Fields" begin
+    @info("================= test_fields.jl")
+    include(joinpath(testdir, "test_fields.jl"))
+end
+
 end
