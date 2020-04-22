@@ -5,11 +5,7 @@ The first step is to write a standard Luna script to run a *single* simulation i
 ```julia
 # Lots of setup work...
 gausspulse = let τ=30e-15, λ=λ0
-    function gausspulse(t)
-        It = Maths.gauss(t, fwhm=τ)
-        ω0 = 2π*PhysData.c/λ0
-        Et = @. sqrt(It)*cos(ω0*t)
-    end
+
 end
 in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
@@ -39,11 +35,7 @@ Then, make the following changes:
 @scan begin
 # Lots of setup work...
 gausspulse = let τ=$τ, λ=λ0
-    function gausspulse(t)
-        It = Maths.gauss(t, fwhm=τ)
-        ω0 = 2π*PhysData.c/λ0
-        Et = @. sqrt(It)*cos(ω0*t)
-    end
+
 end
 in1 = (func=gausspulse, energy=$energy)
 inputs = (in1, )

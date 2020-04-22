@@ -45,7 +45,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)

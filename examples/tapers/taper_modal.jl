@@ -47,13 +47,13 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 linop = LinearOps.make_linop(grid, modes, λ0);
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                modes, :y, full=false)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))

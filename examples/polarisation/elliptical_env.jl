@@ -54,7 +54,7 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :xy; full=false)
 
 Eω .= Ew

@@ -21,7 +21,7 @@ import Luna: Output
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+    energyfun, energyfunω = Fields.energyfuncs(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
 
     modes = (
@@ -29,7 +29,7 @@ import Luna: Output
     )
     in1 = (func=gausspulse, energy=1e-6)
     inputs = ((1,(in1,)),)
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :y; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),
@@ -47,7 +47,7 @@ import Luna: Output
     in1 = (func=gausspulse, energy=1e-6/2.0)
     # same field in each mode
     inputs = ((1, (in1,)), (2, (in1,)))
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :xy; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),

@@ -14,22 +14,18 @@ import Luna: Output
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    function gausspulse(t)
-        It = Maths.gauss(t, fwhm=τ)
-        ω0 = 2π*PhysData.c/λ0
-        Et = @. sqrt(It)*cos(ω0*t)
-    end
+
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+    energyfun, energyfunω = Fields.energyfuncs(grid)
     normfun = NonlinearRHS.norm_modal(grid.ω)
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     in1 = (func=gausspulse, energy=1e-6)
     inputs = ((1,(in1,)),)
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :y; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),
@@ -47,7 +43,7 @@ import Luna: Output
     in1 = (func=gausspulse, energy=1e-6/2.0)
     # same field in each mode
     inputs = ((1, (in1,)), (2, (in1,)))
-    Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                 modes, :xy; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),

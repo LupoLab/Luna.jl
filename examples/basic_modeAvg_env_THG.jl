@@ -25,7 +25,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
 responses = (Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), 2π*PhysData.c/λ0, grid.to),)
 
-inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 

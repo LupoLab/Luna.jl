@@ -24,7 +24,7 @@ grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 m = RectModes.RectMode(a, b, gas, pres, :Al)
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -48,7 +48,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))
 output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)

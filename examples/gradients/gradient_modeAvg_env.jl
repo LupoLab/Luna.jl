@@ -18,7 +18,7 @@ coren, densityfun = Capillary.gradient(gas, L, pres, pres);
 m = Capillary.MarcatilliMode(a, coren, loss=false);
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 function gausspulse(t)
     It = Maths.gauss(t, fwhm=τ)
@@ -41,7 +41,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),

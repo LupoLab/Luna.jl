@@ -26,7 +26,7 @@ modes = (
 
 grid = Grid.RealGrid(L, 800e-9, (160e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
@@ -44,7 +44,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 in1 = (func=gausspulse, energy=1e-6)
 inputs = ((1,(in1,)),)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :y; full=false)
 
 statsfun = Stats.collect_stats((Stats.ω0(grid), ))

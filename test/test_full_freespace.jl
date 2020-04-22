@@ -45,7 +45,7 @@ normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas,
 in1 = (func=gausspulse, energy=energy)
 inputs = (in1, )
 
-Eω, transform, FT = Luna.setup(grid, xygrid, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, xygrid, densityfun, normfun, responses, inputs)
 
 output = Output.MemoryOutput(0, grid.zmax, 21)
 

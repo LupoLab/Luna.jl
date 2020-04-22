@@ -29,7 +29,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas),length(grid.to)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
