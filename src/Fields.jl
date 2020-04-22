@@ -75,7 +75,11 @@ function make_Et(p::PulseField, grid::Grid.EnvGrid)
     @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
 end
 
-"Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`"
+"""
+    (p::PulseField)(Eω, grid, energy_t, FT)
+
+Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
+"""
 function (p::PulseField)(Eω, grid, energy_t, FT)
     Et = make_Et(p, grid)
     Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
