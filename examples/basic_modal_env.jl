@@ -31,11 +31,17 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :y; full=false)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω,
+                              Stats.ω0(grid),
+                              Stats.energy(grid, energyfunω),
+                              Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
+                              Stats.peakpower(grid),
+                              Stats.fwhm_t(grid),
+                              Stats.density(densityfun))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)

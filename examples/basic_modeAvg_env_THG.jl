@@ -7,13 +7,14 @@ pres = 5
 τfwhm = 30e-15
 λ0 = 800e-9
 flength = 0.5e-2
+energy = 1e-6
 
 grid = Grid.EnvGrid(flength, λ0, (160e-9, 3000e-9), 1e-12, thg=true)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
-energyfun, energyfunω = Fields.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -28,8 +29,14 @@ inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+statsfun = Stats.collect_stats(grid, Eω,
+                               Stats.ω0(grid),
+                               Stats.energy(grid, energyfunω),
+                               Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
+                               Stats.peakpower(grid),
+                               Stats.fwhm_t(grid),
+                               Stats.density(densityfun))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

@@ -35,7 +35,7 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(
-    grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
@@ -46,7 +46,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
