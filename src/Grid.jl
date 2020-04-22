@@ -206,7 +206,7 @@ function to_dict(g::GT) where GT <: AbstractGrid
     d
 end
 
-function from_dict(gridtype::DataType, d)
+function from_dict(gridtype, d)
     kwargs = (Symbol(k) => v for (k, v) in pairs(d))
     grid = gridtype(;kwargs...)
 
@@ -215,7 +215,7 @@ function from_dict(gridtype::DataType, d)
     return grid
 end
 
-function validate(grid::AbstractGrid)
+function validate(grid::TimeGrid)
     δt = grid.t[2] - grid.t[1]
     δto = grid.to[2] - grid.to[1]
     @assert δt/δto ≈ length(grid.to)/length(grid.t)
@@ -225,7 +225,7 @@ function validate(grid::AbstractGrid)
     if grid isa EnvGrid
         δω = grid.ω[2] - grid.ω[1]
         Δω = length(grid.ω)*δω
-        @assert δt == π/Δω
+        @assert δt ≈ 2π/Δω
         @assert length(grid.t) == length(grid.ω)
         @assert length(grid.to) == length(grid.ωo)
     else

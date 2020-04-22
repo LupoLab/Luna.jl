@@ -1,8 +1,10 @@
 module Plotting
 import Luna: Grid, Maths, PhysData
 import Luna.PhysData: wlfreq, c, ε_0
+import Luna.Output: AbstractOutput
 import PyPlot: ColorMap, plt, pygui
 import FFTW
+import NumericalIntegration: integrate
 
 """
     cmap_white(cmap, N=512, n=8)
@@ -29,7 +31,7 @@ end
 Create a figure with a grid of `N` subplots with. If `portrait` is `true`, try to lay out
 the grid in portrait orientation (taller than wide), otherwise landscape (wider than tall).
 """
-function subplotgrid(N, portrait=true; title=nothing)
+function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     cols = ceil(Int, sqrt(N))
     rows = ceil(Int, N/cols)
     portrait && ((rows, cols) = (cols, rows))
@@ -40,7 +42,7 @@ function subplotgrid(N, portrait=true; title=nothing)
             axi.remove()
         end
     end
-    fig.set_size_inches(cols*4, rows*2.5)
+    fig.set_size_inches(cols*colw, rows*rowh)
     fig, N > 1 ? axs : [axs]
 end
 
@@ -141,71 +143,96 @@ function should_log10(A, tolfac=10)
     any(ma./mi .> 10)
 end
 
-
 function getEω(grid::Grid.RealGrid, output)
     ω = grid.ω[grid.sidx]
+    δt = grid.t[2] - grid.t[1]
     Eω = output["Eω"][grid.sidx, CartesianIndices(size(output["Eω"])[2:end])]
-    return ω, Eω
+    return ω, Eω*δt*2/sqrt(2π)
 end
 
 function getEω(grid::Grid.EnvGrid, output)
+    δt = grid.t[2] - grid.t[1]
     idcs = FFTW.fftshift(grid.sidx)
     Eωs = FFTW.fftshift(output["Eω"], 1)
-    ω = grid.ω[idcs]
+    ω = FFTW.fftshift(grid.ω)[idcs]
     Eω = Eωs[idcs, CartesianIndices(size(output["Eω"])[2:end])]
-    return ω, Eω
+    return ω, Eω*δt/sqrt(2π)
 end
 
-getEω(output) = getEω(makegrid(output), output)
-
-
-function getEt(grid::Grid.RealGrid, output; trange, oversampling=4)
-    t = grid.t
-    Etout = FFTW.irfft(output["Eω"], length(t), 1)
-    idcs = @. (t < max(trange...)) & (t > min(trange...))
-    cidcs = CartesianIndices(size(Etout)[2:end])
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
-    Et = Maths.hilbert(Eto)
-    return to, Et
+function getEω(grid, output, zslice)
+    ω, Eω = getEω(grid, output)
+    cidcs = CartesianIndices(size(Eω)[1:end-1])
+    zidx = nearest_z(output, zslice)
+    return ω, Eω[cidcs, zidx], output["z"][zidx]
 end
 
-function getEt(grid::Grid.EnvGrid, output; trange, oversampling=4)
+
+getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
+
+function getIω(ω, Eω, specaxis)
+    if specaxis == :f
+        specx = ω./2π.*1e-15
+        If = abs2.(Eω)*1e15*2π
+        return specx, If
+    elseif specaxis == :ω
+        specx = ω*1e-15
+        Iω = abs2.(Eω)*1e15
+        return specx, Iω
+    elseif specaxis == :λ
+        specx = wlfreq.(ω) .* 1e9
+        Iλ = @. ω^2/(2π*c) * abs2.(Eω) * 1e-9
+        idcs = sortperm(specx)
+        cidcs = CartesianIndices(size(Iλ)[2:end])
+        return specx[idcs], Iλ[idcs, cidcs]
+    else
+        error("Unknown specaxis $specaxis")
+    end
+end
+
+getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
+
+function getIω(output::AbstractOutput, specaxis, zslice)
+    ω, Eω, zactual = getEω(output, zslice)
+    specx, Iω = getIω(ω, Eω, specaxis)
+    return specx, Iω, zactual
+end
+
+function getEt(grid, output; trange, oversampling=4)
     t = grid.t
-    Etout = FFTW.ifft(output["Eω"], length(t), 1)
+    Etout = envelope(grid, t, output["Eω"])
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end])
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
     return to, Eto
 end
 
-getEt(output; kwargs...) = getEt(makegrid(output), output; kwargs...)
+function getEt(grid, output, zslice; trange, oversampling=4)
+    t = grid.t
+    Etout = envelope(grid, t, output["Eω"])
+    idcs = @. (t < max(trange...)) & (t > min(trange...))
+    cidcs = CartesianIndices(size(Etout)[2:end-1])
+    zidx = nearest_z(output, zslice)
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs, zidx], factor=oversampling)
+    return to, Eto, output["z"][zidx]
+end
+
+getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
+
+envelope(grid::Grid.RealGrid, t, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(t), 1))
+envelope(grid::Grid.EnvGrid, t, Eω) = FFTW.ifft(Eω, 1)
+
+nearest_z(output, z::Number) = argmin(abs.(output["z"] .- z))
+nearest_z(output, z) = [argmin(abs.(output["z"] .- zi)) for zi in z]
 
 function prop_2D(output, specaxis=:f;
                  λrange=(150e-9, 2000e-9), trange=(-50e-15, 50e-15),
                  dBmin=-60, kwargs...)
     z = output["z"]*1e2
-    ω, Eω = getEω(output)
+    specx, Iω = getIω(output, specaxis)
     t, Et = getEt(output, trange=trange)
     It = abs2.(Et)
 
-    if specaxis == :f
-        specx = ω./2π.*1e-15
-        Iω = Maths.normbymax(abs2.(Eω))
-        speclims = (1e-15*c/maximum(λrange), 1e-15*c/minimum(λrange))
-        speclabel = "Frequency (PHz)"
-    elseif specaxis == :ω
-        specx = ω*1e-15
-        Iω = Maths.normbymax(abs2.(Eω))
-        speclims = (1e-15*wlfreq(maximum(λrange)), 1e-15*wlfreq(minimum(λrange)))
-        speclabel = "Angular frequency (rad/fs)"
-    elseif specaxis == :λ
-        specx = wlfreq.(ω) .* 1e9
-        Iω = Maths.normbymax(ω.^2 .* abs2.(Eω))
-        speclims = λrange .* 1e9
-        speclabel = "Wavelength (nm)"
-    else
-        error("Unknown specaxis $specaxis")
-    end
+    speclims, speclabel = getspeclims(λrange, specaxis)
 
     multimode, modes = get_modes(output)
 
@@ -216,24 +243,28 @@ function prop_2D(output, specaxis=:f;
     end    
 end
 
-function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
-    pfig = plt.figure("Propagation")
-    pfig.set_size_inches(12, 4)
-    plt.subplot(1, 2, 1)
-    plt.pcolormesh(specx, z, 10*log10.(transpose(Iω)); kwargs...)
-    plt.clim(dBmin, 0)
-    cb = plt.colorbar()
-    cb.set_label("SED (dB)")
-    plt.ylabel("Distance (cm)")
-    plt.xlabel(speclabel)
-    plt.xlim(speclims...)
+function getspeclims(λrange, specaxis)
+    if specaxis == :f
+        speclims = (1e-15*c/maximum(λrange), 1e-15*c/minimum(λrange))
+        speclabel = "Frequency (PHz)"
+    elseif specaxis == :ω
+        speclims = (1e-15*wlfreq(maximum(λrange)), 1e-15*wlfreq(minimum(λrange)))
+        speclabel = "Angular frequency (rad/fs)"
+    elseif specaxis == :λ
+        speclims = λrange .* 1e9
+        speclabel = "Wavelength (nm)"
+    else
+        error("Unknown specaxis $specaxis")
+    end
+    return speclims, speclabel
+end
 
-    plt.subplot(1, 2, 2)
-    plt.pcolormesh(t*1e15, z, transpose(It); kwargs...)
-    plt.colorbar()
-    plt.xlim(trange.*1e15)
-    plt.xlabel("Time (fs)")
-    plt.ylabel("Distance (cm)")
+function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
+    pfig, axs = plt.subplots(1, 2, num="Propagation")
+    pfig.set_size_inches(12, 4)
+    _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
+
+    _time2D(axs[2], t, z, It, trange; kwargs...)
     pfig.tight_layout()
     return pfig
 end
@@ -241,52 +272,70 @@ end
 function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
     pfigs = []
     for mi in 1:length(modes)
-        pfig = plt.figure("Propagation ($(modes[mi]))")
+        pfig, axs = plt.subplots(1, 2, num="Propagation ($(modes[mi]))")
         pfig.set_size_inches(12, 4)
-        plt.subplot(1, 2, 1)
-        plt.pcolormesh(specx, z, 10*log10.(transpose(Iω[:, mi, :])); kwargs...)
-        plt.clim(dBmin, 0)
-        cb = plt.colorbar()
-        cb.set_label("SED (dB)")
-        plt.ylabel("Distance (cm)")
-        plt.xlabel(speclabel)
-        plt.xlim(speclims...)
+        _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
 
-        plt.subplot(1, 2, 2)
-        plt.pcolormesh(t*1e15, z, transpose(It[:, mi, :]); kwargs...)
-        plt.colorbar()
-        plt.xlim(trange.*1e15)
-        plt.xlabel("Time (fs)")
-        plt.ylabel("Distance (cm)")
-        pfig.tight_layout()
+        _time2D(axs[2], t, z, It[:, mi, :], trange; kwargs...)
         push!(pfigs, pfig)
     end
 
-    pfig = plt.figure("Propagation (all modes)")
+    pfig, axs = plt.subplots(1, 2, num="Propagation (all modes)")
     pfig.set_size_inches(12, 4)
-    plt.subplot(1, 2, 1)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
-    plt.pcolormesh(specx, z, 10*log10.(transpose(Iωall)); kwargs...)
-    plt.clim(dBmin, 0)
-    cb = plt.colorbar()
-    cb.set_label("SED (dB)")
-    plt.ylabel("Distance (cm)")
-    plt.xlabel(speclabel)
-    plt.xlim(speclims...)
+    _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
 
-    plt.subplot(1, 2, 2)
     Itall = dropdims(sum(It, dims=2), dims=2)
-    plt.pcolormesh(t*1e15, z, transpose(Itall); kwargs...)
-    plt.colorbar()
-    plt.xlim(trange.*1e15)
-    plt.xlabel("Time (fs)")
-    plt.ylabel("Distance (cm)")
+    _time2D(axs[2], t, z, Itall, trange; kwargs...)
     pfig.tight_layout()
     push!(pfigs, pfig)
 
     return pfigs
 end
 
+function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
+    im = ax.pcolormesh(specx, z, 10*log10.(Maths.normbymax(transpose(I))); kwargs...)
+    im.set_clim(dBmin, 0)
+    cb = plt.colorbar(im, ax=ax)
+    cb.set_label("SED (dB)")
+    ax.set_ylabel("Distance (cm)")
+    ax.set_xlabel(speclabel)
+    ax.set_xlim(speclims...)
+end
 
+function _time2D(ax, t, z, I, trange; kwargs...)
+    im = ax.pcolormesh(t*1e15, z, transpose(I); kwargs...)
+    plt.colorbar(im, ax=ax)
+    ax.set_xlim(trange.*1e15)
+    ax.set_xlabel("Time (fs)")
+    ax.set_ylabel("Distance (cm)")
+end
+
+function time_1D(output, zslice; trange=(-50e-15, 50e-15), kwargs...)
+    t, Et, zactual = getEt(output, zslice, trange=trange)
+    It = abs2.(Et)
+
+    sfig = plt.figure()
+    plt.plot(t*1e15, 1e-9*It)
+    plt.xlabel("Time (fs)")
+    plt.ylabel("Power (GW)")
+    plt.ylim(ymin=0)
+    plt.legend(string.(zactual.*100).*" cm")
+end
+
+function spec_1D(output, zslice, specaxis=:λ; λrange=(150e-9, 1200e-9),
+                 log10=true, log10min=1e-6,
+                 kwargs...)
+    specx, Iω, zactual = getIω(output, specaxis, zslice)
+    speclims, speclabel = getspeclims(λrange, specaxis)
+
+    sfig = plt.figure()
+    (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
+    plt.xlabel(speclabel)
+    plt.ylabel("Spectral energy density")
+    log10 && plt.ylim(maximum(Iω)*log10min, 3*maximum(Iω))
+    plt.xlim(speclims...)
+    plt.legend(string.(zactual.*100).*" cm")
+end
 
 end

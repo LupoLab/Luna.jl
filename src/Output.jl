@@ -5,9 +5,10 @@ import Base: getindex, show
 import Printf: @sprintf
 import Luna: Scans, Utils, @hlock
 
+abstract type AbstractOutput end
 
 "Output handler for writing only to memory"
-mutable struct MemoryOutput{sT, S}
+mutable struct MemoryOutput{sT, S} <: AbstractOutput
     save_cond::sT
     yname::AbstractString  # Name for solution (e.g. "Eω")
     tname::AbstractString  # Name for propagation direction (e.g. "z")
@@ -135,7 +136,7 @@ function fastcat(A, v)
 end
 
 "Output handler for writing to an HDF5 file"
-mutable struct HDF5Output{sT, S}
+mutable struct HDF5Output{sT, S} <: AbstractOutput
     fpath::AbstractString  # Path to output file
     save_cond::sT  # callable, determines when data is saved and where it is interpolated
     yname::AbstractString  # Name for solution (e.g. "Eω")
