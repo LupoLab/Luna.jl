@@ -1,5 +1,4 @@
 using Luna
-import FFTW
 
 a = 13e-6
 gas = :Ar
@@ -17,7 +16,7 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-energyfun, energyfunω = Fields.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -32,7 +31,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
             # Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-inputs = (Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy), )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(
     grid, densityfun, normfun, responses, inputs, aeff)
@@ -44,11 +43,12 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakpower(grid),
                                Stats.fwhm_t(grid),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 import PyPlot:pygui, plt
+import FFTW
 
 ω = grid.ω
 t = grid.t

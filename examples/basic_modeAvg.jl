@@ -1,5 +1,4 @@
 using Luna
-import FFTW
 
 a = 13e-6
 gas = :Ar
@@ -18,12 +17,6 @@ aeff = let m=m
 end
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -58,6 +51,7 @@ output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 import PyPlot:pygui, plt
+import FFTW
 
 ω = grid.ω
 t = grid.t
