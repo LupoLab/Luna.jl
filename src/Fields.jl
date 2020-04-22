@@ -39,7 +39,7 @@ function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
 end
 
 """
-    SechField(;λ0, τw, energy, ϕ=0.0, τ0=0.0)
+    SechField(;λ0, energy, τw=nothing, τfwhm=nothing, ϕ=0.0, τ0=0.0)
 
 Construct a Sech^2(t/τw) shaped pulse, specifying either the
 natural width `τw`, or the intensity/power FWHM `τfwhm`.
@@ -58,6 +58,11 @@ function SechField(;λ0, energy, τw=nothing, τfwhm=nothing, ϕ=0.0, τ0=0.0)
     PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
 end
 
+"""
+    make_Et(p::PulseField, grid)
+
+Create electric field for `PulseField`, either the field (for `RealGrid`) or the envelope (for `EnvGrid`)
+"""
 function make_Et(p::PulseField, grid::Grid.RealGrid)
     t = grid.t .- p.τ0
     ω0 = PhysData.wlfreq(p.λ0)
@@ -70,7 +75,11 @@ function make_Et(p::PulseField, grid::Grid.EnvGrid)
     @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
 end
 
-"Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`"
+"""
+    (p::PulseField)(Eω, grid, energy_t, FT)
+
+Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
+"""
 function (p::PulseField)(Eω, grid, energy_t, FT)
     Et = make_Et(p, grid)
     Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
@@ -90,9 +99,13 @@ function ShotNoise(seed=nothing)
     ShotNoise(MersenneTwister(seed))
 end
 
-"Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
+"""
+    (s::ShotNoise)(Eω, grid)
+
+Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
 The optional parameters `energy_t` and `FT` are unused and are present for interface
-compatibility with [`TimeField`](@ref)."
+compatibility with [`TimeField`](@ref).
+"""
 function (s::ShotNoise)(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
@@ -173,8 +186,12 @@ transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
 
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
 
-"Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
-and Fourier transform `FT`"
+"""
+    (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+
+Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
+and Fourier transform `FT`
+"""
 function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
     Etr = make_Etr(s, grid, spacegrid)
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
