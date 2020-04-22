@@ -30,11 +30,7 @@ grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0

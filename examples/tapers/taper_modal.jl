@@ -30,11 +30,7 @@ modes = (
     Capillary.MarcatilliMode(afun, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0

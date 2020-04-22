@@ -23,11 +23,7 @@ m = Capillary.MarcatilliMode(a, coren, loss=false, model=:full);
 
 energyfun = NonlinearRHS.energy_mode_avg(m)
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+
 
 # dens0 = PhysData.density(gas, pres)
 # densityfun(z) = dens0

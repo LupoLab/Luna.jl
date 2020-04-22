@@ -25,11 +25,7 @@ grid = Grid.RealGrid(250e-2, λ0, (200e-9, 3000e-9), 1e-12)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+
 
 Etlin = gausspulse(grid.t)
 cenergy = energyfun(Etlin)
