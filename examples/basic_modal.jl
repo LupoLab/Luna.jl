@@ -66,6 +66,6 @@ Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 Plotting.pygui(true)
 Plotting.stats(output)
 Plotting.prop_2D(output)
-Plotting.time_1D(output, [5e-2, 9.8e-2])
+Plotting.time_1D(output, [5e-2, 9.8e-2], modeidx=2)
 Plotting.spec_1D(output, [5e-2, 9.8e-2])
 

@@ -322,7 +322,7 @@ function time_1D(output, zslice; modeidx=nothing, trange=(-50e-15, 50e-15), kwar
     end
 
     sfig = plt.figure()
-    if multimode && size(It, 2) > 1
+    if multimode && length(modeidx) > 1
         _plot_slice_mm(plt.gca(), t*1e15, 1e-9*It, zslice, modes; kwargs...)
         plt.legend(frameon=false)
     else
@@ -332,7 +332,7 @@ function time_1D(output, zslice; modeidx=nothing, trange=(-50e-15, 50e-15), kwar
     plt.xlabel("Time (fs)")
     plt.ylabel("Power (GW)")
     plt.ylim(ymin=0)
-    sfig.set_size_inches(7.5, 5)
+    sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
 end
 
@@ -348,8 +348,9 @@ function spec_1D(output, zslice, specaxis=:λ; modeidx=nothing, λrange=(150e-9,
         modes = modes[modeidx]
     end
 
+    size(Iω, 2) > 6 && error("spec_1D currently only supports 6 modes or fewer.")
     sfig = plt.figure()
-    if multimode && size(Iω, 2) > 1
+    if multimode && length(modeidx) > 1
         _plot_slice_mm(plt.gca(), specx, Iω, zslice, modes, log10; kwargs...)
         plt.legend(frameon=false)
     else
@@ -360,7 +361,7 @@ function spec_1D(output, zslice, specaxis=:λ; modeidx=nothing, λrange=(150e-9,
     plt.ylabel("Spectral energy density")
     log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
     plt.xlim(speclims...)
-    sfig.set_size_inches(7.5, 5)
+    sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
 end
 
