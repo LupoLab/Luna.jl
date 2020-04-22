@@ -47,7 +47,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakpower(grid),
                                Stats.peakintensity(grid, aeff),
                                Stats.fwhm_t(grid),
-                               Stats.zdw(m),
+                            #    Stats.zdw(m),
                                Stats.pressure(densityfun, gas))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 

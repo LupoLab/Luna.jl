@@ -4,7 +4,7 @@ import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import PyPlot: ColorMap, plt, pygui
 import FFTW
-import NumericalIntegration: integrate
+import Printf: @sprintf
 
 """
     cmap_white(cmap, N=512, n=8)
@@ -36,7 +36,7 @@ function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     rows = ceil(Int, N/cols)
     portrait && ((rows, cols) = (cols, rows))
     fig, axs = plt.subplots(rows, cols, num=title)
-    axs = permutedims(axs, (2, 1))
+    ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
     if cols*rows > N
         for axi in axs[N+1:end]
             axi.remove()
@@ -311,31 +311,76 @@ function _time2D(ax, t, z, I, trange; kwargs...)
     ax.set_ylabel("Distance (cm)")
 end
 
-function time_1D(output, zslice; trange=(-50e-15, 50e-15), kwargs...)
+function time_1D(output, zslice; modeidx=nothing, trange=(-50e-15, 50e-15), kwargs...)
     t, Et, zactual = getEt(output, zslice, trange=trange)
     It = abs2.(Et)
+    multimode, modes = get_modes(output)
+    if multimode
+        modeidx = isnothing(modeidx) ? (1:size(It, 2)) : modeidx 
+        It = It[:, modeidx, :]
+        modes = modes[modeidx]
+    end
 
     sfig = plt.figure()
-    plt.plot(t*1e15, 1e-9*It)
+    if multimode && size(It, 2) > 1
+        _plot_slice_mm(plt.gca(), t*1e15, 1e-9*It, zslice, modes; kwargs...)
+        plt.legend(frameon=false)
+    else
+        plt.plot(t*1e15, 1e-9*It; kwargs...)
+        plt.legend(string.(zactual.*100).*" cm ($modes)", frameon=false)
+    end
     plt.xlabel("Time (fs)")
     plt.ylabel("Power (GW)")
     plt.ylim(ymin=0)
-    plt.legend(string.(zactual.*100).*" cm")
+    sfig.set_size_inches(7.5, 5)
+    sfig.tight_layout()
 end
 
-function spec_1D(output, zslice, specaxis=:λ; λrange=(150e-9, 1200e-9),
+function spec_1D(output, zslice, specaxis=:λ; modeidx=nothing, λrange=(150e-9, 1200e-9),
                  log10=true, log10min=1e-6,
                  kwargs...)
     specx, Iω, zactual = getIω(output, specaxis, zslice)
     speclims, speclabel = getspeclims(λrange, specaxis)
+    multimode, modes = get_modes(output)
+    if multimode
+        modeidx = isnothing(modeidx) ? (1:size(Iω, 2)) : modeidx 
+        Iω = Iω[:, modeidx, :]
+        modes = modes[modeidx]
+    end
 
     sfig = plt.figure()
-    (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
+    if multimode && size(Iω, 2) > 1
+        _plot_slice_mm(plt.gca(), specx, Iω, zslice, modes, log10; kwargs...)
+        plt.legend(frameon=false)
+    else
+        (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
+        plt.legend(string.(zactual.*100).*" cm ($modes)", frameon=false)
+    end
     plt.xlabel(speclabel)
     plt.ylabel("Spectral energy density")
-    log10 && plt.ylim(maximum(Iω)*log10min, 3*maximum(Iω))
+    log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
     plt.xlim(speclims...)
-    plt.legend(string.(zactual.*100).*" cm")
+    sfig.set_size_inches(7.5, 5)
+    sfig.tight_layout()
 end
+
+dashes = [(0, (10, 1)),
+          (0, (5, 1)),
+          (0, (1, 0.5)),
+          (0, (1, 0.5, 1, 0.5, 3, 1)),
+          (0, (5, 1, 1, 1))]
+
+function _plot_slice_mm(ax, x, y, z, modes, log10=false; kwargs...)
+    pfun = (log10 ? ax.semilogy : ax.plot)
+    for sidx = 1:size(y, 3)
+        zs = @sprintf("%.2f cm", z[sidx]*100)
+        line = pfun(x, y[:, 1, sidx]; label="$zs cm ($(modes[1]))", kwargs...)[1]
+        for midx = 2:size(y, 2)
+            pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
+                 label="$zs cm ($(modes[midx]))"; kwargs...)
+        end
+    end
+end
+
 
 end
