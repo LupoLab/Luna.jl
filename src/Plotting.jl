@@ -317,7 +317,7 @@ function time_1D(output, zslice; modes=nothing, trange=(-50e-15, 50e-15), kwargs
     multimode, modestrs = get_modes(output)
     if multimode
         if modes == :sum
-            Iω = dropdims(sum(It, dims=2), dims=2)
+            It = dropdims(sum(It, dims=2), dims=2)
             modestrs = join(modestrs, "+")
             nmodes = 1
         else
