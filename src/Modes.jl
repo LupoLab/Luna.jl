@@ -1,5 +1,5 @@
 module Modes
-import Roots: fzero
+import Roots: find_zero, Order2
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
@@ -109,12 +109,36 @@ function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 
+"""
+    zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` within the range `ub` to `lb`.
+"""
 function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
     ubω = 2π*c/ub
     lbω = 2π*c/lb
     ω0 = missing
     try
-        ω0 = fzero(dispersion_func(m, 2, z=z), lbω, ubω)
+        ω0 = find_zero(dispersion_func(m, 2, z=z), (lbω, ubω))
+    catch
+    end
+    return 2π*c/ω0
+end
+
+"""
+    zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` with an initial guess of `λ0`.
+
+This method is faster than the bounded version if the ZDW is known to be close to `λ0`.
+"""
+function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+    ωguess = 2π*c/λ0 * 1e-15 # convert everything find_zero sees to units close to 1.0
+    dfun = dispersion_func(m, 2, z=z)
+    β2(ω) = 1e30 * dfun(ω*1e15)
+    ω0 = missing
+    try
+        ω0 = 1e15*find_zero(β2, ωguess, Order2(), rtol=rtol)
     catch
     end
     return 2π*c/ω0

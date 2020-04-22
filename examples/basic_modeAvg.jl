@@ -1,7 +1,4 @@
 using Luna
-import Logging
-import FFTW
-Logging.disable_logging(Logging.BelowMinLevel)
 
 a = 13e-6
 gas = :Ar
@@ -53,6 +50,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakintensity(grid, aeff),
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
+                               Stats.zdw(m),
                                Stats.pressure(densityfun, gas))
 output = Output.MemoryOutput(0, grid.zmax, 501, statsfun)
 

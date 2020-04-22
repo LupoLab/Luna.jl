@@ -219,18 +219,35 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
     end
 end
 
+"""
+    density(dfun)
+
+Create stats function to capture the gas density as defined by `dfun(z)`
+"""
 function density(dfun)
     function addstat!(d, Eω, Et, z, dz)
         d["density"] = dfun(z)
     end
 end
 
+"""
+    pressure(dfun, gas)
+
+Create stats function to capture the pressure. Like [`density`](@ref) but converts to
+pressure.
+"""
 function pressure(dfun, gas)
     function addstat!(d, Eω, Et, z, dz)
         d["pressure"] = PhysData.pressure(gas, dfun(z))
     end
 end
 
+"""
+    core_radius(a)
+
+Create stats function to capture core radius as defined by `a` (either a `Number` or a 
+callable `a(z)`)
+"""
 function core_radius(a::Number)
     function addstat!(d, Eω, Et, z, dz)
         d["core_radius"] = a
@@ -243,9 +260,35 @@ function core_radius(afun)
     end
 end
 
-function zdw(mode; ub=200e-9, lb=3000e-9)
+"""
+    zdw(mode)
+
+Create stats function to capture the zero-dispersion wavelength (ZDW).
+
+!!! warning
+    Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
+"""
+function zdw(mode::Modes.AbstractMode; ub=150e-9, lb=3000e-9)
+    λ00 = Modes.zdw(mode; ub=ub, lb=lb, z=0)
     function addstat!(d, Eω, Et, z, dz)
-        d["zdw"] = Modes.zdw(mode; ub=ub, lb=lb, z=z)
+        d["zdw"] = Modes.zdw(mode, λ00; z=z)
+        λ00 = d["zdw"]
+    end
+end
+
+"""
+    zdw(mode)
+
+Create stats function to capture the zero-dispersion wavelength (ZDW).
+
+!!! warning
+    Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
+"""
+function zdw(modes; ub=150e-9, lb=3000e-9)
+    λ00 = [Modes.zdw(mode; ub=ub, lb=lb, z=0) for mode in modes]
+    function addstat!(d, Eω, Et, z, dz)
+        d["zdw"] = [Modes.zdw(modes[ii], λ00[ii]; z=z) for ii in eachindex(modes)]
+        λ00 .= d["zdw"]
     end
 end
 

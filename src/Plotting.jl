@@ -88,6 +88,7 @@ function stats(output; kwargs...)
         fstats, (stats["pressure"], "Pressure (bar)"))
     haskey(stats, "dz") && push!(fstats, (1e6*stats["dz"], "Stepsize (μm)"))
     haskey(stats, "core_radius") && push!(fstats, (1e6*stats["core_radius"], "Core radius (μm)"))
+    haskey(stats, "zdw") && push!(fstats, (1e9*stats["zdw"], "ZDW (nm)"))
 
     z = output["stats"]["z"]*1e2
 
@@ -121,12 +122,19 @@ function stats(output; kwargs...)
             ax.plot(z, data; kwargs...)
             ax.set_xlabel("Distance (cm)")
             ax.set_ylabel(label)
-            multimode && (ndims(data) > 1) && ax.semilogy()
+            multimode && (ndims(data) > 1) && should_log10(data) && ax.semilogy()
             multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
         end
         ffig.tight_layout()
     end
 end
+
+function should_log10(A, tolfac=10)
+    mi = minimum(A; dims=2)
+    ma = maximum(A; dims=2)
+    any(ma./mi .> 10)
+end
+
 
 function getEω(grid::Grid.RealGrid, output)
     ω = grid.ω[grid.sidx]

@@ -33,7 +33,7 @@ dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
             #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
@@ -52,8 +52,9 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.peakintensity(grid, modes),
                                Stats.fwhm_t(grid),
                                Stats.fwhm_r(grid, modes),
-                               Stats.electrondensity(grid, ionrate, densityfun, modes),
-                               Stats.pressure(densityfun, gas)
+                            #    Stats.electrondensity(grid, ionrate, densityfun, modes),
+                               Stats.pressure(densityfun, gas),
+                               Stats.zdw(modes),
                                Stats.core_radius(a)
                                )
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
@@ -65,12 +66,4 @@ Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 Plotting.pygui(true)
 Plotting.stats(output)
 Plotting.prop_2D(output)
-
-##
-plt.figure()
-plt.plot(output["stats"]["z"].*1e2, output["stats"]["fwhm_r"]*1e6)
-plt.axhline(0.93675*a*1e6, linestyle="--", label="FWHM of EH11")
-plt.xlabel("Distance (cm)")
-plt.ylabel("Radial FWHM (μm)")
-plt.legend()
 

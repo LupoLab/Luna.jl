@@ -10,6 +10,10 @@ import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Roots: fzero
 import Dierckx
 
+#= Pre-created finite difference methods for speed.
+    Above order=7, this would create overflow errors in central_fwm() =#
+FDMs = [FiniteDifferences.central_fdm(order+6, order) for order=1:7]
+
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
     if order == 0
@@ -17,7 +21,7 @@ function derivative(f, x, order::Integer)
     else
         # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+6, order), y->f(y*scale), x/scale, adapt=2)/scale^order
+        FiniteDifferences.fdm(FDMs[order], y->f(y*scale), x/scale, adapt=2)/scale^order
     end
 end
 
