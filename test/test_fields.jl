@@ -317,14 +317,14 @@ end
     input!(Eω, grid, energy_t, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
 
     input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
     Eω = fill(0.0 + 0.0im, length(grid.ω))
     input!(Eω, grid, energy_t, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
 
     # non zero
     ϕ = π/3.6
@@ -368,12 +368,12 @@ end
     input!(Eω, grid, energy_t, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
 
     input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
     Eω = fill(0.0 + 0.0im, length(grid.ω))
     input!(Eω, grid, energy_t, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
 end
