@@ -433,7 +433,7 @@ function time_1D(output, zslice;
     multimode, modestrs = get_modes(output)
     if multimode
         if modes == :sum
-            y == :It || error("Modal sum can only be plotted for intensity!")
+            y == :It || error("Modal sum can only be plotted for power!")
             yt = dropdims(sum(yt, dims=2), dims=2)
             modestrs = join(modestrs, "+")
             nmodes = 1
