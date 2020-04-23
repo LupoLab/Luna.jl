@@ -2,6 +2,7 @@ module Modes
 import Roots: fzero
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
+import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
@@ -10,6 +11,9 @@ import LinearAlgebra: mul!
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
 abstract type AbstractMode end
+
+ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
+                       AbstractArray{T} where T <: Modes.AbstractMode}
 
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
@@ -119,6 +123,11 @@ function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
     return 2π*c/ω0
 end
 
+function β_ret(m::AbstractMode, ω; z=0, λ0)
+    ω0 = 2π*c/λ0
+    β.(m, ω; z=z) .- dispersion(m, 1, ω0; z=z)*(ω.-ω0) .- β(m, ω0; z=z)
+end
+
 "Check that function accepts z keyword argument and add it if necessary"
 function chkzkwarg(func)
     try
@@ -135,54 +144,52 @@ function chkzkwarg(func)
 end
 
 """
-Macro to create a delegated mode, which takes its methods from an existing mode except
-for those which are overwritten
-    Arguments:
-        mex: Expression which evaluates to a valid Mode(<:AbstractMode)
-        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
-    (Note: technically, exprs is a tuple of assignment expressions, which we are turning
-    into key-value pairs by only considering the two arguments to the = operator)
-"""
-macro delegated(mex, exprs...)
-    Tname = Symbol(:DelegatedMode, gensym())
-    @eval struct $Tname{mT}<:AbstractMode
-        m::mT # wrapped mode
-    end
-    funs = [kw.args[1] for kw in exprs]
-    for mfun in (:α, :β, :field, :dimlimits)
-        if mfun in funs
-            dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
-        else
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = ($mfun)(dm.m, args...; kwargs...)
-        end
-    end
-    quote
-        $Tname($(esc(mex))) # create mode from expression (evaluted in the caller by esc)
-    end
-end
+    overlap(m::AbstractMode, r, E; dim)
 
+Calculate mode overlap between radially symmetric field and radially symmetric mode.
+
+# Examples
+```jldoctest
+julia> a = 100e-6;
+julia> m = Capillary.MarcatilliMode(a, :He, 1.0);
+julia> unm = besselj_zero(0, 1);
+julia> r = collect(range(0, a, length=512));
+julia> Er = besselj.(0, unm*r/a);
+
+julia> η = Modes.overlap(m, r, Er; dim=1);
+julia> abs2(η[1]) ≈ 1
+true
+```
 """
-Macro to create a "fully delegated" or arbitrary mode from the four required functions,
-α, β, field and dimlimits.
-    Arguments:
-        exprs: keyword-argument-like tuple of expressions α=..., β=... etc
-"""
-macro arbitrary(exprs...)
-    Tname = Symbol(:ArbitraryMode, gensym())
-    @eval struct $Tname<:AbstractMode end
-    funs = [kw.args[1] for kw in exprs]
-    for mfun in (:α, :β, :field, :dimlimits)
-        if mfun in funs
-            dfun = exprs[findfirst(mfun.==funs)].args[2]
-            @eval ($mfun)(dm::$Tname, args...; kwargs...) = $dfun(args...; kwargs...)
-        else
-            error("Must define $mfun for arbitrary mode!")
+function overlap(m::AbstractMode, r, E; dim, norm=true)
+    dl = dimlimits(m) # integration limits
+    # sample the modal field at the same coords as E - select y polarisation component 
+    Er = [Exy(m, (ri, 0))[2] for ri in r]  #field [Ex(r, θ), Ey(r, θ)] of the mode
+    Er[r .> dl[3][1]] .= 0 
+    #= normalisation factor - we want the integral of the modal intensity over the waveguide
+        to be 1, but the  fields Exy(...) are normalised to produce modal power,
+        so they include the factor of cε₀/2 =#
+    normEr = 1/sqrt(c*ε_0/2) 
+
+    # Generate output array: same shape as input, except length in space is 1
+    shape = collect(size(E))
+    shape[dim] = 1
+    integral = zeros(eltype(E), Tuple(shape)) # make output array
+
+    # Indices to iterate over all other dimensions (e.g. polarisation, frequency)
+    idxlo = CartesianIndices(size(E)[1:dim-1])
+    idxhi = CartesianIndices(size(E)[dim+1:end])
+    for hi in idxhi
+        for lo in idxlo
+                # normalisation factor for the other field
+                normE = norm ? sqrt(2π*integrate(r, r.*abs2.(E[lo, :, hi]), Trapezoidal())) :
+                               1/sqrt(c*ε_0/2)
+                # E[lo, :, hi] is a vector
+                integrand = 2π .* E[lo, :, hi] .* Er.*r./(normE*normEr)
+                integral[lo, 1, hi] = integrate(r, integrand, Trapezoidal())
         end
     end
-    quote
-        $Tname()
-    end
+    return integral
 end
 
 struct ToSpace{mT,iT}
@@ -307,5 +314,96 @@ function to_space(Emω, xs, ms; components=:xy, z=0.0)
     to_space!(Erω, Emω, xs, ts, z=z)
     Erω
 end
+
+struct DelegatedMode{mT, idT} <: AbstractMode
+    mode::mT # wrapper mode
+    id::idT # unique identifier type to distinguish different DelegatedModes
+end
+
+function DelegatedMode(mode)
+    DelegatedMode(mode, Val(gensym()))
+end
+
+"""
+    delegated(mode, kwargs...)
+
+Create a delegated mode, which takes its methods from an existing mode except
+for those which are overwritten
+# Arguments:
+- `mode::AbstractMode`: The wrapped mode to which non-specified methods are delegated
+- `kwargs`: functions that override: `neff`, `field`, `dimlimits`, `Aeff`, or `N`.
+
+The functions given should have the **same signature** as the mode methods, i.e. take
+an `AbstractMode` as their first argument, **even if** they do not do anything with it. This
+is to ensure that the delegated functions can access the data of the wrapped mode if necessary.
+
+To override `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
+"""
+function delegated(mode; kwargs...)
+    dmode = DelegatedMode(mode)
+    mT = typeof(dmode) # this is unique for each instance by virtue of the id field
+    kw = Dict(kwargs)
+    for mfun in (:neff, :field, :dimlimits)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(dm.mode, args...; kwargs...)
+        else
+            @eval $mfun(dm::$mT, args...; kwargs...) = $mfun(dm.mode, args...; kwargs...)
+        end
+    end
+    for mfun in (:Aeff, :N)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(dm.mode, args...; kwargs...)
+        elseif (!haskey(kw, :dimlimits)) && (!haskey(kw, :field))
+            #= if dimlimits and field have not been changed, Aeff and N are the same too,
+                so we can safely delegate them to the wrapped mode (likely faster) =#
+            @eval $mfun(dm::$mT, args...; kwargs...) = $mfun(dm.mode, args...; kwargs...)
+        end
+    end
+    dmode
+end
+
+"""
+    arbitrary(kwargs...)
+
+Create an arbitrary mode, which takes its methods from given functions. 
+
+The functions given should have the same signature as defined `Luna.Modes`, **except** that
+the first argument (the `AbstractMode`) is omitted, e.g. for `neff` the function should be
+of the form `n(ω; z) = ...`
+
+To define `neff` with functions for `α` and `β`, create the `neff` function using
+[`neff_from_αβ`](@ref).
+"""
+function arbitrary(;kwargs...)
+    dmode = DelegatedMode(nothing)
+    mT = typeof(dmode)
+    kw = Dict(kwargs)
+    for mfun in (:neff, :field, :dimlimits)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(args...; kwargs...)
+        else
+            err = "method $mfun not defined for this mode"
+            @eval $mfun(dm::$mT, args...; kwargs...) = error($err)
+        end
+    end
+    for mfun in (:Aeff, :N)
+        if haskey(kw, mfun)
+            dfun = kw[mfun]
+            @eval $mfun(dm::$mT, args...; kwargs...) = $dfun(args...; kwargs...)
+        end
+    end
+    dmode
+end
+
+"""
+    neff_from_αβ(α, β)
+
+Create a closure converting the functions `α(ω; z)` and `β(ω; z)` into an effective index.
+"""
+neff_from_αβ(α, β) = (ω; z=0) -> c/ω * (β(ω; z=z) + 0.5im*α(ω; z=z))
 
 end

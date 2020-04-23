@@ -1,4 +1,5 @@
 module Nonlinear
+import Luna
 import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths, Utils
 import FFTW
@@ -243,7 +244,7 @@ harmonic generation component of the response.
 function RamanPolarField(t, ht; thg=true)
     h = zeros(length(t)*2) # note double grid size, see explanation below
     Utils.loadFFTwisdom()
-    FT = FFTW.plan_rfft(h, 1, flags=FFTW.PATIENT)
+    FT = FFTW.plan_rfft(h, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
     Utils.saveFFTwisdom()
     hω, Eω2, Pω = gethω!(h, t, ht, FT)
@@ -265,7 +266,7 @@ using response function `ht`.
 function RamanPolarEnv(t, ht)
     h = zeros(length(t)*2) # note double grid size, see explanation below
     Utils.loadFFTwisdom()
-    FT = FFTW.plan_fft(h, 1, flags=FFTW.PATIENT)
+    FT = FFTW.plan_fft(h, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
     Utils.saveFFTwisdom()
     hω, Eω2, Pω = gethω!(h, t, ht, FT)

@@ -7,6 +7,7 @@ import Random: AbstractRNG, randn, MersenneTwister
 import FFTW
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
+import Roots: fzero
 import Dierckx
 
 "Calculate derivative of function f(x) at value x using finite differences"
@@ -22,7 +23,7 @@ end
 
 "Gaussian or hypergaussian function (with std dev σ as input)"
 function gauss(x, σ; x0 = 0, power = 2)
-    return @. exp(-1//2 * ((x-x0)/σ)^power)
+    return exp(-1/2 * ((x-x0)/σ)^power)
 end
 
 "Gaussian or hypergaussian function (with FWHM as input)"
@@ -64,18 +65,128 @@ function rms_width(x::Vector, y; dim = 1)
 end
 
 """
-Trapezoidal integration for multi-dimensional arrays, in-place or with output array.
-In all of these functions, x can be an array (the x axis) or a number (the x axis spacing)
+    fwhm(x, y; method=:linear, baseline=false, minmax=:min)
 
-In-place integration for multi-dimensional arrays
+Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
+
+`method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
+`:nearest` finds the closest values either side of the crossing point and interpolates linearly.
+
+If `baseline` is true, the width is not taken at
+half the global maximum, but at half of the span of `y`.
+
+`minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
+point of y.
 """
+function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+    minmax in (:min, :max) || error("minmax has to be :min or :max")
+    if baseline
+        val = minimum(y) + 0.5*(maximum(y) - minimum(y))
+    else
+        val = 0.5*maximum(y)
+    end
+    if !(method in (:spline, :linear, :nearest))
+        error("Unknown FWHM method $method")
+    end
+    maxidx = argmax(y)
+    xmax = x[maxidx]
+    if method in (:nearest, :linear)
+        try
+            if minmax == :min
+                lefti = findlast((x .< xmax) .& (y .< val))
+                righti = findfirst((x .> xmax) .& (y .< val))
+                (method == :nearest) && return abs(x[lefti] - x[righti])
+                left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
+                right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
+            else
+                lefti = findfirst((x .< xmax) .& (y .> val))
+                righti = findlast((x .> xmax) .& (y .> val))
+                (method == :nearest) && return abs(x[lefti] - x[righti])
+                left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
+                right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
+            end
+            return abs(right - left)
+        catch
+            return NaN
+        end
+    elseif method == :spline
+        #spline method
+        try
+            spl = BSpline(x, y .- val)
+            r = roots(spl; maxn=10000)
+            rleft = r[r .< xmax]
+            rright = r[r .> xmax]
+            if minmax == :min
+                return abs(minimum(rright) - maximum(rleft))
+            else
+                return abs(maximum(rright) - minimum(rleft))
+            end
+        catch e
+            return NaN
+        end
+    else
+        error("Unknown FWHM method $method")
+    end
+end
+
+"""
+    linterpx(x1, x2, y1, y2, val)
+
+Given two points on a straight line, `(x1, y1)` and `(x2, y2)`, calculate the value of `x` 
+at which this straight line intercepts with `val`.
+
+# Examples
+```jldoctest
+julia> x1 = 0; x2 = 1; y1 = 0; y2 = 2; # y = 2x
+julia> linterpx(x1, x2, y1, y2, 0.5)
+0.25
+```
+"""
+function linterpx(x1, x2, y1, y2, val)
+    slope = (y2-y1)/(x2-x1)
+    icpt = y1 - slope*x1
+    (val-icpt)/slope
+end
+
+"""
+    hwhm(f, x0=0; direction=:fwd)
+
+Find the value `x` where the function `f(x)` drops to half of its maximum, which is located
+at `x0`. For `direction==:fwd`, search in the region `x > x0`, for :bwd, search in `x < x0`.
+"""
+function hwhm(f, x0=0; direction=:fwd)
+    m = f(x0)
+    fhalf(x) = f(x) - 0.5*m
+    if direction == :fwd
+        xhw = fzero(fhalf, x0, Inf)
+    elseif direction == :bwd
+        xhw = fzero(fhalf, -Inf, x0)
+    end
+    return abs(xhw - x0)
+end
+
+"""
+    cumtrapz!([out, ] y, x; dim=1)
+
+Trapezoidal integration for multi-dimensional arrays or vectors, in-place or with output array.
+
+If `out` is omitted, `y` is integrated in place. Otherwise the result is placed into `out`.
+
+`x` can be an array (the x axis) or a number (the x axis spacing).
+"""
+function cumtrapz! end
+
 function cumtrapz!(y, x; dim=1)
     idxlo = CartesianIndices(size(y)[1:dim-1])
     idxhi = CartesianIndices(size(y)[dim+1:end])
     _cumtrapz!(y, x, idxlo, idxhi)
 end
 
-"Inner function for multi-dimensional arrays - uses 1-D routine internally"
+"""
+    _cumtrapz!([out, ] y, x, idxlo, idxhi)
+
+Inner function for multi-dimensional `cumtrapz!` - uses 1-D routine internally
+"""
 function _cumtrapz!(y, x, idxlo, idxhi)
     for lo in idxlo
         for hi in idxhi
@@ -84,7 +195,6 @@ function _cumtrapz!(y, x, idxlo, idxhi)
     end
 end
 
-"In-place integration for 1-D arrays"
 function cumtrapz!(y::T, x) where T <: Union{SubArray, Vector}
     tmp = y[1]
     y[1] = 0
@@ -95,14 +205,12 @@ function cumtrapz!(y::T, x) where T <: Union{SubArray, Vector}
     end
 end
 
-"Integration into output array for multi-dimensional arrays"
 function cumtrapz!(out, y, x; dim=1)
     idxlo = CartesianIndices(size(y)[1:dim-1])
     idxhi = CartesianIndices(size(y)[dim+1:end])
     _cumtrapz!(out, y, x, idxlo, idxhi)
 end
 
-"Inner function for multi-dimensional arrays - uses 1-D routine internally"
 function _cumtrapz!(out, y, x, idxlo, idxhi)
     for lo in idxlo
         for hi in idxhi
@@ -111,7 +219,6 @@ function _cumtrapz!(out, y, x, idxlo, idxhi)
     end
 end
 
-"Integration into output array for 1-D array"
 function cumtrapz!(out, y::Union{SubArray, Vector}, x)
     out[1] = 0
     for i in 2:length(y)
@@ -119,16 +226,23 @@ function cumtrapz!(out, y::Union{SubArray, Vector}, x)
     end
 end
 
-"x axis spacing if x is given as an array"
-function _dx(x, i)
-    x[i] - x[i-1]
-end
+"""
+    _dx(x, i)
 
-"x axis spacing if x is given as a number (i.e. dx)"
-function _dx(x::Number, i)
-    x
-end
+Calculate the axis spacing at index `i` given an axis `x`. If `x` is a number, interpret this
+as `δx` directly
+"""
+_dx(x, i) = x[i] - x[i-1]
+_dx(δx::Number, i) = δx
 
+
+"""
+    cumtrapz(y, x; dim=1)
+
+Calculate the cumulative trapezoidal integral of `y`.
+
+`x` can be an array (the x axis) or a number (the x axis spacing).
+"""
 function cumtrapz(y, x; dim=1)
     out = similar(y)
     cumtrapz!(out, y, x; dim=dim) 
@@ -706,8 +820,8 @@ end
 
 Find the roots of the spline `rs`.
 """
-function roots(rs::RealBSpline)
-    Dierckx.roots(rs.rspl)
+function roots(rs::RealBSpline; maxn::Int=128)
+    Dierckx.roots(rs.rspl; maxn=maxn)
 end
 
 

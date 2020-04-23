@@ -1,9 +1,8 @@
 import Test: @test, @testset
 
 @testset "Full 3D propagation" begin
-import Luna
-import Luna: Grid, Maths, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Hankel
-import Logging
+using Luna
+Luna.set_fftw_mode(:estimate)
 import FFTW
 import Luna.PhysData: wlfreq
 import LinearAlgebra: norm
@@ -26,30 +25,21 @@ xygrid = Grid.FreeGrid(R, N)
 
 x = xygrid.x
 y = xygrid.y
-energyfun, energyfunω = NonlinearRHS.energy_free(grid, xygrid)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ) .* Maths.gauss.(xygrid.r, w0/2)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+energyfun, energyfunω = Fields.energyfuncs(grid, xygrid)
 
 dens0 = PhysData.density(gas, pres)
-densityfun = let dens0=dens0
-    z -> dens0
-end
+densityfun(z) = dens0
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
 normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas, pres))
 
-in1 = (func=gausspulse, energy=energy)
-inputs = (in1, )
+inputs = Fields.GaussGaussField(λ0=λ0, τfwhm=τ, energy=energy, w0=w0)
 
-Eω, transform, FT = Luna.setup(grid, xygrid, energyfun, densityfun, normfun, responses, inputs)
+Eω, transform, FT = Luna.setup(grid, xygrid, densityfun, normfun, responses, inputs)
 
-output = Output.MemoryOutput(0, grid.zmax, 21, (length(grid.ω), N, N))
+output = Output.MemoryOutput(0, grid.zmax, 21)
 
 Luna.run(Eω, grid, linop, transform, FT, output, max_dz=Inf, init_dz=1e-1)
 
@@ -58,7 +48,7 @@ Eout = output.data["Eω"] # (ω, ky, kx, z)
 ω0idx = argmin(abs.(grid.ω .- wlfreq(λ0)))
 λ0 = 2π*PhysData.c/grid.ω[ω0idx]
 w1 = w0*sqrt(1+(L*λ0/(π*w0^2))^2)
-Iω0_analytic = Maths.gauss(xygrid.x, w1/2) # analytical solution (in paraxial approx)
+Iω0_analytic = Maths.gauss.(xygrid.x, w1/2) # analytical solution (in paraxial approx)
 
 Eω0yx = FFTW.ifft(Eout[ω0idx, :, :, end], (1, 2))
 Iω0yx = abs2.(Eω0yx)

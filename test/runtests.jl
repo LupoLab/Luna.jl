@@ -29,7 +29,7 @@ end
 end
 
 @testset "ODE Solver" begin
-    @info("================= test_rect_rk45.jl")
+    @info("================= test_rk45.jl")
     include(joinpath(testdir, "test_rk45.jl"))
 end
 
@@ -72,6 +72,11 @@ end
     include(joinpath(testdir, "test_gradient.jl"))
 end
 
+@testset "Tapers" begin
+    @info("================= test_tapers.jl")
+    include(joinpath(testdir, "test_tapers.jl"))
+end
+
 @testset "Scans" begin
     @info("================= test_scans.jl")
     include(joinpath(testdir, "test_scans.jl"))
@@ -92,6 +97,11 @@ end
     include(joinpath(testdir, "test_linops.jl"))
 end
 
+@testset "Modes" begin
+    @info("================= test_modes.jl")
+    include(joinpath(testdir, "test_modes.jl"))
+end
+
 @testset "Radial Propagation" begin
     @info("================= test_radial.jl")
     include(joinpath(testdir, "test_radial.jl"))
@@ -100,6 +110,16 @@ end
 @testset "Full 3D Propagation" begin
     @info("================= test_full_freespace.jl")
     include(joinpath(testdir, "test_full_freespace.jl"))
+end
+
+@testset "Antiresonant modes" begin
+    @info("================= test_antiresonant.jl")
+    include(joinpath(testdir, "test_antiresonant.jl"))
+end
+
+@testset "Fields" begin
+    @info("================= test_fields.jl")
+    include(joinpath(testdir, "test_fields.jl"))
 end
 
 end
