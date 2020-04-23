@@ -28,8 +28,9 @@ end
 """
     subplotgrid(N, portrait=true, kwargs...)
 
-Create a figure with a grid of `N` subplots with. If `portrait` is `true`, try to lay out
-the grid in portrait orientation (taller than wide), otherwise landscape (wider than tall).
+Create a figure with `N` subplots laid out in a grid that is as close to square as possible.
+If `portrait` is `true`, try to lay out the grid in portrait orientation (taller than wide),
+otherwise landscape (wider than tall).
 """
 function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     cols = ceil(Int, sqrt(N))
