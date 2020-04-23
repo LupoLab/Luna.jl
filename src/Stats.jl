@@ -14,7 +14,7 @@ density.
 function ω0(grid)
     addstat! = let ω=grid.ω
         function addstat!(d, Eω, Et, z, dz)
-            d["ω0"] = Maths.moment(ω, abs2.(Eω))
+            d["ω0"] = dropdims(Maths.moment(ω, abs2.(Eω); dim=1), dims=1)
         end
     end
     return addstat!

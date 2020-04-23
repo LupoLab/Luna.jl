@@ -99,6 +99,7 @@ function stats(output; kwargs...)
     haskey(stats, "fwhm_t_min") && push!(pstats, (1e15*stats["fwhm_t_min"], "min FWHM (fs)"))
     haskey(stats, "fwhm_t_max") && push!(pstats, (1e15*stats["fwhm_t_max"], "max FWHM (fs)"))
     haskey(stats, "fwhm_r") && push!(pstats, (1e6*stats["fwhm_r"], "Radial FWHM (μm)"))
+    haskey(stats, "ω0") && push!(pstats, (1e9*wlfreq.(stats["ω0"]), "Central wavelength (nm)"))
 
     fstats = [] # fibre/waveguide/propagation statistics
     haskey(stats, "electrondensity") && push!(
@@ -256,24 +257,42 @@ can be a single number or an array.
 """
 getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
 
-function getEt(grid, output; trange, oversampling=4)
+function getEt(grid, output; trange, oversampling=4, bandpass=nothing)
     t = grid.t
-    Etout = envelope(grid, output["Eω"])
+    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    Etout = envelope(grid, Eω)
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end])
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
     return to, Eto
 end
 
-function getEt(grid, output, zslice; trange, oversampling=4)
+function getEt(grid, output, zslice; trange, oversampling=4, bandpass=nothing)
     t = grid.t
-    Etout = envelope(grid, output["Eω"])
+    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    Etout = envelope(grid, Eω)
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end-1])
     zidx = nearest_z(output, zslice)
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs, zidx], factor=oversampling)
     return to, Eto, output["z"][zidx]
 end
+
+window_maybe(ω, Eω, ::Nothing) = Eω
+window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(ω, sort(wlfreq.(collect(win)))...)
+function window_maybe(ω, Eω, win::NTuple{2, Number})
+    δω = abs(ω[2] - ω[1])
+    w = 100*δω # magic number
+    ωmin, ωmax = sort(wlfreq.(collect(win)))
+    Eω.*Maths.planck_taper(ω, ωmin-w, ωmin, ωmax, ωmax+w)
+end
+window_maybe(ω, Eω, window) = Eω.*window
+
+window_str(::Nothing) = ""
+window_str(win::NTuple{4, Number}) = @sprintf("%.1f nm to %.1f nm", 1e9.*win[2:3]...)
+window_str(win::NTuple{2, Number}) = @sprintf("%.1f nm to %.1f nm", 1e9.*win...)
+window_str(window) = "custom bandpass"
+
 
 """
     envelope(grid, Eω)
@@ -306,11 +325,12 @@ the sum of all modes.
 - `dBmin::Float64` : lower colour-scale limit for logarithmic spectral plot
 """
 function prop_2D(output, specaxis=:f;
-                 λrange=(150e-9, 2000e-9), trange=(-50e-15, 50e-15),
-                 dBmin=-60, kwargs...)
+                 trange=(-50e-15, 50e-15), bandpass=nothing,
+                 λrange=(150e-9, 2000e-9), dBmin=-60,
+                 kwargs...)
     z = output["z"]*1e2
     specx, Iω = getIω(output, specaxis)
-    t, Et = getEt(output, trange=trange)
+    t, Et = getEt(output, trange=trange, bandpass=bandpass)
     It = abs2.(Et)
 
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
@@ -319,9 +339,11 @@ function prop_2D(output, specaxis=:f;
     multimode, modes = get_modes(output)
 
     if multimode
-        _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
+        _prop2D_mm(modes, t, z, specx, It, Iω,
+                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
     else
-        _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
+        _prop2D_sm(t, z, specx, It, Iω,
+                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
     end    
 end
 
@@ -346,8 +368,9 @@ function getspeclims(λrange, specaxis)
 end
 
 # single-mode 2D propagation plots
-function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
-    pfig, axs = plt.subplots(1, 2, num="Propagation")
+function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
+    num = "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
     _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
@@ -358,11 +381,12 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kw
 end
 
 # multi-mode 2D propagation plots
-function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
+function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
     pfigs = []
     Iω = Maths.normbymax(Iω)
     for mi in 1:length(modes)
-        pfig, axs = plt.subplots(1, 2, num="Propagation ($(modes[mi]))")
+        num = "Propagation ($(modes[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+        pfig, axs = plt.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
 
@@ -370,7 +394,8 @@ function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dB
         push!(pfigs, pfig)
     end
 
-    pfig, axs = plt.subplots(1, 2, num="Propagation (all modes)")
+    num = "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
     _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
@@ -422,9 +447,10 @@ Other `kwargs` are passed onto `plt.plot`.
 """
 function time_1D(output, zslice;
                 y=:Pt, modes=nothing,
-                oversampling=4, trange=(-50e-15, 50e-15),
+                oversampling=4, trange=(-50e-15, 50e-15), bandpass=nothing,
                 kwargs...)
-    t, Et, zactual = getEt(output, zslice, trange=trange, oversampling=oversampling)
+    t, Et, zactual = getEt(output, zslice,
+                           trange=trange, oversampling=oversampling, bandpass=bandpass)
     if y == :Pt
         yt = abs2.(Et)
     elseif y == :Et

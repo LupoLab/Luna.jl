@@ -282,10 +282,14 @@ function errfun_window(x, xmin, xmax, width_left, width_right)
 end
 
 """
-Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)):
-    xmin: lower limit (window is 0 here)
-    xmax: upper limit (window is 0 here)
-    ε: fraction of window width over which to increase from 0 to 1
+    planck_taper(x, xmin, xmax, ε)
+
+Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)).
+
+#Arguments
+-`xmin` : lower limit (window is 0 here)
+-`xmax` : upper limit (window is 0 here)
+-`ε` : fraction of window width over which to increase from 0 to 1
 """
 function planck_taper(x::AbstractArray, xmin, xmax, ε)
     x0 = (xmax + xmin) / 2
@@ -299,9 +303,11 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
 end
 
 """
+    planck_taper(x, left0, left1, right1, right0)
+
 Planck taper window, but finding the taper width by defining 4 points:
-The window increases from 0 to 1 between left0 and left1, and then drops again
-to 0 between right1 and right0
+The window increases from 0 to 1 between `left0` and `left1`, and then drops again
+to 0 between `right1` and `right0`.
 """
 function planck_taper(x::AbstractArray, left0, left1, right1, right0)
     x0 = (right0 + left0) / 2
