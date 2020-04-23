@@ -194,7 +194,7 @@ function getEω(grid, output, zslice)
 end
 
 """
-    get Iω(ω, Eω, specaxis)
+    getIω(ω, Eω, specaxis)
 
 Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
 `Eω`, assumed to be correctly normalised (see [`getEω`](@ref)). `specaxis` determines the
@@ -229,8 +229,8 @@ end
 
 Calculate the correctly normalised frequency-domain field and convert it to spectral
 energy density on x-axis `specaxis` (`:f`, `:ω`, or `:λ`). If `zslice` is given,
-returs only the slices of `Eω` closest to the given distances.`zslice` can be a single
-number or an array.`specaxis` determines the
+returs only the slices of `Eω` closest to the given distances. `zslice` can be a single
+number or an array. `specaxis` determines the
 x-axis:
 
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
@@ -249,7 +249,7 @@ end
     getEt(output[, zslice])
 
 Get the envelope time-domain electric field (including the carrier wave) from the `output`.
-If `zslice` is given, returs only the slices of `Eω` closest to the given distances.`zslice`
+If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
 can be a single number or an array.
 """
 getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
@@ -274,7 +274,7 @@ function getEt(grid, output, zslice; trange, oversampling=4)
 end
 
 """
-    envelope(grid, t, Eω)
+    envelope(grid, Eω)
 
 Get the envelope electric field including the carrier wave from the frequency-domain field
 `Eω` sampled on `grid`.
@@ -404,11 +404,16 @@ end
 """
     time_1D(output, zslice, y=:It, kwargs...)
 
-Create lineplots of time-domain slice(s) of the propagation. The keyword argument `y` determines
-what is plotted: `:It` (power, default), `:Esq` (squared electric field) or `:Et` (electric field)
+Create lineplots of time-domain slice(s) of the propagation.
+
+The keyword argument `y` determines
+what is plotted: `:It` (power, default), `:Esq` (squared electric field) or `:Et` (electric field).
+
 The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
-a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted. The
-keyword argument `oversampling` determines the amount of oversampling done before plotting.
+a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted.
+
+The keyword argument `oversampling` determines the amount of oversampling done before plotting.
+
 Other `kwargs` are passed onto `plt.plot`.
 """
 function time_1D(output, zslice;
@@ -463,11 +468,15 @@ end
 """
     spec_1D(output, zslice, specaxis=:λ, log10=true, log10min=1e-6)
 
-Create lineplots of spectral-domain slices of the propagation. x-axis is determined by
-`specaxis` (see [`getIω`](@ref)). If `log10` is true, plot on a logarithmic scale, with
-a y-axis range of `log10min`. 
+Create lineplots of spectral-domain slices of the propagation.
+
+The x-axis is determined by `specaxis` (see [`getIω`](@ref)).
+
+If `log10` is true, plot on a logarithmic scale, with a y-axis range of `log10min`. 
+
 The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
 a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted.
+
 Other `kwargs` are passed onto `plt.plot`.
 """
 function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1200e-9),
