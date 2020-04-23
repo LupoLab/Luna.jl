@@ -327,53 +327,71 @@ end
     @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
 
     # non zero
-    ϕ = π/3.6
 
     #real 
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 0.0
-    grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
+    grid = Grid.RealGrid(1.0, λ0, (100e-9, 3000e-9), 1e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
-    Eω = fill(0.0 + 0.0im, length(grid.ω))
-    input!(Eω, grid, energy_t, FT)
-    Et = FT \ Eω
-    It = abs2.(Maths.hilbert(Et))
-    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-20, atol=1e-20)
-    
-    input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
-    Eω = fill(0.0 + 0.0im, length(grid.ω))
-    input!(Eω, grid, energy_t, FT)
-    Et = FT \ Eω
-    It = abs2.(Maths.hilbert(Et))
-    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    # Make CEO exact multiple of one grid point to avoid issues with argmax() in getceo()
+    δt = grid.t[2] - grid.t[1]
+    for i = 1:10
+        ϕ = i*δt*PhysData.wlfreq(λ0)
+
+        input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        Eω = fill(0.0 + 0.0im, length(grid.ω))
+        input!(Eω, grid, energy_t, FT)
+        Et = FT \ Eω
+        It = abs2.(Maths.hilbert(Et))
+        @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-10)
+        
+        input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        Eω = fill(0.0 + 0.0im, length(grid.ω))
+        input!(Eω, grid, energy_t, FT)
+        Et = FT \ Eω
+        It = abs2.(Maths.hilbert(Et))
+        @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-10)
+    end
 
     # Envelope
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 0.0
-    grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
+    grid = Grid.EnvGrid(1.0, λ0, (100e-9, 3000e-9), 1e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
-    Eω = fill(0.0 + 0.0im, length(grid.ω))
-    input!(Eω, grid, energy_t, FT)
-    Et = FT \ Eω
-    It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    # Make CEO exact multiple of one grid point to avoid issues with argmax() in getceo()
+    δt = grid.t[2] - grid.t[1]
 
-    input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
-    Eω = fill(0.0 + 0.0im, length(grid.ω))
-    input!(Eω, grid, energy_t, FT)
-    Et = FT \ Eω
-    It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    for i = 1:10
+        ϕ = i*δt*PhysData.wlfreq(λ0)
+
+        input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        Eω = fill(0.0 + 0.0im, length(grid.ω))
+        input!(Eω, grid, energy_t, FT)
+        Et = FT \ Eω
+        It = abs2.(Et)
+        @test isapprox(
+            getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)),
+            ϕ,
+            rtol=1e-10)
+
+        input! = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        Eω = fill(0.0 + 0.0im, length(grid.ω))
+        input!(Eω, grid, energy_t, FT)
+        Et = FT \ Eω
+        It = abs2.(Et)
+        @test isapprox(
+            getceo(grid.t,real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)),
+            ϕ,
+            rtol=1e-10)
+    end
 end
