@@ -1,33 +1,20 @@
-import Luna
-import Luna: Grid, Maths, RectModes, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps
-import Logging
-import FFTW
-import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import DSP.Unwrap: unwrap
-
-import PyPlot:pygui, plt
+using Luna
 
 a = 50e-6
 b = 10e-6
 gas = :Ar
 pres = 5
+L = 15e-2 
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
 energy = 5e-6
 
-grid = Grid.EnvGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
 m = RectModes.RectMode(a, b, gas, pres, :Al)
 aeff(z) = Modes.Aeff(m, z=z)
-energyfun = NonlinearRHS.energy_modal()
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    Et = @. sqrt(It)
-end
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -35,22 +22,23 @@ densityfun(z) = dens0
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-in1 = (func=gausspulse, energy=energy)
-inputs = (in1, )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+import FFTW
 
 ω = grid.ω
 t = grid.t
@@ -70,9 +58,10 @@ zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 energy = zeros(length(zout))
 for ii = 1:size(Etout, 2)
-    energy[ii] = energyfun(t, Etout[:, ii])
+    energy[ii] = energyfun(Etout[:, ii])
 end
 
+import PyPlot:pygui, plt
 pygui(true)
 plt.figure()
 plt.pcolormesh(f, zout, transpose(FFTW.fftshift(Ilog, 1)))

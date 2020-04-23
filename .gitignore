@@ -8,3 +8,4 @@ deps/deps.jl
 Manifest.toml
 _git2_*
 docs/build
+*.info

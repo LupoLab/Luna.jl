@@ -12,6 +12,9 @@ export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, 
 
 abstract type AbstractMode end
 
+ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
+                       AbstractArray{T} where T <: Modes.AbstractMode}
+
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 

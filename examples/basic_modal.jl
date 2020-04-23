@@ -1,33 +1,23 @@
 using Luna
-import FFTW
-import LinearAlgebra: mul!, ldiv!
-
-import DSP.Unwrap: unwrap
-
-import PyPlot:pygui, plt
 
 a = 13e-6
 gas = :Ar
 pres = 5
+flength = 15e-2
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 1e-6
 
 modes = (
     Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -38,10 +28,9 @@ ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
             #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = ((1,(in1,)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :y; full=false)
 
 statsfun = Stats.collect_stats(grid, Eω,

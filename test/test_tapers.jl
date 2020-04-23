@@ -19,14 +19,9 @@ afun = let a0=a0, aL=aL, L=L
     afun(z) = a0 + (aL-a0)*z/L
 end
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 ## mode-average
@@ -35,9 +30,8 @@ m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
 linop, βfun = LinearOps.make_linop(grid, m, λ0)
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
-in1 = (func=gausspulse, energy=600e-9)
-inputs = (in1, )
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=600e-9)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
@@ -51,9 +45,8 @@ modes = (
 )
 linop = LinearOps.make_linop(grid, modes, λ0)
 normfun = NonlinearRHS.norm_modal(grid.ω)
-in1 = (func=gausspulse, energy=600e-9)
-inputs = ((1,(in1,)),)
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=600e-9)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                modes, :y, full=false)
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
@@ -78,14 +71,9 @@ afun = let a=a
     z -> a
 end
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+energyfun, energyfunω = Fields.energyfuncs(grid)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 ## mode-average
@@ -94,9 +82,8 @@ m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
 linop, βfun = LinearOps.make_linop(grid, m, λ0)
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
-in1 = (func=gausspulse, energy=1e-6)
-inputs = (in1, )
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
@@ -107,11 +94,10 @@ end
 Iωavg_c = let
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
-in1 = (func=gausspulse, energy=1e-6)
-inputs = (in1, )
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)

@@ -1,34 +1,22 @@
 using Luna
-import Logging
-import FFTW
-import NumericalIntegration: integrate, SimpsonEven
-Logging.disable_logging(Logging.BelowMinLevel)
-
-# import DSP.Unwrap: unwrap
-
-import PyPlot:pygui, plt
 
 a = 13e-6
 gas = :Ar
 pres = 5
+flength = 15e-2
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 1e-6
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
 m = Antiresonant.ZeisbergerMode(a, gas, pres, wallthickness=200e-9, loss=false)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
-
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+energyfun, energyfunω = Fields.energyfuncs(grid)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -44,11 +32,10 @@ linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = (in1, )
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(
-    grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, normfun, responses, inputs, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
@@ -59,9 +46,13 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.fwhm_t(grid),
                                Stats.electrondensity(grid, ionrate, densityfun, aeff),
                                Stats.density(densityfun))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),), statsfun)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+import FFTW
+import PyPlot:pygui, plt
+
 ##
 ω = grid.ω
 t = grid.t
@@ -80,8 +71,8 @@ Itlog = log10.(Maths.normbymax(It))
 zpeak = argmax(dropdims(maximum(It, dims=1), dims=1))
 
 Et = Maths.hilbert(Etout)
-energy = [energyfun(t, Etout[:, ii]) for ii=1:size(Etout, 2)]
-energyω = [energyfunω(ω, Eout[:, ii]) for ii=1:size(Eout, 2)]
+energy = [energyfun(Etout[:, ii]) for ii=1:size(Etout, 2)]
+energyω = [energyfunω(Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
 ##
