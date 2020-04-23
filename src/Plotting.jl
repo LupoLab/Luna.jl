@@ -165,8 +165,10 @@ end
     getEω(output[, zslice])
 
 Get frequency-domain modal field from `output` with correct normalisation (i.e. 
-`abs2.(Eω)`` gives spectral energy density). If `zslice` is given, return only the slices
-of `Eω` closest to the given distances. `zslice` can be a single number or an array.
+`abs2.(Eω)`` gives angular-frequency spectral energy density in J/(rad/s)).
+
+If `zslice` (number or array) is given, return only the slices of `Eω` closest to the given
+distances.
 """
 getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
 
@@ -201,7 +203,7 @@ Get spectral energy density and x-axis given a frequency array `ω` and frequenc
 x-axis:
 
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
-- :ω -> x-axis is frequency in rad/s and Iω is in J/(rad/s)
+- :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
 """
 function getIω(ω, Eω, specaxis)
@@ -234,7 +236,7 @@ number or an array. `specaxis` determines the
 x-axis:
 
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
-- :ω -> x-axis is frequency in rad/s and Iω is in J/(rad/s)
+- :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
 """
 getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
@@ -394,20 +396,22 @@ end
 
 # a single time-domain propagation plot
 function _time2D(ax, t, z, I, trange; kwargs...)
-    im = ax.pcolormesh(t*1e15, z, transpose(I); kwargs...)
-    plt.colorbar(im, ax=ax)
+    Pfac, unit = power_unit(I, :Pt)
+    im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); kwargs...)
+    cb = plt.colorbar(im, ax=ax)
+    cb.set_label("Power ($unit)")
     ax.set_xlim(trange.*1e15)
     ax.set_xlabel("Time (fs)")
     ax.set_ylabel("Distance (cm)")
 end
 
 """
-    time_1D(output, zslice, y=:It, kwargs...)
+    time_1D(output, zslice, y=:Pt, kwargs...)
 
 Create lineplots of time-domain slice(s) of the propagation.
 
 The keyword argument `y` determines
-what is plotted: `:It` (power, default), `:Esq` (squared electric field) or `:Et` (electric field).
+what is plotted: `:Pt` (power, default), `:Esq` (squared electric field) or `:Et` (electric field).
 
 The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
 a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted.
@@ -417,11 +421,11 @@ The keyword argument `oversampling` determines the amount of oversampling done b
 Other `kwargs` are passed onto `plt.plot`.
 """
 function time_1D(output, zslice;
-                y=:It, modes=nothing,
+                y=:Pt, modes=nothing,
                 oversampling=4, trange=(-50e-15, 50e-15),
                 kwargs...)
     t, Et, zactual = getEt(output, zslice, trange=trange, oversampling=oversampling)
-    if y == :It
+    if y == :Pt
         yt = abs2.(Et)
     elseif y == :Et
         yt = real(Et)
@@ -433,7 +437,7 @@ function time_1D(output, zslice;
     multimode, modestrs = get_modes(output)
     if multimode
         if modes == :sum
-            y == :It || error("Modal sum can only be plotted for power!")
+            y == :Pt || error("Modal sum can only be plotted for power!")
             yt = dropdims(sum(yt, dims=2), dims=2)
             modestrs = join(modestrs, "+")
             nmodes = 1
@@ -445,25 +449,41 @@ function time_1D(output, zslice;
         end
     end
 
+    yfac, unit = power_unit(abs2.(Et), y)
+
     sfig = plt.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), t*1e15, 1e-9*yt, zslice, modestrs; kwargs...)
+        _plot_slice_mm(plt.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
         plt.legend(frameon=false)
     else
-        plt.plot(t*1e15, 1e-9*yt; kwargs...)
+        plt.plot(t*1e15, yfac*yt; kwargs...)
+        zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         if multimode
-            plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+            plt.legend(zs.*" ($modestrs)", frameon=false)
         else
-            plt.legend(string.(zactual.*100).*" cm", frameon=false)
+            plt.legend(zs, frameon=false)
         end
     end
     plt.xlabel("Time (fs)")
-    ylab = y == :Et ?  "Field (a.u.)" : "Power (GW)"
+    ylab = y == :Et ?  "Field ($unit)" : "Power ($unit)"
     plt.ylabel(ylab)
     y == :Et || plt.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
 end
+
+# Automatically find power unit depending on scale of electric field.
+function power_unit(Pt, y)
+    units = ["kW", "MW", "GW", "TW", "PW"]
+    Pmax = maximum(Pt)
+    oom = min(floor(Int, log10(Pmax)/3), 5) # maximum unit is PW
+    powerfac = 1/10^(oom*3)
+    if y == :Et
+        sqrt(powerfac), "$(units[oom])\$^{1/2}\$"
+    else
+        return powerfac, units[oom]
+    end
+end    
 
 """
     spec_1D(output, zslice, specaxis=:λ, log10=true, log10min=1e-6)
@@ -503,14 +523,15 @@ function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1
 
     sfig = plt.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), specx, Iω, zslice, modestrs, log10; kwargs...)
+        _plot_slice_mm(plt.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
         plt.legend(frameon=false)
     else
         (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
+        zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         if multimode
-            plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+            plt.legend(zs.*" ($modestrs)", frameon=false)
         else
-            plt.legend(string.(zactual.*100).*" cm", frameon=false)
+            plt.legend(zs, frameon=false)
         end
     end
     plt.xlabel(speclabel)
@@ -531,10 +552,10 @@ function _plot_slice_mm(ax, x, y, z, modestrs, log10=false; kwargs...)
     pfun = (log10 ? ax.semilogy : ax.plot)
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
-        line = pfun(x, y[:, 1, sidx]; label="$zs cm ($(modestrs[1]))", kwargs...)[1]
+        line = pfun(x, y[:, 1, sidx]; label="$zs ($(modestrs[1]))", kwargs...)[1]
         for midx = 2:size(y, 2) # iterate over modes
             pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
-                 label="$zs cm ($(modestrs[midx]))"; kwargs...)
+                 label="$zs ($(modestrs[midx]))"; kwargs...)
         end
     end
 end
