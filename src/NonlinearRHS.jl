@@ -7,6 +7,7 @@ import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
+import Base.Threads: nthreads, @threads, threadid
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -119,6 +120,7 @@ function norm_mode_average(ω, βfun!, Aeff)
     return norm
 end
 
+
 "Accumulate responses induced by Et in Pt"
 function Et_to_Pt!(Pt, Et, responses)
     for resp in responses
@@ -129,6 +131,23 @@ end
 function Et_to_Pt!(Pt, Et, responses, idcs)
     for i in idcs
         Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses)
+    end
+end
+
+struct NonlinearResp{rT}
+    responses::Array{rT,1}
+    function NonlinearResp(responses::rT) where rT
+        new{rT}([deepcopy(responses) for i = 1:nthreads()])
+    end
+end
+
+function (n::NonlinearResp)(Pt, Et)
+    Et_to_Pt!(Pt, Et, n.responses[threadid()])
+end
+
+function (n::NonlinearResp)(Pt, Et, idcs)
+    @threads for i in idcs
+        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), n.responses[threadid()])
     end
 end
 
@@ -347,7 +366,7 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices(size(Pto)[2:end])
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
+    TransRadial(HT, FT, normfun, NonlinearResp(responses), grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
 end
 
 """
@@ -381,7 +400,7 @@ function (t::TransRadial)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
     ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    t.resp(t.Pto, t.Eto, t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
@@ -471,7 +490,7 @@ function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
-    TransFree(FT, normfun, responses, grid, xygrid, densityfun,
+    TransFree(FT, normfun, NonlinearResp(responses), grid, xygrid, densityfun,
               Pto, Eto, Eωo, Pωo, scale, idcs)
 end
 
@@ -513,7 +532,7 @@ function (t::TransFree)(nl, Eωk, z)
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    t.resp(t.Pto, t.Eto, t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
