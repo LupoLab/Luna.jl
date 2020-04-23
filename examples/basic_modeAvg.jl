@@ -37,17 +37,8 @@ normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 Eω, transform, FT = Luna.setup(
     grid, densityfun, normfun, responses, inputs, aeff)
 
-statsfun = Stats.collect_stats(grid, Eω,
-                               Stats.ω0(grid),
-                               Stats.energy(grid, energyfunω),
-                               Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
-                               Stats.peakpower(grid),
-                               Stats.peakintensity(grid, aeff),
-                               Stats.fwhm_t(grid),
-                               Stats.electrondensity(grid, ionrate, densityfun, aeff),
-                               Stats.zdw(m),
-                               Stats.pressure(densityfun, gas))
-output = Output.MemoryOutput(0, grid.zmax, 501, statsfun)
+statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
