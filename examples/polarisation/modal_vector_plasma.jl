@@ -13,8 +13,9 @@ grid = Grid.RealGrid(flength, λ0, (200e-9, 3000e-9), 2e-12)
 
 modes = (
     Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-    Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false),
 )
+nmodes = length(modes)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
@@ -31,7 +32,8 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
-inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+inputs = ((mode=1, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)),
+          (mode=2, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)))
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                                modes, :xy; full=false)
