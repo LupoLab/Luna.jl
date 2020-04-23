@@ -93,7 +93,10 @@ function stats(output; kwargs...)
         str = "Energy "*replace(k[8:end], "_" => " ")*" (μJ)"
         push!(pstats, (1e6*stats[k], str))
     end
-    haskey(stats, "peakpower") && push!(pstats, (1e-9*stats["peakpower"], "Peak power (GW)"))
+    if haskey(stats, "peakpower")
+        Pfac, unit = power_unit(stats["peakpower"])
+        push!(pstats, (Pfac*stats["peakpower"], "Peak power ($unit)"))
+    end
     haskey(stats, "peakintensity") && push!(
         pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm\$^2\$)"))
     haskey(stats, "fwhm_t_min") && push!(pstats, (1e15*stats["fwhm_t_min"], "min FWHM (fs)"))
@@ -103,9 +106,9 @@ function stats(output; kwargs...)
 
     fstats = [] # fibre/waveguide/propagation statistics
     haskey(stats, "electrondensity") && push!(
-        fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-1}\$)"))
+        fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
     haskey(stats, "density") && push!(
-        fstats, (stats["density"], "Density (cm\$^{-1}\$)"))
+        fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
     haskey(stats, "pressure") && push!(
         fstats, (stats["pressure"], "Pressure (bar)"))
     haskey(stats, "dz") && push!(fstats, (1e6*stats["dz"], "Stepsize (μm)"))
@@ -421,7 +424,7 @@ end
 
 # a single time-domain propagation plot
 function _time2D(ax, t, z, I, trange; kwargs...)
-    Pfac, unit = power_unit(I, :Pt)
+    Pfac, unit = power_unit(I)
     im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); kwargs...)
     cb = plt.colorbar(im, ax=ax)
     cb.set_label("Power ($unit)")
@@ -499,7 +502,7 @@ function time_1D(output, zslice;
 end
 
 # Automatically find power unit depending on scale of electric field.
-function power_unit(Pt, y)
+function power_unit(Pt, y=:Pt)
     units = ["kW", "MW", "GW", "TW", "PW"]
     Pmax = maximum(Pt)
     oom = min(floor(Int, log10(Pmax)/3), 5) # maximum unit is PW

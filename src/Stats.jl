@@ -199,8 +199,8 @@ If oversampling > 1, the field is oversampled before the calculation
     Oversampling can lead to a significant performance hit
 """
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
-                         modes::Modes.ModeCollection,
-                         components=:y; oversampling=1) where N
+                         modes::Modes.ModeCollection;
+                         components=:y, oversampling=1) where N
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
     function ionfrac!(out, Et)
