@@ -353,7 +353,7 @@ end
 function show(io::IO, t::TransRadial)
     grid = "grid type: $(typeof(t.grid))"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
-    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp.responses[1]], "\n    ")
     nr = "radial points: $(t.QDHT.N)"
     R = "aperture: $(t.QDHT.R)"
     out = join(["TransRadial", grid, samples, nr, R, resp], "\n  ")
@@ -475,7 +475,7 @@ end
 function show(io::IO, t::TransFree)
     grid = "grid type: $(typeof(t.grid))"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
-    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp.responses[1]], "\n    ")
     y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
     x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
     out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
