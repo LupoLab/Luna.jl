@@ -1,42 +1,44 @@
 using Luna
 
-a = 13e-6
+a = 9e-6
 gas = :Ar
 pres = 5
-flength = 15e-2
+flength = 25e-2
 
 τfwhm = 30e-15
-λ0 = 800e-9
-energy=1e-6
+λ0 = 1500e-9
+energy = 1.7e-6
+
+grid = Grid.RealGrid(flength, λ0, (200e-9, 3000e-9), 2e-12)
 
 modes = (
     Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
 )
-nmodes = length(modes)
-
-grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-normfun = NonlinearRHS.norm_modal(grid.ω)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+plasma = Nonlinear.PlasmaCumtrapz(grid.to, Array{Float64}(undef, length(grid.to), 2),
+                                  ionrate, ionpot)
+                                  
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             plasma)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+normfun = NonlinearRHS.norm_modal(grid.ω)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
-                              modes, :xy; full=true)
+                               modes, :xy; full=false)
 
 statsfun = Stats.collect_stats(grid, Eω,
                               Stats.ω0(grid),
                               Stats.energy(grid, energyfunω),
-                              Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
                               Stats.peakpower(grid),
                               Stats.peakintensity(grid, modes),
                               Stats.fwhm_t(grid),
