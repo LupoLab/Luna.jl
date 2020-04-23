@@ -3,7 +3,7 @@ import FFTW
 import Hankel
 import Logging
 import LinearAlgebra: mul!, ldiv!
-import Random: MersenneTwister
+Logging.disable_logging(Logging.BelowMinLevel)
 
 """
     HDF5LOCK
@@ -78,50 +78,84 @@ include("Polarisation.jl")
 include("Tools.jl")
 include("Plotting.jl")
 include("Raman.jl")
+include("Fields.jl")
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
-       Tools, Plotting, Raman, Antiresonant
+       Tools, Plotting, Raman, Antiresonant, Fields
 
-function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
+# for a tuple of TimeFields we assume all inputs are for mode 1
+function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
+    out = fill(0.0 + 0.0im, length(grid.ω))
+    energy_t = Fields.energyfuncs(grid)[1]
+    for input! in inputs
+        input!(out, grid, energy_t, FT)
+    end
+    return out
+end
+
+# for a single Fields.TimeField we assume a single input for mode 1
+function doinput_sm(grid, inputs::Fields.TimeField, FT)
+    doinput_sm(grid, (inputs,), FT)
+end
+
+function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     xo = Array{Float64}(undef, length(grid.to))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
-    Eω = make_init(grid, inputs, energyfun, FT)
+    Eω = doinput_sm(grid, inputs, FT)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs, aeff)
+function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs, aeff)
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
     xo = Array{ComplexF64}(undef, length(grid.to))
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
-    Eω = make_init(grid, inputs, energyfun, FT)
+    Eω = doinput_sm(grid, inputs, FT)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
     Eω, transform, FT
 end
 
-# for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
-function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, inputs,
-               modes, components; full=false)
+# for a tuple of NamedTuple's with tuple fields we assume all is well
+function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
+    energy_t = Fields.energyfuncs(grid)[1]
+    for input in inputs
+        out = @view Eω[:,input.mode]
+        for input! in input.fields
+            input!(out, grid, energy_t, FT)
+        end
+    end
+end
+
+# for a tuple of TimeFields we assume all inputs are for mode 1
+function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
+    doinput_mm!(Eω, grid, ((mode=1, fields=inputs),), FT)
+end
+
+# for a single Fields.TimeField we assume a single input for mode 1
+function doinput_mm!(Eω, grid, inputs::Fields.TimeField, FT)
+    doinput_mm!(Eω, grid, ((mode=1, fields=(inputs,)),), FT)
+end
+
+function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
+               modes::Modes.ModeCollection, components; full=false)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
     FTt = FFTW.plan_rfft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
-    for i in 1:length(inputs)
-        Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
-    end
+    doinput_mm!(Eω, grid, inputs, FTt)
     x = Array{Float64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
@@ -135,17 +169,14 @@ function setup(grid::Grid.RealGrid, energyfun, densityfun, normfun, responses, i
     Eω, transform, FT
 end
 
-# for multimode setup, inputs is a tuple of ((mode_index, inputs), (mode_index, inputs), ..)
-function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, inputs,
-               modes, components; full=false)
+function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
+               modes::Modes.ModeCollection, components; full=false)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
     FTt = FFTW.plan_fft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(modes))
-    for i in 1:length(inputs)
-        Eω[:,inputs[i][1]] .= make_init(grid, inputs[i][2], energyfun, FTt)
-    end
+    doinput_mm!(Eω, grid, inputs, FTt)
     x = Array{ComplexF64}(undef, length(grid.t), length(modes))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
@@ -159,16 +190,27 @@ function setup(grid::Grid.EnvGrid, energyfun, densityfun, normfun, responses, in
     Eω, transform, FT
 end
 
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+                   inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
+    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
+    for input! in inputs
+        input!(Eωk, grid, spacegrid, energy_t, FT)
+    end
+end
+
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+                   inputs::Fields.SpatioTemporalField)
+    doinputs_fs!(Eωk, grid, spacegrid, FT, (inputs,))
+end
+
 function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
-               energyfun, densityfun, normfun, responses, inputs)
+               densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
     xt = zeros(Float64, length(grid.t), length(q.r))
     FT = FFTW.plan_rfft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
-    for input in inputs
-        Eω .+= scaled_input(grid, input, energyfun, FT)
-    end
     Eωk = q * Eω
+    doinputs_fs!(Eωk, grid, q, FT, inputs)
     xo = Array{Float64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
@@ -179,15 +221,13 @@ function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
 end
 
 function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
-               energyfun, densityfun, normfun, responses, inputs)
+               densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
     xt = zeros(ComplexF64, length(grid.t), length(q.r))
     FT = FFTW.plan_fft(xt, 1, flags=settings["fftw_flag"])
     Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
-    for input in inputs
-        Eω .+= scaled_input(grid, input, energyfun, FT)
-    end
     Eωk = q * Eω
+    doinputs_fs!(Eωk, grid, q, FT, inputs)
     xo = Array{ComplexF64}(undef, length(grid.to), length(q.r))
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
@@ -198,16 +238,14 @@ function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
 end
 
 function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
-               energyfun, densityfun, normfun, responses, inputs)
+               densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
     x = xygrid.x
     y = xygrid.y          
     xr = Array{Float64}(undef, length(grid.t), length(y), length(x))
     FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
-    for input in inputs
-        Eωk .+= scaled_input(grid, input, energyfun, FT)
-    end
+    doinputs_fs!(Eωk, grid, xygrid, FT, inputs)
     xo = Array{Float64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_rfft(xo, (1, 2, 3), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
@@ -219,16 +257,14 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
 end
 
 function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
-               energyfun, densityfun, normfun, responses, inputs)
+               densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
     x = xygrid.x
     y = xygrid.y          
     xr = Array{ComplexF64}(undef, length(grid.t), length(y), length(x))
-    FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=settings["fftw_flag"])
+    FT = FFTW.plan_fft(xr, (1, 2, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
-    for input in inputs
-        Eωk .+= scaled_input(grid, input, energyfun, FT)
-    end
+    doinputs_fs!(Eωk, grid, xygrid, FT, inputs)
     xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))
     FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
@@ -237,46 +273,6 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     inv(FTo)
     Utils.saveFFTwisdom()
     Eωk, transform, FT
-end
-
-function make_init(grid, inputs, energyfun, FT)
-    out = fill(0.0 + 0.0im, length(grid.ω))
-    for input in inputs
-        out .+= scaled_input(grid, input, energyfun, FT)
-    end
-    return out
-end
-
-function scaled_input(grid, input, energyfun, FT)
-    Et = fixtype(grid, input.func(grid.t))
-    energy = energyfun(grid.t,  Et)
-    Et_sc = sqrt(input.energy)/sqrt(energy) .* Et
-    return FT * Et_sc
-end
-
-# Make sure that envelope fields are complex to trigger correct dispatch
-fixtype(grid::Grid.RealGrid, Et) = Et
-fixtype(grid::Grid.EnvGrid, Et) = complex(Et)
-
-function shotnoise!(Eω, grid::Grid.RealGrid; seed=nothing)
-    rng = MersenneTwister(seed)
-    δω = grid.ω[2] - grid.ω[1]
-    δt = grid.t[2] - grid.t[1]
-    amp = @. sqrt(PhysData.ħ*grid.ω/δω)
-    rFFTamp = sqrt(2π)/2δt*amp
-    φ = 2π*rand(rng, size(Eω)...)
-    @. Eω += rFFTamp * exp(1im*φ)
-end
-
-function shotnoise!(Eω, grid::Grid.EnvGrid; seed=nothing)
-    rng = MersenneTwister(seed)
-    δω = grid.ω[2] - grid.ω[1]
-    δt = grid.t[2] - grid.t[1]
-    amp = zero(grid.ω)
-    amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
-    FFTamp = sqrt(2π)/δt*amp
-    φ = 2π*rand(rng, size(Eω)...)
-    @. Eω += FFTamp * exp(1im*φ)
 end
 
 linoptype(l::AbstractArray) = "constant"

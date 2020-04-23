@@ -23,7 +23,7 @@ end
 
 "Gaussian or hypergaussian function (with std dev σ as input)"
 function gauss(x, σ; x0 = 0, power = 2)
-    return @. exp(-1//2 * ((x-x0)/σ)^power)
+    return exp(-1/2 * ((x-x0)/σ)^power)
 end
 
 "Gaussian or hypergaussian function (with FWHM as input)"

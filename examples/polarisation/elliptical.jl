@@ -22,17 +22,13 @@ nmodes = length(modes)
 
 grid = Grid.RealGrid(250e-2, λ0, (200e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
+
 
 Etlin = gausspulse(grid.t)
-cenergy = energyfun(grid.t, Etlin)
+cenergy = energyfun(Etlin)
 Etlin = sqrt(energy)/sqrt(cenergy) .* Etlin
 
 Et = [Etlin zero(grid.t)]
@@ -60,16 +56,15 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-in1 = (func=gausspulse, energy=1e-6)
-inputs = ((1,(in1,)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :xy; full=false)
 
 Eω .= Ew
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
