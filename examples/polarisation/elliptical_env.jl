@@ -1,18 +1,12 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output, LinearOps, Polarisation
-import Logging
-import FFTW
+using Luna
 import StaticArrays: SMatrix, SVector
 import LinearAlgebra: mul!, ldiv!
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import PyPlot:pygui, plt
 
 a = 50e-6
 gas = :Ar
 pres = 5
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 400e-9
 energy = 30e-6
 
@@ -22,7 +16,7 @@ nmodes = length(modes)
 
 grid = Grid.EnvGrid(10e-2, λ0, (160e-9, 3000e-9), 1e-12)
 
-energyfun = NonlinearRHS.energy_env_modal()
+energyfun = Fields.energyfuncs(grid)[1]
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
 function gausspulse(t)
@@ -30,8 +24,9 @@ function gausspulse(t)
     Et = @. sqrt(It)
 end
 
+field = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 Etlin = gausspulse(grid.t)
-cenergy = energyfun(grid.t, Etlin)
+cenergy = energyfun(Etlin)
 Etlin = sqrt(energy)/sqrt(cenergy) .* Etlin
 
 Et = [Etlin zero(grid.t)] .+ 0im
@@ -45,24 +40,27 @@ Ewp .= CP * Ewp
 permutedims!(Ew, Ewp, [2, 1])
 Et = FFTW.ifft(Ew, 1);
 
-densityfun(z) = PhysData.std_dens * pres
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 # dummy, we don't use these
-in1 = (func=gausspulse, energy=1e-6)
-inputs = ((1,(in1,)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :xy; full=false)
 
 Eω .= Ew
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+import FFTW
+import PyPlot:pygui, plt
 
 ω = FFTW.fftshift(grid.ω)
 t = grid.t

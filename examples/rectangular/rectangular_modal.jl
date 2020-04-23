@@ -1,41 +1,25 @@
-import Luna
-import Luna: Grid, Maths, RectModes, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output, LinearOps
-import Logging
-import FFTW
-import NumericalIntegration: integrate, SimpsonEven
-import LinearAlgebra: mul!, ldiv!
-Logging.disable_logging(Logging.BelowMinLevel)
-
-import DSP.Unwrap: unwrap
-
+using Luna
 
 a = 50e-6
 b = 10e-6
 gas = :Ar
 pres = 5
+L = 15e-2/10
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 800e-9
+energy = 5e-6
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
-#modes = (RectModes.RectMode(a, b, gas, pres, :Ag, n=1, m=1),
-#         RectModes.RectMode(a, b, gas, pres, :Ag, n=2, m=1))
 modes = collect(RectModes.RectMode(a, b, gas, pres, :Ag, n=n, m=m) for m in 1:3 for n in 1:6)
 nmodes = length(modes)
 
-grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-
-energyfun = NonlinearRHS.energy_modal()
+energyfun, energyfunω = Fields.energyfuncs(grid)
 normfun = NonlinearRHS.norm_modal(grid.ω)
 
-function gausspulse(t)
-    It = Maths.gauss(t, fwhm=τ)
-    ω0 = 2π*PhysData.c/λ0
-    Et = @. sqrt(It)*cos(ω0*t)
-end
-
-densityfun(z) = PhysData.std_dens * pres
+dens0 = PhysData.density(gas, pres)
+densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -43,18 +27,19 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-in1 = (func=gausspulse, energy=5e-6)
-inputs = ((1,(in1,)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, energyfun, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
                               modes, :x; full=true)
 
-statsfun = Stats.collect_stats((Stats.ω0(grid), ))
-output = Output.MemoryOutput(0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
+statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 #output = Output.HDF5Output("test_full_modal_rect.h5", 0, grid.zmax, 201, (length(grid.ω),length(modes)), statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+
+import FFTW
 
 ω = grid.ω
 t = grid.t

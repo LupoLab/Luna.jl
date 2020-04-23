@@ -111,21 +111,16 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
-    energyfun, energyfunω = NonlinearRHS.energy_modal(grid)
+    energyfun, energyfunω = Fields.energyfuncs(grid)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
-    function gausspulse(t)
-        It = Maths.gauss(t, fwhm=τ)
-        ω0 = 2π*PhysData.c/λ0
-        Et = @. sqrt(It)*cos(ω0*t)
-    end
-    in1 = (func=gausspulse, energy=1e-6)
-    inputs = (in1, )
+
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, energyfun, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, normfun, responses, inputs, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))

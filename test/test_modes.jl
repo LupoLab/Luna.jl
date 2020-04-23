@@ -64,7 +64,7 @@ r = collect(range(0, 4a, length=2^16))
 m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1)
 for i in eachindex(fac)
     w0 = fac[i]*a
-    Er = Maths.gauss(r, w0/sqrt(2))
+    Er = Maths.gauss.(r, w0/sqrt(2))
     ηn[i] = abs2.(Modes.overlap(m, r, Er, dim=1)[1])
 end
 @test 0.63 < fac[argmax(ηn)] < 0.65
@@ -73,7 +73,7 @@ end
     total energy =#
 fac = 0.45
 w0 = fac*a
-Er = Maths.gauss(r, w0/sqrt(2))
+Er = Maths.gauss.(r, w0/sqrt(2))
 s = 0
 for mi = 1:10
     m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=mi)
@@ -93,7 +93,7 @@ a = 100e-6 # capillary radius
 q = Hankel.QDHT(2a, 512)
 grid = Grid.RealGrid(1, 800e-9, (200e-9, 2000e-9), 0.5e-12)
 # First pulse
-It1 = Maths.gauss(grid.t, fwhm=30e-15)
+It1 = Maths.gauss.(grid.t, fwhm=30e-15)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 # Spatial profile of the first pulse
@@ -102,7 +102,7 @@ Er1 = besselj.(0, unm*q.r/a)'
 Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
 # Second pulse
-It2 = 4*Maths.gauss(grid.t, fwhm=15e-15)
+It2 = 4*Maths.gauss.(grid.t, fwhm=15e-15)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/400e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 # Spatial profile of the second pulse
@@ -115,10 +115,10 @@ Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
 Etr = Etr1 .+ Etr2
 Eωr = FFTW.rfft(Etr, 1)
 
-ert, ekω = NonlinearRHS.energy_radial(grid, q)
-energy1 = ert(grid.t, Etr1)
-energy2 = ert(grid.t, Etr2)
-@test ert(grid.t, Etr) ≈ energy1 + energy2
+ert, ekω = Fields.energyfuncs(grid, q)
+energy1 = ert(Etr1)
+energy2 = ert(Etr2)
+@test ert(Etr) ≈ energy1 + energy2
 
 m1 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1)
 m2 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2)
@@ -128,10 +128,10 @@ Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
 Etm1 = FFTW.irfft(Eωm1[:, 1], length(grid.t))
 Etm2 = FFTW.irfft(Eωm2[:, 1], length(grid.t))
 
-et, eω = NonlinearRHS.energy_modal(grid)
+et, eω = Fields.energyfuncs(grid)
 # check that the non-normalised overlap integral preserves the total energy
-@test isapprox(et(grid.t, Etm1), energy1, rtol=1e-3)
-@test isapprox(et(grid.t, Etm2), energy2, rtol=1e-3)
+@test isapprox(et(Etm1), energy1, rtol=1e-3)
+@test isapprox(et(Etm2), energy2, rtol=1e-3)
 
 # check that the non-normalised overlap integral preserves the spectral shape
 En1 = Eω1/norm(Eω1)

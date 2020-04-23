@@ -28,9 +28,9 @@ Create stats function to calculate the total energy.
 function energy(grid, energyfun_ω)
     function addstat!(d, Eω, Et, z, dz)
         if ndims(Eω) > 1
-            d["energy"] = [energyfun_ω(grid.ω, Eω[:, i]) for i=1:size(Eω, 2)]
+            d["energy"] = [energyfun_ω(Eω[:, i]) for i=1:size(Eω, 2)]
         else
-            d["energy"] = energyfun_ω(grid.ω, Eω)
+            d["energy"] = energyfun_ω(Eω)
         end
     end
     return addstat!
@@ -63,9 +63,9 @@ function energy_window(grid, energyfun_ω, window; label)
     key = "energy_$label"
     function addstat!(d, Eω, Et, z, dz)
         if ndims(Eω) > 1
-            d[key] = [energyfun_ω(grid.ω, Eω[:, i].*window) for i=1:size(Eω, 2)]
+            d[key] = [energyfun_ω(Eω[:, i].*window) for i=1:size(Eω, 2)]
         else
-            d[key] = energyfun_ω(grid.ω, Eω.*window)
+            d[key] = energyfun_ω(Eω.*window)
         end
     end
     return addstat!

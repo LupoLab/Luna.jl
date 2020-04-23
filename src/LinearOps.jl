@@ -11,15 +11,14 @@ import Luna.PhysData: wlfreq
     make_const_linop(grid, xygrid, n, frame_vel)
 
 Make constant linear operator for full 3D propagation. `n` is the refractive index (array)
-and frame_vel is the velocity of the reference frame.
+and β1 is 1/velocity of the reference frame.
 """
 function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
-                          n::AbstractArray, frame_vel::Number)
+                          n::AbstractArray, β1::Number)
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
     idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
     k2 = zero(grid.ω)
     k2[2:end] .= (n[2:end] .* grid.ω[2:end] ./ PhysData.c).^2
-    β1 = 1/frame_vel
     out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
     _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs)
     return out
@@ -29,16 +28,15 @@ function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
     n = zero(grid.ω)
     n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
     β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
-    make_const_linop(grid, xygrid, n, 1/β1)
+    make_const_linop(grid, xygrid, n, β1)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
-                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+                          n::AbstractArray, β1::Number, β0ref::Number; thg=false)
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
     idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
     k2 = zero(grid.ω)
     k2[grid.sidx] .= (n[grid.sidx].*grid.ω[grid.sidx]./PhysData.c).^2
-    β1 = 1/frame_vel
     out = zeros(ComplexF64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
     _fill_linop_xy!(out, grid, β1, k2, kperp2, idcs, β0ref; thg=thg)
     return out
@@ -54,7 +52,7 @@ function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun,
     else
         β0const = grid.ω0/PhysData.c * nfun(wlfreq(grid.ω0))
     end
-    make_const_linop(grid, xygrid, n, 1/β1, β0const; thg=thg)
+    make_const_linop(grid, xygrid, n, β1, β0const; thg=thg)
 end
 
 """
@@ -127,14 +125,13 @@ end
     make_const_linop(grid, q::QDHT, n, frame_vel)
 
 Make constant linear operator for radial free-space. `n` is the refractive index (array)
-and frame_vel is the velocity of the reference frame.
+and β1 is 1/velocity of the reference frame.
 """
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
-                          n::AbstractArray, frame_vel::Number)
+                          n::AbstractArray, β1::Number)
     out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
-    β1 = 1/frame_vel 
     _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
     return out
 end
@@ -143,7 +140,7 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     n = zero(grid.ω)
     n[2:end] = nfun.(2π*PhysData.c./grid.ω[2:end])
     β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
-    make_const_linop(grid, q, n, 1/β1)
+    make_const_linop(grid, q, n, β1)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
@@ -155,15 +152,14 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
     else
         β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
     end
-    make_const_linop(grid, q, n, 1/β1, β0const; thg=thg)
+    make_const_linop(grid, q, n, β1, β0const; thg=thg)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
-                          n::AbstractArray, frame_vel::Number, β0ref::Number; thg=false)
+                          n::AbstractArray, β1::Number, β0ref::Number; thg=false)
     out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
-    β1 = 1/frame_vel
     _fill_linop_r!(out, grid, β1, k2, kr2, q.N, β0ref, thg)
     return out
 end
