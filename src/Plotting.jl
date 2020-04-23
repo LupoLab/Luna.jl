@@ -59,6 +59,13 @@ function makegrid(output)
     end
 end
 
+
+"""
+    get_modes(output)
+
+Determine whether `output` contains a multimode simulation, and if so, return the names
+of the modes.
+"""
 function get_modes(output)
     t = output["simulation_type"]["transform"]
     !startswith(t, "TransModal") && return false, nothing
@@ -70,6 +77,11 @@ function get_modes(output)
     return true, labels
 end
 
+"""
+    stats(output; kwargs...)
+
+Plot all statistics available in `output`. Additional `kwargs` are passed onto `plt.plot()`
+"""
 function stats(output; kwargs...)
     stats = output["stats"]
 
@@ -105,7 +117,6 @@ function stats(output; kwargs...)
     Npl = length(pstats)
     if Npl > 0
         pfig, axs = subplotgrid(Npl, title="Pulse stats")
-        # pfig.set_size_inches(8, 8)
         for n in 1:Npl
             ax = axs[n]
             data, label = pstats[n]
@@ -122,7 +133,6 @@ function stats(output; kwargs...)
     Npl = length(fstats)
     if Npl > 0
         ffig, axs = subplotgrid(Npl, title="Other stats")
-        # ffig.set_size_inches(8, 8)
         for n in 1:Npl
             ax = axs[n]
             data, label = fstats[n]
@@ -137,11 +147,27 @@ function stats(output; kwargs...)
     end
 end
 
+"""
+    should_log10(A, tolfac=10)
+
+For multi-line plots, determine whether data for different lines contained in `A` spans
+a sufficiently large range that a logarithmic scale should be used. By default, this is the
+case when there is any point where the lines are different by more than a factor of 10.
+"""
 function should_log10(A, tolfac=10)
     mi = minimum(A; dims=2)
     ma = maximum(A; dims=2)
     any(ma./mi .> 10)
 end
+
+"""
+    getEω(output[, zslice])
+
+Get frequency-domain modal field from `output` with correct normalisation (i.e. 
+`abs2.(Eω)`` gives spectral energy density). If `zslice` is given, return only the slices
+of `Eω` closest to the given distances. `zslice` can be a single number or an array.
+"""
+getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
 
 function getEω(grid::Grid.RealGrid, output)
     ω = grid.ω[grid.sidx]
@@ -166,21 +192,29 @@ function getEω(grid, output, zslice)
     return ω, Eω[cidcs, zidx], output["z"][zidx]
 end
 
+"""
+    get Iω(ω, Eω, specaxis)
 
-getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
+Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
+`Eω`, assumed to be correctly normalised (see [`getEω`](@ref)). `specaxis` determines the
+x-axis:
 
+- :f -> x-axis is frequency in Hz and Iω is in J/Hz
+- :ω -> x-axis is frequency in rad/s and Iω is in J/(rad/s)
+- :λ -> x-axis is wavelength in m and Iω is in J/m
+"""
 function getIω(ω, Eω, specaxis)
     if specaxis == :f
-        specx = ω./2π.*1e-15
-        If = abs2.(Eω)*1e15*2π
+        specx = ω./2π
+        If = abs2.(Eω)*2π
         return specx, If
     elseif specaxis == :ω
-        specx = ω*1e-15
-        Iω = abs2.(Eω)*1e15
+        specx = ω
+        Iω = abs2.(Eω)
         return specx, Iω
     elseif specaxis == :λ
-        specx = wlfreq.(ω) .* 1e9
-        Iλ = @. ω^2/(2π*c) * abs2.(Eω) * 1e-9
+        specx = wlfreq.(ω)
+        Iλ = @. ω^2/(2π*c) * abs2.(Eω)
         idcs = sortperm(specx)
         cidcs = CartesianIndices(size(Iλ)[2:end])
         return specx[idcs], Iλ[idcs, cidcs]
@@ -189,6 +223,19 @@ function getIω(ω, Eω, specaxis)
     end
 end
 
+"""
+    getIω(output, specaxis[, zslice])
+
+Calculate the correctly normalised frequency-domain field and convert it to spectral
+energy density on x-axis `specaxis` (`:f`, `:ω`, or `:λ`). If `zslice` is given,
+returs only the slices of `Eω` closest to the given distances.`zslice` can be a single
+number or an array.`specaxis` determines the
+x-axis:
+
+- :f -> x-axis is frequency in Hz and Iω is in J/Hz
+- :ω -> x-axis is frequency in rad/s and Iω is in J/(rad/s)
+- :λ -> x-axis is wavelength in m and Iω is in J/m
+"""
 getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
 
 function getIω(output::AbstractOutput, specaxis, zslice)
@@ -197,9 +244,18 @@ function getIω(output::AbstractOutput, specaxis, zslice)
     return specx, Iω, zactual
 end
 
+"""
+    getEt(output[, zslice])
+
+Get the envelope time-domain electric field (including the carrier wave) from the `output`.
+If `zslice` is given, returs only the slices of `Eω` closest to the given distances.`zslice`
+can be a single number or an array.
+"""
+getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
+
 function getEt(grid, output; trange, oversampling=4)
     t = grid.t
-    Etout = envelope(grid, t, output["Eω"])
+    Etout = envelope(grid, output["Eω"])
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end])
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
@@ -208,7 +264,7 @@ end
 
 function getEt(grid, output, zslice; trange, oversampling=4)
     t = grid.t
-    Etout = envelope(grid, t, output["Eω"])
+    Etout = envelope(grid, output["Eω"])
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end-1])
     zidx = nearest_z(output, zslice)
@@ -216,14 +272,36 @@ function getEt(grid, output, zslice; trange, oversampling=4)
     return to, Eto, output["z"][zidx]
 end
 
-getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
+"""
+    envelope(grid, t, Eω)
 
-envelope(grid::Grid.RealGrid, t, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(t), 1))
-envelope(grid::Grid.EnvGrid, t, Eω) = FFTW.ifft(Eω, 1)
+Get the envelope electric field including the carrier wave from the frequency-domain field
+`Eω` sampled on `grid`.
+"""
+envelope(grid::Grid.RealGrid, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(grid.t), 1))
+envelope(grid::Grid.EnvGrid, Eω) = FFTW.ifft(Eω, 1) .* exp.(im.*grid.ω0.*grid.t)
 
-nearest_z(output, z::Number) = argmin(abs.(output["z"] .- z))
+"""
+    nearest_z(output, z)
+
+Return the index of saved z-position(s) closest to the position(s) `z`. Output is always
+an array, even if `z` is a number.
+"""
+nearest_z(output, z::Number) = [argmin(abs.(output["z"] .- z))]
 nearest_z(output, z) = [argmin(abs.(output["z"] .- zi)) for zi in z]
 
+"""
+    prop_2D(output, specaxis=:f)
+
+Make false-colour propagation plots for `output`, using spectral x-axis `specaxis` (see
+[`getIω`](@ref)). For multimode simulations, create one figure for each mode plus one for
+the sum of all modes.
+
+# Keyword arguments
+- `λrange::Tuple(Float64, Float64)` : x-axis limits for spectral plot (wavelength in metres)
+- `trange::Tuple(Float64, Float64)` : x-axis limits for time-domain plot (time in seconds)
+- `dBmin::Float64` : lower colour-scale limit for logarithmic spectral plot
+"""
 function prop_2D(output, specaxis=:f;
                  λrange=(150e-9, 2000e-9), trange=(-50e-15, 50e-15),
                  dBmin=-60, kwargs...)
@@ -232,7 +310,8 @@ function prop_2D(output, specaxis=:f;
     t, Et = getEt(output, trange=trange)
     It = abs2.(Et)
 
-    speclims, speclabel = getspeclims(λrange, specaxis)
+    speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
+    specx .*= specxfac
 
     multimode, modes = get_modes(output)
 
@@ -243,25 +322,31 @@ function prop_2D(output, specaxis=:f;
     end    
 end
 
+# Helper function to convert λrange to the correct numbers depending on specaxis
 function getspeclims(λrange, specaxis)
     if specaxis == :f
-        speclims = (1e-15*c/maximum(λrange), 1e-15*c/minimum(λrange))
+        specxfac = 1e-15
+        speclims = (specxfac*c/maximum(λrange), specxfac*c/minimum(λrange))
         speclabel = "Frequency (PHz)"
     elseif specaxis == :ω
-        speclims = (1e-15*wlfreq(maximum(λrange)), 1e-15*wlfreq(minimum(λrange)))
+        specxfac = 1e-15
+        speclims = (specxfac*wlfreq(maximum(λrange)), specxfac*wlfreq(minimum(λrange)))
         speclabel = "Angular frequency (rad/fs)"
     elseif specaxis == :λ
-        speclims = λrange .* 1e9
+        specxfac = 1e9
+        speclims = λrange .* specxfac
         speclabel = "Wavelength (nm)"
     else
         error("Unknown specaxis $specaxis")
     end
-    return speclims, speclabel
+    return speclims, speclabel, specxfac
 end
 
+# single-mode 2D propagation plots
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
     pfig, axs = plt.subplots(1, 2, num="Propagation")
     pfig.set_size_inches(12, 4)
+    Iω = Maths.normbymax(Iω)
     _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
 
     _time2D(axs[2], t, z, It, trange; kwargs...)
@@ -269,8 +354,10 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kw
     return pfig
 end
 
+# multi-mode 2D propagation plots
 function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin; kwargs...)
     pfigs = []
+    Iω = Maths.normbymax(Iω)
     for mi in 1:length(modes)
         pfig, axs = plt.subplots(1, 2, num="Propagation ($(modes[mi]))")
         pfig.set_size_inches(12, 4)
@@ -293,8 +380,9 @@ function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dB
     return pfigs
 end
 
+# a single logarithmic colour-scale spectral domain plot
 function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
-    im = ax.pcolormesh(specx, z, 10*log10.(Maths.normbymax(transpose(I))); kwargs...)
+    im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); kwargs...)
     im.set_clim(dBmin, 0)
     cb = plt.colorbar(im, ax=ax)
     cb.set_label("SED (dB)")
@@ -303,6 +391,7 @@ function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
     ax.set_xlim(speclims...)
 end
 
+# a single time-domain propagation plot
 function _time2D(ax, t, z, I, trange; kwargs...)
     im = ax.pcolormesh(t*1e15, z, transpose(I); kwargs...)
     plt.colorbar(im, ax=ax)
@@ -311,17 +400,40 @@ function _time2D(ax, t, z, I, trange; kwargs...)
     ax.set_ylabel("Distance (cm)")
 end
 
-function time_1D(output, zslice; modes=nothing, trange=(-50e-15, 50e-15), kwargs...)
-    t, Et, zactual = getEt(output, zslice, trange=trange)
-    It = abs2.(Et)
+"""
+    time_1D(output, zslice, y=:It, kwargs...)
+
+Create lineplots of time-domain slice(s) of the propagation. The keyword argument `y` determines
+what is plotted: `:It` (power, default), `:Esq` (squared electric field) or `:Et` (electric field)
+The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
+a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted. The
+keyword argument `oversampling` determines the amount of oversampling done before plotting.
+Other `kwargs` are passed onto `plt.plot`.
+"""
+function time_1D(output, zslice;
+                y=:It, modes=nothing,
+                oversampling=4, trange=(-50e-15, 50e-15),
+                kwargs...)
+    t, Et, zactual = getEt(output, zslice, trange=trange, oversampling=oversampling)
+    if y == :It
+        yt = abs2.(Et)
+    elseif y == :Et
+        yt = real(Et)
+    elseif y == :Esq
+        yt = real(Et).^2
+    else
+        error("unknown time plot variable $y")
+    end
     multimode, modestrs = get_modes(output)
     if multimode
         if modes == :sum
-            It = dropdims(sum(It, dims=2), dims=2)
+            y == :It || error("Modal sum can only be plotted for intensity!")
+            yt = dropdims(sum(yt, dims=2), dims=2)
             modestrs = join(modestrs, "+")
             nmodes = 1
         else
-            It = It[:, modes, :]
+            isnothing(modes) && (modes = 1:length(modestrs))
+            yt = yt[:, modes, :]
             modestrs = modestrs[modes]
             nmodes = length(modes)
         end
@@ -329,24 +441,39 @@ function time_1D(output, zslice; modes=nothing, trange=(-50e-15, 50e-15), kwargs
 
     sfig = plt.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), t*1e15, 1e-9*It, zslice, modestrs; kwargs...)
+        _plot_slice_mm(plt.gca(), t*1e15, 1e-9*yt, zslice, modestrs; kwargs...)
         plt.legend(frameon=false)
     else
-        plt.plot(t*1e15, 1e-9*It; kwargs...)
-        plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+        plt.plot(t*1e15, 1e-9*yt; kwargs...)
+        if multimode
+            plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+        else
+            plt.legend(string.(zactual.*100).*" cm", frameon=false)
+        end
     end
     plt.xlabel("Time (fs)")
-    plt.ylabel("Power (GW)")
-    plt.ylim(ymin=0)
+    ylab = y == :Et ?  "Field (a.u.)" : "Power (GW)"
+    plt.ylabel(ylab)
+    y == :Et || plt.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
 end
 
+"""
+    spec_1D(output, zslice, specaxis=:λ, log10=true, log10min=1e-6)
+
+Create lineplots of spectral-domain slices of the propagation. x-axis is determined by
+`specaxis` (see [`getIω`](@ref)). If `log10` is true, plot on a logarithmic scale, with
+a y-axis range of `log10min`. 
+The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
+a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted.
+Other `kwargs` are passed onto `plt.plot`.
+"""
 function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1200e-9),
                  log10=true, log10min=1e-6,
                  kwargs...)
     specx, Iω, zactual = getIω(output, specaxis, zslice)
-    speclims, speclabel = getspeclims(λrange, specaxis)
+    speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
     multimode, modestrs = get_modes(output)
     if multimode
         modes = isnothing(modes) ? (1:size(Iω, 2)) : modes
@@ -355,11 +482,14 @@ function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1
             modestrs = join(modestrs, "+")
             nmodes = 1
         else
+            isnothing(modes) && (modes = 1:length(modestrs))
             Iω = Iω[:, modes, :]
             modestrs = modestrs[modes]
             nmodes = length(modes)
         end
     end
+
+    specx .*= specxfac
 
     sfig = plt.figure()
     if multimode && nmodes > 1
@@ -367,7 +497,11 @@ function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1
         plt.legend(frameon=false)
     else
         (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
-        plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+        if multimode
+            plt.legend(string.(zactual.*100).*" cm ($modestrs)", frameon=false)
+        else
+            plt.legend(string.(zactual.*100).*" cm", frameon=false)
+        end
     end
     plt.xlabel(speclabel)
     plt.ylabel("Spectral energy density")
@@ -385,10 +519,10 @@ dashes = [(0, (10, 1)),
 
 function _plot_slice_mm(ax, x, y, z, modestrs, log10=false; kwargs...)
     pfun = (log10 ? ax.semilogy : ax.plot)
-    for sidx = 1:size(y, 3)
+    for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
         line = pfun(x, y[:, 1, sidx]; label="$zs cm ($(modestrs[1]))", kwargs...)[1]
-        for midx = 2:size(y, 2)
+        for midx = 2:size(y, 2) # iterate over modes
             pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
                  label="$zs cm ($(modestrs[midx]))"; kwargs...)
         end
