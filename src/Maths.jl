@@ -348,6 +348,23 @@ function hypergauss_window(x, xmin, xmax, power = 10)
 end
 
 """
+    gabor(t, A, ts, fw)
+
+Compute the Gabor transform (aka spectrogram or time-gated Fourier transform) of the vector
+`A`, sampled on axis `t`, with windows centred at `ts` and a window FWHM of `fw`.
+"""
+function gabor(t::Vector, A::Vector, ts, fw)
+    tmp = Array{eltype(A), 2}(undef, (length(t), length(ts)));
+    for (ii, ti) in enumerate(ts)
+        tmp[:, ii] = A .* Maths.gauss.(t; x0=ti, fwhm=fw)
+    end
+    _gaborFT(tmp)
+end
+
+_gaborFT(x::Array{T, 2}) where T <: Real = FFTW.rfft(x, 1)
+_gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
+
+"""
     hilbert(x; dim=1)
 
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
@@ -638,6 +655,16 @@ function fftfreq(x)
     N = length(x)
     n = collect(range(0, length=N))
     (n .- N/2) .* 2π/(N*Dx)
+end
+
+"Calculate frequency vector k from samples x for rFFT"
+function rfftfreq(x)
+    Dx = abs(x[2] - x[1])
+    all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
+    Nx = length(x)
+    Nf = length(x)÷2 + 1
+    n = collect(range(0, length=Nf))
+    n .* 2π/(Nx*Dx)
 end
 
 """

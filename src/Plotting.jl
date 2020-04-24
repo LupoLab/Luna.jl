@@ -260,21 +260,30 @@ can be a single number or an array.
 """
 getEt(output::AbstractOutput, args...; kwargs...) = getEt(makegrid(output), output, args...; kwargs...)
 
-function getEt(grid, output; trange, oversampling=4, bandpass=nothing)
+function getEt(grid, output; trange=nothing, oversampling=4, bandpass=nothing)
     t = grid.t
     Eω = window_maybe(grid.ω, output["Eω"], bandpass)
     Etout = envelope(grid, Eω)
+    if isnothing(trange)
+        idcs = 1:length(t)
+    else
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+    end
     idcs = @. (t < max(trange...)) & (t > min(trange...))
     cidcs = CartesianIndices(size(Etout)[2:end])
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
     return to, Eto
 end
 
-function getEt(grid, output, zslice; trange, oversampling=4, bandpass=nothing)
+function getEt(grid, output, zslice; trange=nothing, oversampling=4, bandpass=nothing)
     t = grid.t
     Eω = window_maybe(grid.ω, output["Eω"], bandpass)
     Etout = envelope(grid, Eω)
-    idcs = @. (t < max(trange...)) & (t > min(trange...))
+    if isnothing(trange)
+        idcs = 1:length(t)
+    else
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+    end
     cidcs = CartesianIndices(size(Etout)[2:end-1])
     zidx = nearest_z(output, zslice)
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs, zidx], factor=oversampling)
@@ -589,5 +598,31 @@ function _plot_slice_mm(ax, x, y, z, modestrs, log10=false; kwargs...)
     end
 end
 
+spectrogram(output, args...; kwargs...) = spectrogram(makegrid(output), output, args...; kwargs...)
+
+function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
+                     trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
+                     kwargs...)
+    t, Et, zactual = getEt(output, zslice, oversampling=1)
+    Et = Et[:, 1]
+    ω = Maths.rfftfreq(t)[2:end]
+    tmin, tmax = extrema(trange)
+    tg = collect(range(tmin, tmax, length=N))
+    g = Maths.gabor(t, real(Et), tg, fw)
+    g = g[2:end, :]
+
+    specy, Ig = getIω(ω, g, specaxis)
+    speclims, speclabel, specyfac = getspeclims(λrange, specaxis)
+
+    log && (Ig = 10*log10.(Maths.normbymax(Ig)))
+
+    plt.figure()
+    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig)
+    plt.ylim(speclims...)
+    plt.ylabel(speclabel)
+    plt.xlabel("Time (fs)")
+    log && plt.clim(dBmin, 0)
+    plt.colorbar()
+end
 
 end

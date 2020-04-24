@@ -32,7 +32,7 @@ linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
 
-    inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(
     grid, densityfun, normfun, responses, inputs, aeff)
@@ -48,3 +48,5 @@ Plotting.stats(output)
 Plotting.prop_2D(output)
 Plotting.time_1D(output, [5e-2, 10e-2, 11e-2])
 Plotting.spec_1D(output, [5e-2, 10e-2, 11e-2])
+##
+Plotting.spectrogram(output, 10e-2, :λ; trange=(-50e-15, 50e-15), N=512, fw=10e-15, log=true)
