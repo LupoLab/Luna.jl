@@ -75,6 +75,21 @@ energyω = [energyfunω(Eout[:, ii]) for ii=1:size(Eout, 2)]
 
 pygui(true)
 ##
+
+λ = PhysData.wlfreq.(ω)[2:end]
+Ilogλ = log10.(Maths.normbymax(abs2.(Eout[2:end,:]) ./ λ.^2) .+ 1e-30)
+plt.figure()
+plt.subplot(121)
+plt.pcolormesh(λ, zout, transpose(Ilogλ))
+plt.clim(-3, 0)
+plt.xlim(550e-9,1800e-9)
+plt.colorbar()
+plt.subplot(122)
+plt.pcolormesh(to.*1e15, zout, transpose(It))
+plt.xlim(-500.0,100.0)
+plt.colorbar()
+
+
 plt.figure()
 plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog))
 plt.clim(-6, 0)
