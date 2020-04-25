@@ -49,4 +49,6 @@ Plotting.prop_2D(output)
 Plotting.time_1D(output, [5e-2, 10e-2, 11e-2])
 Plotting.spec_1D(output, [5e-2, 10e-2, 11e-2])
 ##
-Plotting.spectrogram(output, 10e-2, :λ; trange=(-50e-15, 50e-15), N=512, fw=10e-15, log=true)
+Plotting.spectrogram(output, 9.8e-2, :λ; trange=(-50e-15, 50e-15), λrange=(160e-9, 1200e-9),
+                     N=512, fw=3e-15,
+                     cmap=Plotting.cmap_white("viridis", n=48))

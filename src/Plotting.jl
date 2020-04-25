@@ -12,7 +12,7 @@ import Printf: @sprintf
 Replace the lowest colour stop of `cmap` (after splitting into `n` stops) with white and
 create a new colourmap with `N` stops.
 """
-function cmap_white(cmap, N=512, n=8)
+function cmap_white(cmap; N=2^12, n=8)
     vals = collect(range(0, 1, length=n))
     vals_i = collect(range(0, 1, length=N))
     cm = ColorMap(cmap)
@@ -617,7 +617,7 @@ function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))
 
     plt.figure()
-    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig)
+    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; kwargs...)
     plt.ylim(speclims...)
     plt.ylabel(speclabel)
     plt.xlabel("Time (fs)")
