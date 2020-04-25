@@ -1,3 +1,5 @@
+import FFTW
+#FFTW.set_num_threads(1)
 using Luna
 
 a = 13e-6

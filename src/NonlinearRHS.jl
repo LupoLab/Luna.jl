@@ -5,9 +5,9 @@ import Cubature
 import Base: show
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
-import Luna: PhysData, Modes, Maths, Grid
+import Luna: PhysData, Modes, Maths, Grid, settings
 import Luna.PhysData: wlfreq
-import Base.Threads: nthreads, @threads, threadid
+import Base: Threads
 
 "Transform A(ω) to A(t) on oversampled time grid - real field"
 function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
@@ -68,7 +68,7 @@ end
 "copy_scale! for multi-dim arrays. Works along first axis"
 function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
-     || error("dest and source must be same size except along first dimension"))
+    || error("dest and source must be same size except along first dimension"))
     idcs = CartesianIndices(size(dest)[2:end])
     _cpsc_core(dest, source, N, scale, idcs)
 end
@@ -84,7 +84,7 @@ end
 "copy_scale_both! for multi-dim arrays. Works along first axis"
 function copy_scale_both!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
-     || error("dest and source must be same size except along first dimension"))
+    || error("dest and source must be same size except along first dimension"))
     idcs = CartesianIndices(size(dest)[2:end])
     _cpscb_core(dest, source, N, scale, idcs)
 end
@@ -137,23 +137,22 @@ end
 struct NonlinearResp{rT}
     responses::Array{rT,1}
     function NonlinearResp(responses::rT) where rT
-        new{rT}([deepcopy(responses) for i = 1:nthreads()])
+        new{rT}([deepcopy(responses) for i = 1:Threads.nthreads()])
     end
 end
 
 function (n::NonlinearResp)(Pt, Et)
-    Et_to_Pt!(Pt, Et, n.responses[threadid()])
+    Et_to_Pt!(Pt, Et, n.responses[Threads.threadid()])
 end
 
 function (n::NonlinearResp)(Pt, Et, idcs)
-    @threads for i in idcs
-        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), n.responses[threadid()])
+    Threads.@threads for i in idcs
+        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), n.responses[Threads.threadid()])
     end
 end
 
-mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
+mutable struct TransModalWorker{tsT, lT, TT, FTT, rT, gT, nT}
     ts::tsT
-    full::Bool
     dimlimits::lT
     Emω::Array{ComplexF64,2}
     Erω::Array{ComplexF64,2}
@@ -166,32 +165,24 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     FT::FTT
     resp::rT
     grid::gT
-    densityfun::dT
     normfun::nT
-    ncalls::Int
     z::Float64
-    rtol::Float64
-    atol::Float64
-    mfcn::Int
 end
 
-function show(io::IO, t::TransModal)
-    grid = "grid type: $(typeof(t.grid))"
-    modes = "modes: $(t.ts.nmodes)\n"*" "^4*join([string(mi) for mi in t.ts.ms], "\n    ")
-    p = t.ts.indices == 1:2 ? "x,y" : t.ts.indices == 1 ? "x" : "y"
-    pol = "polarisation: $p"
-    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
-    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
-    full = "full: $(t.full)"
-    out = join(["TransModal", modes, pol, grid, samples, full, resp], "\n  ")
-    print(io, out)
+function mkplan(grid::Grid.RealGrid, Pr)
+    FFTW.plan_rfft(Pr, 1, flags=settings["fftw_flag"])
 end
+
+function mkplan(grid::Grid.EnvGrid, Pr)
+    FFTW.plan_fft(Pr, 1, flags=settings["fftw_flag"])
+end
+
 
 "Transform E(ω) -> Pₙₗ(ω) for modal field."
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+function TransModalWorker(tT, grid, ts::Modes.ToSpace, resp, normfun)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
     Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
@@ -200,68 +191,107 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; 
     Prω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
+    FT = mkplan(grid, Pr)
     IFT = inv(FT)
-    TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
+    TransModalWorker(ts, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
+                     FT, resp, grid, normfun, 0.0)
 end
 
-function TransModal(grid::Grid.RealGrid, args...; kwargs...)
-    TransModal(Float64, grid, args...; kwargs...)
+function TransModalWorker(grid::Grid.RealGrid, args...)
+    TransModalWorker(Float64, grid, args...)
 end
 
-function TransModal(grid::Grid.EnvGrid, args...; kwargs...)
-    TransModal(ComplexF64, grid, args...; kwargs...)
+function TransModalWorker(grid::Grid.EnvGrid, args...)
+    TransModalWorker(ComplexF64, grid, args...)
+end
+
+function (t::TransModalWorker)(fval, xs, i)
+    x1 = xs[1, i]
+    # on or outside boundaries are zero
+    if x1 <= t.dimlimits[2][1] || x1 >= t.dimlimits[3][1]
+        fval[:, i] .= 0.0
+        return
+    end
+    if size(xs, 1) > 1
+        x2 = xs[2, i]
+        if t.dimlimits[1] == :polar
+            pre = x1
+        else
+            if x2 <= t.dimlimits[2][2] || x1 >= t.dimlimits[3][2]
+                fval[:, i] .= 0.0
+                return
+            end
+            pre = 1.0
+        end
+    else
+        if t.dimlimits[1] == :polar
+            x2 = 0.0
+            pre = 2π*x1
+        else
+            x2 = 0.0
+            pre = 1.0
+        end
+    end
+    x = (x1,x2)
+    Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
+    to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
+    # get nonlinear pol at r,θ
+    fill!(t.Pr, 0.0)
+    Et_to_Pt!(t.Pr, t.Er, t.resp)
+    @. t.Pr *= t.grid.towin
+    to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
+    t.Prω .*= t.grid.ωwin.*t.normfun(t.z)
+    # now project back to each mode
+    # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
+    mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))
+    fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
+end
+
+mutable struct TransModal{wT, lT, dT}
+    workers::wT
+    full::Bool
+    dimlimits::lT
+    densityfun::dT
+    rtol::Float64
+    atol::Float64
+    mfcn::Int
+end
+
+function show(io::IO, t::TransModal)
+    tm = t.workers[1]
+    grid = "grid type: $(typeof(tm.grid))"
+    modes = "modes: $(tm.ts.nmodes)\n"*" "^4*join([string(mi) for mi in tm.ts.ms], "\n    ")
+    p = tm.ts.indices == 1:2 ? "x,y" : tm.ts.indices == 1 ? "x" : "y"
+    pol = "polarisation: $p"
+    samples = "time grid size: $(length(tm.grid.t)) / $(length(tm.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in tm.resp], "\n    ")
+    full = "full: $(t.full)"
+    out = join(["TransModal", modes, pol, grid, samples, full, resp], "\n  ")
+    print(io, out)
+end
+
+function TransModal(grid, ts::Modes.ToSpace, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+    #tmw = TransModalWorker(grid, ts, FT, resp, normfun)
+    workers = [TransModalWorker(grid, deepcopy(ts), deepcopy(resp), normfun) for i = 1:Threads.nthreads()]
+    TransModal(workers, full, Modes.dimlimits(ts.ms[1]), densityfun, rtol, atol, mfcn)
 end
 
 function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
-    t.Emω .= Emω
-    t.ncalls = 0
-    t.z = z
-    t.dimlimits = Modes.dimlimits(t.ts.ms[1], z=z)
+    for worker in t.workers
+        worker.Emω .= Emω
+        worker.z = z
+        worker.dimlimits = Modes.dimlimits(worker.ts.ms[1], z=z)
+    end
+    t.dimlimits = t.workers[1].dimlimits
+end
+
+function run(fval, xs, t::TransModal, i)
+    t.workers[Threads.threadid()](fval, xs, i)
 end
 
 function pointcalc!(fval, xs, t::TransModal)
-    # TODO: parallelize this in Julia 1.3
-    for i in 1:size(xs, 2)
-        x1 = xs[1, i]
-        # on or outside boundaries are zero
-        if x1 <= t.dimlimits[2][1] || x1 >= t.dimlimits[3][1]
-            fval[:, i] .= 0.0
-            continue
-        end
-        if size(xs, 1) > 1
-            x2 = xs[2, i]
-            if t.dimlimits[1] == :polar
-                pre = x1
-            else
-                if x2 <= t.dimlimits[2][2] || x1 >= t.dimlimits[3][2]
-                    fval[:, i] .= 0.0
-                    continue
-                end
-                pre = 1.0
-            end
-        else
-            if t.dimlimits[1] == :polar
-                x2 = 0.0
-                pre = 2π*x1
-            else
-                x2 = 0.0
-                pre = 1.0
-            end
-        end
-        x = (x1,x2)
-        Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
-        to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
-        # get nonlinear pol at r,θ
-        fill!(t.Pr, 0.0)
-        Et_to_Pt!(t.Pr, t.Er, t.resp)
-        @. t.Pr *= t.grid.towin
-        to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
-        t.Prω .*= t.grid.ωwin.*t.normfun(t.z)
-        # now project back to each mode
-        # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
-        mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))
-        fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
+    Threads.@threads for i in 1:size(xs, 2)
+        run(fval, xs, t, i)
     end
 end
 
@@ -269,16 +299,16 @@ function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
     if t.full
         val, err = Cubature.pcubature_v(
-            length(Eω)*2,
-            (x, fval) -> pointcalc!(fval, x, t),
-            t.dimlimits[2], t.dimlimits[3], 
-            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
+        length(Eω)*2,
+        (x, fval) -> pointcalc!(fval, x, t),
+        t.dimlimits[2], t.dimlimits[3], 
+        reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
         val, err = Cubature.pcubature_v(
-            length(Eω)*2,
-            (x, fval) -> pointcalc!(fval, x, t),
-            (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
-            reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
+        length(Eω)*2,
+        (x, fval) -> pointcalc!(fval, x, t),
+        (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
+        reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
 end
@@ -332,7 +362,7 @@ function (t::TransModeAvg)(nl, Eω, z)
 end
 
 """
-    TransRadial
+TransRadial
 
 Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation
 """
@@ -370,7 +400,7 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
 end
 
 """
-    TransRadial(grid, HT, FT, responses, densityfun, normfun)
+TransRadial(grid, HT, FT, responses, densityfun, normfun)
 
 Construct a `TransRadial` to calculate the reciprocal-domain nonlinear polarisation.
 
@@ -391,7 +421,7 @@ function TransRadial(grid::Grid.EnvGrid, args...)
 end
 
 """
-    (t::TransRadial)(nl, Eω, z)
+(t::TransRadial)(nl, Eω, z)
 
 Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field `Eω` and
 place the result in `nl`
@@ -408,185 +438,185 @@ function (t::TransRadial)(nl, Eω, z)
 end
 
 """
-    const_norm_radial(ω, q, nfun)
+const_norm_radial(ω, q, nfun)
 
 Make function to return normalisation factor for radial symmetry without re-calculating at
-every step. 
-"""
-function const_norm_radial(grid, q, nfun)
-    nfunω = (ω; z) -> nfun(wlfreq(ω))
-    normfun = norm_radial(grid, q, nfunω)
-    out = copy(normfun(0.0))
-    function norm(z)
-        return out
+    every step. 
+    """
+    function const_norm_radial(grid, q, nfun)
+        nfunω = (ω; z) -> nfun(wlfreq(ω))
+        normfun = norm_radial(grid, q, nfunω)
+        out = copy(normfun(0.0))
+        function norm(z)
+            return out
+        end
+        return norm
     end
-    return norm
-end
-
-"""
+    
+    """
     norm_radial(ω, q, nfun)
-
-Make function to return normalisation factor for radial symmetry. 
-
-!!! note
-    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
-"""
-function norm_radial(grid, q, nfun)
-    ω = grid.ω
-    out = zeros(Float64, (length(ω), q.N))
-    kr2 = q.k.^2
-    k2 = zeros(Float64, length(ω))
-    function norm(z)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
-        for ir = 1:q.N
-            for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ir] = 1.0
-                    continue
+    
+    Make function to return normalisation factor for radial symmetry. 
+        
+        !!! note
+        Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+        """
+        function norm_radial(grid, q, nfun)
+            ω = grid.ω
+            out = zeros(Float64, (length(ω), q.N))
+            kr2 = q.k.^2
+            k2 = zeros(Float64, length(ω))
+            function norm(z)
+                k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+                for ir = 1:q.N
+                    for iω in eachindex(ω)
+                        if ω[iω] == 0
+                            out[iω, ir] = 1.0
+                            continue
+                        end
+                        βsq = k2[iω] - kr2[ir]
+                        if βsq <= 0
+                            out[iω, ir] = 1.0
+                            continue
+                        end
+                        out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                    end
                 end
-                βsq = k2[iω] - kr2[ir]
-                if βsq <= 0
-                    out[iω, ir] = 1.0
-                    continue
-                end
-                out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                return out
             end
+            return norm
         end
-        return out
-    end
-    return norm
-end
-
-mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
-    FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
-    normfun::nT # Function which returns normalisation factor
-    resp::rT # nonlinear responses (tuple of callables)
-    grid::gT # time grid
-    xygrid::xygT
-    densityfun::dT # callable which returns density
-    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
-    Eto::Array{TT, 3} # buffer for oversampled time-domain field
-    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
-    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
-    scale::Float64 # scale factor to be applied during oversampling
-    idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
-end
-
-function show(io::IO, t::TransFree)
-    grid = "grid type: $(typeof(t.grid))"
-    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
-    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp.responses[1]], "\n    ")
-    y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
-    x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
-    out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
-    print(io, out)
-end
-
-function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
-    Ny = length(xygrid.y)
-    Nx = length(xygrid.x)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
-    Eto = zeros(TT, (length(grid.to), Ny, Nx))
-    Pto = similar(Eto)
-    Pωo = similar(Eωo)
-    idcs = CartesianIndices((Ny, Nx))
-    TransFree(FT, normfun, NonlinearResp(responses), grid, xygrid, densityfun,
-              Pto, Eto, Eωo, Pωo, scale, idcs)
-end
-
-"""
-    TransFree(grid, xygrid, FT, responses, densityfun, normfun)
-
-Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
-
-# Arguments
-- `grid::AbstractGrid` : the grid used in the simulation
-- `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
-- `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
-- `responses` : `Tuple` of response functions
-- `densityfun` : callable which returns the gas density as a function of `z`
-- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
-"""
-function TransFree(grid::Grid.RealGrid, args...)
-    N = length(grid.ω)
-    No = length(grid.ωo)
-    scale = (No-1)/(N-1)
-    TransFree(Float64, scale, grid, args...)
-end
-
-function TransFree(grid::Grid.EnvGrid, args...)
-    N = length(grid.ω)
-    No = length(grid.ωo)
-    scale = No/N
-    TransFree(ComplexF64, scale, grid, args...)
-end
-
-"""
-    (t::TransFree)(nl, Eω, z)
-
-Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the field `Eω`
-and place the result in `nl`.
-"""
-function (t::TransFree)(nl, Eωk, z)
-    fill!(t.Pto, 0)
-    fill!(t.Eωo, 0)
-    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
-    t.resp(t.Pto, t.Eto, t.idcs) # add up responses
-    @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
-    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
-    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
-end
-
-"""
-    const_norm_free(grid, xygrid, nfun)
-
-Make function to return normalisation factor for 3D propagation without re-calculating at
-every step.
-"""
-function const_norm_free(grid, xygrid, nfun)
-    nfunω = (ω; z) -> nfun(wlfreq(ω))
-    normfun = norm_free(grid, xygrid, nfunω)
-    out = copy(normfun(0.0))
-    function norm(z)
-        return out
-    end
-    return norm
-end
-
-"""
-    norm_free(grid, xygrid, nfun)
-
-Make function to return normalisation factor for 3D propagation.
-
-!!! note
-    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
-"""
-function norm_free(grid, xygrid, nfun)
-    ω = grid.ω
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
-    k2 = zero(grid.ω)
-    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
-    function norm(z)
-        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
-        for ii in idcs
-            for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ii] = 1.0
-                    continue
+        
+        mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
+            FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
+            normfun::nT # Function which returns normalisation factor
+            resp::rT # nonlinear responses (tuple of callables)
+            grid::gT # time grid
+            xygrid::xygT
+            densityfun::dT # callable which returns density
+            Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+            Eto::Array{TT, 3} # buffer for oversampled time-domain field
+            Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
+            Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+            scale::Float64 # scale factor to be applied during oversampling
+            idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
+        end
+        
+        function show(io::IO, t::TransFree)
+            grid = "grid type: $(typeof(t.grid))"
+            samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+            resp = "responses: "*join([string(typeof(ri)) for ri in t.resp.responses[1]], "\n    ")
+            y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
+            x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
+            out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
+            print(io, out)
+        end
+        
+        function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
+            Ny = length(xygrid.y)
+            Nx = length(xygrid.x)
+            Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
+            Eto = zeros(TT, (length(grid.to), Ny, Nx))
+            Pto = similar(Eto)
+            Pωo = similar(Eωo)
+            idcs = CartesianIndices((Ny, Nx))
+            TransFree(FT, normfun, NonlinearResp(responses), grid, xygrid, densityfun,
+            Pto, Eto, Eωo, Pωo, scale, idcs)
+        end
+        
+        """
+        TransFree(grid, xygrid, FT, responses, densityfun, normfun)
+        
+        Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation.
+        
+        # Arguments
+        - `grid::AbstractGrid` : the grid used in the simulation
+        - `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
+        - `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
+        - `responses` : `Tuple` of response functions
+        - `densityfun` : callable which returns the gas density as a function of `z`
+        - `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
+        """
+        function TransFree(grid::Grid.RealGrid, args...)
+            N = length(grid.ω)
+            No = length(grid.ωo)
+            scale = (No-1)/(N-1)
+            TransFree(Float64, scale, grid, args...)
+        end
+        
+        function TransFree(grid::Grid.EnvGrid, args...)
+            N = length(grid.ω)
+            No = length(grid.ωo)
+            scale = No/N
+            TransFree(ComplexF64, scale, grid, args...)
+        end
+        
+        """
+        (t::TransFree)(nl, Eω, z)
+        
+        Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the field `Eω`
+        and place the result in `nl`.
+        """
+        function (t::TransFree)(nl, Eωk, z)
+            fill!(t.Pto, 0)
+            fill!(t.Eωo, 0)
+            copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
+            ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+            t.resp(t.Pto, t.Eto, t.idcs) # add up responses
+            @. t.Pto *= t.grid.towin # apodisation
+            mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+            copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+            nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+        end
+        
+        """
+        const_norm_free(grid, xygrid, nfun)
+        
+        Make function to return normalisation factor for 3D propagation without re-calculating at
+            every step.
+            """
+            function const_norm_free(grid, xygrid, nfun)
+                nfunω = (ω; z) -> nfun(wlfreq(ω))
+                normfun = norm_free(grid, xygrid, nfunω)
+                out = copy(normfun(0.0))
+                function norm(z)
+                    return out
                 end
-                βsq = k2[iω] - kperp2[ii]
-                if βsq <= 0
-                    out[iω, ii] = 1.0
-                    continue
-                end
-                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                return norm
             end
-        end
-        return out
-    end
-end
-
-end
+            
+            """
+            norm_free(grid, xygrid, nfun)
+            
+            Make function to return normalisation factor for 3D propagation.
+                
+                !!! note
+                Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+                """
+                function norm_free(grid, xygrid, nfun)
+                    ω = grid.ω
+                    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
+                    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+                    k2 = zero(grid.ω)
+                    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+                    function norm(z)
+                        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
+                        for ii in idcs
+                            for iω in eachindex(ω)
+                                if ω[iω] == 0
+                                    out[iω, ii] = 1.0
+                                    continue
+                                end
+                                βsq = k2[iω] - kperp2[ii]
+                                if βsq <= 0
+                                    out[iω, ii] = 1.0
+                                    continue
+                                end
+                                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                            end
+                        end
+                        return out
+                    end
+                end
+                
+            end

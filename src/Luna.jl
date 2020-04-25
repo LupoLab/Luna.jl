@@ -160,7 +160,7 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModal(grid, ts, FTo,
+    transform = NonlinearRHS.TransModal(grid, ts,
                                  responses, densityfun, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
@@ -181,7 +181,7 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModal(grid, ts, FTo,
+    transform = NonlinearRHS.TransModal(grid, ts,
                                  responses, densityfun, normfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
