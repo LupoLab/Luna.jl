@@ -290,9 +290,8 @@ function run(fval, xs, t::TransModal, i)
 end
 
 function pointcalc!(fval, xs, t::TransModal)
-    Threads.@threads for i in 1:size(xs, 2)
-        run(fval, xs, t, i)
-    end
+    fs = [Threads.@spawn run(fval, xs, t, i) for i in 1:size(xs, 2)]
+    wait.(fs)
 end
 
 function (t::TransModal)(nl, Eω, z)
