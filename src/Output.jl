@@ -4,6 +4,7 @@ import Logging
 import Base: getindex, show
 import Printf: @sprintf
 import Luna: Scans, Utils, @hlock
+import Pidfile: mkpidlock
 
 
 "Output handler for writing only to memory"
@@ -392,7 +393,6 @@ macro ScanHDF5Output(args...)
     code = ""
     try
         script = string(__source__.file)
-        isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
         code = open(script, "r") do file
             read(file, String)
         end
@@ -434,7 +434,6 @@ for op in (:MemoryOutput, :HDF5Output)
                 script_code = ""
                 try
                     script = string(__source__.file)
-                    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
                     code = open(script, "r") do file
                         read(file, String)
                     end
@@ -456,5 +455,85 @@ for op in (:MemoryOutput, :HDF5Output)
         end
     )
 end
-            
+
+"""
+    scansave(scan, scanidx, Eω, stats)
+
+Save the field `Eω` and statistics dictionary `stats` in the "collected" scan output file, 
+placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`.
+"""
+function scansave(scan, scanidx, Eω, stats=nothing; script=nothing)
+    fpath = "$(scan.name)_collected.h5"
+    lockpath = joinpath(Utils.cachedir(), "scanlock")
+    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
+    pidlock = mkpidlock(lockpath)
+    if !isfile(fpath)
+        # First save - set up file structure
+        @hlock HDF5.h5open(fpath, "cw") do file
+            group = HDF5.g_create(file, "scanvariables")
+            order = String[]
+            shape = Int[]
+            # create grid of scan points
+            for (k, var) in pairs(scan.vars)
+                # scan.vars is an OrderedDict so this iteration is deterministic
+                group[string(k)] = var
+                push!(order, string(k))
+                push!(shape, length(var))
+            end
+            file["scanorder"] = order
+            # dimensions of the field saved
+            dims = (size(Eω)..., shape...)
+            # chunk size is dimension of one field slice
+            chdims = (size(Eω)..., fill(1, length(shape))...)
+            HDF5.d_create(file, "Eω", HDF5.datatype(ComplexF64), (dims, dims),
+                          "chunk", chdims)
+            if !isnothing(stats)
+                group = HDF5.g_create(file, "stats")
+                for (k, v) in pairs(stats)
+                    dims = (size(v)..., shape...)
+                    chdims = (size(v)..., fill(1, length(shape))...)
+                    HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, dims),
+                                  "chunk", chdims)
+                end
+            end
+            if !isnothing(script)
+                script_code = ""
+                try
+                    code = open(script, "r") do file
+                        read(file, String)
+                    end
+                    script_code = script*"\n"*code
+                catch
+                end
+                file["script"] = script_code
+            end
+        end
+    end
+    @hlock HDF5.h5open(fpath, "r+") do file
+        scanshape = Tuple([length(ai) for ai in scan.arrays])
+        cidcs = CartesianIndices(scanshape)
+        scanidcs = Tuple(cidcs[scanidx])
+        Eωidcs = fill(:, ndims(Eω))
+        file["Eω"][Eωidcs..., scanidcs...] = Eω
+        for (k, v) in pairs(stats)
+            sidcs = fill(:, ndims(v))
+            file["stats"][k][sidcs..., scanidcs...] = v
+        end
+    end
+    close(pidlock)
+end
+
+"""
+    @scansave
+
+Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
+surrounding scope and also saves the script being run.
+"""
+macro scansave(Eω, stats)
+    global script = string(__source__.file)
+    quote
+        scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)), $(esc(Eω)), $(esc(stats)),
+                 script=script)
+    end
+end
 end
