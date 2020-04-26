@@ -457,12 +457,17 @@ for op in (:MemoryOutput, :HDF5Output)
 end
 
 """
-    scansave(scan, scanidx, Eω, stats)
+    scansave(scan, scanidx, Eω, stats; kwargs...)
 
 Save the field `Eω` and statistics dictionary `stats` in the "collected" scan output file, 
-placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`.
+placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`. Additional
+keyword arguments are also saved in this manner, in a field given by the keyword.
+
+E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` dataset in the 
+file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
+in this manner.
 """
-function scansave(scan, scanidx, Eω, stats=nothing; script=nothing)
+function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
     fpath = "$(scan.name)_collected.h5"
     lockpath = joinpath(Utils.cachedir(), "scanlock")
     isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
@@ -507,6 +512,15 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing)
                 end
                 file["script"] = script_code
             end
+            # deal with other keyword arguments (additional quantities to be saved)
+            for (k, v) in kwargs
+                # dimensions of the array
+                dims = (size(v)..., shape...)
+                # chunk size is dimension of one array
+                chdims = (size(v)..., fill(1, length(shape))...)
+                HDF5.d_create(file, string(k), HDF5.datatype(eltype(v)), (dims, dims),
+                              "chunk", chdims)
+            end
         end
     end
     @hlock HDF5.h5open(fpath, "r+") do file
@@ -519,21 +533,34 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing)
             sidcs = fill(:, ndims(v))
             file["stats"][k][sidcs..., scanidcs...] = v
         end
+        for (k, v) in pairs(kwargs)
+            sidcs = fill(:, ndims(v))
+            file[string(k)][sidcs..., scanidcs...] = v
+        end 
     end
     close(pidlock)
 end
 
 """
-    @scansave
+    @scansave(Eω, stats; kwargs...)
 
 Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
 surrounding scope and also saves the script being run.
 """
-macro scansave(Eω, stats)
+macro scansave(Eω, stats, kwargs...)
     global script = string(__source__.file)
-    quote
-        scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)), $(esc(Eω)), $(esc(stats)),
-                 script=script)
+    ex = :(scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)),
+                    $(esc(Eω)), $(esc(stats)),
+                    script=script))
+    for arg in kwargs
+        if isa(arg, Expr) && arg.head == :(=)
+            arg.head = :kw
+            push!(ex.args, esc(arg))
+        else
+            # To a macro, arguments and keyword arguments look the same, so check manually
+            error("third and higher argument to `@scansave` must be keyword arguments")
+        end
     end
+    ex
 end
 end

@@ -34,7 +34,6 @@ push!(ARGS, "--range", "1:4")
 @scanvar dummy2 = collect(1:10)
 @test __SCAN__.vars[:dummy] == dummy
 @test __SCAN__.vars[:dummy2] == dummy2
-# end
 
 for _ in eachindex(ARGS)
     pop!(ARGS)
@@ -85,7 +84,8 @@ push!(ARGS, "--local")
 @scan begin
     out = [$x * $y, ($x)^2, ($y)^2]
     stats = Dict("energy" => 1.0, "energym" => [1.0, 1.0])
-    Output.@scansave(out, stats)
+    xx, yy = $x, $y
+    Output.@scansave(out, stats, keyword=[xx, yy])
 end
 HDF5.h5open("scantest_collected.h5", "r") do file
     @test read(file["scanvariables"]["x"]) == x
@@ -96,9 +96,10 @@ HDF5.h5open("scantest_collected.h5", "r") do file
     pass = true
     for (ix, xi) in enumerate(x)
         for (iy, yi) in enumerate(y)
-            pass = pass && out[:, ix, iy] == [xi * yi, (xi)^2, (yi)^2]
-            pass = pass && file["stats"]["energy"][ix, iy] == 1.0
-            pass = pass && file["stats"]["energym"][:, ix, iy] == [1.0, 1.0]
+            pass = pass && (out[:, ix, iy] == [xi * yi, (xi)^2, (yi)^2])
+            pass = pass && (stats["energy"][ix, iy] == 1.0)
+            pass = pass && (stats["energym"][:, ix, iy] == [1.0, 1.0])
+            pass = pass && (file["keyword"][:, ix, iy] == [xi, yi])
         end
     end
     @test pass
