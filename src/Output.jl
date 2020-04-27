@@ -477,7 +477,7 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
         @hlock HDF5.h5open(fpath, "cw") do file
             group = HDF5.g_create(file, "scanvariables")
             order = String[]
-            shape = Int[]
+            shape = Int[] # scan shape
             # create grid of scan points
             for (k, var) in pairs(scan.vars)
                 # scan.vars is an OrderedDict so this iteration is deterministic
@@ -501,6 +501,7 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
                     HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
                                   "chunk", chdims)
                 end
+                HDF5.d_create(group, "valid_length", HDF5.datatype(Int), HDF5.dataspace(shape...))
             end
             if !isnothing(script)
                 script_code = ""
@@ -549,6 +550,8 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
             # Stats array has shape (N1, N2,... Ns) - fill everything up to Ns with data
             sidcs = (fill(:, (ndims(v)-1))..., 1:size(v)[end])
             file["stats"][k][sidcs..., scanidcs...] = v
+            # save number of valid points we just saved
+            file["stats"]["valid_length"][scanidcs...] = size(v)[end]
             # fill everything after Ns with NaN
             nanidcs = (fill(:, (ndims(v)-1))..., size(v)[end]+1:size(file["stats"][k])[ndims(v)])
             file["stats"][k][nanidcs..., scanidcs...] = NaN

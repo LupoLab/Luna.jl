@@ -101,11 +101,13 @@ HDF5.h5open("scantest_collected.h5", "r") do file
         for (iy, yi) in enumerate(y)
             pass = pass && (out[:, ix, iy] == [xi * yi, (xi)^2, (yi)^2])
             slength = xi * yi
+            pass = pass && (stats["valid_length"][ix, iy] == slength)
             e = fill(1.0*slength, slength)
             em = fill(1.0*slength, (2, slength))
             pass = pass && (stats["energy"][1:slength, ix, iy] == e)
             pass = pass && all(isnan.(stats["energy"][slength+1:end, ix, iy]))
             pass = pass && (stats["energym"][:, 1:slength, ix, iy] == em)
+            pass = pass && all(isnan.(stats["energym"][:, slength+1:end, ix, iy]))
             pass = pass && (file["keyword"][:, ix, iy] == [xi, yi])
         end
     end
