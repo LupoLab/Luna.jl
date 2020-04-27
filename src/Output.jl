@@ -496,8 +496,9 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
                 group = HDF5.g_create(file, "stats")
                 for (k, v) in pairs(stats)
                     dims = (size(v)..., shape...)
-                    chdims = (size(v)..., fill(1, length(shape))...)
-                    HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, dims),
+                    mdims = (fill(-1, ndims(v))..., shape...)
+                    chdims = (fill(1, ndims(v))..., shape...)
+                    HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
                                   "chunk", chdims)
                 end
             end
@@ -530,8 +531,27 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
         Eωidcs = fill(:, ndims(Eω))
         file["Eω"][Eωidcs..., scanidcs...] = Eω
         for (k, v) in pairs(stats)
-            sidcs = fill(:, ndims(v))
+            if size(v)[end] > size(file["stats"][k])[ndims(v)]
+                #= new point has more stats points than before - extend dataset
+                    stats arrays are of shape (N1, N2,... Ns) where N1 etc are fixed and
+                    Ns depends on the number of steps
+                    stats *datasets" have shape (N1, N2,... Ns, Nx, Ny,...) where Nx, Ny...
+                    are the lengths of the scan arrays (see scanshape above)=#
+                oldlength = size(file["stats"][k])[ndims(v)] # current Ns
+                newlength = size(v)[end] # new Ns
+                newdims = (size(v)..., scanshape...) # (N1, N2,..., new Ns, Nx, Ny,...)
+                HDF5.set_dims!(file["stats"][k], newdims) # set new dimensions
+                # For existing shorter arrays, fill everything above their length with NaN
+                nanidcs = (fill(:, (ndims(v)-1))..., oldlength+1:newlength)
+                allscan = fill(:, length(scanshape)) # = (1:Nx, 1:Ny,...)
+                file["stats"][k][nanidcs..., allscan...] = NaN
+            end
+            # Stats array has shape (N1, N2,... Ns) - fill everything up to Ns with data
+            sidcs = (fill(:, (ndims(v)-1))..., 1:size(v)[end])
             file["stats"][k][sidcs..., scanidcs...] = v
+            # fill everything after Ns with NaN
+            nanidcs = (fill(:, (ndims(v)-1))..., size(v)[end]+1:size(file["stats"][k])[ndims(v)])
+            file["stats"][k][nanidcs..., scanidcs...] = NaN
         end
         for (k, v) in pairs(kwargs)
             sidcs = fill(:, ndims(v))

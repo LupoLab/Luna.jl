@@ -68,7 +68,7 @@ push!(ARGS, "--batch", "1,3")
 end
 end
 
-
+try
 @testset "scansave" begin
 for _ in eachindex(ARGS)
     pop!(ARGS)
@@ -83,7 +83,10 @@ push!(ARGS, "--local")
 
 @scan begin
     out = [$x * $y, ($x)^2, ($y)^2]
-    stats = Dict("energy" => 1.0, "energym" => [1.0, 1.0])
+    slength = $x * $y
+    e = fill(1.0*slength, slength)
+    em = fill(1.0*slength, (2, slength))
+    stats = Dict("energy" => e, "energym" => em)
     xx, yy = $x, $y
     Output.@scansave(out, stats, keyword=[xx, yy])
 end
@@ -97,8 +100,12 @@ HDF5.h5open("scantest_collected.h5", "r") do file
     for (ix, xi) in enumerate(x)
         for (iy, yi) in enumerate(y)
             pass = pass && (out[:, ix, iy] == [xi * yi, (xi)^2, (yi)^2])
-            pass = pass && (stats["energy"][ix, iy] == 1.0)
-            pass = pass && (stats["energym"][:, ix, iy] == [1.0, 1.0])
+            slength = xi * yi
+            e = fill(1.0*slength, slength)
+            em = fill(1.0*slength, (2, slength))
+            pass = pass && (stats["energy"][1:slength, ix, iy] == e)
+            pass = pass && all(isnan.(stats["energy"][slength+1:end, ix, iy]))
+            pass = pass && (stats["energym"][:, 1:slength, ix, iy] == em)
             pass = pass && (file["keyword"][:, ix, iy] == [xi, yi])
         end
     end
@@ -109,5 +116,8 @@ HDF5.h5open("scantest_collected.h5", "r") do file
             end
     @test read(file["script"]) == this * "\n" * code
 end
+rm("scantest_collected.h5")
+end
+catch
 rm("scantest_collected.h5")
 end
