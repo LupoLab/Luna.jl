@@ -4,8 +4,8 @@ import Logging: @info
 
 @scaninit "scantest"
 
-@scanvar energy = range(0.1e-6, 1.5e-6, length=16)
-@scanvar τ = range(25e-15, 35e-15, length=11)
+@scanvar energy = collect(range(0.1e-6, 1.5e-6, length=16))
+@scanvar τ = collect(range(25e-15, 35e-15, length=11))
 
 @scan begin
 a = 13e-6
@@ -43,7 +43,7 @@ Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, ae
 
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.@ScanHDF5Output(0, grid.zmax, 101, statsfun)
-println(output["meta"]["scanvars"])
 
 Luna.run(Eω, grid, linop, transform, FT, output)
+Output.@scansave(output["Eω"][:, end], output["stats"])
 end
