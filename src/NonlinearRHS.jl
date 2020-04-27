@@ -271,7 +271,6 @@ function show(io::IO, t::TransModal)
 end
 
 function TransModal(grid, ts::Modes.ToSpace, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
-    #tmw = TransModalWorker(grid, ts, FT, resp, normfun)
     workers = [TransModalWorker(grid, deepcopy(ts), deepcopy(resp), normfun) for i = 1:Threads.nthreads()]
     TransModal(workers, full, Modes.dimlimits(ts.ms[1]), densityfun, rtol, atol, mfcn)
 end
