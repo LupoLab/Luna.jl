@@ -36,7 +36,8 @@ end
 
 Dictionary of global settings for `Luna`.
 """
-settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT)
+settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT,
+                             "fftw_threads" => 0)
 
 """
     set_fftw_mode(mode)
@@ -56,6 +57,21 @@ function set_fftw_mode(mode)
     s = uppercase(string(mode))
     flag = getfield(FFTW, Symbol(s))
     settings["fftw_flag"] = flag
+end
+
+"""
+    set_fftw_threads(nthr)
+
+Set number of threads to be used by FFTW. If set to `0`, the number of threads used by 
+FFTW is determined automatically (see [`Utils.FFTWthreads()`](@ref))
+"""
+function set_fftw_threads(nthr=0)
+    settings["fftw_threads"] = nthr
+    FFTW.set_num_threads(Utils.FFTWthreads())
+end
+
+function __init__()
+    set_fftw_threads()
 end
 
 include("Utils.jl")
