@@ -501,7 +501,7 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
                     HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
                                   "chunk", chdims)
                 end
-                HDF5.d_create(group, "valid_length", HDF5.datatype(Int), HDF5.dataspace(shape...))
+                group["valid_length"] = zeros(Int, shape...)
             end
             if !isnothing(script)
                 script_code = ""
