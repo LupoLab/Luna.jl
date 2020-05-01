@@ -496,8 +496,11 @@ function scansave(scan, scanidx, Eω, stats=nothing; grid=nothing, script=nothin
                 group = HDF5.g_create(file, "stats")
                 for (k, v) in pairs(stats)
                     dims = (size(v)..., shape...)
-                    mdims = (fill(-1, ndims(v))..., shape...)
-                    chdims = (fill(1, ndims(v))..., shape...)
+                    #= last dimension of a statistics array is number of steps,
+                        so save in chunks of 100 steps =#
+                    fixeddims_v = size(v)[1:end-1]
+                    mdims = (fixeddims_v..., -1, shape...)
+                    chdims = (fixeddims_v..., 100, fill(1, length(shape))...)
                     HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
                                   "chunk", chdims)
                 end
