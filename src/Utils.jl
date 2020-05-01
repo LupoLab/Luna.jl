@@ -60,7 +60,13 @@ function sourcecode()
     return out
 end
 
-FFTWthreads() = settings["fftw_threads"] == 0 ? 4*Threads.nthreads() : settings["fftw_threads"]
+function FFTWthreads()
+    if Threads.nthreads() == 1
+        1
+    else
+        settings["fftw_threads"] == 0 ? 4*Threads.nthreads() : settings["fftw_threads"]
+    end
+end
 
 function loadFFTwisdom()
     FFTW.set_num_threads(FFTWthreads())
