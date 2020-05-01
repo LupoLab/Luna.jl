@@ -467,7 +467,7 @@ E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` datas
 file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
 in this manner.
 """
-function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
+function scansave(scan, scanidx, Eω, stats=nothing; grid=nothing, script=nothing, kwargs...)
     fpath = "$(scan.name)_collected.h5"
     lockpath = joinpath(Utils.cachedir(), "scanlock")
     isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
@@ -502,6 +502,13 @@ function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
                                   "chunk", chdims)
                 end
                 group["valid_length"] = zeros(Int, shape...)
+            end
+            if !isnothing(grid)
+                group = HDF5.g_create(file, "grid")
+                for (k, v) in pairs(grid)
+                    isa(v, BitArray) && (v = Array{Bool, 1}(v))
+                    group[k] = v
+                end
             end
             if !isnothing(script)
                 script_code = ""
