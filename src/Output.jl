@@ -4,6 +4,7 @@ import Logging
 import Base: getindex, show
 import Printf: @sprintf
 import Luna: Scans, Utils, @hlock
+import Pidfile: mkpidlock
 
 
 "Output handler for writing only to memory"
@@ -392,7 +393,6 @@ macro ScanHDF5Output(args...)
     code = ""
     try
         script = string(__source__.file)
-        isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
         code = open(script, "r") do file
             read(file, String)
         end
@@ -434,7 +434,6 @@ for op in (:MemoryOutput, :HDF5Output)
                 script_code = ""
                 try
                     script = string(__source__.file)
-                    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
                     code = open(script, "r") do file
                         read(file, String)
                     end
@@ -456,5 +455,135 @@ for op in (:MemoryOutput, :HDF5Output)
         end
     )
 end
-            
+
+"""
+    scansave(scan, scanidx, Eω, stats; kwargs...)
+
+Save the field `Eω` and statistics dictionary `stats` in the "collected" scan output file, 
+placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`. Additional
+keyword arguments are also saved in this manner, in a field given by the keyword.
+
+E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` dataset in the 
+file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
+in this manner.
+"""
+function scansave(scan, scanidx, Eω, stats=nothing; script=nothing, kwargs...)
+    fpath = "$(scan.name)_collected.h5"
+    lockpath = joinpath(Utils.cachedir(), "scanlock")
+    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
+    pidlock = mkpidlock(lockpath)
+    if !isfile(fpath)
+        # First save - set up file structure
+        @hlock HDF5.h5open(fpath, "cw") do file
+            group = HDF5.g_create(file, "scanvariables")
+            order = String[]
+            shape = Int[] # scan shape
+            # create grid of scan points
+            for (k, var) in pairs(scan.vars)
+                # scan.vars is an OrderedDict so this iteration is deterministic
+                group[string(k)] = var
+                push!(order, string(k))
+                push!(shape, length(var))
+            end
+            file["scanorder"] = order
+            # dimensions of the field saved
+            dims = (size(Eω)..., shape...)
+            # chunk size is dimension of one field slice
+            chdims = (size(Eω)..., fill(1, length(shape))...)
+            HDF5.d_create(file, "Eω", HDF5.datatype(ComplexF64), (dims, dims),
+                          "chunk", chdims)
+            if !isnothing(stats)
+                group = HDF5.g_create(file, "stats")
+                for (k, v) in pairs(stats)
+                    dims = (size(v)..., shape...)
+                    mdims = (fill(-1, ndims(v))..., shape...)
+                    chdims = (fill(1, ndims(v))..., shape...)
+                    HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
+                                  "chunk", chdims)
+                end
+                group["valid_length"] = zeros(Int, shape...)
+            end
+            if !isnothing(script)
+                script_code = ""
+                try
+                    code = open(script, "r") do file
+                        read(file, String)
+                    end
+                    script_code = script*"\n"*code
+                catch
+                end
+                file["script"] = script_code
+            end
+            # deal with other keyword arguments (additional quantities to be saved)
+            for (k, v) in kwargs
+                # dimensions of the array
+                dims = (size(v)..., shape...)
+                # chunk size is dimension of one array
+                chdims = (size(v)..., fill(1, length(shape))...)
+                HDF5.d_create(file, string(k), HDF5.datatype(eltype(v)), (dims, dims),
+                              "chunk", chdims)
+            end
+        end
+    end
+    @hlock HDF5.h5open(fpath, "r+") do file
+        scanshape = Tuple([length(ai) for ai in scan.arrays])
+        cidcs = CartesianIndices(scanshape)
+        scanidcs = Tuple(cidcs[scanidx])
+        Eωidcs = fill(:, ndims(Eω))
+        file["Eω"][Eωidcs..., scanidcs...] = Eω
+        for (k, v) in pairs(stats)
+            if size(v)[end] > size(file["stats"][k])[ndims(v)]
+                #= new point has more stats points than before - extend dataset
+                    stats arrays are of shape (N1, N2,... Ns) where N1 etc are fixed and
+                    Ns depends on the number of steps
+                    stats *datasets" have shape (N1, N2,... Ns, Nx, Ny,...) where Nx, Ny...
+                    are the lengths of the scan arrays (see scanshape above)=#
+                oldlength = size(file["stats"][k])[ndims(v)] # current Ns
+                newlength = size(v)[end] # new Ns
+                newdims = (size(v)..., scanshape...) # (N1, N2,..., new Ns, Nx, Ny,...)
+                HDF5.set_dims!(file["stats"][k], newdims) # set new dimensions
+                # For existing shorter arrays, fill everything above their length with NaN
+                nanidcs = (fill(:, (ndims(v)-1))..., oldlength+1:newlength)
+                allscan = fill(:, length(scanshape)) # = (1:Nx, 1:Ny,...)
+                file["stats"][k][nanidcs..., allscan...] = NaN
+            end
+            # Stats array has shape (N1, N2,... Ns) - fill everything up to Ns with data
+            sidcs = (fill(:, (ndims(v)-1))..., 1:size(v)[end])
+            file["stats"][k][sidcs..., scanidcs...] = v
+            # save number of valid points we just saved
+            file["stats"]["valid_length"][scanidcs...] = size(v)[end]
+            # fill everything after Ns with NaN
+            nanidcs = (fill(:, (ndims(v)-1))..., size(v)[end]+1:size(file["stats"][k])[ndims(v)])
+            file["stats"][k][nanidcs..., scanidcs...] = NaN
+        end
+        for (k, v) in pairs(kwargs)
+            sidcs = fill(:, ndims(v))
+            file[string(k)][sidcs..., scanidcs...] = v
+        end 
+    end
+    close(pidlock)
+end
+
+"""
+    @scansave(Eω, stats; kwargs...)
+
+Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
+surrounding scope and also saves the script being run.
+"""
+macro scansave(Eω, stats, kwargs...)
+    global script = string(__source__.file)
+    ex = :(scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)),
+                    $(esc(Eω)), $(esc(stats)),
+                    script=script))
+    for arg in kwargs
+        if isa(arg, Expr) && arg.head == :(=)
+            arg.head = :kw
+            push!(ex.args, esc(arg))
+        else
+            # To a macro, arguments and keyword arguments look the same, so check manually
+            error("third and higher argument to `@scansave` must be keyword arguments")
+        end
+    end
+    ex
+end
 end
