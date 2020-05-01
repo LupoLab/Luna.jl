@@ -4,8 +4,23 @@ import Luna: Maths
 import Luna.PhysData: wlfreq
 import Luna.Grid: RealGrid, EnvGrid
 
-function arrivaltime(grid, Eω; λlims, winwidth=0, kwargs...)
+"""
+    arrivaltime(grid, Eω; λlims, winwidth=0, method=:moment, oversampling=1)
+
+Extract the arrival time of the pulse in the wavelength limits `λlims`.
+
+# Arguments
+    - `λlims::Tuple{Number, Number}` : wavelength limits (λmin, λmax)
+    - `winwidth` : If a `Number`, set smoothing width (in rad/s) of the window function
+                   used to bandpass.
+                   If `:auto`, automatically set the width to 128 frequency samples.
+    - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
+                        the time of peak power
+    - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
+"""
+function arrivaltime(grid, Eω; λlims, winwidth=:auto, kwargs...)
     ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
     window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
     arrivaltime(grid, Eω, window; kwargs...)
 end
