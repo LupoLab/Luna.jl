@@ -122,4 +122,9 @@ end
     include(joinpath(testdir, "test_fields.jl"))
 end
 
+@testset "Processing" begin
+    @info("================= test_processing.jl")
+    include(joinpath(testdir, "test_processing.jl"))
+end
+
 end
