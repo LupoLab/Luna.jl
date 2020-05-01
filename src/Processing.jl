@@ -1,6 +1,6 @@
 module Processing
 import FFTW
-import Luna: Maths
+import Luna: Maths, Fields
 import Luna.PhysData: wlfreq
 import Luna.Grid: RealGrid, EnvGrid
 
@@ -60,6 +60,35 @@ function arrivaltime(t, It::Array{<:Real, N}; method) where N
     else
         error("Unknown arrival time method $method")
     end
+end
+
+"""
+    energy_λ(grid, Eω; λlims, winwidth=:auto)
+
+Extract energy within a wavelength band given by `λlims`. `winwidth` can be a `Number` in 
+rad/fs to set the smoothing edges of the frequency window, or `:auto`, in which case the
+width defaults to 128 frequency samples.
+"""
+function energy_λ(grid, Eω; λlims, winwidth=:auto)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
+    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
+    energy_window(grid, Eω, window)
+end
+
+function energy_window(grid, Eω, ωwindow)
+    _, energyω = Fields.energyfuncs(grid)
+    _energy_window(Eω, ωwindow, energyω)
+end
+
+_energy_window(Eω::Vector, ωwindow, energyω) = energyω(Eω .* ωwindow)
+function _energy_window(Eω, ωwindow, energyω)
+    out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
+    cidcs = CartesianIndices(size(Eω)[2:end])
+    for ii in cidcs
+        out[ii] = _energy_window(Eω[:, ii], ωwindow, energyω)
+    end
+    out
 end
 
 end
