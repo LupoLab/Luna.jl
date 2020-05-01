@@ -2,7 +2,7 @@ module Fields
 import Luna
 import Luna: Grid, Maths, PhysData
 import NumericalIntegration: integrate, SimpsonEven
-import Random: MersenneTwister, AbstractRNG
+import Random: AbstractRNG, GLOBAL_RNG
 import Hankel
 
 abstract type AbstractField end
@@ -86,25 +86,24 @@ function (p::PulseField)(Eω, grid, energy_t, FT)
 end
 
 """
-    ShotNoise(seed=nothing)
+    ShotNoise(rng=GLOBAL_RNG)
 
 Creates one photon per mode quantum noise (shot noise) to add to an input field.
-The random `seed` can optionally be provided.
+If no random number generator `rng` is provided, it defaults to `GLOBAL_RNG`
 """
 struct ShotNoise{rT<:AbstractRNG} <: TimeField
     rng::rT
 end
 
-function ShotNoise(seed=nothing)
-    ShotNoise(MersenneTwister(seed))
+function ShotNoise(rng=GLOBAL_RNG)
+    ShotNoise(rng)
 end
 
 """
     (s::ShotNoise)(Eω, grid)
 
-Add shotnoise to `Eω` for the provided `grid`. The random `seed` can optionally be provided.
-The optional parameters `energy_t` and `FT` are unused and are present for interface
-compatibility with [`TimeField`](@ref).
+Add shotnoise to `Eω` for the provided `grid`. The optional parameters `energy_t` and `FT`
+are unused and are present for interface compatibility with [`TimeField`](@ref).
 """
 function (s::ShotNoise)(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
