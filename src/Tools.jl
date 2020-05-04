@@ -70,10 +70,6 @@ function Pcr(ω, n0, n2)
     1.8962*(2π*PhysData.c/ω)^2/(4π*n0*n2)
 end
 
-struct Params{pT}
-    p::pT
-end
-
 paramfields = (:E, :τfw, :τ0, :ω, :λ, :material, :P, :T, :shape,:P0, :β2, :N0, :n0, :n2,
                :γ, :N, :I0, :Pcr, :Ld, :Lnl, :Lfiss, :zdw, :Lloss, :Aeff, :mode)
 
