@@ -290,7 +290,7 @@ The keyword argument `oversampling` determines the amount of oversampling done b
 
 Other `kwargs` are passed onto `plt.plot`.
 """
-function time_1D(output, zslice;
+function time_1D(output, zslice=maximum(output["z"]);
                 y=:Pt, modes=nothing,
                 oversampling=4, trange=(-50e-15, 50e-15), bandpass=nothing,
                 kwargs...)
@@ -347,7 +347,7 @@ end
 function power_unit(Pt, y=:Pt)
     units = ["kW", "MW", "GW", "TW", "PW"]
     Pmax = maximum(Pt)
-    oom = min(floor(Int, log10(Pmax)/3), 5) # maximum unit is PW
+    oom = clamp(floor(Int, log10(Pmax)/3), 1, 5) # maximum unit is PW
     powerfac = 1/10^(oom*3)
     if y == :Et
         sqrt(powerfac), "$(units[oom])\$^{1/2}\$"
@@ -370,7 +370,8 @@ a single index, a `range` or `:sum`. In the latter case, the sum of modes is plo
 
 Other `kwargs` are passed onto `plt.plot`.
 """
-function spec_1D(output, zslice, specaxis=:λ; modes=nothing, λrange=(150e-9, 1200e-9),
+function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
+                 modes=nothing, λrange=(150e-9, 1200e-9),
                  log10=true, log10min=1e-6,
                  kwargs...)
     specx, Iω, zactual = getIω(output, specaxis, zslice)
@@ -431,13 +432,23 @@ function _plot_slice_mm(ax, x, y, z, modestrs, log10=false; kwargs...)
     end
 end
 
-spectrogram(output, args...; kwargs...) = spectrogram(makegrid(output), output, args...; kwargs...)
+spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
+    makegrid(output), output, args...; kwargs...)
 
-function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
-                     trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
-                     kwargs...)
+function spectrogram(grid, Eω::AbstractArray, specaxis=:λ; kwargs...)
+    t, Et = getEt(grid, Eω, oversampling=1)
+    spectrogram(t, Et, specaxis; kwargs...)
+end
+
+function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ; kwargs...)
     t, Et, zactual = getEt(output, zslice, oversampling=1)
     Et = Et[:, 1]
+    spectrogram(t, Et, specaxis; kwargs...)
+end
+
+function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
+                     trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
+                     kwargs...)
     ω = Maths.rfftfreq(t)[2:end]
     tmin, tmax = extrema(trange)
     tg = collect(range(tmin, tmax, length=N))

@@ -11,13 +11,13 @@ import Luna.Output: AbstractOutput
 Extract the arrival time of the pulse in the wavelength limits `λlims`.
 
 # Arguments
-    - `λlims::Tuple{Number, Number}` : wavelength limits (λmin, λmax)
-    - `winwidth` : If a `Number`, set smoothing width (in rad/s) of the window function
-                   used to bandpass.
-                   If `:auto`, automatically set the width to 128 frequency samples.
-    - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
-                        the time of peak power
-    - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
+- `λlims::Tuple{Number, Number}` : wavelength limits (λmin, λmax)
+- `winwidth` : If a `Number`, set smoothing width (in rad/s) of the window function
+                used to bandpass.
+                If `:auto`, automatically set the width to 128 frequency samples.
+- `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
+                    the time of peak power
+- `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
 """
 function arrivaltime(grid, Eω; λlims, winwidth=:auto, kwargs...)
     ωmin, ωmax = extrema(wlfreq.(λlims))
