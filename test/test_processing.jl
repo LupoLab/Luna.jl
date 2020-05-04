@@ -1,7 +1,36 @@
 import Test: @test, @testset
 import FFTW
-import Luna: Grid, Processing, Maths
+import Luna: Grid, Processing, Maths, Fields, settings
 import Luna.PhysData: wlfreq
+
+@testset "normalisation" begin
+import NumericalIntegration: integrate
+λ0 = 800e-9
+τfwhm = 30e-15
+energy = 1e-3
+ω0 = wlfreq(λ0)
+
+# field
+grid = Grid.RealGrid(1, λ0, (200e-9, 3000e-9), 0.5e-12)
+input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+FT = FFTW.plan_rfft(similar(grid.t), flags=settings["fftw_flag"])
+energy_t, energy_ω = Fields.energyfuncs(grid)
+Eω = zeros(ComplexF64, length(grid.ω))
+input!(Eω, grid, energy_t, FT)
+@test energy_ω(Eω) ≈ energy
+
+ω, Iω = Processing.getIω(Processing.getEω(grid, Eω)..., :ω)
+f, If = Processing.getIω(Processing.getEω(grid, Eω)..., :f)
+λ, Iλ = Processing.getIω(Processing.getEω(grid, Eω)..., :λ)
+
+@test integrate(ω, Iω) ≈ energy
+@test integrate(f, If) ≈ energy
+@test isapprox(integrate(λ, Iλ), energy, rtol=1e-4)
+
+t, Et = Processing.getEt(grid, Eω)
+Pp = 0.94*energy/τfwhm # approximate peak power of gaussian pulse
+@test isapprox(maximum(abs2.(Et)), Pp, rtol=1e-3)
+end
 
 @testset "arrivaltime" begin
 λ0 = 800e-9
