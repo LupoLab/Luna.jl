@@ -1,6 +1,6 @@
 module Tools
 import Luna: Modes, PhysData, Capillary, RectModes
-import Base: show, getproperty
+import Base: show
 import Printf: @sprintf
 
 "Calculate 'natural' pulse width from FWHM" 
