@@ -1,7 +1,7 @@
 module Maths
 import FiniteDifferences
 import LinearAlgebra: Tridiagonal, mul!, ldiv!
-import SpecialFunctions: erf, erfc
+import SpecialFunctions: erf, erfc, gamma
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
@@ -19,22 +19,30 @@ function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
     else
-        # use 5th order central finite differences with 4 adaptive steps
+        # use (order+6)th order central finite differences with 2 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
         FiniteDifferences.fdm(FDMs[order], y->f(y*scale), x/scale, adapt=2)/scale^order
     end
 end
 
-"Gaussian or hypergaussian function (with std dev σ as input)"
-function gauss(x, σ; x0=0, power=2)
-    return exp(-1/2 * ((x-x0)/σ)^power)
-end
+"""
+    gauss(x, σ; x0=0, power=2)
+Gaussian or hypergaussian function over `x` with std dev `σ`, power in the exponent of `power`,
+centred at `x0`.
+"""
+gauss(x, σ; x0=0, power=2) = exp(-1/2 * ((x-x0)/σ)^power)
 
-"Gaussian or hypergaussian function (with FWHM as input)"
-function gauss(x; x0=0, power=2, fwhm)
-    σ = fwhm / (2 * (2 * log(2))^(1 / power))
-    return gauss(x, σ, x0 = x0, power=power)
-end
+"""
+    gauss(x; fwhm, x0=0, power=2)
+Gaussian or hypergaussian function over `x` with FWHM `fwhm`, power in the exponent of `power`,
+centred at `x0`.
+"""
+gauss(x; x0=0, power=2, fwhm) = gauss(x, fwhm_to_σ(fwhm; power=power), x0 = x0, power=power)
+
+fwhm_to_σ(fwhm; power=2) = fwhm / (2 * (2 * log(2))^(1 / power))
+
+gaussnorm(σ; power=2) = 2σ*2^(1/power)*gamma((power+1)/power)
+gaussnorm(;fwhm, power=2) = gaussnorm(fwhm_to_σ(fwhm; power=power); power=power)
 
 """
     randgauss([rng=GLOBAL_RNG], μ, σ, args...)
@@ -359,7 +367,7 @@ Compute the Gabor transform (aka spectrogram or time-gated Fourier transform) of
 `A`, sampled on axis `t`, with windows centred at `ts` and a window FWHM of `fw`.
 """
 function gabor(t::Vector, A::Vector, ts, fw)
-    tmp = Array{eltype(A), 2}(undef, (length(t), length(ts)));
+    tmp = Array{eltype(A), 2}(undef, (length(t), length(ts)))
     for (ii, ti) in enumerate(ts)
         tmp[:, ii] = A .* Maths.gauss.(t; x0=ti, fwhm=fw)
     end
@@ -671,6 +679,9 @@ function rfftfreq(x)
     n = collect(range(0, length=Nf))
     n .* 2π/(Nx*Dx)
 end
+
+rfftnorm(δt) = 2*fftnorm(δt)
+fftnorm(δt) = δt/sqrt(2π)
 
 """
     FastFinder

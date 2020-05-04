@@ -444,7 +444,7 @@ function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
     g = Maths.gabor(t, real(Et), tg, fw)
     g = g[2:end, :]
 
-    specy, Ig = getIω(ω, getEω(grid, g), specaxis)
+    specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis)
     speclims, speclabel, specyfac = getspeclims(λrange, specaxis)
 
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))

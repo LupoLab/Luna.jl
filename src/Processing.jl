@@ -2,7 +2,7 @@ module Processing
 import FFTW
 import Luna: Maths, Fields
 import Luna.PhysData: wlfreq, c
-import Luna.Grid: RealGrid, EnvGrid, from_dict
+import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput
 
 """
@@ -163,19 +163,27 @@ getEω(grid, output) = getEω(grid, output["Eω"])
 
 function getEω(grid::RealGrid, Eω::AbstractArray)
     ω = grid.ω[grid.sidx]
-    δt = grid.t[2] - grid.t[1]
     Eω = Eω[grid.sidx, CartesianIndices(size(Eω)[2:end])]
-    return ω, Eω*δt*2/sqrt(2π)
+    return ω, Eω*fftnorm(grid)
 end
 
 function getEω(grid::EnvGrid, Eω::AbstractArray)
-    δt = grid.t[2] - grid.t[1]
     idcs = FFTW.fftshift(grid.sidx)
     Eωs = FFTW.fftshift(Eω, 1)
     ω = FFTW.fftshift(grid.ω)[idcs]
     Eω = Eωs[idcs, CartesianIndices(size(Eω)[2:end])]
-    return ω, Eω*δt/sqrt(2π)
+    return ω, Eω*fftnorm(grid)
 end
+
+function getEω(grid, output, zslice)
+    ω, Eω = getEω(grid, output)
+    cidcs = CartesianIndices(size(Eω)[1:end-1])
+    zidx = nearest_z(output, zslice)
+    return ω, Eω[cidcs, zidx], output["z"][zidx]
+end
+
+fftnorm(grid::RealGrid) = Maths.rfftnorm(grid.t[2] - grid.t[1])
+fftnorm(grid::EnvGrid) = Maths.fftnorm(grid.t[2] - grid.t[1])
 
 """
     getEt(output[, zslice]; kwargs...)
@@ -197,10 +205,10 @@ or wavelength limits with `bandpass` (see [`window_maybe`](@ref)).
 If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
 can be a single number or an array.
 """
-function getEt(grid, Eω::AbstractArray;
-                        trange=nothing, oversampling=4, bandpass=nothing)
+function getEt(grid::AbstractGrid, Eω::AbstractArray;
+               trange=nothing, oversampling=4, bandpass=nothing)
     t = grid.t
-    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    Eω = window_maybe(grid.ω, Eω, bandpass)
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
@@ -212,9 +220,10 @@ function getEt(grid, Eω::AbstractArray;
     return to, Eto
 end
 
-getEt(grid, output; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
+getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
 
-function getEt(grid, output, zslice; trange=nothing, oversampling=4, bandpass=nothing)
+function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
+               trange=nothing, oversampling=4, bandpass=nothing)
     t = grid.t
     Eω = window_maybe(grid.ω, output["Eω"], bandpass)
     Etout = envelope(grid, Eω)

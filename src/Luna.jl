@@ -93,9 +93,9 @@ include("LinearOps.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
+include("Processing.jl")
 include("Plotting.jl")
 include("Raman.jl")
-include("Processing.jl")
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,

@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths
 import Dierckx
+import HCubature: hquadrature
 import Random: seed!
 
 @testset "Derivatives" begin
@@ -266,4 +267,13 @@ end
     x = Maths.randgauss(1, 0.5, (1000, 1000))
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
+end
+
+@testset "gaussnorm" begin
+    for power = 2:2:10
+        @test Maths.gaussnorm(1, power=power) ≈ hquadrature(
+            x -> Maths.gauss(x, 1; power=power), -10, 10)[1]
+        @test Maths.gaussnorm(fwhm=1, power=power) ≈ hquadrature(
+            x -> Maths.gauss(x; fwhm=1, power=power), -10, 10)[1]
+    end
 end
