@@ -75,8 +75,8 @@ paramfields = (:E, :τfw, :τ0, :ω, :λ, :material, :P, :T, :shape,:P0, :β2, :
 
 function show(io::IO, p::NamedTuple{paramfields, vT}) where vT
     mode = "MODE:\n  $(p.mode)"
-    fill = @sprintf("FILL:\n  %.1f bar %s, Pcr = %.1e, γ = %.1e, n2 = %.1e",
-                     p.P, p.material, p.Pcr, p.γ, p.n2)
+    fill = @sprintf("FILL:\n  %.1f bar %s, Pcr = %.1e W, γ = %.1e (Wm)^-1, n2 = %.1e cm^2/W",
+                     p.P, p.material, p.Pcr, p.γ, p.n2*1e4)
     wg = @sprintf("WAVEGUIDE:\n  Aeff = %.1e m^2, Lloss = %.1e m", p.Aeff, p.Lloss)
     pulse = @sprintf("PULSE:\n  %.2e J, %.2e s @ %.1f nm (shape: %s)",
                       p.E, p.τfw, p.λ*1e9, p.shape)
@@ -84,7 +84,7 @@ function show(io::IO, p::NamedTuple{paramfields, vT}) where vT
                           p.β2, p.λ*1e9, p.zdw*1e9)
     intensity = @sprintf("INTENSITY:\n  %.1e W/cm^2", p.I0*1e-4)
     power = @sprintf("POWER:\n  %.1e W (%.4f of Pcr)", p.P0, p.P0/p.Pcr)
-    sol = @sprintf("SOLITON:\n  Ld = %.1e, Lnl = %.1e, Lfiss = %.1e, N = %.2f",
+    sol = @sprintf("SOLITON:\n  Ld = %.1e m, Lnl = %.1e m, Lfiss = %.1e m, N = %.2f",
                    p.Ld, p.Lnl, p.Lfiss, p.N)
     out = join((mode, wg, fill, pulse, dispersion, power, intensity, sol), "\n")
     print(io, out)
