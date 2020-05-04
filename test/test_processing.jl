@@ -10,26 +10,34 @@ import NumericalIntegration: integrate
 energy = 1e-3
 ω0 = wlfreq(λ0)
 
-# field
-grid = Grid.RealGrid(1, λ0, (200e-9, 3000e-9), 0.5e-12)
-input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
-FT = FFTW.plan_rfft(similar(grid.t), flags=settings["fftw_flag"])
-energy_t, energy_ω = Fields.energyfuncs(grid)
-Eω = zeros(ComplexF64, length(grid.ω))
-input!(Eω, grid, energy_t, FT)
-@test energy_ω(Eω) ≈ energy
 
-ω, Iω = Processing.getIω(Processing.getEω(grid, Eω)..., :ω)
-f, If = Processing.getIω(Processing.getEω(grid, Eω)..., :f)
-λ, Iλ = Processing.getIω(Processing.getEω(grid, Eω)..., :λ)
+rg = Grid.RealGrid(1, λ0, (200e-9, 3000e-9), 0.5e-12)
+rFT = FFTW.plan_rfft(similar(rg.t), flags=settings["fftw_flag"])
+eg = Grid.EnvGrid(1, λ0, (200e-9, 3000e-9), 0.5e-12)
+eFT = FFTW.plan_fft(similar(eg.t), flags=settings["fftw_flag"])
 
-@test integrate(ω, Iω) ≈ energy
-@test integrate(f, If) ≈ energy
-@test isapprox(integrate(λ, Iλ), energy, rtol=1e-4)
+itr = ((rg, rFT), (eg, eFT))
 
-t, Et = Processing.getEt(grid, Eω)
-Pp = 0.94*energy/τfwhm # approximate peak power of gaussian pulse
-@test isapprox(maximum(abs2.(Et)), Pp, rtol=1e-3)
+for ii = 1:2
+    grid, FT = itr[ii]
+    input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+    energy_t, energy_ω = Fields.energyfuncs(grid)
+    Eω = zeros(ComplexF64, length(grid.ω))
+    input!(Eω, grid, energy_t, FT)
+    @test energy_ω(Eω) ≈ energy
+
+    ω, Iω = Processing.getIω(Processing.getEω(grid, Eω)..., :ω)
+    f, If = Processing.getIω(Processing.getEω(grid, Eω)..., :f)
+    λ, Iλ = Processing.getIω(Processing.getEω(grid, Eω)..., :λ)
+
+    @test integrate(ω, Iω) ≈ energy
+    @test integrate(f, If) ≈ energy
+    @test isapprox(integrate(λ, Iλ), energy, rtol=1e-4)
+
+    t, Et = Processing.getEt(grid, Eω)
+    Pp = 0.94*energy/τfwhm # approximate peak power of gaussian pulse
+    @test isapprox(maximum(abs2.(Et)), Pp, rtol=1e-3)
+end
 end
 
 @testset "arrivaltime" begin
