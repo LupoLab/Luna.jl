@@ -3,7 +3,7 @@ import FiniteDifferences
 import LinearAlgebra: Tridiagonal, mul!, ldiv!
 import SpecialFunctions: erf, erfc
 import StaticArrays: SVector
-import Random: AbstractRNG, randn, MersenneTwister
+import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
@@ -36,10 +36,15 @@ function gauss(x; x0 = 0, power = 2, fwhm)
     return gauss(x, σ, x0 = x0, power=power)
 end
 
-function randgauss(μ, σ, args...; seed=nothing)
-    rng = MersenneTwister(seed)
-    σ*randn(rng, args...) .+ μ
-end
+"""
+    randgauss([rng=GLOBAL_RNG], μ, σ, args...)
+
+Generate random numbers with normal distribution centred on `μ` with standard deviation `σ`.
+
+Any additional `args` are passed onto `randn` and can be used to specify the output dimensions.
+"""
+randgauss(μ, σ, args...) = randgauss(GLOBAL_RNG, μ, σ, args...)
+randgauss(rng::AbstractRNG, μ, σ, args...) = σ*randn(rng, args...) .+ μ
 
 "nth moment of the vector y"
 function moment(x::Vector, y::Vector, n = 1)

@@ -5,7 +5,7 @@ import Logging
 import LibGit2
 import Pidfile: mkpidlock
 import HDF5
-import Luna: @hlock
+import Luna: @hlock, settings
 
 subzero = '\u2080'
 subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
@@ -65,8 +65,17 @@ function sourcecode()
     return out
 end
 
+function FFTWthreads()
+    if Threads.nthreads() == 1
+        1
+    else
+        settings["fftw_threads"] == 0 ? 4*Threads.nthreads() : settings["fftw_threads"]
+    end
+end
+
 function loadFFTwisdom()
-    fpath = joinpath(cachedir(), "FFTWcache")
+    FFTW.set_num_threads(FFTWthreads())
+    fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     isdir(cachedir()) || mkpath(cachedir())
     if isfile(fpath)
@@ -74,17 +83,13 @@ function loadFFTwisdom()
         pidlock = mkpidlock(lockpath)
         ret = FFTW.import_wisdom(fpath)
         close(pidlock)
-        success = (ret != 0)
-        Logging.@info(success ? "FFTW wisdom loaded" : "Loading FFTW wisdom failed")
-        return success
     else
         Logging.@info("No FFTW wisdom found")
-        return false
     end
 end
 
 function saveFFTwisdom()
-    fpath = joinpath(cachedir(), "FFTWcache")
+    fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     pidlock = mkpidlock(lockpath)
     isfile(fpath) && rm(fpath)
