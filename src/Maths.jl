@@ -26,12 +26,12 @@ function derivative(f, x, order::Integer)
 end
 
 "Gaussian or hypergaussian function (with std dev σ as input)"
-function gauss(x, σ; x0 = 0, power = 2)
+function gauss(x, σ; x0=0, power=2)
     return exp(-1/2 * ((x-x0)/σ)^power)
 end
 
 "Gaussian or hypergaussian function (with FWHM as input)"
-function gauss(x; x0 = 0, power = 2, fwhm)
+function gauss(x; x0=0, power=2, fwhm)
     σ = fwhm / (2 * (2 * log(2))^(1 / power))
     return gauss(x, σ, x0 = x0, power=power)
 end

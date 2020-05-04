@@ -1,8 +1,9 @@
 module Processing
 import FFTW
 import Luna: Maths, Fields
-import Luna.PhysData: wlfreq
-import Luna.Grid: RealGrid, EnvGrid
+import Luna.PhysData: wlfreq, c
+import Luna.Grid: RealGrid, EnvGrid, from_dict
+import Luna.Output: AbstractOutput
 
 """
     arrivaltime(grid, Eω; λlims, winwidth=0, method=:moment, oversampling=1)
@@ -25,13 +26,15 @@ function arrivaltime(grid, Eω; λlims, winwidth=:auto, kwargs...)
     arrivaltime(grid, Eω, window; kwargs...)
 end
 
-function arrivaltime(grid::RealGrid, Eω, ωwindow::Vector{<:Real}; method=:moment, oversampling=1)
+function arrivaltime(grid::RealGrid, Eω::Vector, ωwindow::Vector{<:Real};
+                     method=:moment, oversampling=1)
     Et = FFTW.irfft(Eω .* ωwindow, length(grid.t), 1)
     to, Eto = Maths.oversample(grid.t, Et)
     arrivaltime(to, abs2.(Maths.hilbert(Eto)); method=method)
 end
 
-function arrivaltime(grid::EnvGrid, Eω, ωwindow::Vector{<:Real}; method=:moment, oversampling=1)
+function arrivaltime(grid::EnvGrid, Eω::Vector, ωwindow::Vector{<:Real};
+                     method=:moment, oversampling=1)
     Et = FFTW.ifft(Eω .* ωwindow, 1)
     to, Eto = Maths.oversample(grid.t, Et)
     arrivaltime(to, abs2.(Eto); method=method)
@@ -47,19 +50,13 @@ function arrivaltime(t, It::Vector{<:Real}; method)
     end
 end
 
-function arrivaltime(t, It::Array{<:Real, N}; method) where N
-    if method == :moment
-        dropdims(Maths.moment(t, It; dim=1); dims=1)
-    elseif method == :peak
-        out = Array{Float64, ndims(It)-1}(undef, size(It)[2:end])
-        cidcs = CartesianIndices(size(It)[2:end])
-        for ii in cidcs
-            out[ii] = arrivaltime(t, It[:, ii]; method=:peak)
-        end
-        out
-    else
-        error("Unknown arrival time method $method")
+function arrivaltime(grid, Eω, ωwindow::Vector{<:Real}; kwargs...)
+    out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
+    cidcs = CartesianIndices(size(Eω)[2:end])
+    for ii in cidcs
+        out[ii] = arrivaltime(grid, Eω[:, ii], ωwindow; kwargs...)
     end
+    out
 end
 
 """
@@ -90,5 +87,198 @@ function _energy_window(Eω, ωwindow, energyω)
     end
     out
 end
+
+"""
+    ωwindow_λ(ω, λlims; winwidth=:auto)
+
+Create a ω-axis filtering window to filter in `λlims`. `winwidth`, if a `Number`, sets
+the smoothing width of the window in rad/s.
+"""
+function ωwindow_λ(ω, λlims; winwidth=:auto)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 128*abs(ω[2] - ω[1]))
+    window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
+end
+
+"""
+    getIω(ω, Eω, specaxis)
+
+Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
+`Eω`, assumed to be correctly normalised (see [`getEω`](@ref)). `specaxis` determines the
+x-axis:
+
+- :f -> x-axis is frequency in Hz and Iω is in J/Hz
+- :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
+- :λ -> x-axis is wavelength in m and Iω is in J/m
+"""
+function getIω(ω, Eω, specaxis)
+    if specaxis == :f
+        specx = ω./2π
+        If = abs2.(Eω)*2π
+        return specx, If
+    elseif specaxis == :ω
+        specx = ω
+        Iω = abs2.(Eω)
+        return specx, Iω
+    elseif specaxis == :λ
+        specx = wlfreq.(ω)
+        Iλ = @. ω^2/(2π*c) * abs2.(Eω)
+        idcs = sortperm(specx)
+        cidcs = CartesianIndices(size(Iλ)[2:end])
+        return specx[idcs], Iλ[idcs, cidcs]
+    else
+        error("Unknown specaxis $specaxis")
+    end
+end
+
+"""
+    getIω(output, specaxis[, zslice])
+
+Calculate the correctly normalised frequency-domain field and convert it to spectral
+energy density on x-axis `specaxis` (`:f`, `:ω`, or `:λ`). If `zslice` is given,
+returs only the slices of `Eω` closest to the given distances. `zslice` can be a single
+number or an array. `specaxis` determines the
+x-axis:
+
+- :f -> x-axis is frequency in Hz and Iω is in J/Hz
+- :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
+- :λ -> x-axis is wavelength in m and Iω is in J/m
+"""
+getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
+
+function getIω(output::AbstractOutput, specaxis, zslice)
+    ω, Eω, zactual = getEω(output, zslice)
+    specx, Iω = getIω(ω, Eω, specaxis)
+    return specx, Iω, zactual
+end
+
+"""
+    getEω(output[, zslice])
+
+Get frequency-domain modal field from `output` with correct normalisation (i.e. 
+`abs2.(Eω)`` gives angular-frequency spectral energy density in J/(rad/s)).
+"""
+getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
+getEω(grid, output) = getEω(grid, output["Eω"])
+
+function getEω(grid::RealGrid, Eω::AbstractArray)
+    ω = grid.ω[grid.sidx]
+    δt = grid.t[2] - grid.t[1]
+    Eω = Eω[grid.sidx, CartesianIndices(size(Eω)[2:end])]
+    return ω, Eω*δt*2/sqrt(2π)
+end
+
+function getEω(grid::EnvGrid, Eω::AbstractArray)
+    δt = grid.t[2] - grid.t[1]
+    idcs = FFTW.fftshift(grid.sidx)
+    Eωs = FFTW.fftshift(Eω, 1)
+    ω = FFTW.fftshift(grid.ω)[idcs]
+    Eω = Eωs[idcs, CartesianIndices(size(Eω)[2:end])]
+    return ω, Eω*δt/sqrt(2π)
+end
+
+"""
+    getEt(output[, zslice]; kwargs...)
+
+Get the envelope time-domain electric field (including the carrier wave) from the `output`.
+If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
+can be a single number or an array.
+"""
+getEt(output::AbstractOutput, args...; kwargs...) = getEt(
+    makegrid(output), output, args...; kwargs...)
+
+"""
+    getEt(grid, Eω; trange=nothing, oversampling=4, bandpass=nothing)
+
+Get the envelope time-domain electric field (including the carrier wave) from the frequency-
+domain field `Eω`. The field can be cropped in time using `trange`, it is oversampled by
+a factor of `oversampling` (default 4) and can be bandpassed using a pre-defined window,
+or wavelength limits with `bandpass` (see [`window_maybe`](@ref)).
+If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
+can be a single number or an array.
+"""
+function getEt(grid, Eω::AbstractArray;
+                        trange=nothing, oversampling=4, bandpass=nothing)
+    t = grid.t
+    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    Etout = envelope(grid, Eω)
+    if isnothing(trange)
+        idcs = 1:length(t)
+    else
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+    end
+    cidcs = CartesianIndices(size(Etout)[2:end])
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
+    return to, Eto
+end
+
+getEt(grid, output; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
+
+function getEt(grid, output, zslice; trange=nothing, oversampling=4, bandpass=nothing)
+    t = grid.t
+    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    Etout = envelope(grid, Eω)
+    if isnothing(trange)
+        idcs = 1:length(t)
+    else
+        idcs = @. (t < max(trange...)) & (t > min(trange...))
+    end
+    cidcs = CartesianIndices(size(Etout)[2:end-1])
+    zidx = nearest_z(output, zslice)
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs, zidx], factor=oversampling)
+    return to, Eto, output["z"][zidx]
+end
+
+"""
+    window_maybe(ω, Eω, win)
+
+Apply a frequency window to the field `Eω` if required. Possible values for `win`:
+
+- `nothing` : no window is applied
+- 4-`Tuple` of `Number`s : the 4 parameters for a [`Maths.planck_taper`](@ref) in **wavelength**
+- 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
+- `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
+"""
+window_maybe(ω, Eω, ::Nothing) = Eω
+window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
+    ω, sort(wlfreq.(collect(win)))...)
+function window_maybe(ω, Eω, win::NTuple{2, Number})
+    δω = abs(ω[2] - ω[1])
+    w = 100*δω # magic number
+    ωmin, ωmax = sort(wlfreq.(collect(win)))
+    Eω.*Maths.planck_taper(ω, ωmin-w, ωmin, ωmax, ωmax+w)
+end
+window_maybe(ω, Eω, window) = Eω.*window
+
+"""
+    envelope(grid, Eω)
+
+Get the envelope electric field including the carrier wave from the frequency-domain field
+`Eω` sampled on `grid`.
+"""
+envelope(grid::RealGrid, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(grid.t), 1))
+envelope(grid::EnvGrid, Eω) = FFTW.ifft(Eω, 1) .* exp.(im.*grid.ω0.*grid.t)
+
+"""
+    makegrid(output)
+
+Create an `AbstractGrid` from the `"grid"` dictionary saved in `output`.
+"""
+function makegrid(output)
+    if output["simulation_type"]["field"] == "field-resolved"
+        from_dict(RealGrid, output["grid"])
+    else
+        from_dict(EnvGrid, output["grid"])
+    end
+end
+
+"""
+    nearest_z(output, z)
+
+Return the index of saved z-position(s) closest to the position(s) `z`. Output is always
+an array, even if `z` is a number.
+"""
+nearest_z(output, z::Number) = [argmin(abs.(output["z"] .- z))]
+nearest_z(output, z) = [argmin(abs.(output["z"] .- zi)) for zi in z]
 
 end
