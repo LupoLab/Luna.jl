@@ -70,7 +70,7 @@ function rms_width(x::Vector, y; dim = 1)
 end
 
 """
-    fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+    fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
 
 Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 
@@ -82,13 +82,16 @@ half the global maximum, but at half of the span of `y`.
 
 `minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
+
+The default `level=0.5` requests the full width at half maximum. Setting `level` to something
+different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
 """
-function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+function fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
-        val = minimum(y) + 0.5*(maximum(y) - minimum(y))
+        val = minimum(y) + level*(maximum(y) - minimum(y))
     else
-        val = 0.5*maximum(y)
+        val = level*maximum(y)
     end
     if !(method in (:spline, :linear, :nearest))
         error("Unknown FWHM method $method")

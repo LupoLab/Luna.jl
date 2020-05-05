@@ -3,6 +3,7 @@ import Luna
 import Luna: Grid, Maths, PhysData
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
+import Statistics: mean
 import Hankel
 
 abstract type AbstractField end
@@ -61,7 +62,8 @@ end
 """
     make_Et(p::PulseField, grid)
 
-Create electric field for `PulseField`, either the field (for `RealGrid`) or the envelope (for `EnvGrid`)
+Create electric field for `PulseField`, either the field (for `RealGrid`) or
+the envelope (for `EnvGrid`)
 """
 function make_Et(p::PulseField, grid::Grid.RealGrid)
     t = grid.t .- p.τ0
@@ -83,6 +85,48 @@ Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier 
 function (p::PulseField)(Eω, grid, energy_t, FT)
     Et = make_Et(p, grid)
     Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+end
+
+"""
+    CWField(Pavg, Aωfunc)
+
+Represents a continuous-wave field with spectral phase/amplitude defined by `Aωfunc`.
+
+# Fields
+- `Pavg::Float64`: the average power
+- `Aωfunc`: a callable `f(ω)` to get the amplitude/phase of the field in the frequency domain
+"""
+struct CWField{aT} <: TimeField
+    Pavg::Float64
+    Aωfunc::aT
+end
+
+"""
+    CWSech(;λ0, Pavg, Δλ)
+
+Construct a CW field with Sech^2 spectral power density and random phase, with spectral
+full-width half-maximim of `Δλ` and other parameters as defined for [`CWField`](@ref).
+"""
+function CWSech(;λ0, Pavg, Δλ, rng=GLOBAL_RNG)
+    ωw = PhysData.ΔλΔω(Δλ, λ0)/(2*log(1 + sqrt(2)))
+    ω0 = PhysData.wlfreq(λ0)
+    Aωfunc(ω) = let rng=rng, ωw=ωw, ω0=ω0
+        sech((ω - ω0)/ωw)*exp(1im*2π*rand(rng))
+    end
+    CWField(Pavg, Aωfunc)
+end
+
+"""
+    (c::CWField)(Eω, grid, energy_t, FT)
+
+Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
+"""
+function (c::CWField)(Eω, grid, energy_t, FT)
+    Et = FT \ c.Aωfunc.(grid.ω)
+    # we scale before windowing to make sure we scale full average
+    Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)))
+    Et .*= grid.twin
+    Eω .+= FT * Et
 end
 
 """
@@ -209,11 +253,20 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
+function It(Et, grid::Grid.RealGrid)
+    Eta = Maths.hilbert(Et)
+    abs2.(Eta)
+end
+
+function It(Et, grid::Grid.EnvGrid)
+    abs2.(Et)
+end
+
+
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
     function energy_t(Et)
-        Eta = Maths.hilbert(Et)
-        return integrate(grid.t, abs2.(Eta), SimpsonEven())
+        return integrate(grid.t, It(Et, grid), SimpsonEven())
     end
 
     prefac = 2π/(grid.ω[end]^2)
@@ -225,7 +278,7 @@ end
 
 function energyfuncs(grid::Grid.EnvGrid)
     function energy_t(Et)
-        return integrate(grid.t, abs2.(Et), SimpsonEven())
+        return integrate(grid.t, It(Et, grid), SimpsonEven())
     end
 
     δω = grid.ω[2] - grid.ω[1]
