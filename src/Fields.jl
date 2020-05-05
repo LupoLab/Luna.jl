@@ -82,9 +82,9 @@ end
 
 Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
 """
-function (p::PulseField)(Eω, grid, energy_t, FT)
+function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
-    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
 end
 
 """
@@ -117,16 +117,16 @@ function CWSech(;λ0, Pavg, Δλ, rng=GLOBAL_RNG)
 end
 
 """
-    (c::CWField)(Eω, grid, energy_t, FT)
+    (c::CWField)(grid, FT)
 
-Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
+Get the field for the provided `grid` and Fourier transform `FT`
 """
-function (c::CWField)(Eω, grid, energy_t, FT)
+function (c::CWField)(grid, FT)
     Et = FT \ c.Aωfunc.(grid.ω)
     # we scale before windowing to make sure we scale full average
     Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)))
     Et .*= grid.twin
-    Eω .+= FT * Et
+    FT * Et
 end
 
 """
@@ -146,26 +146,26 @@ end
 """
     (s::ShotNoise)(Eω, grid)
 
-Add shotnoise to `Eω` for the provided `grid`. The optional parameters `energy_t` and `FT`
-are unused and are present for interface compatibility with [`TimeField`](@ref).
+Get shotnoise for the provided `grid`. The optional parameter `FT`
+is unused and is present for interface compatibility with [`TimeField`](@ref).
 """
-function (s::ShotNoise)(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing)
+function (s::ShotNoise)(grid::Grid.RealGrid, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
     amp = @. sqrt(PhysData.ħ*grid.ω/δω)
     rFFTamp = sqrt(2π)/2δt*amp
-    φ = 2π*rand(s.rng, size(Eω)...)
-    @. Eω += rFFTamp * exp(1im*φ)
+    φ = 2π*rand(s.rng, size(grid.ω)...)
+    @. rFFTamp * exp(1im*φ)
 end
 
-function (s::ShotNoise)(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing)
+function (s::ShotNoise)(grid::Grid.EnvGrid, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
     amp = zero(grid.ω)
     amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
     FFTamp = sqrt(2π)/δt*amp
-    φ = 2π*rand(s.rng, size(Eω)...)
-    @. Eω += FFTamp * exp(1im*φ)
+    φ = 2π*rand(s.rng, size(grid.ω)...)
+    @. FFTamp * exp(1im*φ)
 end
 
 """
@@ -230,19 +230,20 @@ transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
 
 """
-    (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+    (s::SpatioTemporalField)(grid, spacegrid, FT)
 
-Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
+Get the field for the provided `grid`, `spacegrid` function
 and Fourier transform `FT`
 """
-function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Etr = make_Etr(s, grid, spacegrid)
+    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
-    lEωk = transform(spacegrid, FT, Etr)
+    Eωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
-        prop!(lEωk, s.propz, grid, spacegrid)
+        prop!(Eωk, s.propz, grid, spacegrid)
     end
-    Eωk .+= lEωk
+    Eωk
 end
 
 # TODO: this for FreeGrid
@@ -261,7 +262,6 @@ end
 function It(Et, grid::Grid.EnvGrid)
     abs2.(Et)
 end
-
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)

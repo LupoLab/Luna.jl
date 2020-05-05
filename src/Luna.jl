@@ -104,9 +104,8 @@ export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, Rect
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
-    energy_t = Fields.energyfuncs(grid)[1]
-    for input! in inputs
-        input!(out, grid, energy_t, FT)
+    for field in inputs
+        out .+= field(out, grid, FT)
     end
     return out
 end
@@ -146,11 +145,10 @@ end
 
 # for a tuple of NamedTuple's with tuple fields we assume all is well
 function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
-    energy_t = Fields.energyfuncs(grid)[1]
     for input in inputs
         out = @view Eω[:,input.mode]
-        for input! in input.fields
-            input!(out, grid, energy_t, FT)
+        for field in input.fields
+            out .+= field(grid, FT)
         end
     end
 end
@@ -209,9 +207,8 @@ end
 
 function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
                    inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
-    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
-    for input! in inputs
-        input!(Eωk, grid, spacegrid, energy_t, FT)
+    for field in inputs
+        Eωk .+= field(grid, spacegrid, FT)
     end
 end
 
