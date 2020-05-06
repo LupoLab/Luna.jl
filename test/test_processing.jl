@@ -1,6 +1,6 @@
 import Test: @test, @testset
 import FFTW
-import Luna: Grid, Processing, Maths
+import Luna: Grid, Processing, Maths, Fields
 import Luna.PhysData: wlfreq
 
 @testset "arrivaltime" begin
@@ -66,4 +66,29 @@ Eω = FFTW.fft(Et, 1)
 @test isapprox(Processing.arrivaltime(grid, Eω, λlims=(600e-9, 1000e-9))[2], -5e-15, rtol=1e-8)
 @test isapprox(Processing.arrivaltime(grid, Eω, λlims=(300e-9, 500e-9))[1], -5e-15, rtol=1e-8)
 @test isapprox(Processing.arrivaltime(grid, Eω, λlims=(300e-9, 500e-9))[2], 5e-15, rtol=1e-8)
+end
+
+@testset "findpeaks" begin
+    grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 10e-12)
+    dt = grid.t[2] - grid.t[1]
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = FT * x
+    fill!(Eω, 0.0)
+    positions = (-367e-15, -10e-15, 100e-15, 589e-15)
+    widths = (30e-15, 3e-15, 100e-15, 200e-15)
+    powers = (1e3, 1e4, 1e2, 2e3)
+    for i in 1:length(positions)
+        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i], τ0=positions[i])
+        Eω .+= field(grid, FT)
+    end
+    Et = FT \ Eω
+    It = Fields.It(Et, grid)
+    pks = Processing.findpeaks(grid.t, It, threshold=10.0, filterfw=false)
+    print(pks)
+    for i in 1:length(positions)
+        @test isapprox(pks[i].position, positions[i], atol=dt*1.1)
+        @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.1)
+        @test isapprox(pks[i].peak, powers[i], rtol=1e-2)
+    end
 end
