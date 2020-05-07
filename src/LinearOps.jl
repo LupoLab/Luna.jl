@@ -375,15 +375,15 @@ end
 
 function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
-        nmodes = length(modes)
+        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
         fill!(out, 0.0)
-        for i = 1:nmodes
-            out[2:end, i] .= -im.*(
-                grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[2:end], z=z))
-                .- grid.ω[2:end] .* β1
-                )
-            out[1, i] = 0
+        for i in eachindex(modes)
+            for iω = 2:length(grid.ω)
+                n = Modes.neff(modes[i], grid.ω[iω], z=z)
+                # make sure neff is within safe limits and also take complex conjugate
+                nc = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω])
+                out[iω, i] = -im*(grid.ω[iω]/PhysData.c*nc - grid.ω[iω]*β1)
+            end
         end
     end
 end
