@@ -82,7 +82,7 @@ function rms_width(x::Vector, y; dim = 1)
 end
 
 """
-    fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+    fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
 
 Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 
@@ -90,17 +90,39 @@ Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
 `:nearest` finds the closest values either side of the crossing point and interpolates linearly.
 
 If `baseline` is true, the width is not taken at
-half the global maximum, but at half of the span of `y`.
+`level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
 
 `minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
+
+The default `level=0.5` requests the full width at half maximum. Setting `level` to something
+different computes the corresponding width. E.g. `level=0.1` for the 10% width.
 """
-function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+function fwhm(x, y; kwargs...)
+    left, right = level_xings(x, y; kwargs...)
+    return abs(right-left)
+end
+
+"""
+    level_xings(x, y; method=:linear, baseline=false, minmax=:min)
+
+Find crossings of the curve `y` on the axis `x` with the value `level * maximum(y)`.
+
+`method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
+`:nearest` finds the closest values either side of the crossing point and interpolates linearly.
+
+If `baseline` is true, the width is not taken at
+`level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
+
+`minmax` determines whether the crossings are taken at the narrowest (`:min`) or the widest (`:max`)
+point of y.
+"""
+function level_xings(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
-        val = minimum(y) + 0.5*(maximum(y) - minimum(y))
+        val = minimum(y) + level*(maximum(y) - minimum(y))
     else
-        val = 0.5*maximum(y)
+        val = level*maximum(y)
     end
     if !(method in (:spline, :linear, :nearest))
         error("Unknown FWHM method $method")
@@ -112,19 +134,21 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
             if minmax == :min
                 lefti = findlast((x .< xmax) .& (y .< val))
                 righti = findfirst((x .> xmax) .& (y .< val))
-                (method == :nearest) && return abs(x[lefti] - x[righti])
+                (method == :nearest) && return (x[lefti], x[righti])
+
                 left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
                 right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
             else
                 lefti = findfirst((x .< xmax) .& (y .> val))
                 righti = findlast((x .> xmax) .& (y .> val))
-                (method == :nearest) && return abs(x[lefti] - x[righti])
+                (method == :nearest) && return (x[lefti], x[righti])
+
                 left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
                 right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
             end
-            return abs(right - left)
+            return left, right
         catch
-            return NaN
+            return NaN, NaN
         end
     elseif method == :spline
         #spline method
@@ -134,15 +158,15 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
             rleft = r[r .< xmax]
             rright = r[r .> xmax]
             if minmax == :min
-                return abs(minimum(rright) - maximum(rleft))
+                return maximum(rleft), minimum(rright)
             else
-                return abs(maximum(rright) - minimum(rleft))
+                return minimum(rleft), maximum(rright)
             end
         catch e
-            return NaN
+            return NaN, NaN
         end
     else
-        error("Unknown FWHM method $method")
+        error("Unknown level_xings method $method")
     end
 end
 

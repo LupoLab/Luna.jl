@@ -325,17 +325,17 @@ function time_1D(output, zslice=maximum(output["z"]);
     sfig = plt.figure()
     if multimode && nmodes > 1
         _plot_slice_mm(plt.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
-        plt.legend(frameon=false)
     else
-        plt.plot(t*1e15, yfac*yt; kwargs...)
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
-        if multimode
-            plt.legend(zs.*" ($modestrs)", frameon=false)
-        else
-            plt.legend(zs, frameon=false)
+        label = multimode ? zs.*" ($modestrs)" : zs
+        for iz in eachindex(zactual)
+            plt.plot(t*1e15, yfac*yt[:, iz]; label=label[iz], kwargs...)
         end
     end
+    plt.legend(frameon=false)
+    add_fwhm_legends(plt.gca(), "fs")
     plt.xlabel("Time (fs)")
+    plt.xlim(1e15.*trange)
     ylab = y == :Et ?  "Field ($unit)" : "Power ($unit)"
     plt.ylabel(ylab)
     y == :Et || plt.ylim(ymin=0)
@@ -396,16 +396,14 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     sfig = plt.figure()
     if multimode && nmodes > 1
         _plot_slice_mm(plt.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
-        plt.legend(frameon=false)
     else
-        (log10 ? plt.semilogy : plt.plot)(specx, Iω; kwargs...)
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
-        if multimode
-            plt.legend(zs.*" ($modestrs)", frameon=false)
-        else
-            plt.legend(zs, frameon=false)
+        label = multimode ? zs.*" ($modestrs)" : zs
+        for iz in eachindex(zactual)
+            (log10 ? plt.semilogy : plt.plot)(specx, Iω[:, iz]; label=label[iz], kwargs...)
         end
     end
+    plt.legend(frameon=false)
     plt.xlabel(speclabel)
     plt.ylabel("Spectral energy density")
     log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
@@ -420,7 +418,7 @@ dashes = [(0, (10, 1)),
           (0, (1, 0.5, 1, 0.5, 3, 1)),
           (0, (5, 1, 1, 1))]
 
-function _plot_slice_mm(ax, x, y, z, modestrs, log10=false; kwargs...)
+function _plot_slice_mm(ax, x, y, z, modestrs, log10=false, fwhm=false; kwargs...)
     pfun = (log10 ? ax.semilogy : ax.plot)
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
@@ -467,6 +465,48 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     plt.xlabel("Time (fs)")
     log && plt.clim(dBmin, 0)
     plt.colorbar()
+end
+
+function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
+                                    text=nothing, units="fs")
+    left, right = Maths.level_xings(x, y)
+    fw = abs(right - left)
+    halfmax = maximum(y)/2
+    arrowlength = isnothing(arrowlength) ? 2*fw : arrowlength
+
+    ax.annotate("", xy=(left-hpad, halfmax),
+                xytext=(left-hpad-arrowlength, halfmax),
+                arrowprops=Dict("arrowstyle" => "->",
+                                "color" => color,
+                                "linewidth" => linewidth))
+    ax.annotate("", xy=(right+hpad, halfmax),
+                xytext=(right+hpad+arrowlength, halfmax),
+                arrowprops=Dict("arrowstyle" => "->",
+                                "color" => color,
+                                "linewidth" => linewidth))
+
+    if text == :left
+        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+                ha="right", color=color)
+    elseif text == :right
+        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+                color=color)
+    end
+end
+
+function add_fwhm_legends(ax, unit)
+    leg = ax.get_legend()
+    texts = leg.get_texts()
+    handles, labels = ax.get_legend_handles_labels()
+    
+    for (ii, line) in enumerate(handles)
+        xy = line.get_xydata()
+        fw = Maths.fwhm(xy[:, 1], xy[:, 2])
+        t = texts[ii]
+        s = t.get_text()
+        s *= @sprintf(" [%.2f %s]", fw, unit)
+        t.set_text(s)
+    end
 end
 
 end

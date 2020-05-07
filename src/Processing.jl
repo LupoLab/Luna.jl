@@ -29,14 +29,14 @@ end
 function arrivaltime(grid::RealGrid, Eω::Vector, ωwindow::Vector{<:Real};
                      method=:moment, oversampling=1)
     Et = FFTW.irfft(Eω .* ωwindow, length(grid.t), 1)
-    to, Eto = Maths.oversample(grid.t, Et)
+    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
     arrivaltime(to, abs2.(Maths.hilbert(Eto)); method=method)
 end
 
 function arrivaltime(grid::EnvGrid, Eω::Vector, ωwindow::Vector{<:Real};
                      method=:moment, oversampling=1)
     Et = FFTW.ifft(Eω .* ωwindow, 1)
-    to, Eto = Maths.oversample(grid.t, Et)
+    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
     arrivaltime(to, abs2.(Eto); method=method)
 end
 
@@ -57,6 +57,53 @@ function arrivaltime(grid, Eω, ωwindow::Vector{<:Real}; kwargs...)
         out[ii] = arrivaltime(grid, Eω[:, ii], ωwindow; kwargs...)
     end
     out
+end
+
+"""
+    time_bandwidth(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+
+Extract the time-bandwidth product in the wavelength region given by `λlims`. The TBP
+is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of 
+a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
+oversampled before extracting the FWHM.
+"""
+function time_bandwidth(grid, Eω; λlims=nothing, winwidth=:auto, kwargs...)
+    isnothing(λlims) && return time_bandwidth(grid, Eω, fill(1, size(grid.ω)); kwargs...)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
+    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
+    time_bandwidth(grid, Eω, window; kwargs...)
+end
+
+function time_bandwidth(grid::RealGrid, Eω::Vector, ωwindow::Vector{<:Real};
+                        oversampling=1)
+    Eωwin = Eω .* ωwindow
+    Et = FFTW.irfft(Eωwin, length(grid.t), 1)
+    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+    time_bandwidth(to, abs2.(Maths.hilbert(Eto)), grid.ω, abs2.(Eωwin))
+end
+
+function time_bandwidth(grid::EnvGrid, Eω::Vector, ωwindow::Vector{<:Real};
+                        oversampling=1)
+    Eωwin = Eω .* ωwindow
+    Et = FFTW.ifft(Eωwin, 1)
+    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+    time_bandwidth(to, abs2.(Maths.hilbert(Eto)), grid.ω, abs2.(Eωwin))
+end
+
+function time_bandwidth(grid, Eω, ωwindow::Vector{<:Real}; kwargs...)
+    out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
+    cidcs = CartesianIndices(size(Eω)[2:end])
+    for ii in cidcs
+        out[ii] = time_bandwidth(grid, Eω[:, ii], ωwindow; kwargs...)
+    end
+    out
+end
+
+function time_bandwidth(t::Vector, It::Vector, ω::Vector, Iω::Vector)
+    fwω = Maths.fwhm(ω, Iω)
+    fwt = Maths.fwhm(t, It)
+    fwt*fwω/2π # return ΔfΔt
 end
 
 """
