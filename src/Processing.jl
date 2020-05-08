@@ -67,44 +67,53 @@ is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the T
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
-function time_bandwidth(grid, Eω; λlims=nothing, winwidth=:auto, kwargs...)
-    isnothing(λlims) && return time_bandwidth(grid, Eω, fill(1, size(grid.ω)); kwargs...)
-    ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
-    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-    time_bandwidth(grid, Eω, window; kwargs...)
+function time_bandwidth(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+    fwt = fwhm_t(grid, Eω; λlims=λlims, winwidth=winwidth, oversampling=oversampling)
+    fwf = fwhm_f(grid, Eω; λlims=λlims, winwidth=winwidth)
+    fwt.*fwf
 end
 
-function time_bandwidth(grid::RealGrid, Eω::Vector, ωwindow::Vector{<:Real};
-                        oversampling=1)
-    Eωwin = Eω .* ωwindow
-    Et = FFTW.irfft(Eωwin, length(grid.t), 1)
-    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
-    time_bandwidth(to, abs2.(Maths.hilbert(Eto)), grid.ω, abs2.(Eωwin))
+
+"""
+    fwhm_t(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+
+Extract the temporal FWHM. If `λlims` is given, bandpass first. If `oversampling` > 1, the 
+time-domain field is oversampled before extracting the FWHM.
+"""
+function fwhm_t(grid::AbstractGrid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+    window = isnothing(λlims) ?
+             fill(1, size(grid.ω)) :
+             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=window)
+    fwhm(to, abs2.(Eto))
 end
 
-function time_bandwidth(grid::EnvGrid, Eω::Vector, ωwindow::Vector{<:Real};
-                        oversampling=1)
-    Eωwin = Eω .* ωwindow
-    Et = FFTW.ifft(Eωwin, 1)
-    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
-    time_bandwidth(to, abs2.(Maths.hilbert(Eto)), grid.ω, abs2.(Eωwin))
+
+"""
+    fwhm_f(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+
+Extract the frequency FWHM. If `λlims` is given, bandpass first.
+"""
+function fwhm_f(grid::AbstractGrid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+    window = isnothing(λlims) ?
+             fill(1, size(grid.ω)) :
+             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    f, If = getIω(getEω(grid, Eω)..., :f)
+    fwhm(f, If)
 end
 
-function time_bandwidth(grid, Eω, ωwindow::Vector{<:Real}; kwargs...)
-    out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
-    cidcs = CartesianIndices(size(Eω)[2:end])
+
+function fwhm(x, I)
+    out = Array{Float64, ndims(I)-1}(undef, size(I)[2:end])
+    cidcs = CartesianIndices(size(I)[2:end])
     for ii in cidcs
-        out[ii] = time_bandwidth(grid, Eω[:, ii], ωwindow; kwargs...)
+        out[ii] = fwhm(x, I[:, ii])
     end
     out
 end
 
-function time_bandwidth(t::Vector, It::Vector, ω::Vector, Iω::Vector)
-    fwω = Maths.fwhm(ω, Iω)
-    fwt = Maths.fwhm(t, It)
-    fwt*fwω/2π # return ΔfΔt
-end
+fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
+
 
 """
     energy_λ(grid, Eω; λlims, winwidth=:auto)
@@ -298,12 +307,7 @@ Apply a frequency window to the field `Eω` if required. Possible values for `wi
 window_maybe(ω, Eω, ::Nothing) = Eω
 window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
     ω, sort(wlfreq.(collect(win)))...)
-function window_maybe(ω, Eω, win::NTuple{2, Number})
-    δω = abs(ω[2] - ω[1])
-    w = 100*δω # magic number
-    ωmin, ωmax = sort(wlfreq.(collect(win)))
-    Eω.*Maths.planck_taper(ω, ωmin-w, ωmin, ωmax, ωmax+w)
-end
+window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
 window_maybe(ω, Eω, window) = Eω.*window
 
 """
