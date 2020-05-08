@@ -27,6 +27,18 @@ function cmap_white(cmap; N=2^12, n=8)
 end
 
 """
+    cmap_colours(num, cmap="viridis"; cmin=0, cmax=0.8)
+
+Make an array of `num` different colours that follow the colourmap `cmap` between the values
+`cmin` and `cmax`.
+"""
+function cmap_colours(num, cmap="viridis"; cmin=0, cmax=0.8)
+    cm = ColorMap(cmap)
+    n = collect(range(cmin, cmax; length=num))
+    cm.(n)
+end
+
+"""
     subplotgrid(N, portrait=true, kwargs...)
 
 Create a figure with `N` subplots laid out in a grid that is as close to square as possible.
