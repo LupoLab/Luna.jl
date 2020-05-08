@@ -315,11 +315,17 @@ macro scan(ex)
         else
             if $(esc(:__SCAN__)).parallel
                 @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch
+                    end
                 end
             else
                 for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch
+                    end
                 end
             end
         end
