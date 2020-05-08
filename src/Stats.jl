@@ -274,10 +274,10 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(mode::Modes.AbstractMode; ub=150e-9, lb=3000e-9)
+function zdw(mode::Modes.AbstractMode; ub=100e-9, lb=3000e-9)
     λ00 = Modes.zdw(mode; ub=ub, lb=lb, z=0)
     function addstat!(d, Eω, Et, z, dz)
-        d["zdw"] = Modes.zdw(mode, λ00; z=z)
+        d["zdw"] = missnan(Modes.zdw(mode, λ00; z=z))
         λ00 = d["zdw"]
     end
 end
@@ -290,13 +290,16 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(modes; ub=150e-9, lb=3000e-9)
+function zdw(modes; ub=100e-9, lb=3000e-9)
     λ00 = [Modes.zdw(mode; ub=ub, lb=lb, z=0) for mode in modes]
     function addstat!(d, Eω, Et, z, dz)
-        d["zdw"] = [Modes.zdw(modes[ii], λ00[ii]; z=z) for ii in eachindex(modes)]
+        d["zdw"] = [missnan(Modes.zdw(modes[ii], λ00[ii]; z=z)) for ii in eachindex(modes)]
         λ00 .= d["zdw"]
     end
 end
+
+# convert missing to NaN
+missnan(x) = ismissing(x) ? NaN : x
 
 function zdz!(d, Eω, Et, z, dz)
     d["z"] = z
