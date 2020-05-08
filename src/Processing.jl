@@ -114,6 +114,19 @@ end
 
 fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 
+"""
+    peakpower(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+
+Extract the peak power. If `λlims` is given, bandpass first.
+"""
+function peakpower(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+    window = isnothing(λlims) ?
+             fill(1, size(grid.ω)) :
+             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=window)
+    dropdims(maximum(abs2.(Eto); dims=1); dims=1)
+end
+
 
 """
     energy_λ(grid, Eω; λlims, winwidth=:auto)
