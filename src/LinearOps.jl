@@ -381,7 +381,8 @@ function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
             for iω = 2:length(grid.ω)
                 n = Modes.neff(modes[i], grid.ω[iω], z=z)
                 # make sure neff is within safe limits and also take complex conjugate
-                nc = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω])
+                nc = (clamp(real(n), 1e-3, Inf)
+                        - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
                 out[iω, i] = -im*(grid.ω[iω]/PhysData.c*nc - grid.ω[iω]*β1)
             end
         end
@@ -390,17 +391,23 @@ end
 
 function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
+        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
         nmodes = length(modes)
         fill!(out, 0.0)
-        for i = 1:nmodes
-            out[grid.sidx, i] .= -im.*(
-                grid.ω[grid.sidx]./PhysData.c.*conj.(
-                    Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
-                .- (grid.ω[grid.sidx] .- grid.ω0) .* β1
-                )
-            if !thg
-                out[grid.sidx, i] .-= -im.*Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
+        sidcs = (1:length(grid.ω))[grid.sidx]
+        if !thg
+            βref = Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
+        end
+        for i in eachindex(modes)
+            for iω in sidcs
+                n = Modes.neff(modes[i], grid.ω[iω], z=z)
+                # make sure neff is within safe limits and also take complex conjugate
+                nc = (clamp(real(n), 1e-3, Inf)
+                        - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
+                out[iω, i] = -im*(grid.ω[iω]/PhysData.c*nc - (grid.ω[iω] - grid.ω0)*β1)
+                if !thg
+                    out[iω, i] -= -im*βref
+                end
             end
         end
     end
