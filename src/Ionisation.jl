@@ -126,11 +126,11 @@ end
 function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2*Ip_au)
-    Emax = Z^3/(16*ns^4) * au_Efield # Barrier suppression field strength
+    Emax = 5*Z^3/(16*ns^4) * au_Efield # Barrier suppression field strength
 
     # ω0 = 2π*c/λ0
     # Emin = ω0*sqrt(2m_e*ionpot)/electron/0.5 # Keldysh parameter of 0.5
-    Emin = Emax/1000
+    Emin = Emax/5000
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
