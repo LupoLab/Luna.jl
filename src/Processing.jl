@@ -91,4 +91,107 @@ function _energy_window(Eω, ωwindow, energyω)
     out
 end
 
+"Square window centred at `x0` with full width `xfw`"
+function swin(x, x0, xfw)
+    abs(x - x0) < xfw/2 ? 1.0 : 0.0
+end
+
+"Gaussian window centred at `x0` with full width `xfw`"
+function gwin(x, x0, xfw)
+    σ = xfw * 0.42
+    exp(-0.5 * ((x-x0)/σ)^2)
+end
+
+"""
+    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=4)
+
+Calculate the spectral power, defined by frequency domain field `Eω` over
+angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
+of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
+FWHM of `resolution`, and by default we sample `nsamples=4` times within each `resolution`.
+
+This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
+if necessary before this function is called, and that `ω` is monotonically increasing.
+"""
+function Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=4)
+    _Eω_to_Px(ω, Eω, λrange, resolution, window, nsamples, PhysData.wlfreq, PhysData.wlfreq)
+end
+
+"""
+    Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=4)
+
+Calculate the spectral power, defined by frequency domain field `Eω` over
+angular frequency grid `ω`, on a frequency scale over the range `Frange` taking account
+of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
+FWHM of `resolution`, and by default we sample `nsamples=4` times within each `resolution`.
+
+This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
+if necessary before this function is called, and that `ω` is monotonically increasing.
+"""
+function Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=4)
+    _Eω_to_Px(ω, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
+end
+
+"""
+Convolution kernel for each output point. We simply loop over all `z` and output points.
+The inner loop adds up the contributions from the specified window around
+the target point. Note that this works without scaling also for wavelength ranges
+because the integral is still over a frequency grid (with appropriate frequency dependent
+integration bounds).
+"""
+function _Eω_to_Px_kernel!(Px, cidcs, istart, iend, Eω, window, x, xg, resolution)
+    for ii in cidcs
+        for j in 1:size(Px, 1)
+            for k in istart[j]:iend[j]
+                Px[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution)
+            end
+        end
+    end
+    Px[Px .<= 0.0] .= maximum(Px) * 1e-20
+end
+
+function _Eω_to_Px(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+    # build output grid and array
+    x = ωtox.(ω)
+    nxg = ceil(Int, (xrange[2] - xrange[1])/resolution*nsamples)
+    xg = collect(range(xrange[1], xrange[2], length=nxg))
+    rdims = size(Eω)[2:end]
+    Px = Array{Float64, ndims(Eω)}(undef, ((nxg,)..., rdims...))
+    fill!(Px, 0.0)
+    cidcs = CartesianIndices(rdims)
+    # we find a suitable nspan
+    nspan = 1
+    while window(nspan*resolution, 0.0, resolution) > 1e-8
+        nspan += 1
+    end
+    # now we build arrays of start and end indices for the relevent frequency
+    # band for each output. For a frequency grid this is a little (tiny) inefficient
+    # but for a wavelength grid, which has varying index ranges, this is essential
+    # and I think having a common code is simpler/cleaner.
+    istart = Array{Int,1}(undef,nxg)
+    iend = Array{Int,1}(undef,nxg)
+    δω = ω[2] - ω[1]
+    i0 = argmin(abs.(ω))
+    for i in 1:nxg
+        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
+        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        # we want increasing indices
+        if i1 > i2
+            i1,i2 = i2,i1
+        end
+        # handle boundaries
+        if i2 > length(ω)
+            i2 = length(ω)
+        end
+        if i1 < i0
+            i1 = i0
+        end
+        istart[i] = i1
+        iend[i] = i2
+    end
+    # run the convolution kernel - the function barrier massively improves performance
+    _Eω_to_Px_kernel!(Px, cidcs, istart, iend, Eω, window, x, xg, resolution)
+    xg, Px
+end
+
 end
