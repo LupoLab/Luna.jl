@@ -103,7 +103,7 @@ function gwin(x, x0, xfw)
 end
 
 """
-    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=4)
+    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
 
 Calculate the spectral power, defined by frequency domain field `Eω` over
 angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
@@ -113,17 +113,17 @@ FWHM of `resolution`, and by default we sample `nsamples=4` times within each `r
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
 """
-function Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=4)
+function Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
     _Eω_to_Px(ω, Eω, λrange, resolution, window, nsamples, PhysData.wlfreq, PhysData.wlfreq)
 end
 
 """
-    Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=4)
+    Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
 
 Calculate the spectral power, defined by frequency domain field `Eω` over
 angular frequency grid `ω`, on a frequency scale over the range `Frange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=4` times within each `resolution`.
+FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
