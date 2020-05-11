@@ -244,6 +244,12 @@ end
     conj_clamp(n, ω)
 
 Simultaneously conjugate and clamp the effective index `n` to safe levels.
+
+The real part is lower-bounded at 1e-3 and the imaginary part upper-bounded at an attenuation
+coefficient `α` of 3000 (130 dB/cm). The limits are somewhat arbitrary and chosen empirically
+from previous bugs. See https://github.com/LupoLab/Luna/pull/142.
+
+See also [`αlim!`](@ref).
 """
 conj_clamp(n, ω) = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysData.c/ω)
 
