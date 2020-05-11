@@ -240,6 +240,13 @@ function αlim!(α)
     clamp!(α, 0.0, 3000.0)
 end
 
+"""
+    conj_clamp(n, ω)
+
+Simultaneously conjugate and clamp the effective index `n` to safe levels.
+"""
+conj_clamp(n, ω) = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysData.c/ω)
+
 function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     β = similar(grid.ω)
     βfun!(β, grid.ω, 0)
@@ -303,10 +310,7 @@ function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     function linop!(out, z)
         β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
         for iω = 2:length(grid.ω)
-            n = Modes.neff(mode, grid.ω[iω], z=z)
-            # make sure neff is within safe limits and also take complex conjugate
-            nc = (clamp(real(n), 1e-3, Inf)
-                    - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
+            nc = conj_clamp(Modes.neff(mode, grid.ω[iω], z=z), grid.ω[iω])
             out[iω] = -im*(grid.ω[iω]/PhysData.c*nc - grid.ω[iω]*β1)
         end
         out[1] = 0
@@ -327,10 +331,7 @@ function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false
             βref = Modes.β(mode, wlfreq(λ0), z=z)
         end
         for iω in sidcs
-            n = Modes.neff(mode, grid.ω[iω], z=z)
-            # make sure neff is within safe limits and also take complex conjugate
-            nc = (clamp(real(n), 1e-3, Inf)
-                    - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
+            nc = conj_clamp(Modes.neff(mode, grid.ω[iω], z=z), grid.ω[iω])
             out[iω] = -im*(grid.ω[iω]/PhysData.c*nc - (grid.ω[iω] - grid.ω0)*β1)
             if !thg
                 out[iω] -= -im*βref
@@ -390,10 +391,7 @@ function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
         fill!(out, 0.0)
         for i in eachindex(modes)
             for iω = 2:length(grid.ω)
-                n = Modes.neff(modes[i], grid.ω[iω], z=z)
-                # make sure neff is within safe limits and also take complex conjugate
-                nc = (clamp(real(n), 1e-3, Inf)
-                        - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
+                nc = conj_clamp(Modes.neff(modes[i], grid.ω[iω], z=z), grid.ω[iω])
                 out[iω, i] = -im*(grid.ω[iω]/PhysData.c*nc - grid.ω[iω]*β1)
             end
         end
@@ -410,10 +408,7 @@ function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
         end
         for i in eachindex(modes)
             for iω in sidcs
-                n = Modes.neff(modes[i], grid.ω[iω], z=z)
-                # make sure neff is within safe limits and also take complex conjugate
-                nc = (clamp(real(n), 1e-3, Inf)
-                        - im*clamp(imag(n), 0, 3000*PhysData.c/grid.ω[iω]))
+                nc = conj_clamp(Modes.neff(modes[i], grid.ω[iω], z=z), grid.ω[iω])
                 out[iω, i] = -im*(grid.ω[iω]/PhysData.c*nc - (grid.ω[iω] - grid.ω0)*β1)
                 if !thg
                     out[iω, i] -= -im*βref
