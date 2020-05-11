@@ -3,7 +3,7 @@ import Roots: fzero
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
-import Luna: Maths
+import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
 import LinearAlgebra: mul!
@@ -199,7 +199,7 @@ end
 Decompose the spatio-spectral field `Eωr`, sampled on radial coordinate `r` and time-grid
 `oldgrid`, into the given `modes` and resample onto `newgrid` via cubic interpolation.
 """
-function overlap(modes::ModeCollection, newgrid, oldgrid, r, Eωr)
+function overlap(modes::ModeCollection, newgrid::Grid.RealGrid, oldgrid::Grid.RealGrid, r, Eωr)
     Egm = zeros(ComplexF64, (length(newgrid.ω), length(modes))) # output array
     # If old and new grids have different number of samples, we need to scale by δt1/δt2
     scale = (oldgrid.t[2] - oldgrid.t[1]) / (newgrid.t[2] - newgrid.t[1])
