@@ -579,7 +579,7 @@ struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     ifun::fT
 end
 
-# make  broadcast like a scalar
+# make broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 """
@@ -647,6 +647,9 @@ struct LinTerp{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     y::Vy
     ifun::fT
 end
+
+# make  broadcast like a scalar
+Broadcast.broadcastable(l::LinTerp) = Ref(l)
 
 """
     LinTerp(xp, xs, ys)

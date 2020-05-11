@@ -1,6 +1,6 @@
 module Processing
 import FFTW
-import Luna: Maths, Fields
+import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq
 import Luna.Grid: RealGrid, EnvGrid
 
@@ -192,6 +192,48 @@ function _Eω_to_Px(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
     # run the convolution kernel - the function barrier massively improves performance
     _Eω_to_Px_kernel!(Px, cidcs, istart, iend, Eω, window, x, xg, resolution)
     xg, Px
+end
+
+"""
+    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+
+Calculate the spectral power, defined by frequency domain field `Eω` over
+angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
+of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
+FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
+
+This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
+if necessary before this function is called.
+
+This function should produce identical output to Eω_to_Pλ, but is based on regridding and FFT
+convolution. It appears to perform worse for all grid sizes.
+"""
+function Eω_to_Pλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    # build output grid and array
+    λ = PhysData.wlfreq.(ω)
+    rdims = size(Eω)[2:end]
+    cidcs = CartesianIndices(rdims)
+    iλ = (λ .>= λrange[1]) .& (λ .<= λrange[2])
+    mΔλ = minimum(abs.(diff(λ[iλ])))
+    λg = collect(range(λrange[1], λrange[2], step=mΔλ))
+    ωg = PhysData.wlfreq.(λg)
+    nλg = length(λg)
+    Pout = Array{Float64, ndims(Eω)}(undef, ((nλg,)..., rdims...))
+    for ii in cidcs
+        l = Maths.LinTerp(ω[iλ], abs2.(Eω[iλ,ii]) .* PhysData.c ./ λ[iλ].^2)
+        Pout[:,ii] .= l.(ωg)
+    end
+    nspan = 1
+    win = window.(λg, λg[nλg ÷ 2], resolution)
+    wω = FFTW.rfft(win)
+    for ii in cidcs
+        Pout[:,ii] .= FFTW.fftshift(abs.(FFTW.irfft(FFTW.rfft(Pout[:,ii]) .* wω, nλg)))
+    end
+    red = floor(Int, (resolution/mΔλ) / nsamples)
+    Pout = Pout[1:red:end,cidcs]
+    λg = λg[1:red:end]
+    Pout[Pout .<= 0.0] .= maximum(Pout) * 1e-20
+    λg, Pout
 end
 
 end
