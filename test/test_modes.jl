@@ -144,6 +144,10 @@ Emn2 = Eωm2/norm(Eωm2)
 end
 
 @testset "overlap with interpolation" begin
+#= Here we test the complete decomposition of a field into two modes while also re-gridding
+    onto a new time grid. We create two pulses in different spatial modes with different
+    arrival times and durations on one grid and check that we reproduce them on a new grid.
+    =#
 a = 100e-6 # capillary radius
 # spatial grid, with a bigger aperture than the capillary - as we would have in a simulation
 q = Hankel.QDHT(2a, 512)
@@ -203,4 +207,15 @@ Itm = abs2.(Maths.hilbert(Etm))
 @test isapprox(Maths.moment(newgrid.t, Itm[:, 1]), τ1, rtol=1e-3)
 @test abs(newgrid.t[argmax(Itm[:, 2])] - τ2) < (newgrid.t[2]-newgrid.t[1])
 @test isapprox(Maths.moment(newgrid.t, Itm[:, 2]), τ2, rtol=1e-3)
+
+# are the temporal shapes reproduced?
+It1new = Maths.gauss.(newgrid.t, x0=τ1, fwhm=fwhm1)
+It1new /= norm(It1new)
+Itm1 = Itm[:, 1]/norm(Itm[:, 1])
+@test all(isapprox.(Itm1, It1new, atol=1e-3*maximum(abs.(It1new))))
+
+It2new = Maths.gauss.(newgrid.t, x0=τ2, fwhm=fwhm2)
+It2new /= norm(It2new)
+Itm2 = Itm[:, 2]/norm(Itm[:, 2])
+@test all(isapprox.(Itm2, It2new, atol=1e-3*maximum(abs.(It2new))))
 end
