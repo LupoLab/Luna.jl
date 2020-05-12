@@ -209,6 +209,11 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
+"Pre-factor for energy integrals"
+function prefrac_energy_ω(grid::Grid.RealGrid)
+    2π/(grid.ω[end]^2)
+end
+
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
     function energy_t(Et)
@@ -216,11 +221,17 @@ function energyfuncs(grid::Grid.RealGrid)
         return integrate(grid.t, abs2.(Eta), SimpsonEven())
     end
 
-    prefac = 2π/(grid.ω[end]^2)
+    prefac = prefrac_energy_ω(grid)
     function energy_ω(Eω)
         prefac*integrate(grid.ω, abs2.(Eω), SimpsonEven())
     end
     return energy_t, energy_ω
+end
+
+function prefrac_energy_ω(grid::Grid.EnvGrid)
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    2π*δω/(Δω^2)
 end
 
 function energyfuncs(grid::Grid.EnvGrid)
@@ -228,9 +239,7 @@ function energyfuncs(grid::Grid.EnvGrid)
         return integrate(grid.t, abs2.(Et), SimpsonEven())
     end
 
-    δω = grid.ω[2] - grid.ω[1]
-    Δω = length(grid.ω)*δω
-    prefac = 2π*δω/(Δω^2)
+    prefac = prefrac_energy_ω(grid)
     function energy_ω(Eω)
         prefac*sum(abs2.(Eω))
     end

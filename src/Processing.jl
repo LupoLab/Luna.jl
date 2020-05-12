@@ -104,33 +104,33 @@ function gwin(x, x0, xfw)
 end
 
 """
-    Eω_to_SEDλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDλ(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral energy density, defined by frequency domain field `Eω` over
-angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
+Calculate the spectral energy density, defined by frequency domain field `Eω` defined
+on `grid`, on a wavelength scale over the range `λrange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
 """
-function Eω_to_SEDλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
-    _Eω_to_SEDx(ω, Eω, λrange, resolution, window, nsamples, PhysData.wlfreq, PhysData.wlfreq)
+function Eω_to_SEDλ(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
+    _Eω_to_SEDx(grid, Eω, λrange, resolution, window, nsamples, wlfreq, wlfreq)
 end
 
 """
-    Eω_to_SEDf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDf(grid, Eω, Frange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral energy density, defined by frequency domain field `Eω` over
-angular frequency grid `ω`, on a frequency scale over the range `Frange` taking account
+Calculate the spectral energy density, defined by frequency domain field `Eω` defined
+on `grid`, on a frequency scale over the range `Frange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
 """
-function Eω_to_SEDf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
-    _Eω_to_SEDx(ω, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
+function Eω_to_SEDf(grid, Eω, Frange, resolution; window=gwin, nsamples=8)
+    _Eω_to_SEDx(grid, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
 end
 
 """
@@ -140,18 +140,28 @@ the target point. Note that this works without scaling also for wavelength range
 because the integral is still over a frequency grid (with appropriate frequency dependent
 integration bounds).
 """
-function _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution)
+function _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution, scale)
     for ii in cidcs
         for j in 1:size(SEDx, 1)
             for k in istart[j]:iend[j]
-                SEDx[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution)
+                SEDx[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution) * scale
             end
         end
     end
     SEDx[SEDx .<= 0.0] .= minimum(SEDx[SEDx .> 0.0])
 end
 
-function _Eω_to_SEDx(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+function _Eω_to_SEDx(grid::EnvGrid, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+    ω = FFTW.fftshift(grid.ω)
+    Eω = FFTW.fftshift(Eω, 1)
+    _Eω_to_SEDx(grid, ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+end
+
+function _Eω_to_SEDx(grid::RealGrid, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+    _Eω_to_SEDx(grid, grid.ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+end
+
+function _Eω_to_SEDx(grid, ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
     # build output grid and array
     x = ωtox.(ω)
     nxg = ceil(Int, (xrange[2] - xrange[1])/resolution*nsamples)
@@ -190,16 +200,17 @@ function _Eω_to_SEDx(ω, Eω, xrange, resolution, window, nsamples, ωtox, xto�
         istart[i] = i1
         iend[i] = i2
     end
+    scale = Fields.prefrac_energy_ω(grid)
     # run the convolution kernel - the function barrier massively improves performance
-    _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution)
+    _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution, scale)
     xg, SEDx
 end
 
 """
-    Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDλ_fft(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral energy density, defined by frequency domain field `Eω` over
-angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
+Calculate the spectral energy density, defined by frequency domain field `Eω` defined
+on `grid`, on a wavelength scale over the range `λrange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
@@ -207,11 +218,22 @@ This works for both fields and envelopes and it is assumed that `Eω` is suitabl
 if necessary before this function is called.
 
 This function should produce identical output to `Eω_to_SEDλ`, but is based on regridding and FFT
-convolution. It appears to perform worse for all grid sizes.
+convolution. It appears to perform worse only for very large grid sizes and large ranges, otherwise
+it is faster.
 """
-function Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+function Eω_to_SEDλ_fft(grid::RealGrid, Eω, λrange, resolution; window=gwin, nsamples=8)
+    _Eω_to_SEDλ_fft(grid, grid.ω, Eω, λrange, resolution, window=window, nsamples=nsamples)
+end
+
+function Eω_to_SEDλ_fft(grid::EnvGrid, Eω, λrange, resolution; window=gwin, nsamples=8)
+    ω = FFTW.fftshift(grid.ω)
+    Eω = FFTW.fftshift(Eω, 1)
+    _Eω_to_SEDλ_fft(grid, ω, Eω, λrange, resolution, window=window, nsamples=nsamples)
+end
+
+function _Eω_to_SEDλ_fft(grid, ω, Eω, λrange, resolution; window=gwin, nsamples=8)
     # build output grid and array
-    λ = PhysData.wlfreq.(ω)
+    λ = wlfreq.(ω)
     rdims = size(Eω)[2:end]
     cidcs = CartesianIndices(rdims)
     # we find a suitable nspan
@@ -225,14 +247,17 @@ function Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
     mΔλ = minimum(abs.(diff(λ[iλ])))
     nλg = DSP.nextfastfft(ceil(Int, (sλrange[2] - sλrange[1])/mΔλ))
     λg = collect(range(sλrange[1], sλrange[2], length=nλg))
-    ωg = PhysData.wlfreq.(λg)
+    ωg = wlfreq.(λg)
     Sout = Array{Float64, ndims(Eω)}(undef, ((nλg,)..., rdims...))
+    prefac = Fields.prefrac_energy_ω(grid) / (ω[2] - ω[1])
     for ii in cidcs
-        l = Maths.LinTerp(ω[iλ], abs2.(Eω[iλ,ii]) .* PhysData.c ./ λ[iλ].^2)
+        l = Maths.LinTerp(ω[iλ], abs2.(Eω[iλ,ii]) .* prefac .* PhysData.c ./ λ[iλ].^2)
         Sout[:,ii] .= l.(ωg)
     end
     win = FFTW.fftshift(window.(λg, λg[nλg ÷ 2], resolution))
-    Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg)
+    dλ = λg[2] - λg[1]
+    scale = dλ/length(λg)/resolution # TODO not sure why the 1/res factor is necessary
+    Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg, scale)
     red = floor(Int, (resolution/mΔλ) / nsamples)
     red = red < 1 ? 1 : red
     istart = findfirst(x -> x >= λrange[1], λg)
@@ -243,10 +268,10 @@ function Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
     λg, Sout
 end
 
-function Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg)
+function Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg, scale)
     wω = FFTW.rfft(win)
     for ii in cidcs
-        Sout[:,ii] .= abs.(FFTW.irfft(FFTW.rfft(Sout[:,ii]) .* wω, nλg))
+        Sout[:,ii] .= scale .* abs.(FFTW.irfft(FFTW.rfft(Sout[:,ii]) .* wω, nλg))
     end
 end
 
