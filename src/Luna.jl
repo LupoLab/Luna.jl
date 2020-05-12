@@ -315,13 +315,11 @@ end
 
 function run(Eω, grid,
              linop, transform, FT, output;
-             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4,
+             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
 
     Et = FT \ Eω
-
-    z = 0.0
 
     function stepfun(Eω, z, dz, interpolant)
         Eω .*= grid.ωwin
@@ -336,7 +334,7 @@ function run(Eω, grid,
     output(dumps(transform, linop), group="dumps")
 
     RK45.solve_precon(
-        transform, linop, Eω, z, init_dz, grid.zmax, stepfun=stepfun,
+        transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
         max_dt=max_dz, min_dt=min_dz,
         rtol=rtol, atol=atol, safety=safety, norm=norm,
         status_period=status_period)

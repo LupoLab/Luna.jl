@@ -145,34 +145,50 @@ mutable struct HDF5Output{sT, S}
     statsfun::S  # Callable, returns dictionary of statistics
     stats_tmp::Vector{Dict{String, Any}}  # Temporary storage for statistics between saves
     compression::Bool # whether to use compression
+    cache::Bool # whether to cache latest solution point (for continuing after interrupt)
 end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, statsfun=nostats;
-                    yname="Eω", tname="z", compression=false, script=nothing)
+                    yname="Eω", tname="z", compression=false, script=nothing, cache=false)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script)
+    HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script, cache)
 end
 
 "Internal constructor - creates the file"
-function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script=nothing)
-    if isfile(fpath)
-        Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
-        rm(fpath)
-    end
-    fdir, fname = splitdir(fpath)
-    isdir(fdir) || mkpath(fdir)
-    @hlock HDF5.h5open(fpath, "cw") do file
-        HDF5.g_create(file, "stats")
-        HDF5.g_create(file, "meta")
-        file["meta"]["sourcecode"] = Utils.sourcecode()
-        file["meta"]["git_commit"] = Utils.git_commit()
-        if !isnothing(script)
-            file["meta"]["script_code"] = script
+function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
+                    script=nothing, cache=false)
+    if isfile(fpath) && cache
+        @hlock HDF5.h5open(fpath, "cw") do file
+            if HDF5.exists(file["meta"], "cache")
+                saved = read(file["meta"]["cache"]["saved"])
+            else
+                error("cached HDF5Output created but file without cache already exists")
+            end
         end
+    elseif isfile(fpath)
+        Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
+        saved = 0
+        rm(fpath)
+    else
+        fdir, fname = splitdir(fpath)
+        isdir(fdir) || mkpath(fdir)
+        @hlock HDF5.h5open(fpath, "cw") do file
+            HDF5.g_create(file, "stats")
+            HDF5.g_create(file, "meta")
+            file["meta"]["sourcecode"] = Utils.sourcecode()
+            file["meta"]["git_commit"] = Utils.git_commit()
+            if !isnothing(script)
+                file["meta"]["script_code"] = script
+            end
+            if cache
+                HDF5.g_create(file["meta"], "cache")
+            end
+        end
+        saved = 0
     end
     stats0 = Vector{Dict{String, Any}}()
-    HDF5Output(fpath, save_cond, yname, tname, 0, statsfun, stats0, compression)
+    HDF5Output(fpath, save_cond, yname, tname, saved, statsfun, stats0, compression, cache)
 end
 
 function initialise(o::HDF5Output, y)
@@ -194,6 +210,12 @@ function initialise(o::HDF5Output, y)
         end
         HDF5.d_create(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
+        if o.cache
+            file["meta"]["cache"]["t"] = typemin(0.0)
+            file["meta"]["cache"]["dt"] = typemin(0.0)
+            file["meta"]["cache"]["y"] = y
+            file["meta"]["cache"]["saved"] = 0
+        end
     end
 end
 
@@ -248,9 +270,14 @@ function (o::HDF5Output)(y, t, dt, yfun)
             end
             append_stats!(file["stats"], o.stats_tmp)
             o.stats_tmp = Vector{Dict{String, Any}}()
+            if o.cache
+                write(file["meta"]["cache"]["t"], t)
+                write(file["meta"]["cache"]["dt"], dt)
+                write(file["meta"]["cache"]["y"], y)
+                write(file["meta"]["cache"]["saved"], o.saved)
+            end
         end
     end
-
 end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
@@ -307,9 +334,17 @@ function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing
                 if !HDF5.exists(parent, group)
                     HDF5.g_create(parent, group)
                 end
-                parent[group][k] = v
+                if HDF5.exists(parent[group], k)
+                    write(parent[group][k], v)
+                else
+                    parent[group][k] = v
+                end
             else
-                parent[k] = v
+                if HDF5.exists(parent, k)
+                    write(parent[k], v)
+                else
+                    parent[k] = v
+                end
             end
         end
     end
@@ -333,11 +368,32 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
             if !HDF5.exists(parent, group)
                 HDF5.g_create(parent, group)
             end
-            parent[group][key] = val
+            if HDF5.exists(parent[group], key)
+                    write(parent[group][key], val)
+                else
+                    parent[group][key] = val
+                end
         else
-            parent[key] = val
+            if HDF5.exists(parent, key)
+                write(parent[key], val)
+            else
+                parent[key] = val
+            end
         end
     end
+end
+
+function check_cache(o::HDF5Output, y, t, dt)
+    if !o.cache
+        return y, t, dt
+    end
+    tc = o["meta"]["cache"]["t"]
+    if tc < t
+        return y, t, dt
+    end
+    yc = o["meta"]["cache"]["y"]
+    dtc = o["meta"]["cache"]["dt"]
+    return yc, tc, dtc
 end
 
 "Condition callable that distributes save points evenly on a grid"
@@ -411,6 +467,7 @@ macro ScanHDF5Output(args...)
         push!(exp.args, esc(arg))
     end
     push!(exp.args, Expr(:kw, :script, code))
+    push!(exp.args, Expr(:kw, :cache, true))
     quote 
         begin
             out = $exp
