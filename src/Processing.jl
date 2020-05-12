@@ -3,6 +3,7 @@ import FFTW
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq
 import Luna.Grid: RealGrid, EnvGrid
+import DSP
 
 """
     arrivaltime(grid, Eω; λlims, winwidth=0, method=:moment, oversampling=1)
@@ -103,24 +104,24 @@ function gwin(x, x0, xfw)
 end
 
 """
-    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral power, defined by frequency domain field `Eω` over
+Calculate the spectral energy density, defined by frequency domain field `Eω` over
 angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=4` times within each `resolution`.
+FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
 """
-function Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
-    _Eω_to_Px(ω, Eω, λrange, resolution, window, nsamples, PhysData.wlfreq, PhysData.wlfreq)
+function Eω_to_SEDλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    _Eω_to_SEDx(ω, Eω, λrange, resolution, window, nsamples, PhysData.wlfreq, PhysData.wlfreq)
 end
 
 """
-    Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral power, defined by frequency domain field `Eω` over
+Calculate the spectral energy density, defined by frequency domain field `Eω` over
 angular frequency grid `ω`, on a frequency scale over the range `Frange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
@@ -128,8 +129,8 @@ FWHM of `resolution`, and by default we sample `nsamples=8` times within each `r
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called, and that `ω` is monotonically increasing.
 """
-function Eω_to_Pf(ω, Eω, Frange, resolution; window=gwin, nsamples=4)
-    _Eω_to_Px(ω, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
+function Eω_to_SEDf(ω, Eω, Frange, resolution; window=gwin, nsamples=8)
+    _Eω_to_SEDx(ω, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
 end
 
 """
@@ -139,25 +140,25 @@ the target point. Note that this works without scaling also for wavelength range
 because the integral is still over a frequency grid (with appropriate frequency dependent
 integration bounds).
 """
-function _Eω_to_Px_kernel!(Px, cidcs, istart, iend, Eω, window, x, xg, resolution)
+function _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution)
     for ii in cidcs
-        for j in 1:size(Px, 1)
+        for j in 1:size(SEDx, 1)
             for k in istart[j]:iend[j]
-                Px[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution)
+                SEDx[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution)
             end
         end
     end
-    Px[Px .<= 0.0] .= maximum(Px) * 1e-20
+    SEDx[SEDx .<= 0.0] .= minimum(SEDx[SEDx .> 0.0])
 end
 
-function _Eω_to_Px(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+function _Eω_to_SEDx(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
     # build output grid and array
     x = ωtox.(ω)
     nxg = ceil(Int, (xrange[2] - xrange[1])/resolution*nsamples)
     xg = collect(range(xrange[1], xrange[2], length=nxg))
     rdims = size(Eω)[2:end]
-    Px = Array{Float64, ndims(Eω)}(undef, ((nxg,)..., rdims...))
-    fill!(Px, 0.0)
+    SEDx = Array{Float64, ndims(Eω)}(undef, ((nxg,)..., rdims...))
+    fill!(SEDx, 0.0)
     cidcs = CartesianIndices(rdims)
     # we find a suitable nspan
     nspan = 1
@@ -165,7 +166,7 @@ function _Eω_to_Px(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
         nspan += 1
     end
     # now we build arrays of start and end indices for the relevent frequency
-    # band for each output. For a frequency grid this is a little (tiny) inefficient
+    # band for each output. For a frequency grid this is a little inefficient
     # but for a wavelength grid, which has varying index ranges, this is essential
     # and I think having a common code is simpler/cleaner.
     istart = Array{Int,1}(undef,nxg)
@@ -190,14 +191,14 @@ function _Eω_to_Px(ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
         iend[i] = i2
     end
     # run the convolution kernel - the function barrier massively improves performance
-    _Eω_to_Px_kernel!(Px, cidcs, istart, iend, Eω, window, x, xg, resolution)
-    xg, Px
+    _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution)
+    xg, SEDx
 end
 
 """
-    Eω_to_Pλ(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+    Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral power, defined by frequency domain field `Eω` over
+Calculate the spectral energy density, defined by frequency domain field `Eω` over
 angular frequency grid `ω`, on a wavelength scale over the range `λrange` taking account
 of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
@@ -205,35 +206,49 @@ FWHM of `resolution`, and by default we sample `nsamples=8` times within each `r
 This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
 if necessary before this function is called.
 
-This function should produce identical output to Eω_to_Pλ, but is based on regridding and FFT
+This function should produce identical output to `Eω_to_SEDλ`, but is based on regridding and FFT
 convolution. It appears to perform worse for all grid sizes.
 """
-function Eω_to_Pλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
+function Eω_to_SEDλ_fft(ω, Eω, λrange, resolution; window=gwin, nsamples=8)
     # build output grid and array
     λ = PhysData.wlfreq.(ω)
     rdims = size(Eω)[2:end]
     cidcs = CartesianIndices(rdims)
-    iλ = (λ .>= λrange[1]) .& (λ .<= λrange[2])
+    # we find a suitable nspan
+    nspan = 1
+    while window(nspan*resolution, 0.0, resolution) > 1e-8
+        nspan += 1
+    end
+    sλrange = (λrange[1] - nspan*resolution, λrange[2] + nspan*resolution)
+    # TODO error check boundaries
+    iλ = (λ .>= sλrange[1]) .& (λ .<= sλrange[2])
     mΔλ = minimum(abs.(diff(λ[iλ])))
-    λg = collect(range(λrange[1], λrange[2], step=mΔλ))
+    nλg = DSP.nextfastfft(ceil(Int, (sλrange[2] - sλrange[1])/mΔλ))
+    λg = collect(range(sλrange[1], sλrange[2], length=nλg))
     ωg = PhysData.wlfreq.(λg)
-    nλg = length(λg)
-    Pout = Array{Float64, ndims(Eω)}(undef, ((nλg,)..., rdims...))
+    Sout = Array{Float64, ndims(Eω)}(undef, ((nλg,)..., rdims...))
     for ii in cidcs
         l = Maths.LinTerp(ω[iλ], abs2.(Eω[iλ,ii]) .* PhysData.c ./ λ[iλ].^2)
-        Pout[:,ii] .= l.(ωg)
+        Sout[:,ii] .= l.(ωg)
     end
-    nspan = 1
-    win = window.(λg, λg[nλg ÷ 2], resolution)
+    win = FFTW.fftshift(window.(λg, λg[nλg ÷ 2], resolution))
+    Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg)
+    red = floor(Int, (resolution/mΔλ) / nsamples)
+    red = red < 1 ? 1 : red
+    istart = findfirst(x -> x >= λrange[1], λg)
+    iend = findfirst(x -> x > λrange[2], λg) - 1
+    Sout = Sout[istart:red:iend,cidcs]
+    λg = λg[istart:red:iend]
+    Sout[Sout .<= 0.0] .= maximum(Sout) * 1e-20
+    λg, Sout
+end
+
+function Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg)
     wω = FFTW.rfft(win)
     for ii in cidcs
-        Pout[:,ii] .= FFTW.fftshift(abs.(FFTW.irfft(FFTW.rfft(Pout[:,ii]) .* wω, nλg)))
+        Sout[:,ii] .= abs.(FFTW.irfft(FFTW.rfft(Sout[:,ii]) .* wω, nλg))
     end
-    red = floor(Int, (resolution/mΔλ) / nsamples)
-    Pout = Pout[1:red:end,cidcs]
-    λg = λg[1:red:end]
-    Pout[Pout .<= 0.0] .= maximum(Pout) * 1e-20
-    λg, Pout
 end
+
 
 end
