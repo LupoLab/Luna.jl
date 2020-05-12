@@ -384,7 +384,7 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
 end
 
 function check_cache(o::HDF5Output, y, t, dt)
-    if !o.cache
+    if !o.cache || !haskey(o["meta"]["cache"], "t")
         return y, t, dt
     end
     tc = o["meta"]["cache"]["t"]
