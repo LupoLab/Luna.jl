@@ -194,8 +194,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
-    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun, cache=true)
-    Eω, z0, dz = Output.check_cache(output, Eω, 0.0, 1e-3)
+    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
     function stepfun(Eω, z, dz, interpolant)
         output(Eω, z, dz, interpolant)
         if z > 3e-2
@@ -215,9 +214,8 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
-    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun, cache=true)
-    Eω, z0, dz = Output.check_cache(output, Eω, 0.0, 1e-3)
-    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5, z0=z0, init_dz=dz)
+    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     # Run from scratch with MemoryOutput
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)

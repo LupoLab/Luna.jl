@@ -146,31 +146,33 @@ mutable struct HDF5Output{sT, S}
     stats_tmp::Vector{Dict{String, Any}}  # Temporary storage for statistics between saves
     compression::Bool # whether to use compression
     cache::Bool # whether to cache latest solution point (for continuing after interrupt)
+    cachehash::UInt64 # safety hash to prevent cache-continuing for different propagations
 end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, statsfun=nostats;
-                    yname="Eω", tname="z", compression=false, script=nothing, cache=false)
+                    yname="Eω", tname="z", compression=false, script=nothing, cache=true)
     save_cond = GridCondition(tmin, tmax, saveN)
     HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script, cache)
 end
 
 "Internal constructor - creates the file"
 function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
-                    script=nothing, cache=false)
+                    script=nothing, cache=true)
     if isfile(fpath) && cache
         @hlock HDF5.h5open(fpath, "cw") do file
             if HDF5.exists(file["meta"], "cache")
                 saved = read(file["meta"]["cache"]["saved"])
+                chash = hash((sort(names(file["stats"])), size(file[yname])[1:end-1]))
             else
-                error("cached HDF5Output created but file without cache already exists")
+                error("cached HDF5Output created, file exists, but has no cache")
             end
         end
-    elseif isfile(fpath)
-        Logging.@warn("Output file $(fpath) already exists and will be overwritten!")
-        saved = 0
-        rm(fpath)
     else
+        if isfile(fpath)
+            Logging.@warn("output file $(fpath) already exists and will be overwritten!")
+            rm(fpath)
+        end
         fdir, fname = splitdir(fpath)
         isdir(fdir) || mkpath(fdir)
         @hlock HDF5.h5open(fpath, "cw") do file
@@ -185,10 +187,12 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
                 HDF5.g_create(file["meta"], "cache")
             end
         end
+        chash = UInt64(0)
         saved = 0
     end
     stats0 = Vector{Dict{String, Any}}()
-    HDF5Output(fpath, save_cond, yname, tname, saved, statsfun, stats0, compression, cache)
+    HDF5Output(fpath, save_cond, yname, tname, saved, statsfun, stats0,
+               compression, cache, chash)
 end
 
 function initialise(o::HDF5Output, y)
@@ -210,6 +214,9 @@ function initialise(o::HDF5Output, y)
         end
         HDF5.d_create(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
+        statsnames = sort(collect(keys(o.stats_tmp[end])))
+        o.cachehash = hash((statsnames, size(y)))
+        file["meta"]["cachehash"] = o.cachehash
         if o.cache
             file["meta"]["cache"]["t"] = typemin(0.0)
             file["meta"]["cache"]["dt"] = typemin(0.0)
@@ -251,6 +258,10 @@ function (o::HDF5Output)(y, t, dt, yfun)
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
             !HDF5.exists(file, o.yname) && initialise(o, y)
+            statsnames = sort(collect(keys(o.stats_tmp[end])))
+            cachehash = hash((statsnames, size(y)))
+            cachehash == o.cachehash || error(
+                "the hash for this propagation does not agree with cache in file")
             while save
                 s = collect(size(file[o.yname]))
                 idcs = fill(:, length(s)-1)
@@ -383,6 +394,11 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
     end
 end
 
+"""
+    check_cache(o::HDF5Output, y, t, dt)
+
+Check for an existing cached propagation in the output `o` and return this cache if present.
+"""
 function check_cache(o::HDF5Output, y, t, dt)
     if !o.cache || !haskey(o["meta"]["cache"], "t")
         return y, t, dt
@@ -395,6 +411,9 @@ function check_cache(o::HDF5Output, y, t, dt)
     dtc = o["meta"]["cache"]["dt"]
     return yc, tc, dtc
 end
+
+# For other outputs (e.g. MemoryOutput or another function), checking the cache does nothing.
+check_cache(o, y, t, dt) = y, t, dt
 
 "Condition callable that distributes save points evenly on a grid"
 struct GridCondition
@@ -467,7 +486,6 @@ macro ScanHDF5Output(args...)
         push!(exp.args, esc(arg))
     end
     push!(exp.args, Expr(:kw, :script, code))
-    push!(exp.args, Expr(:kw, :cache, true))
     quote 
         begin
             out = $exp

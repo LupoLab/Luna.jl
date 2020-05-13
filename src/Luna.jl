@@ -329,6 +329,13 @@ function run(Eω, grid,
         output(Eω, z, dz, interpolant)
     end
 
+    # check_cache does nothing except for HDF5Outputs
+    Eωc, zc, dzc = Output.check_cache(output, Eω, z0, init_dz)
+    if zc > z0
+        Logging.@info("Found cached propagation. Resuming...")
+        Eω, z0, init_dz = Eωc, zc, dzc
+    end
+
     output(Grid.to_dict(grid), group="grid")
     output(simtype(grid, transform, linop), group="simulation_type")
     output(dumps(transform, linop), group="dumps")
