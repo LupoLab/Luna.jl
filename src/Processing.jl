@@ -6,15 +6,12 @@ import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput
 
 """
-    arrivaltime(grid, Eω; λlims, winwidth=0, method=:moment, oversampling=1)
+    arrivaltime(grid, Eω; bandpass=nothing, method=:moment, oversampling=1)
 
 Extract the arrival time of the pulse in the wavelength limits `λlims`.
 
 # Arguments
-- `λlims::Tuple{Number, Number}` : wavelength limits (λmin, λmax)
-- `winwidth` : If a `Number`, set smoothing width (in rad/s) of the window function
-                used to bandpass.
-                If `:auto`, automatically set the width to 64 frequency samples.
+- `bandpass` : method to bandpass the field if required. See [`window_maybe`](@ref)
 - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
                     the time of peak power
 - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
@@ -45,9 +42,9 @@ function arrivaltime(t::AbstractVector, It::AbstractArray; method)
 end
 
 """
-    time_bandwidth(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+    time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the time-bandwidth product in the wavelength region given by `λlims`. The TBP
+Extract the time-bandwidth product, after bandpassing if required. The TBP
 is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of 
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
@@ -60,10 +57,10 @@ end
 
 
 """
-    fwhm_t(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+    fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the temporal FWHM. If `λlims` is given, bandpass first. If `oversampling` > 1, the 
-time-domain field is oversampled before extracting the FWHM.
+Extract the temporal FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
+If `oversampling` > 1, the  time-domain field is oversampled before extracting the FWHM.
 """
 function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
@@ -72,9 +69,9 @@ end
 
 
 """
-    fwhm_f(grid, Eω::Vector; λlims=nothing, winwidth=:auto, oversampling=1)
+    fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)
 
-Extract the frequency FWHM. If `λlims` is given, bandpass first.
+Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
 """
 function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
     Eω = window_maybe(grid.ω, Eω, bandpass)
@@ -95,9 +92,9 @@ end
 fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 
 """
-    peakpower(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
+    peakpower(grid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the peak power. If `λlims` is given, bandpass first.
+Extract the peak power. If `bandpass` is given, bandpass the field according to `window_maybe`.
 """
 function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
@@ -106,31 +103,23 @@ end
 
 
 """
-    energy_λ(grid, Eω; λlims, winwidth=:auto)
+    energy(grid, Eω; bandpass=nothing)
 
-Extract energy within a wavelength band given by `λlims`. `winwidth` can be a `Number` in 
-rad/fs to set the smoothing edges of the frequency window, or `:auto`, in which case the
-width defaults to 64 frequency samples.
+Extract energy. If `bandpass` is given, bandpass the field according to `window_maybe`.
 """
-function energy_λ(grid, Eω; λlims, winwidth=:auto)
-    ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 64*abs(grid.ω[2] - grid.ω[1]))
-    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-    energy_window(grid, Eω, window)
-end
-
-function energy_window(grid, Eω, ωwindow)
+function energy(grid, Eω; bandpass=nothing)
+    Eω = window_maybe(grid.ω, Eω, bandpass)
     _, energyω = Fields.energyfuncs(grid)
-    _energy_window(Eω, ωwindow, energyω)
+    _energy(Eω, energyω)
 end
 
-_energy_window(Eω::Vector, ωwindow, energyω) = energyω(Eω .* ωwindow)
+_energy(Eω::Vector, energyω) = energyω(Eω)
 
-function _energy_window(Eω, ωwindow, energyω)
+function _energy(Eω, energyω)
     out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
     cidcs = CartesianIndices(size(Eω)[2:end])
     for ii in cidcs
-        out[ii] = _energy_window(Eω[:, ii], ωwindow, energyω)
+        out[ii] = _energy(Eω[:, ii], energyω)
     end
     out
 end
@@ -317,6 +306,7 @@ Apply a frequency window to the field `Eω` if required. Possible values for `wi
 - 3-`Tuple` of `Number`s : minimum, maximum **wavelength**, and smoothing in **radial frequency**
 - 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
 - `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
+- `PeakWindow` : automatically track the peak in a given range and apply the window around it
 """
 window_maybe(ω, Eω, ::Nothing) = Eω
 window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
