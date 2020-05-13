@@ -183,7 +183,7 @@ function step!(s)
     else
         s.yn .= s.y
     end
-    s.prop!(s.yn, s.t, s.tn) # propagate to new time to pass correct solution to stepfun
+    prop!_maybe(s) # propagate to new time to pass correct solution to stepfun
     return s.ok
 end
 
@@ -217,6 +217,9 @@ function evaluate!(s::PreconStepper)
         s.fbar!(s.ks[ii+1], s.yn, s.t, s.t+nodes[ii]*s.dt)
     end
 end
+
+prop!_maybe(s::PreconStepper) = s.prop!(s.yn, s.t, s.tn)
+prop!_maybe(s) = nothing
 
 "Interpolate solution, aka dense output."
 function interpolate(s::Stepper, ti::Float64)
