@@ -14,33 +14,18 @@ Extract the arrival time of the pulse in the wavelength limits `λlims`.
 - `λlims::Tuple{Number, Number}` : wavelength limits (λmin, λmax)
 - `winwidth` : If a `Number`, set smoothing width (in rad/s) of the window function
                 used to bandpass.
-                If `:auto`, automatically set the width to 128 frequency samples.
+                If `:auto`, automatically set the width to 64 frequency samples.
 - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
                     the time of peak power
 - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
 """
-function arrivaltime(grid, Eω; λlims, winwidth=:auto, kwargs...)
-    ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
-    window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-    arrivaltime(grid, Eω, window; kwargs...)
-end
-
-function arrivaltime(grid::RealGrid, Eω::Vector, ωwindow::Vector{<:Real};
-                     method=:moment, oversampling=1)
-    Et = FFTW.irfft(Eω .* ωwindow, length(grid.t), 1)
-    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
-    arrivaltime(to, abs2.(Maths.hilbert(Eto)); method=method)
-end
-
-function arrivaltime(grid::EnvGrid, Eω::Vector, ωwindow::Vector{<:Real};
-                     method=:moment, oversampling=1)
-    Et = FFTW.ifft(Eω .* ωwindow, 1)
-    to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+function arrivaltime(grid::AbstractGrid, Eω;
+                     bandpass=nothing, method=:moment, oversampling=1)
+    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
     arrivaltime(to, abs2.(Eto); method=method)
 end
 
-function arrivaltime(t, It::Vector{<:Real}; method)
+function arrivaltime(t::AbstractVector, It::AbstractVector; method)
     if method == :moment
         Maths.moment(t, It)
     elseif method == :peak
@@ -50,11 +35,11 @@ function arrivaltime(t, It::Vector{<:Real}; method)
     end
 end
 
-function arrivaltime(grid, Eω, ωwindow::Vector{<:Real}; kwargs...)
-    out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
-    cidcs = CartesianIndices(size(Eω)[2:end])
+function arrivaltime(t::AbstractVector, It::AbstractArray; method)
+    out = Array{Float64, ndims(It)-1}(undef, size(It)[2:end])
+    cidcs = CartesianIndices(size(It)[2:end])
     for ii in cidcs
-        out[ii] = arrivaltime(grid, Eω[:, ii], ωwindow; kwargs...)
+        out[ii] = arrivaltime(t, It[:, ii]; method=method)
     end
     out
 end
@@ -67,9 +52,9 @@ is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the T
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
-function time_bandwidth(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
-    fwt = fwhm_t(grid, Eω; λlims=λlims, winwidth=winwidth, oversampling=oversampling)
-    fwf = fwhm_f(grid, Eω; λlims=λlims, winwidth=winwidth)
+function time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
+    fwt = fwhm_t(grid, Eω; bandpass=bandpass, oversampling=oversampling)
+    fwf = fwhm_f(grid, Eω; bandpass=bandpass)
     fwt.*fwf
 end
 
@@ -80,11 +65,8 @@ end
 Extract the temporal FWHM. If `λlims` is given, bandpass first. If `oversampling` > 1, the 
 time-domain field is oversampled before extracting the FWHM.
 """
-function fwhm_t(grid::AbstractGrid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
-    window = isnothing(λlims) ?
-             fill(1, size(grid.ω)) :
-             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
-    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=window)
+function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
     fwhm(to, abs2.(Eto))
 end
 
@@ -94,10 +76,8 @@ end
 
 Extract the frequency FWHM. If `λlims` is given, bandpass first.
 """
-function fwhm_f(grid::AbstractGrid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
-    window = isnothing(λlims) ?
-             fill(1, size(grid.ω)) :
-             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+    Eω = window_maybe(grid.ω, Eω, bandpass)
     f, If = getIω(getEω(grid, Eω)..., :f)
     fwhm(f, If)
 end
@@ -119,11 +99,8 @@ fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 
 Extract the peak power. If `λlims` is given, bandpass first.
 """
-function peakpower(grid, Eω; λlims=nothing, winwidth=:auto, oversampling=1)
-    window = isnothing(λlims) ?
-             fill(1, size(grid.ω)) :
-             ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
-    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=window)
+function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
+    to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
     dropdims(maximum(abs2.(Eto); dims=1); dims=1)
 end
 
@@ -133,11 +110,11 @@ end
 
 Extract energy within a wavelength band given by `λlims`. `winwidth` can be a `Number` in 
 rad/fs to set the smoothing edges of the frequency window, or `:auto`, in which case the
-width defaults to 128 frequency samples.
+width defaults to 64 frequency samples.
 """
 function energy_λ(grid, Eω; λlims, winwidth=:auto)
     ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 128*abs(grid.ω[2] - grid.ω[1]))
+    winwidth == :auto && (winwidth = 64*abs(grid.ω[2] - grid.ω[1]))
     window = Maths.planck_taper(grid.ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
     energy_window(grid, Eω, window)
 end
@@ -148,6 +125,7 @@ function energy_window(grid, Eω, ωwindow)
 end
 
 _energy_window(Eω::Vector, ωwindow, energyω) = energyω(Eω .* ωwindow)
+
 function _energy_window(Eω, ωwindow, energyω)
     out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
     cidcs = CartesianIndices(size(Eω)[2:end])
@@ -165,7 +143,7 @@ the smoothing width of the window in rad/s.
 """
 function ωwindow_λ(ω, λlims; winwidth=:auto)
     ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 128*abs(ω[2] - ω[1]))
+    winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
     window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
 end
 
@@ -307,6 +285,28 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
     return to, Eto, output["z"][zidx]
 end
 
+struct PeakWindow
+    width::Float64
+    λmin::Float64
+    λmax::Float64
+end
+
+function (pw::PeakWindow)(ω, Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end]) # dims are ω, modes, rest...
+    out = similar(Eω)
+    cropidcs = (ω .> wlfreq(pw.λmax)) .& (ω .< wlfreq(pw.λmin))
+    cropω = ω[cropidcs]
+    Iω = abs2.(Eω)
+    for cidx in cidcs
+        λpeak = wlfreq(cropω[argmax(Iω[cropidcs, 1, cidx])])
+        window = ωwindow_λ(ω, (λpeak-pw.width/2, λpeak+pw.width/2))
+        for midx in 1:size(Eω, 2)
+            out[:, midx, cidx] .= Eω[:, midx, cidx] .* window
+        end
+    end
+    out
+end
+
 """
     window_maybe(ω, Eω, win)
 
@@ -314,6 +314,7 @@ Apply a frequency window to the field `Eω` if required. Possible values for `wi
 
 - `nothing` : no window is applied
 - 4-`Tuple` of `Number`s : the 4 parameters for a [`Maths.planck_taper`](@ref) in **wavelength**
+- 3-`Tuple` of `Number`s : minimum, maximum **wavelength**, and smoothing in **radial frequency**
 - 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
 - `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
 """
@@ -321,7 +322,10 @@ window_maybe(ω, Eω, ::Nothing) = Eω
 window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
     ω, sort(wlfreq.(collect(win)))...)
 window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
-window_maybe(ω, Eω, window) = Eω.*window
+window_maybe(ω, Eω, win::NTuple{3, Number}) = Eω .* ωwindow_λ(ω, win[1:2]; winwidth=win[3])
+window_maybe(ω, Eω, win::PeakWindow) = win(ω, Eω)
+window_maybe(ω, Eω, window::Vector) = Eω.*window
+
 
 """
     envelope(grid, Eω)
