@@ -59,8 +59,9 @@ end
 """
     fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the temporal FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
-If `oversampling` > 1, the  time-domain field is oversampled before extracting the FWHM.
+Extract the temporal FWHM. If `bandpass` is given, bandpass the fieldaccording to
+[`window_maybe`](@ref). If `oversampling` > 1, the  time-domain field is oversampled before
+extracting the FWHM.
 """
 function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
@@ -71,7 +72,8 @@ end
 """
     fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)
 
-Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref).
 """
 function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
     Eω = window_maybe(grid.ω, Eω, bandpass)
@@ -94,7 +96,8 @@ fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 """
     peakpower(grid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the peak power. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract the peak power. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref).
 """
 function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
@@ -105,7 +108,8 @@ end
 """
     energy(grid, Eω; bandpass=nothing)
 
-Extract energy. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract energy. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref).
 """
 function energy(grid, Eω; bandpass=nothing)
     Eω = window_maybe(grid.ω, Eω, bandpass)
