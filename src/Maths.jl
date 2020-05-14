@@ -577,13 +577,14 @@ struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     y::Vy
     D::Vy
     ifun::fT
+    bounds_error::Bool
 end
 
 # make  broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 """
-    CSpline(x, y [, ifun])
+    CSpline(x, y [, ifun]; bounds_error=false)
 
 Construct a `CSpline` to interpolate the values `y` on axis `x`.
 
@@ -592,7 +593,7 @@ than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
 2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
 """
-function CSpline(x, y, ifun=nothing)
+function CSpline(x, y, ifun=nothing; bounds_error=false)
     x, y = check_spline_args(x, y)
     R = similar(y)
     R[1] = y[2] - y[1]
@@ -607,7 +608,7 @@ function CSpline(x, y, ifun=nothing)
     dl = fill(1.0, length(y) - 1)
     M = Tridiagonal(dl, d, dl)
     D = M \ R
-    CSpline(x, y, D, make_spline_ifun(x, ifun))
+    CSpline(x, y, D, make_spline_ifun(x, ifun), bounds_error)
 end
 
 """
@@ -616,6 +617,10 @@ end
 Evaluate the `CSpline` at coordinate `x0`
 """
 function (c::CSpline)(x0)
+    if c.bounds_error
+        x0 < c.x[1] && throw(DomainError("CSpline evaulated out of bounds, $x0 < $(c.x[1])"))
+        x0 > c.x[end] && throw(DomainError("CSpline evaulated out of bounds, $x0 < $(c.x[end])"))
+    end
     i = c.ifun(x0)
     x0 == c.x[i] && return c.y[i]
     x0 == c.x[i-1] && return c.y[i-1]

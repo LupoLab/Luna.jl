@@ -2,6 +2,8 @@ module Scans
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Base.Threads: @threads
 import Base: length
+import Dates
+import Logging: @info, @warn
 import DataStructures: OrderedDict
 
 """
@@ -315,11 +317,21 @@ macro scan(ex)
         else
             if $(esc(:__SCAN__)).parallel
                 @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch e
+                        bt = catch_backtrace()
+                        @warn sprint(showerror, e, bt)
+                    end
                 end
             else
                 for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch e
+                        bt = catch_backtrace()
+                        @warn sprint(showerror, e, bt)
+                    end
                 end
             end
         end
