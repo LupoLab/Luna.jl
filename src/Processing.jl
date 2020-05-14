@@ -1,5 +1,6 @@
 module Processing
 import FFTW
+import DSP
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
@@ -124,90 +125,58 @@ function _energy(Eω, energyω)
     out
 end
 
-"Square window centred at `x0` with full width `xfw`"
-function swin(x, x0, xfw)
-    abs(x - x0) < xfw/2 ? 1.0 : 0.0
-end
-
-"Gaussian window centred at `x0` with full width `xfw`"
-function gwin(x, x0, xfw)
-    σ = xfw * 0.42
-    exp(-0.5 * ((x-x0)/σ)^2)
-end
-
 """
-    Eω_to_SEDλ(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
+    specres(ω, Iω, specaxis, resolution; window=gwin, nsamples=8)
 
-Calculate the spectral energy density, defined by frequency domain field `Eω` defined
-on `grid`, on a wavelength scale over the range `λrange` taking account
-of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
+Smooth the spectral energy density `Iω(ω)` to account for the given `resolution`
+on the defined `specaxis`. The `window` function to use defaults to a Gaussian function with
 FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
 
-This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
-if necessary before this function is called, and that `ω` is monotonically increasing.
-"""
-function Eω_to_SEDλ(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
-    _Eω_to_SEDx(grid, Eω, λrange, resolution, window, nsamples, wlfreq, wlfreq)
-end
+Note that you should prefer the `resolution` keyword of [`getIω`](@ref) instead of calling
+this function directly.
 
-"""
-    Eω_to_SEDf(grid, Eω, Frange, resolution; window=gwin, nsamples=8)
+The input `ω` and `Iω` should be as returned by [`getIω`](@ref) with `specaxis = :ω`.
 
-Calculate the spectral energy density, defined by frequency domain field `Eω` defined
-on `grid`, on a frequency scale over the range `Frange` taking account
-of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
-
-This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
-if necessary before this function is called, and that `ω` is monotonically increasing.
+Returns the new specaxis grid and smoothed spectrum.
 """
-function Eω_to_SEDf(grid, Eω, Frange, resolution; window=gwin, nsamples=8)
-    _Eω_to_SEDx(grid, Eω, Frange, resolution, window, nsamples, x -> x/(2π), x -> x*(2π))
-end
-
-"""
-Convolution kernel for each output point. We simply loop over all `z` and output points.
-The inner loop adds up the contributions from the specified window around
-the target point. Note that this works without scaling also for wavelength ranges
-because the integral is still over a frequency grid (with appropriate frequency dependent
-integration bounds).
-"""
-function _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution, scale)
-    for ii in cidcs
-        for j in 1:size(SEDx, 1)
-            for k in istart[j]:iend[j]
-                SEDx[j,ii] += abs2(Eω[k,ii]) * window(x[k], xg[j], resolution) * scale
-            end
+function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=8)
+    if isnothing(window)
+        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
+            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
         end
     end
-    SEDx[SEDx .<= 0.0] .= minimum(SEDx[SEDx .> 0.0])
+    if specaxis == :λ
+        xg, Ix = _specres(ω, Iω, resolution, specrange, window, nsamples, wlfreq, wlfreq)
+    elseif specaxis == :f
+        xg, Ix = _specres(ω, Iω, resolution, specrange, window, nsamples, x -> x/(2π), x -> x*(2π))
+    else
+        error("`specaxis` must be one of `:λ` or `:f`")
+    end
+    xg, Ix
 end
 
-function _Eω_to_SEDx(grid::EnvGrid, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
-    ω = FFTW.fftshift(grid.ω)
-    Eω = FFTW.fftshift(Eω, 1)
-    _Eω_to_SEDx(grid, ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
-end
-
-function _Eω_to_SEDx(grid::RealGrid, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
-    _Eω_to_SEDx(grid, grid.ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
-end
-
-function _Eω_to_SEDx(grid, ω, Eω, xrange, resolution, window, nsamples, ωtox, xtoω)
+function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     # build output grid and array
     x = ωtox.(ω)
+    fxrange = extrema(x[(x .> 0) .& isfinite.(x)])
+    if isnothing(xrange)
+        xrange = fxrange
+    else
+        xrange = extrema(xrange)
+        xrange = (max(xrange[1], fxrange[1]), min(xrange[2], fxrange[2]))
+    end
     nxg = ceil(Int, (xrange[2] - xrange[1])/resolution*nsamples)
     xg = collect(range(xrange[1], xrange[2], length=nxg))
-    rdims = size(Eω)[2:end]
-    SEDx = Array{Float64, ndims(Eω)}(undef, ((nxg,)..., rdims...))
-    fill!(SEDx, 0.0)
+    rdims = size(Iω)[2:end]
+    Ix = Array{Float64, ndims(Iω)}(undef, ((nxg,)..., rdims...))
+    fill!(Ix, 0.0)
     cidcs = CartesianIndices(rdims)
     # we find a suitable nspan
     nspan = 1
-    while window(nspan*resolution, 0.0, resolution) > 1e-8
+    while window(nspan*resolution, 0.0) > 1e-8
         nspan += 1
     end
-    # now we build arrays of start and end indices for the relevent frequency
+    # now we build arrays of start and end indices for the relevant frequency
     # band for each output. For a frequency grid this is a little inefficient
     # but for a wavelength grid, which has varying index ranges, this is essential
     # and I think having a common code is simpler/cleaner.
@@ -232,79 +201,27 @@ function _Eω_to_SEDx(grid, ω, Eω, xrange, resolution, window, nsamples, ωtox
         istart[i] = i1
         iend[i] = i2
     end
-    scale = Fields.prefrac_energy_ω(grid)
     # run the convolution kernel - the function barrier massively improves performance
-    _Eω_to_SEDx_kernel!(SEDx, cidcs, istart, iend, Eω, window, x, xg, resolution, scale)
-    xg, SEDx
+    _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
+    xg, Ix
 end
 
 """
-    Eω_to_SEDλ_fft(grid, Eω, λrange, resolution; window=gwin, nsamples=8)
-
-Calculate the spectral energy density, defined by frequency domain field `Eω` defined
-on `grid`, on a wavelength scale over the range `λrange` taking account
-of spectral `resolution`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
-
-This works for both fields and envelopes and it is assumed that `Eω` is suitably fftshifted
-if necessary before this function is called.
-
-This function should produce identical output to `Eω_to_SEDλ`, but is based on regridding and FFT
-convolution. It appears to perform worse only for very large grid sizes and large ranges, otherwise
-it is faster.
+Convolution kernel for each output point. We simply loop over all `z` and output points.
+The inner loop adds up the contributions from the specified window around
+the target point. Note that this works without scaling also for wavelength ranges
+because the integral is still over a frequency grid (with appropriate frequency dependent
+integration bounds).
 """
-function Eω_to_SEDλ_fft(grid::RealGrid, Eω, λrange, resolution; window=gwin, nsamples=8)
-    _Eω_to_SEDλ_fft(grid, grid.ω, Eω, λrange, resolution, window=window, nsamples=nsamples)
-end
-
-function Eω_to_SEDλ_fft(grid::EnvGrid, Eω, λrange, resolution; window=gwin, nsamples=8)
-    ω = FFTW.fftshift(grid.ω)
-    Eω = FFTW.fftshift(Eω, 1)
-    _Eω_to_SEDλ_fft(grid, ω, Eω, λrange, resolution, window=window, nsamples=nsamples)
-end
-
-function _Eω_to_SEDλ_fft(grid, ω, Eω, λrange, resolution; window=gwin, nsamples=8)
-    # build output grid and array
-    λ = wlfreq.(ω)
-    rdims = size(Eω)[2:end]
-    cidcs = CartesianIndices(rdims)
-    # we find a suitable nspan
-    nspan = 1
-    while window(nspan*resolution, 0.0, resolution) > 1e-8
-        nspan += 1
-    end
-    sλrange = (λrange[1] - nspan*resolution, λrange[2] + nspan*resolution)
-    # TODO error check boundaries
-    iλ = (λ .>= sλrange[1]) .& (λ .<= sλrange[2])
-    mΔλ = minimum(abs.(diff(λ[iλ])))
-    nλg = DSP.nextfastfft(ceil(Int, (sλrange[2] - sλrange[1])/mΔλ))
-    λg = collect(range(sλrange[1], sλrange[2], length=nλg))
-    ωg = wlfreq.(λg)
-    Sout = Array{Float64, ndims(Eω)}(undef, ((nλg,)..., rdims...))
-    prefac = Fields.prefrac_energy_ω(grid) / (ω[2] - ω[1])
+function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
     for ii in cidcs
-        l = Maths.LinTerp(ω[iλ], abs2.(Eω[iλ,ii]) .* prefac .* PhysData.c ./ λ[iλ].^2)
-        Sout[:,ii] .= l.(ωg)
+        for j in 1:size(Ix, 1)
+            for k in istart[j]:iend[j]
+                Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
+            end
+        end
     end
-    win = FFTW.fftshift(window.(λg, λg[nλg ÷ 2], resolution))
-    dλ = λg[2] - λg[1]
-    scale = dλ/length(λg)/resolution # TODO not sure why the 1/res factor is necessary
-    Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg, scale)
-    red = floor(Int, (resolution/mΔλ) / nsamples)
-    red = red < 1 ? 1 : red
-    istart = findfirst(x -> x >= λrange[1], λg)
-    iend = findfirst(x -> x > λrange[2], λg) - 1
-    Sout = Sout[istart:red:iend,cidcs]
-    λg = λg[istart:red:iend]
-    Sout[Sout .<= 0.0] .= maximum(Sout) * 1e-20
-    λg, Sout
-end
-
-function Eω_to_SEDλ_fft_kernel!(Sout, cidcs, win, nλg, scale)
-    wω = FFTW.rfft(win)
-    for ii in cidcs
-        Sout[:,ii] .= scale .* abs.(FFTW.irfft(FFTW.rfft(Sout[:,ii]) .* wω, nλg))
-    end
+    Ix[Ix .<= 0.0] .= minimum(Ix[Ix .> 0.0])
 end
 
 """
@@ -319,8 +236,24 @@ function ωwindow_λ(ω, λlims; winwidth=:auto)
     window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
 end
 
+function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
+    cidcs = CartesianIndices(size(Ix)[2:end])
+    if !isnothing(specrange)
+        spectrange = extrema(specrange)
+        idcs = (x .>= specrange[1] .& (x .<= specrange[2]))
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    if sortx
+        idcs = sortperm(x)
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    x, Ix
+end
+
 """
-    getIω(ω, Eω, specaxis)
+    getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
 
 Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
 `Eω`, assumed to be correctly normalised (see [`getEω`](@ref)). `specaxis` determines the
@@ -329,29 +262,39 @@ x-axis:
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
 - :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
+
+# Keyword arguments
+- `specrange::Tuple` can be set to a pair of limits on the spectral range.
+- `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
+
+Note that if `resolution` is set it is highly recommended to also set `specrange`.
 """
-function getIω(ω, Eω, specaxis)
-    if specaxis == :f
-        specx = ω./2π
-        If = abs2.(Eω)*2π
-        return specx, If
-    elseif specaxis == :ω
+function getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
+    sortx = false
+    if specaxis == :ω || !isnothing(resolution)
         specx = ω
-        Iω = abs2.(Eω)
-        return specx, Iω
+        Ix = abs2.(Eω)
+        if !isnothing(resolution)
+            return specres(ω, Ix, specaxis, resolution, specrange)
+        end
+    elseif specaxis == :f
+        specx = ω./2π
+        Ix = abs2.(Eω)*2π
     elseif specaxis == :λ
         specx = wlfreq.(ω)
-        Iλ = @. ω^2/(2π*c) * abs2.(Eω)
-        idcs = sortperm(specx)
-        cidcs = CartesianIndices(size(Iλ)[2:end])
-        return specx[idcs], Iλ[idcs, cidcs]
+        Ix = @. ω^2/(2π*c) * abs2.(Eω)
+        sortx = true
     else
         error("Unknown specaxis $specaxis")
     end
+    if !isnothing(specrange) || sortx
+        specx, Ix = _specrangeselect(specx, Ix, specrange=specrange, sortx=sortx)
+    end
+    return specx, Ix
 end
 
 """
-    getIω(output, specaxis[, zslice])
+    getIω(output, specaxis[, zslice]; kwargs...)
 
 Calculate the correctly normalised frequency-domain field and convert it to spectral
 energy density on x-axis `specaxis` (`:f`, `:ω`, or `:λ`). If `zslice` is given,
@@ -362,12 +305,18 @@ x-axis:
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
 - :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
-"""
-getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
 
-function getIω(output::AbstractOutput, specaxis, zslice)
+# Keyword arguments
+- `specrange::Tuple` can be set to a pair of limits on the spectral range.
+- `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
+
+Note that if `resolution` is set it is highly recommended to also set `specrange`.
+"""
+getIω(output::AbstractOutput, specaxis; kwargs...) = getIω(getEω(output)..., specaxis; kwargs...)
+
+function getIω(output::AbstractOutput, specaxis, zslice; kwargs...)
     ω, Eω, zactual = getEω(output, zslice)
-    specx, Iω = getIω(ω, Eω, specaxis)
+    specx, Iω = getIω(ω, Eω, specaxis; kwargs...)
     return specx, Iω, zactual
 end
 

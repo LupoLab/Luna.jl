@@ -105,33 +105,37 @@ Eω = FFTW.fft(Et, 1)
 @test isapprox(Processing.arrivaltime(grid, Eω, λlims=(300e-9, 500e-9))[2], 5e-15, rtol=1e-8)
 end
 
-@testset "Eω_to_SEDλ" begin
+@testset "specres" begin
 # field grid
-grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 300e-12)
+grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 30e-12)
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfreq(grid.referenceλ))
       .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/367e-9^2*20e-9, x0=PhysData.wlfreq(367e-9))
       .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/2000e-9^2*3e-9, x0=PhysData.wlfreq(2000e-9)))
-λg,Pλ = Processing.Eω_to_SEDλ(grid, Eω, (170e-9, 2900e-9), 10e-9)
-λgf,Pλf = Processing.Eω_to_SEDλ_fft(grid, Eω, (170e-9, 2900e-9), 10e-9)
-spl = Maths.BSpline(λg, Pλ)
-@test isapprox(spl.(λgf), Pλf, rtol=7e-4)
+# test energy integral is correct
+ωp, Eωp = Processing.getEω(grid, Eω)
+λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-10)
+# test resolution
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
+ωp, Eωp = Processing.getEω(grid, Eω)
 for res in (2e-9, 10e-9, 20e-9)
-    λg,Pλ = Processing.Eω_to_SEDλ(grid, Eω, (170e-9, 2900e-9), res)
+    λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=res, specrange=(170e-9, 2900e-9))
     @test isapprox(Maths.fwhm(λg, Pλ), res, rtol=1e-2)
 end
 # envelope grid
-grid = Grid.EnvGrid(1.0, 800e-9, (160e-9, 3000e-9), 300e-12)
+grid = Grid.EnvGrid(1.0, 800e-9, (160e-9, 3000e-9), 30e-12)
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfreq(grid.referenceλ))
       .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/367e-9^2*20e-9, x0=PhysData.wlfreq(367e-9))
       .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/2000e-9^2*3e-9, x0=PhysData.wlfreq(2000e-9)))
-λg,Pλ = Processing.Eω_to_SEDλ(grid, Eω, (170e-9, 2900e-9), 10e-9)
-λgf,Pλf = Processing.Eω_to_SEDλ_fft(grid, Eω, (170e-9, 2900e-9), 10e-9)
-spl = Maths.BSpline(λg, Pλ)
-@test isapprox(spl.(λgf), Pλf, rtol=2e-3)
+# test energy integral is correct
+ωp, Eωp = Processing.getEω(grid, Eω)
+λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-11)
+# test resolution
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
+ωp, Eωp = Processing.getEω(grid, Eω)
 for res in (2e-9, 10e-9, 20e-9)
-    λg,Pλ = Processing.Eω_to_SEDλ(grid, Eω, (170e-9, 2900e-9), res)
+    λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=res, specrange=(170e-9, 2900e-9))
     @test isapprox(Maths.fwhm(λg, Pλ), res, rtol=1e-2)
 end
 end
