@@ -467,8 +467,9 @@ E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` datas
 file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
 in this manner.
 """
-function scansave(scan, scanidx, Eω, stats=nothing; grid=nothing, script=nothing, kwargs...)
-    fpath = "$(scan.name)_collected.h5"
+function scansave(scan, scanidx; stats=nothing, fpath=nothing,
+                                 grid=nothing, script=nothing, kwargs...)
+    fpath = isnothing(fpath) ? "$(scan.name)_collected.h5" : fpath
     lockpath = joinpath(Utils.cachedir(), "scanlock")
     isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
     pidlock = mkpidlock(lockpath)
@@ -486,12 +487,6 @@ function scansave(scan, scanidx, Eω, stats=nothing; grid=nothing, script=nothin
                 push!(shape, length(var))
             end
             file["scanorder"] = order
-            # dimensions of the field saved
-            dims = (size(Eω)..., shape...)
-            # chunk size is dimension of one field slice
-            chdims = (size(Eω)..., fill(1, length(shape))...)
-            HDF5.d_create(file, "Eω", HDF5.datatype(ComplexF64), (dims, dims),
-                          "chunk", chdims)
             if !isnothing(stats)
                 group = HDF5.g_create(file, "stats")
                 for (k, v) in pairs(stats)
@@ -539,32 +534,32 @@ function scansave(scan, scanidx, Eω, stats=nothing; grid=nothing, script=nothin
         scanshape = Tuple([length(ai) for ai in scan.arrays])
         cidcs = CartesianIndices(scanshape)
         scanidcs = Tuple(cidcs[scanidx])
-        Eωidcs = fill(:, ndims(Eω))
-        file["Eω"][Eωidcs..., scanidcs...] = Eω
-        for (k, v) in pairs(stats)
-            if size(v)[end] > size(file["stats"][k])[ndims(v)]
-                #= new point has more stats points than before - extend dataset
-                    stats arrays are of shape (N1, N2,... Ns) where N1 etc are fixed and
-                    Ns depends on the number of steps
-                    stats *datasets" have shape (N1, N2,... Ns, Nx, Ny,...) where Nx, Ny...
-                    are the lengths of the scan arrays (see scanshape above)=#
-                oldlength = size(file["stats"][k])[ndims(v)] # current Ns
-                newlength = size(v)[end] # new Ns
-                newdims = (size(v)..., scanshape...) # (N1, N2,..., new Ns, Nx, Ny,...)
-                HDF5.set_dims!(file["stats"][k], newdims) # set new dimensions
-                # For existing shorter arrays, fill everything above their length with NaN
-                nanidcs = (fill(:, (ndims(v)-1))..., oldlength+1:newlength)
-                allscan = fill(:, length(scanshape)) # = (1:Nx, 1:Ny,...)
-                file["stats"][k][nanidcs..., allscan...] = NaN
+        if !isnothing(stats)
+            for (k, v) in pairs(stats)
+                if size(v)[end] > size(file["stats"][k])[ndims(v)]
+                    #= new point has more stats points than before - extend dataset
+                        stats arrays are of shape (N1, N2,... Ns) where N1 etc are fixed and
+                        Ns depends on the number of steps
+                        stats *datasets" have shape (N1, N2,... Ns, Nx, Ny,...) where Nx, Ny...
+                        are the lengths of the scan arrays (see scanshape above)=#
+                    oldlength = size(file["stats"][k])[ndims(v)] # current Ns
+                    newlength = size(v)[end] # new Ns
+                    newdims = (size(v)..., scanshape...) # (N1, N2,..., new Ns, Nx, Ny,...)
+                    HDF5.set_dims!(file["stats"][k], newdims) # set new dimensions
+                    # For existing shorter arrays, fill everything above their length with NaN
+                    nanidcs = (fill(:, (ndims(v)-1))..., oldlength+1:newlength)
+                    allscan = fill(:, length(scanshape)) # = (1:Nx, 1:Ny,...)
+                    file["stats"][k][nanidcs..., allscan...] = NaN
+                end
+                # Stats array has shape (N1, N2,... Ns) - fill everything up to Ns with data
+                sidcs = (fill(:, (ndims(v)-1))..., 1:size(v)[end])
+                file["stats"][k][sidcs..., scanidcs...] = v
+                # save number of valid points we just saved
+                file["stats"]["valid_length"][scanidcs...] = size(v)[end]
+                # fill everything after Ns with NaN
+                nanidcs = (fill(:, (ndims(v)-1))..., size(v)[end]+1:size(file["stats"][k])[ndims(v)])
+                file["stats"][k][nanidcs..., scanidcs...] = NaN
             end
-            # Stats array has shape (N1, N2,... Ns) - fill everything up to Ns with data
-            sidcs = (fill(:, (ndims(v)-1))..., 1:size(v)[end])
-            file["stats"][k][sidcs..., scanidcs...] = v
-            # save number of valid points we just saved
-            file["stats"]["valid_length"][scanidcs...] = size(v)[end]
-            # fill everything after Ns with NaN
-            nanidcs = (fill(:, (ndims(v)-1))..., size(v)[end]+1:size(file["stats"][k])[ndims(v)])
-            file["stats"][k][nanidcs..., scanidcs...] = NaN
         end
         for (k, v) in pairs(kwargs)
             sidcs = fill(:, ndims(v))
@@ -580,10 +575,9 @@ end
 Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
 surrounding scope and also saves the script being run.
 """
-macro scansave(Eω, stats, kwargs...)
+macro scansave(kwargs...)
     global script = string(__source__.file)
     ex = :(scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)),
-                    $(esc(Eω)), $(esc(stats)),
                     script=script))
     for arg in kwargs
         if isa(arg, Expr) && arg.head == :(=)
