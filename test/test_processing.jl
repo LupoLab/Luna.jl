@@ -99,10 +99,10 @@ Et[:, 2] .+= sqrt.(It)
 It = Maths.gauss.(grid.t, fwhm=15e-15, x0=5e-15)
 Et[:, 2] .+= sqrt.(It).*exp.(1im*grid.t*ω0)
 Eω = FFTW.fft(Et, 1)
-@test isapprox(Processing.arrivaltime(grid, Eω, λlims=(600e-9, 1000e-9))[1], 5e-15, rtol=1e-8)
-@test isapprox(Processing.arrivaltime(grid, Eω, λlims=(600e-9, 1000e-9))[2], -5e-15, rtol=1e-8)
-@test isapprox(Processing.arrivaltime(grid, Eω, λlims=(300e-9, 500e-9))[1], -5e-15, rtol=1e-8)
-@test isapprox(Processing.arrivaltime(grid, Eω, λlims=(300e-9, 500e-9))[2], 5e-15, rtol=1e-8)
+@test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(600e-9, 1000e-9))[1], 5e-15, rtol=1e-8)
+@test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(600e-9, 1000e-9))[2], -5e-15, rtol=1e-8)
+@test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(300e-9, 500e-9))[1], -5e-15, rtol=1e-8)
+@test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(300e-9, 500e-9))[2], 5e-15, rtol=1e-8)
 end
 
 @testset "specres" begin
