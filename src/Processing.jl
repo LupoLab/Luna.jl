@@ -126,11 +126,11 @@ function _energy(Eω, energyω)
 end
 
 """
-    specres(ω, Iω, specaxis, resolution; window=gwin, nsamples=8)
+    specres(ω, Iω, specaxis, resolution; window=nothing, nsamples=10)
 
 Smooth the spectral energy density `Iω(ω)` to account for the given `resolution`
 on the defined `specaxis`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=8` times within each `resolution`.
+FWHM of `resolution`, and by default we sample `nsamples=10` times within each `resolution`.
 
 Note that you should prefer the `resolution` keyword of [`getIω`](@ref) instead of calling
 this function directly.
@@ -139,7 +139,7 @@ The input `ω` and `Iω` should be as returned by [`getIω`](@ref) with `specaxi
 
 Returns the new specaxis grid and smoothed spectrum.
 """
-function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=8)
+function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
     if isnothing(window)
         window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
             (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
@@ -267,7 +267,7 @@ x-axis:
 - `specrange::Tuple` can be set to a pair of limits on the spectral range.
 - `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
 
-Note that if `resolution` is set it is highly recommended to also set `specrange`.
+Note that if `resolution` and `specaxis=:λ` is set it is highly recommended to also set `specrange`.
 """
 function getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
     sortx = false
@@ -310,7 +310,7 @@ x-axis:
 - `specrange::Tuple` can be set to a pair of limits on the spectral range.
 - `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
 
-Note that if `resolution` is set it is highly recommended to also set `specrange`.
+Note that `resolution` is set and `specaxis=:λ` it is highly recommended to also set `specrange`.
 """
 getIω(output::AbstractOutput, specaxis; kwargs...) = getIω(getEω(output)..., specaxis; kwargs...)
 
