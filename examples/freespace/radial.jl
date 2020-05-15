@@ -1,7 +1,7 @@
 using Luna
 import Luna.PhysData: wlfreq
 import FFTW
-import Hankel
+import Luna: Hankel
 import NumericalIntegration: integrate, SimpsonEven
 
 gas = :Ar
@@ -130,7 +130,7 @@ plt.plot(zout.*1e2, energy.*1e6)
 plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
-jw = Plotting.cmap_white("jet", 512, 10)
+jw = Plotting.cmap_white("jet"; n=10)
 fig = plt.figure()
 fig.set_size_inches(12, 4)
 for ii in 1:3

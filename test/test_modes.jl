@@ -3,7 +3,7 @@ import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
 import FFTW
-import Luna: Modes, Maths, Capillary, Grid, PhysData, Hankel, NonlinearRHS
+import Luna: Modes, Maths, Capillary, Grid, PhysData, Hankel, NonlinearRHS, Fields
 import Luna.PhysData: wlfreq
 
 
@@ -141,4 +141,81 @@ Emn1 = Eωm1/norm(Eωm1)
 En2 = Eω2/norm(Eω2)
 Emn2 = Eωm2/norm(Eωm2)
 @test all(isapprox.(En2, Emn2, atol=1e-3*maximum(abs.(Emn2))))
+end
+
+@testset "overlap with interpolation" begin
+#= Here we test the complete decomposition of a field into two modes while also re-gridding
+    onto a new time grid. We create two pulses in different spatial modes with different
+    arrival times and durations on one grid and check that we reproduce them on a new grid.
+    =#
+a = 100e-6 # capillary radius
+# spatial grid, with a bigger aperture than the capillary - as we would have in a simulation
+q = Hankel.QDHT(2a, 512)
+grid = Grid.RealGrid(1, 800e-9, (400e-9, 1000e-9), 0.5e-12)
+
+fwhm1 = 30e-15
+τ1 = -5e-15
+fwhm2 = 15e-15
+τ2 = 10e-15
+
+# First pulse
+It1 = Maths.gauss.(grid.t, x0=τ1, fwhm=fwhm1)
+Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
+Eω1 = FFTW.rfft(Et1)
+# Spatial profile of the first pulse
+unm = besselj_zero(0, 1)
+Er1 = besselj.(0, unm*q.r/a)'
+Er1[q.r .> a] .= 0
+Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
+# Second pulse
+It2 = 4*Maths.gauss.(grid.t, x0=τ2, fwhm=fwhm2)
+Et2 = @. sqrt(It2)*cos(2π*PhysData.c/800e-9*grid.t)
+Eω2 = FFTW.rfft(Et2)
+# Spatial profile of the second pulse
+unm = besselj_zero(0, 2)
+Er2 = besselj.(0, unm*q.r/a)'
+Er2[q.r .> a] .= 0
+Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
+
+# The total spatio-temporal field is the sum of the two pulses
+Etr = Etr1 .+ Etr2
+Eωr = FFTW.rfft(Etr, 1)
+
+ert, ekω = Fields.energyfuncs(grid, q)
+energy1 = ert(Etr1)
+energy2 = ert(Etr2)
+@test ert(Etr) ≈ energy1 + energy2
+
+modes = (Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1),
+         Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2))
+newgrid = Grid.RealGrid(1, 800e-9, (160e-9, 3000e-9), 1e-12)
+
+Eωm = Modes.overlap(modes, newgrid, grid, q.r, Eωr)
+
+et, eω = Fields.energyfuncs(newgrid)
+# do we preserve the energy?
+@test isapprox(eω(Eωm[:, 1]), energy1, rtol=1e-3)
+@test isapprox(eω(Eωm[:, 2]), energy2, rtol=1e-3)
+
+Etm = FFTW.irfft(Eωm, length(newgrid.t), 1)
+Itm = abs2.(Maths.hilbert(Etm))
+# is fwhm the same?
+@test isapprox(Maths.fwhm(newgrid.t, Itm[:, 1]), fwhm1, rtol=1e-4)
+@test isapprox(Maths.fwhm(newgrid.t, Itm[:, 2]), fwhm2, rtol=1e-4)
+# do we preserve the temporal location?
+@test abs(newgrid.t[argmax(Itm[:, 1])] - τ1) < (newgrid.t[2]-newgrid.t[1])
+@test isapprox(Maths.moment(newgrid.t, Itm[:, 1]), τ1, rtol=1e-3)
+@test abs(newgrid.t[argmax(Itm[:, 2])] - τ2) < (newgrid.t[2]-newgrid.t[1])
+@test isapprox(Maths.moment(newgrid.t, Itm[:, 2]), τ2, rtol=1e-3)
+
+# are the temporal shapes reproduced?
+It1new = Maths.gauss.(newgrid.t, x0=τ1, fwhm=fwhm1)
+It1new /= norm(It1new)
+Itm1 = Itm[:, 1]/norm(Itm[:, 1])
+@test all(isapprox.(Itm1, It1new, atol=1e-3*maximum(abs.(It1new))))
+
+It2new = Maths.gauss.(newgrid.t, x0=τ2, fwhm=fwhm2)
+It2new /= norm(It2new)
+Itm2 = Itm[:, 2]/norm(Itm[:, 2])
+@test all(isapprox.(Itm2, It2new, atol=1e-3*maximum(abs.(It2new))))
 end

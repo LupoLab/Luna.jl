@@ -9,6 +9,7 @@ import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 import Luna.PhysData: wlfreq
+import Luna.Utils: subscript
 import Base: show
 
 export MarcatilliMode, dimlimits, neff, field, N, Aeff
@@ -36,7 +37,7 @@ function show(io::IO, m::MarcatilliMode)
     print(io, out)
 end
 
-mode_string(m::MarcatilliMode) = string(m.kind)*string(m.n)*string(m.m)
+mode_string(m::MarcatilliMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
 
 function MarcatilliMode(a::Number, args...; kwargs...)
     afun(z) = a
