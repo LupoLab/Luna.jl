@@ -173,7 +173,7 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     cidcs = CartesianIndices(rdims)
     # we find a suitable nspan
     nspan = 1
-    while window(nspan*resolution, 0.0) > 1e-8
+    while window(nspan*resolution, 0.0)/window(0.0, 0.0) > 1e-8
         nspan += 1
     end
     # now we build arrays of start and end indices for the relevant frequency

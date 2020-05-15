@@ -116,8 +116,7 @@ Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfr
 λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
 @test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-10)
 Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=5e12)
-# TODO why is the frequency domain integral much less exact?
-@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=2e-2)
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=1e-10)
 # test resolution
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
 ωp, Eωp = Processing.getEω(grid, Eω)
@@ -139,8 +138,7 @@ Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfr
 λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
 @test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-11)
 Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=5e12)
-# TODO why is the frequency domain integral much less exact?
-@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=2e-2)
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=1e-11)
 # test resolution
 Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
 ωp, Eωp = Processing.getEω(grid, Eω)
