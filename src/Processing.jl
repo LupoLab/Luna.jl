@@ -1,6 +1,7 @@
 module Processing
 import FFTW
-import Luna: Maths, Fields
+import DSP
+import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput
@@ -129,6 +130,106 @@ function _energy(Eω, energyω)
 end
 
 """
+    specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
+
+Smooth the spectral energy density `Iω(ω)` to account for the given `resolution`
+on the defined `specaxis` and `specrange`. The `window` function to use defaults
+to a Gaussian function with FWHM of `resolution`, and by default we sample `nsamples=10`
+times within each `resolution`.
+
+Note that you should prefer the `resolution` keyword of [`getIω`](@ref) instead of calling
+this function directly.
+
+The input `ω` and `Iω` should be as returned by [`getIω`](@ref) with `specaxis = :ω`.
+
+Returns the new specaxis grid and smoothed spectrum.
+"""
+function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
+    if isnothing(window)
+        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
+            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
+        end
+    end
+    if specaxis == :λ
+        xg, Ix = _specres(ω, Iω, resolution, specrange, window, nsamples, wlfreq, wlfreq)
+    elseif specaxis == :f
+        xg, Ix = _specres(ω, Iω, resolution, specrange, window, nsamples, x -> x/(2π), x -> x*(2π))
+    else
+        error("`specaxis` must be one of `:λ` or `:f`")
+    end
+    xg, Ix
+end
+
+function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
+    # build output grid and array
+    x = ωtox.(ω)
+    fxrange = extrema(x[(x .> 0) .& isfinite.(x)])
+    if isnothing(xrange)
+        xrange = fxrange
+    else
+        xrange = extrema(xrange)
+        xrange = (max(xrange[1], fxrange[1]), min(xrange[2], fxrange[2]))
+    end
+    nxg = ceil(Int, (xrange[2] - xrange[1])/resolution*nsamples)
+    xg = collect(range(xrange[1], xrange[2], length=nxg))
+    rdims = size(Iω)[2:end]
+    Ix = Array{Float64, ndims(Iω)}(undef, ((nxg,)..., rdims...))
+    fill!(Ix, 0.0)
+    cidcs = CartesianIndices(rdims)
+    # we find a suitable nspan
+    nspan = 1
+    while window(nspan*resolution, 0.0)/window(0.0, 0.0) > 1e-8
+        nspan += 1
+    end
+    # now we build arrays of start and end indices for the relevant frequency
+    # band for each output. For a frequency grid this is a little inefficient
+    # but for a wavelength grid, which has varying index ranges, this is essential
+    # and I think having a common code is simpler/cleaner.
+    istart = Array{Int,1}(undef,nxg)
+    iend = Array{Int,1}(undef,nxg)
+    δω = ω[2] - ω[1]
+    i0 = argmin(abs.(ω))
+    for i in 1:nxg
+        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
+        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        # we want increasing indices
+        if i1 > i2
+            i1,i2 = i2,i1
+        end
+        # handle boundaries
+        if i2 > length(ω)
+            i2 = length(ω)
+        end
+        if i1 < i0
+            i1 = i0
+        end
+        istart[i] = i1
+        iend[i] = i2
+    end
+    # run the convolution kernel - the function barrier massively improves performance
+    _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
+    xg, Ix
+end
+
+"""
+Convolution kernel for each output point. We simply loop over all outer indices
+and output points. The inner loop adds up the contributions from the specified window
+around the target point. Note that this works without scaling also for wavelength ranges
+because the integral is still over a frequency grid (with appropriate frequency dependent
+integration bounds).
+"""
+function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
+    for ii in cidcs
+        for j in 1:size(Ix, 1)
+            for k in istart[j]:iend[j]
+                Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
+            end
+        end
+    end
+    Ix[Ix .<= 0.0] .= minimum(Ix[Ix .> 0.0])
+end
+
+"""
     ωwindow_λ(ω, λlims; winwidth=:auto)
 
 Create a ω-axis filtering window to filter in `λlims`. `winwidth`, if a `Number`, sets
@@ -140,8 +241,24 @@ function ωwindow_λ(ω, λlims; winwidth=:auto)
     window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
 end
 
+function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
+    cidcs = CartesianIndices(size(Ix)[2:end])
+    if !isnothing(specrange)
+        specrange = extrema(specrange)
+        idcs = (x .>= specrange[1] .& (x .<= specrange[2]))
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    if sortx
+        idcs = sortperm(x)
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    x, Ix
+end
+
 """
-    getIω(ω, Eω, specaxis)
+    getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
 
 Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
 `Eω`, assumed to be correctly normalised (see [`getEω`](@ref)). `specaxis` determines the
@@ -150,29 +267,39 @@ x-axis:
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
 - :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
+
+# Keyword arguments
+- `specrange::Tuple` can be set to a pair of limits on the spectral range (in `specaxis` units).
+- `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
+
+Note that if `resolution` and `specaxis=:λ` is set it is highly recommended to also set `specrange`.
 """
-function getIω(ω, Eω, specaxis)
-    if specaxis == :f
-        specx = ω./2π
-        If = abs2.(Eω)*2π
-        return specx, If
-    elseif specaxis == :ω
+function getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
+    sortx = false
+    if specaxis == :ω || !isnothing(resolution)
         specx = ω
-        Iω = abs2.(Eω)
-        return specx, Iω
+        Ix = abs2.(Eω)
+        if !isnothing(resolution)
+            return specres(ω, Ix, specaxis, resolution, specrange)
+        end
+    elseif specaxis == :f
+        specx = ω./2π
+        Ix = abs2.(Eω)*2π
     elseif specaxis == :λ
         specx = wlfreq.(ω)
-        Iλ = @. ω^2/(2π*c) * abs2.(Eω)
-        idcs = sortperm(specx)
-        cidcs = CartesianIndices(size(Iλ)[2:end])
-        return specx[idcs], Iλ[idcs, cidcs]
+        Ix = @. ω^2/(2π*c) * abs2.(Eω)
+        sortx = true
     else
         error("Unknown specaxis $specaxis")
     end
+    if !isnothing(specrange) || sortx
+        specx, Ix = _specrangeselect(specx, Ix, specrange=specrange, sortx=sortx)
+    end
+    return specx, Ix
 end
 
 """
-    getIω(output, specaxis[, zslice])
+    getIω(output, specaxis[, zslice]; kwargs...)
 
 Calculate the correctly normalised frequency-domain field and convert it to spectral
 energy density on x-axis `specaxis` (`:f`, `:ω`, or `:λ`). If `zslice` is given,
@@ -183,12 +310,18 @@ x-axis:
 - :f -> x-axis is frequency in Hz and Iω is in J/Hz
 - :ω -> x-axis is angular frequency in rad/s and Iω is in J/(rad/s)
 - :λ -> x-axis is wavelength in m and Iω is in J/m
-"""
-getIω(output::AbstractOutput, specaxis) = getIω(getEω(output)..., specaxis)
 
-function getIω(output::AbstractOutput, specaxis, zslice)
+# Keyword arguments
+- `specrange::Tuple` can be set to a pair of limits on the spectral range (in `specaxis` units).
+- `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
+
+Note that `resolution` is set and `specaxis=:λ` it is highly recommended to also set `specrange`.
+"""
+getIω(output::AbstractOutput, specaxis; kwargs...) = getIω(getEω(output)..., specaxis; kwargs...)
+
+function getIω(output::AbstractOutput, specaxis, zslice; kwargs...)
     ω, Eω, zactual = getEω(output, zslice)
-    specx, Iω = getIω(ω, Eω, specaxis)
+    specx, Iω = getIω(ω, Eω, specaxis; kwargs...)
     return specx, Iω, zactual
 end
 

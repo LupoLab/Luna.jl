@@ -182,14 +182,18 @@ end
     # Create new FastFinder, immediately index backwards - does this still work?
     ff = Maths.FastFinder(x)
     @test ff.(x2[end:-1:1]) == idcs_slow[end:-1:1]
+    # Accuracy
+    @test maximum(spl.(x2) - sin.(x2)) < 5e-8
+    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
     # Extrapolation
     ff = Maths.FastFinder(x)
     x3 = range(-0.5, 2π+0.5, length=200)
     @test ff.(x3[end:-1:1]) == fslow.(x3[end:-1:1])
     @test ff.(x3) == fslow.(x3)
-    @test maximum(spl.(x2) - sin.(x2)) < 5e-8
-    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
-    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+    spl = Maths.CSpline(x, y; bounds_error=true)
+    @test_throws DomainError spl(-0.5)
+    @test_throws DomainError spl(10)
 end
 
 @testset "BSpline" begin
@@ -267,6 +271,18 @@ end
     x = Maths.randgauss(1, 0.5, (1000, 1000))
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
+end
+
+@testset "linterp" begin
+    x = range(0.0, 2π, length=100)
+    y = sin.(x)
+    l = Maths.LinTerp(x, y)
+    @test all(abs.(l.(x) .- y) .< 3e-16)
+    x2 = range(0.0, 2π, length=300)
+    @test isapprox(l.(x2), sin.(x2), rtol=4e-4)
+    @test Maths.linterp(0.5, 0.0, 0.0, 1.0, 1.0) ≈ 0.5
+    @test Maths.linterp(1.5, 0.0, 0.0, 1.0, 1.0) ≈ 1.5
+    @test Maths.linterp(-0.5, 0.0, 0.0, 1.0, 1.0) ≈ -0.5
 end
 
 @testset "gaussnorm" begin

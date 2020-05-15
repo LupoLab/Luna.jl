@@ -3,10 +3,11 @@ import Roots: find_zero, Order2
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
-import Luna: Maths
+import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
 import LinearAlgebra: mul!
+import DSP: unwrap
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
@@ -215,6 +216,36 @@ function overlap(m::AbstractMode, r, E; dim, norm=true)
     end
     return integral
 end
+
+"""
+    overlap(modes::ModeCollection, newgrid, oldgrid, r, Eωr)
+
+Decompose the spatio-spectral field `Eωr`, sampled on radial coordinate `r` and time-grid
+`oldgrid`, into the given `modes` and resample onto `newgrid` via cubic interpolation.
+"""
+function overlap(modes::ModeCollection, newgrid::Grid.RealGrid, oldgrid::Grid.RealGrid, r, Eωr)
+    Egm = zeros(ComplexF64, (length(newgrid.ω), length(modes))) # output array
+    # If old and new grids have different number of samples, we need to scale by δt1/δt2
+    scale = (oldgrid.t[2] - oldgrid.t[1]) / (newgrid.t[2] - newgrid.t[1])
+    #= Pulses centred on t=0 have large linear spectral phase components which can confuse
+        phase unwrapping and lead to oscillations in the spectral phase after interpolation.
+        Here we shift the pulse to t=-t_max of the old grid to remove this, then do the
+        interpolation, then shift back to t=0 on the new grid. Note that this preserves any
+        actual time shifts on the original pulse =#
+    τold = length(oldgrid.t) * (oldgrid.t[2] - oldgrid.t[1])/2
+    τnew = length(newgrid.t) * (newgrid.t[2] - newgrid.t[1])/2
+    for (midx, mode) in enumerate(modes)
+        Eωm = overlap(mode, r, Eωr; norm=false, dim=2)[:, 1]
+        Eωm .*= exp.(1im.*oldgrid.ω.*τold) # shift to -t_max before unwrapping
+        Aω = abs.(Eωm) # spectral amplitude
+        ϕω = unwrap(angle.(Eωm)) # spectral phase
+        Ag = Maths.BSpline(oldgrid.ω, Aω).(newgrid.ω)
+        ϕg = Maths.BSpline(oldgrid.ω, ϕω).(newgrid.ω) .- newgrid.ω*τnew # shift to t=0
+        Egm[:, midx] = scale * Ag .* exp.(1im*ϕg)
+    end
+    Egm
+end
+    
 
 struct ToSpace{mT,iT}
     ms::mT

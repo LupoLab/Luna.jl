@@ -1,6 +1,6 @@
 import Test: @test, @testset
 import FFTW
-import Luna: Grid, Processing, Maths, Fields, settings
+import Luna: Grid, Processing, Maths, Fields, settings, PhysData
 import Luna.PhysData: wlfreq
 
 @testset "normalisation" begin
@@ -103,4 +103,51 @@ Eω = FFTW.fft(Et, 1)
 @test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(600e-9, 1000e-9))[2], -5e-15, rtol=1e-8)
 @test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(300e-9, 500e-9))[1], -5e-15, rtol=1e-8)
 @test isapprox(Processing.arrivaltime(grid, Eω, bandpass=(300e-9, 500e-9))[2], 5e-15, rtol=1e-8)
+end
+
+@testset "specres" begin
+# field grid
+grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 30e-12)
+Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfreq(grid.referenceλ))
+      .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/367e-9^2*20e-9, x0=PhysData.wlfreq(367e-9))
+      .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/2000e-9^2*3e-9, x0=PhysData.wlfreq(2000e-9)))
+# test energy integral is correct
+ωp, Eωp = Processing.getEω(grid, Eω)
+λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-10)
+Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=5e12)
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=1e-10)
+# test resolution
+Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
+ωp, Eωp = Processing.getEω(grid, Eω)
+for res in (2e-9, 10e-9, 20e-9)
+    λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=res, specrange=(170e-9, 2900e-9))
+    @test isapprox(Maths.fwhm(λg, Pλ), res, rtol=1e-2)
+end
+for res in (1e12, 5e12, 10e12)
+    Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=res)
+    @test isapprox(Maths.fwhm(Fg, Pf), res, rtol=1e-2)
+end
+# envelope grid
+grid = Grid.EnvGrid(1.0, 800e-9, (160e-9, 3000e-9), 30e-12)
+Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*2e-9, x0=PhysData.wlfreq(grid.referenceλ))
+      .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/367e-9^2*20e-9, x0=PhysData.wlfreq(367e-9))
+      .+ Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/2000e-9^2*3e-9, x0=PhysData.wlfreq(2000e-9)))
+# test energy integral is correct
+ωp, Eωp = Processing.getEω(grid, Eω)
+λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=10e-9, specrange=(170e-9, 2900e-9))
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(λg, Pλ), 1.0, rtol=1e-11)
+Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=5e12)
+@test isapprox(Fields.energyfuncs(grid)[2](Eω) / integrate(Fg, Pf), 1.0, rtol=1e-11)
+# test resolution
+Eω = (Maths.gauss.(grid.ω, fwhm=2π*PhysData.c/800e-9^2*0.1e-9, x0=PhysData.wlfreq(grid.referenceλ)))
+ωp, Eωp = Processing.getEω(grid, Eω)
+for res in (2e-9, 10e-9, 20e-9)
+    λg, Pλ = Processing.getIω(ωp, Eωp, :λ, resolution=res, specrange=(170e-9, 2900e-9))
+    @test isapprox(Maths.fwhm(λg, Pλ), res, rtol=1e-2)
+end
+for res in (1e12, 5e12, 10e12)
+    Fg, Pf = Processing.getIω(ωp, Eωp, :f, resolution=res)
+    @test isapprox(Maths.fwhm(Fg, Pf), res, rtol=1e-2)
+end
 end
