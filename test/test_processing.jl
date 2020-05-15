@@ -176,7 +176,7 @@ end
     end
 end
 
-@testset "intensity correlation" begin
+@testset "intensity autocorrelation" begin
     grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 1e-12)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
