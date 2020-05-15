@@ -187,8 +187,13 @@ end
 
 Calculate the field autocorrelation of `Et`.
 """
-function field_autocorrelation(Et)
+function field_autocorrelation(Et, grid::EnvGrid)
     FFTW.fftshift(FFTW.ifft(abs2.(FFTW.fft(Et))))
+end
+
+function field_autocorrelation(Et, grid::RealGrid)
+    fac = FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Et)), length(grid.t)))
+    Maths.hilbert(fac)
 end
 
 """
@@ -197,8 +202,7 @@ end
 Calculate the intensity autocorrelation of `Et` over `grid`.
 """
 function intensity_autocorrelation(Et, grid)
-    I = Fields.It(Et, grid)
-    real.(FFTW.ifft(abs2.(FFTW.fft(I))))
+    real.(FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Fields.It(Et, grid))), length(grid.t))))
 end
 
 """
@@ -207,8 +211,7 @@ end
 Get the coherence time of a field `Et` over `grid`.
 """
 function coherence_time(grid, Et)
-    fac = field_autocorrelation(Et)
-    Maths.fwhm(grid.t, abs2.(fac))
+    Maths.fwhm(grid.t, abs2.(field_autocorrelation(Et, grid)))
 end
 
 """

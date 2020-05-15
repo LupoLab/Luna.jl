@@ -37,13 +37,13 @@ Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`, eit
 as defined for [`PulseField`](@ref).
 """
 function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=0.0, τ0=0.0, m=1)
-    if power != nothing
-        if energy != nothing
+    if !isnothing(power)
+        if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
         else
             energy = power*τfwhm*sqrt(pi/log(16))
         end
-    elseif energy == nothing
+    elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
     PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
@@ -59,22 +59,22 @@ Other parameters are as defined for [`PulseField`](@ref).
 """
 function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=nothing,
                     ϕ=0.0, τ0=0.0)
-    if τfwhm != nothing
-        if τw != nothing
+    if !isnothing(τfwhm)
+        if !isnothing(τw)
             error("only one of `τw` or `τfwhm` can be specified")
         else
             τw = τfwhm/(2*log(1 + sqrt(2)))
         end
-    elseif τw == nothing
+    elseif isnothing(τw)
         error("one of `τw` or `τfwhm` must be specified")
     end
-    if power != nothing
-        if energy != nothing
+    if !isnothing(power)
+        if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
         else
             energy = 2*power*τw
         end
-    elseif energy == nothing
+    elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
     PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
