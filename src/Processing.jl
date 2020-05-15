@@ -126,11 +126,12 @@ function _energy(Eω, energyω)
 end
 
 """
-    specres(ω, Iω, specaxis, resolution; window=nothing, nsamples=10)
+    specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
 
 Smooth the spectral energy density `Iω(ω)` to account for the given `resolution`
-on the defined `specaxis`. The `window` function to use defaults to a Gaussian function with
-FWHM of `resolution`, and by default we sample `nsamples=10` times within each `resolution`.
+on the defined `specaxis` and `specrange`. The `window` function to use defaults
+to a Gaussian function with FWHM of `resolution`, and by default we sample `nsamples=10`
+times within each `resolution`.
 
 Note that you should prefer the `resolution` keyword of [`getIω`](@ref) instead of calling
 this function directly.
@@ -207,9 +208,9 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
 end
 
 """
-Convolution kernel for each output point. We simply loop over all `z` and output points.
-The inner loop adds up the contributions from the specified window around
-the target point. Note that this works without scaling also for wavelength ranges
+Convolution kernel for each output point. We simply loop over all outer indices
+and output points. The inner loop adds up the contributions from the specified window
+around the target point. Note that this works without scaling also for wavelength ranges
 because the integral is still over a frequency grid (with appropriate frequency dependent
 integration bounds).
 """
@@ -264,7 +265,7 @@ x-axis:
 - :λ -> x-axis is wavelength in m and Iω is in J/m
 
 # Keyword arguments
-- `specrange::Tuple` can be set to a pair of limits on the spectral range.
+- `specrange::Tuple` can be set to a pair of limits on the spectral range (in `specaxis` units).
 - `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
 
 Note that if `resolution` and `specaxis=:λ` is set it is highly recommended to also set `specrange`.
@@ -307,7 +308,7 @@ x-axis:
 - :λ -> x-axis is wavelength in m and Iω is in J/m
 
 # Keyword arguments
-- `specrange::Tuple` can be set to a pair of limits on the spectral range.
+- `specrange::Tuple` can be set to a pair of limits on the spectral range (in `specaxis` units).
 - `resolution::Real` is set, smooth the spectral energy density as defined by [`specres`](@ref).
 
 Note that `resolution` is set and `specaxis=:λ` it is highly recommended to also set `specrange`.
