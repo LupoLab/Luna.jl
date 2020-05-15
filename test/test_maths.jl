@@ -273,6 +273,18 @@ end
     @test isapprox(mean(x), 1, rtol=1e-3)
 end
 
+@testset "linterp" begin
+    x = range(0.0, 2π, length=100)
+    y = sin.(x)
+    l = Maths.LinTerp(x, y)
+    @test all(abs.(l.(x) .- y) .< 3e-16)
+    x2 = range(0.0, 2π, length=300)
+    @test isapprox(l.(x2), sin.(x2), rtol=4e-4)
+    @test Maths.linterp(0.5, 0.0, 0.0, 1.0, 1.0) ≈ 0.5
+    @test Maths.linterp(1.5, 0.0, 0.0, 1.0, 1.0) ≈ 1.5
+    @test Maths.linterp(-0.5, 0.0, 0.0, 1.0, 1.0) ≈ -0.5
+end
+
 @testset "gaussnorm" begin
     for power = 2:2:10
         @test Maths.gaussnorm(1, power=power) ≈ hquadrature(

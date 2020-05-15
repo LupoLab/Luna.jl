@@ -639,7 +639,7 @@ struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     bounds_error::Bool
 end
 
-# make  broadcast like a scalar
+# make broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 """
@@ -688,6 +688,50 @@ function (c::CSpline)(x0)
         + c.D[i - 1]*t 
         + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
+end
+
+"""
+    linterp(x, x1, y1, x2, y2)
+
+Linear interpolation of `y` at position `xp`, between points `(x1, y1)` and `(x2, y2)`.
+For `xp` outside interval `[x1, x2]` this corresponds to linear extrapolation.
+"""
+function linterp(xp, x1, y1, x2, y2)
+    t = (xp - x1) / (x2 - x1)
+    (1 - t) * y1 + t * y2
+end
+
+"""
+    LinTerp
+
+Linear interpolation.
+"""
+struct LinTerp{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
+    x::Vx
+    y::Vy
+    ifun::fT
+end
+
+# make  broadcast like a scalar
+Broadcast.broadcastable(l::LinTerp) = Ref(l)
+
+"""
+    LinTerp(xp, xs, ys)
+
+Construct a linear interpolator over `xs`, `ys`.
+"""
+function LinTerp(xs, ys)
+    LinTerp(xs, ys, make_spline_ifun(xs, nothing))
+end
+
+"""
+    (l::LinTerp)(x)
+
+Evaluate a linear interpolator `LinTerp` at point `x`.
+"""
+function (l::LinTerp)(x)
+    i = l.ifun(x)
+    linterp(x, l.x[i - 1], l.y[i - 1], l.x[i], l.y[i])
 end
 
 "Calculate frequency vector k from samples x for FFT"
