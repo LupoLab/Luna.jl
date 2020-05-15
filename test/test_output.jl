@@ -102,6 +102,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     using Luna
     import FFTW
     import HDF5
+    import LinearAlgebra: norm
 
     a = 13e-6
     gas = :Ar
@@ -162,4 +163,84 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
 end
 rm(fpath)
 rm(fpath_comp)
+rm(splitdir(fpath)[1], force=true)
+
+##
+fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+@testset "Continuing" begin
+    using Luna
+    import FFTW
+    import HDF5
+
+    a = 13e-6
+    gas = :Ar
+    pres = 5
+    τ = 30e-15
+    λ0 = 800e-9
+    grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    aeff(z) = Modes.Aeff(m, z=z)
+    energyfun, energyfunω = Fields.energyfuncs(grid)
+    dens0 = PhysData.density(gas, pres)
+    densityfun(z) = dens0
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
+    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+
+    # Run with arbitrary error at 3 cm
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
+    Eω, transform, FT = Luna.setup(
+        grid, densityfun, normfun, responses, inputs, aeff)
+    statsfun = Stats.collect_stats(grid, Eω,
+                                   Stats.ω0(grid),
+                                   Stats.energy(grid, energyfunω))
+    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
+    function stepfun(Eω, z, dz, interpolant)
+        output(Eω, z, dz, interpolant)
+        if z > 3e-2
+            error("Oh no!")
+        end
+    end
+    stepfun(args...; kwargs...) = output(args...; kwargs...)
+    try
+        Luna.run(Eω, grid, linop, transform, FT, stepfun, status_period=10, z0=0.0)
+    catch
+    end
+
+    # Run again, starting from 3 cm
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
+    Eω, transform, FT = Luna.setup(
+        grid, densityfun, normfun, responses, inputs, aeff)
+    statsfun = Stats.collect_stats(grid, Eω,
+                                   Stats.ω0(grid),
+                                   Stats.energy(grid, energyfunω))
+    output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
+    Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
+
+    # Run from scratch with MemoryOutput
+    inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
+    Eω, transform, FT = Luna.setup(
+        grid, densityfun, normfun, responses, inputs, aeff)
+    statsfun = Stats.collect_stats(grid, Eω,
+                                   Stats.ω0(grid),
+                                   Stats.energy(grid, energyfunω))
+    mem = Output.MemoryOutput(0, grid.zmax, 51, statsfun)
+    Luna.run(Eω, grid, linop, transform, FT, mem, status_period=5)
+
+    idx1 = findfirst(grid.ωwin .!= 1)
+    idx2 = findlast(grid.ωwin .== 1)
+    Eωm = mem["Eω"][idx1:idx2, :]
+    Eω = output["Eω"][idx1:idx2, :]
+    Iω = abs2.(Eω)
+    Iωm = abs2.(Eωm)
+    @test norm(Iω - Iωm)/norm(Iω) < 1e-7
+    @test all(isapprox.(Eωm, Eω, atol=1e-4*maximum(abs.(Eωm))))
+    @test all(isapprox.(output["stats"]["ω0"], mem.data["stats"]["ω0"], rtol=1e-6))
+    @test all(output["stats"]["energy"] .≈ mem.data["stats"]["energy"])
+    @test output["z"] == mem.data["z"]
+    @test output["grid"] == Grid.to_dict(grid)
+    @test output["simulation_type"]["field"] == "field-resolved"
+    @test output["simulation_type"]["transform"] == string(transform)
+end
+rm(fpath, force=true)
 rm(splitdir(fpath)[1], force=true)
