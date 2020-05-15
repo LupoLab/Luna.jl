@@ -22,7 +22,7 @@ for ii = 1:2
     grid, FT = itr[ii]
     input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
     energy_t, energy_ω = Fields.energyfuncs(grid)
-    Eω = input(grid, FT)
+    Eω = Eω = input(grid, FT)
     @test energy_ω(Eω) ≈ energy
 
     ω, Iω = Processing.getIω(Processing.getEω(grid, Eω)..., :ω)
@@ -181,13 +181,13 @@ end
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
     input = Fields.GaussField(λ0=800e-9, τfwhm=30e-15, energy=1e-6)
-    Eω = input(grid, FT)
+    Eω = Eω = input(grid, FT)
     Et = FT \ Eω
     IAC = Processing.intensity_autocorrelation(Et, grid)
     # Gaussian IAC width is sqrt(2)*FWHM 
     @test isapprox(Maths.fwhm(grid.t, IAC), sqrt(2)*30e-15, rtol=3e-6)
     input = Fields.SechField(λ0=800e-9, τfwhm=30e-15, energy=1e-6)
-    Eω = input(grid, FT)
+    Eω = Eω = input(grid, FT)
     Et = FT \ Eω
     IAC = Processing.intensity_autocorrelation(Et, grid)
     # TODO get analytic AC width
