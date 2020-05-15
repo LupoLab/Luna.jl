@@ -380,10 +380,10 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
                 HDF5.g_create(parent, group)
             end
             if HDF5.exists(parent[group], key)
-                    write(parent[group][key], val)
-                else
-                    parent[group][key] = val
-                end
+                write(parent[group][key], val)
+            else
+                parent[group][key] = val
+            end
         else
             if HDF5.exists(parent, key)
                 write(parent[key], val)
