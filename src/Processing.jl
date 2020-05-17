@@ -379,9 +379,13 @@ If `zslice` is given, returs only the slices of `Eω` closest to the given dista
 can be a single number or an array.
 """
 function getEt(grid::AbstractGrid, Eω::AbstractArray;
-               trange=nothing, oversampling=4, bandpass=nothing)
+               trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
     t = grid.t
     Eω = window_maybe(grid.ω, Eω, bandpass)
+    if FTL
+        τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+        Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    end
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
