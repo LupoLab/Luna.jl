@@ -419,7 +419,10 @@ struct PeakWindow
     width::Float64
     λmin::Float64
     λmax::Float64
+    relative::Bool
 end
+
+PeakWindow(width, λmin, λmax; relative=false) = PeakWindow(width, λmin, λmax, relative)
 
 function (pw::PeakWindow)(ω, Eω)
     cidcs = CartesianIndices(size(Eω)[3:end]) # dims are ω, modes, rest...
@@ -429,7 +432,8 @@ function (pw::PeakWindow)(ω, Eω)
     Iω = abs2.(Eω)
     for cidx in cidcs
         λpeak = wlfreq(cropω[argmax(Iω[cropidcs, 1, cidx])])
-        window = ωwindow_λ(ω, (λpeak-pw.width/2, λpeak+pw.width/2))
+        lims = pw.relative ? λpeak.*(1 .+ (-0.5, 0.5).*pw.width) : λpeak .+ (-0.5, 0.5).*pw.width
+        window = ωwindow_λ(ω, lims)
         for midx in 1:size(Eω, 2)
             out[:, midx, cidx] .= Eω[:, midx, cidx] .* window
         end
@@ -455,7 +459,7 @@ window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
 window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
 window_maybe(ω, Eω, win::NTuple{3, Number}) = Eω .* ωwindow_λ(ω, win[1:2]; winwidth=win[3])
 window_maybe(ω, Eω, win::PeakWindow) = win(ω, Eω)
-window_maybe(ω, Eω, window::Vector) = Eω.*window
+window_maybe(ω, Eω, window::AbstractVector) = Eω.*window
 
 
 """
