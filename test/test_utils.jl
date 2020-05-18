@@ -35,4 +35,13 @@ rm(fpath)
 rm(dirname(fpath), force=true)
 end
 
+@testset "super/subscripts" begin
+@test Utils.subscript(0) == Utils.subscript("0") == Utils.subscript('0') == "₀"
+@test Utils.subscript(1) == Utils.subscript("1") == Utils.subscript('1') == "₁"
+@test Utils.subscript(2) == Utils.subscript("2") == Utils.subscript('2') == "₂"
+
+@test Utils.subscript(123456789) == Utils.subscript("123456789") == "₁₂₃₄₅₆₇₈₉"
+@test Utils.subscript("0123456789") == "₀₁₂₃₄₅₆₇₈₉"
+end
+
 end

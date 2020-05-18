@@ -1,12 +1,13 @@
 module Modes
-import Roots: fzero
+import Roots: find_zero, Order2
 import Cubature: hcubature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
-import Luna: Maths
+import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
 import LinearAlgebra: mul!
+import DSP: unwrap
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
@@ -112,12 +113,36 @@ function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 
+"""
+    zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` within the range `ub` to `lb`.
+"""
 function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
     ubω = 2π*c/ub
     lbω = 2π*c/lb
     ω0 = missing
     try
-        ω0 = fzero(dispersion_func(m, 2, z=z), lbω, ubω)
+        ω0 = find_zero(dispersion_func(m, 2, z=z), (lbω, ubω))
+    catch
+    end
+    return 2π*c/ω0
+end
+
+"""
+    zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` with an initial guess of `λ0`.
+
+This method is faster than the bounded version if the ZDW is known to be close to `λ0`.
+"""
+function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+    ωguess = 2π*c/λ0 * 1e-15 # convert everything find_zero sees to units close to 1.0
+    dfun = dispersion_func(m, 2, z=z)
+    β2(ω) = 1e30 * dfun(ω*1e15)
+    ω0 = missing
+    try
+        ω0 = 1e15*find_zero(β2, ωguess, Order2(), rtol=rtol)
     catch
     end
     return 2π*c/ω0
@@ -191,6 +216,36 @@ function overlap(m::AbstractMode, r, E; dim, norm=true)
     end
     return integral
 end
+
+"""
+    overlap(modes::ModeCollection, newgrid, oldgrid, r, Eωr)
+
+Decompose the spatio-spectral field `Eωr`, sampled on radial coordinate `r` and time-grid
+`oldgrid`, into the given `modes` and resample onto `newgrid` via cubic interpolation.
+"""
+function overlap(modes::ModeCollection, newgrid::Grid.RealGrid, oldgrid::Grid.RealGrid, r, Eωr)
+    Egm = zeros(ComplexF64, (length(newgrid.ω), length(modes))) # output array
+    # If old and new grids have different number of samples, we need to scale by δt1/δt2
+    scale = (oldgrid.t[2] - oldgrid.t[1]) / (newgrid.t[2] - newgrid.t[1])
+    #= Pulses centred on t=0 have large linear spectral phase components which can confuse
+        phase unwrapping and lead to oscillations in the spectral phase after interpolation.
+        Here we shift the pulse to t=-t_max of the old grid to remove this, then do the
+        interpolation, then shift back to t=0 on the new grid. Note that this preserves any
+        actual time shifts on the original pulse =#
+    τold = length(oldgrid.t) * (oldgrid.t[2] - oldgrid.t[1])/2
+    τnew = length(newgrid.t) * (newgrid.t[2] - newgrid.t[1])/2
+    for (midx, mode) in enumerate(modes)
+        Eωm = overlap(mode, r, Eωr; norm=false, dim=2)[:, 1]
+        Eωm .*= exp.(1im.*oldgrid.ω.*τold) # shift to -t_max before unwrapping
+        Aω = abs.(Eωm) # spectral amplitude
+        ϕω = unwrap(angle.(Eωm)) # spectral phase
+        Ag = Maths.BSpline(oldgrid.ω, Aω).(newgrid.ω)
+        ϕg = Maths.BSpline(oldgrid.ω, ϕω).(newgrid.ω) .- newgrid.ω*τnew # shift to t=0
+        Egm[:, midx] = scale * Ag .* exp.(1im*ϕg)
+    end
+    Egm
+end
+    
 
 struct ToSpace{mT,iT}
     ms::mT
