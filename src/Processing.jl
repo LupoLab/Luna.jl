@@ -126,6 +126,38 @@ function _energy(Eω, energyω)
 end
 
 """
+    field_autocorrelation(Et; dims=1)
+
+Calculate the field autocorrelation of `Et`.
+"""
+function field_autocorrelation(Et, grid::EnvGrid; dims=1)
+    FFTW.fftshift(FFTW.ifft(abs2.(FFTW.fft(Et, dims)), dims), dims)
+end
+
+function field_autocorrelation(Et, grid::RealGrid; dims=1)
+    fac = FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Et, dims)), length(grid.t), dims), dims)
+    Maths.hilbert(fac, dim=dims)
+end
+
+"""
+    intensity_autocorrelation(Et, grid)
+
+Calculate the intensity autocorrelation of `Et` over `grid`.
+"""
+function intensity_autocorrelation(Et, grid; dims=1)
+    real.(FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Fields.It(Et, grid), dims)), length(grid.t), dims), dims))
+end
+
+"""
+    coherence_time(grid, Et; dims=1)
+
+Get the coherence time of a field `Et` over `grid`.
+"""
+function coherence_time(grid, Et; dims=1)
+    Maths.fwhm(grid.t, abs2.(field_autocorrelation(Et, grid, dims=dims)))
+end
+
+"""
     specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
 
 Smooth the spectral energy density `Iω(ω)` to account for the given `resolution`

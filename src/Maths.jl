@@ -9,6 +9,7 @@ import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Roots: fzero
 import Dierckx
+import Peaks
 
 #= Pre-created finite difference methods for speed.
     Above order=7, this would create overflow errors in central_fwm() =#
@@ -1028,6 +1029,62 @@ function fpbspl!(h, hh, t, k, x, l)
         end
     end
     return h
+end
+
+"""
+    pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
+
+Find the full width of a peak in `y` over `x` centred at index `pki`.
+
+The default `level=0.5` requests the full width at half maximum. Setting `level` to something
+different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
+
+`skipnonmono=true` skips peaks which are not monotonically increaing/decreasing before/after the peak.
+
+`closest=5` sets the minimum number of indices for the full width.
+"""
+function pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
+    val = level*y[pki]
+    iup = findnext(x -> x < val, y, pki)
+    if iup == nothing
+        iup = length(x)
+    end
+    idn = findprev(x -> x < val, y, pki)
+    if idn == nothing
+        idn = 1
+    end
+    if skipnonmono
+        if any(diff(y[pki:iup]) .> 0)
+            return missing
+        end
+        if any(diff(y[idn:pki]) .< 0)
+            return missing
+        end
+    end
+    if (iup - idn) < closest
+        return missing
+    end
+    up = Maths.linterpx(x[iup - 1], x[iup], y[iup - 1], y[iup], val)
+    dn = Maths.linterpx(x[idn], x[idn + 1], y[idn], y[idn + 1], val)
+    return up - dn
+end
+
+"""
+    findpeaks(x, y; threshold=0.0, filterfw=true)
+
+Find isolated peaks in a signal `y` over `x` and return their value, FWHM and index.
+`threshold=0.0` allows filtering peaks above a threshold value.
+If `filterfw=true` then only peaks with a clean FWHM are returned.
+"""
+function findpeaks(x, y; threshold=0.0, filterfw=true)
+    pkis, proms = Peaks.peakprom(y, Peaks.Maxima(), 10)
+    pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
+    # filter out peaks with missing fws
+    if filterfw
+        pks = filter(x -> !(x.fw === missing), pks)
+    end
+    # filter out peaks below threshold
+    pks = filter(x -> x.peak > threshold, pks)
 end
 
 end

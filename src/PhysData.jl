@@ -57,6 +57,9 @@ const metal = (:Ag,:Al)
 "Change from ω to λ and vice versa"
 wlfreq(ωλ) = 2π*c/ωλ
 
+"convert Δλ at λ to Δω"
+ΔλΔω(Δλ, λ) = (2π*c)*Δλ/λ^2
+
 eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
 "Linear coefficients"

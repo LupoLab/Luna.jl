@@ -3,7 +3,9 @@ import Luna
 import Luna: Grid, Maths, PhysData
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
+import Statistics: mean
 import Hankel
+import LinearAlgebra: norm
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -31,10 +33,20 @@ end
 """
     GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
 
-Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`,
-superGaussian parameter `m=1` and other parameters as defined for [`PulseField`](@ref).
+Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`, either
+`energy` or peak `power` specified, superGaussian parameter `m=1` and other parameters
+as defined for [`PulseField`](@ref).
 """
-function GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
+function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=0.0, τ0=0.0, m=1)
+    if !isnothing(power)
+        if !isnothing(energy)
+            error("only one of `energy` or `power` can be specified")
+        else
+            energy = power*τfwhm*sqrt(pi/log(16))
+        end
+    elseif isnothing(energy)
+        error("one of `energy` or `power` must be specified")
+    end
     PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
 end
 
@@ -42,18 +54,29 @@ end
     SechField(;λ0, energy, τw=nothing, τfwhm=nothing, ϕ=0.0, τ0=0.0)
 
 Construct a Sech^2(t/τw) shaped pulse, specifying either the
-natural width `τw`, or the intensity/power FWHM `τfwhm`.
+natural width `τw`, or the intensity/power FWHM `τfwhm`, and either
+`energy` or peak `power` specified.
 Other parameters are as defined for [`PulseField`](@ref).
 """
-function SechField(;λ0, energy, τw=nothing, τfwhm=nothing, ϕ=0.0, τ0=0.0)
-    if τfwhm != nothing
-        if τw != nothing
+function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=nothing,
+                    ϕ=0.0, τ0=0.0)
+    if !isnothing(τfwhm)
+        if !isnothing(τw)
             error("only one of `τw` or `τfwhm` can be specified")
         else
             τw = τfwhm/(2*log(1 + sqrt(2)))
         end
-    elseif τw == nothing
+    elseif isnothing(τw)
         error("one of `τw` or `τfwhm` must be specified")
+    end
+    if !isnothing(power)
+        if !isnothing(energy)
+            error("only one of `energy` or `power` can be specified")
+        else
+            energy = 2*power*τw
+        end
+    elseif isnothing(energy)
+        error("one of `energy` or `power` must be specified")
     end
     PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
 end
@@ -61,7 +84,8 @@ end
 """
     make_Et(p::PulseField, grid)
 
-Create electric field for `PulseField`, either the field (for `RealGrid`) or the envelope (for `EnvGrid`)
+Create electric field for `PulseField`, either the field (for `RealGrid`) or
+the envelope (for `EnvGrid`)
 """
 function make_Et(p::PulseField, grid::Grid.RealGrid)
     t = grid.t .- p.τ0
@@ -80,9 +104,63 @@ end
 
 Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier transform `FT`
 """
-function (p::PulseField)(Eω, grid, energy_t, FT)
+function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
-    Eω .+= FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    energy_t = Fields.energyfuncs(grid)[1]
+    FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+end
+
+"""
+    CWField(Pavg, Aωfunc)
+
+Represents a continuous-wave field with spectral phase/amplitude defined by `Aωfunc`.
+
+# Fields
+- `Pavg::Float64`: the average power
+- `Aωfunc`: a callable `f(ω)` to get the amplitude/phase of the field in the frequency domain
+"""
+struct CWField{aT} <: TimeField
+    Pavg::Float64
+    Aωfunc::aT
+end
+
+"""
+    CWSech(;λ0, Pavg, Δλ)
+
+Construct a CW field with Sech^2 spectral power density and random phase, with spectral
+full-width half-maximim of `Δλ` and other parameters as defined for [`CWField`](@ref).
+"""
+function CWSech(;λ0, Pavg, Δλ, rng=GLOBAL_RNG)
+    ωw = PhysData.ΔλΔω(Δλ, λ0)/(2*log(1 + sqrt(2)))
+    ω0 = PhysData.wlfreq(λ0)
+    Aωfunc(ω) = let rng=rng, ωw=ωw, ω0=ω0
+        sech((ω - ω0)/ωw)*exp(1im*2π*rand(rng))
+    end
+    CWField(Pavg, Aωfunc)
+end
+
+"""
+    (c::CWField)(grid, FT)
+
+Get the field for the provided `grid` and Fourier transform `FT`
+"""
+function (c::CWField)(grid::Grid.EnvGrid, FT)
+    Eω = c.Aωfunc.(grid.ω)
+    istart = findfirst(isequal(1.0), grid.twin)
+    iend = findlast(isequal(1.0), grid.twin)
+    shape = abs.(Eω)
+    Eω′ = Eω
+    while true
+        Eω = shape .* exp.(1im .* angle.(Eω))
+        Et = FT \ Eω
+        Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)[istart:iend]))
+        Et .*= grid.twin
+        Eω = FT * Et
+        err = norm(Eω .- Eω′)/maximum(abs.(Eω))
+        err < 1e-2 && break
+        Eω′ = Eω
+    end
+    Eω
 end
 
 """
@@ -102,26 +180,26 @@ end
 """
     (s::ShotNoise)(Eω, grid)
 
-Add shotnoise to `Eω` for the provided `grid`. The optional parameters `energy_t` and `FT`
-are unused and are present for interface compatibility with [`TimeField`](@ref).
+Get shotnoise for the provided `grid`. The optional parameter `FT`
+is unused and is present for interface compatibility with [`TimeField`](@ref).
 """
-function (s::ShotNoise)(Eω, grid::Grid.RealGrid, energy_t=nothing, FT=nothing)
+function (s::ShotNoise)(grid::Grid.RealGrid, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
     amp = @. sqrt(PhysData.ħ*grid.ω/δω)
     rFFTamp = sqrt(2π)/2δt*amp
-    φ = 2π*rand(s.rng, size(Eω)...)
-    @. Eω += rFFTamp * exp(1im*φ)
+    φ = 2π*rand(s.rng, size(grid.ω)...)
+    @. rFFTamp * exp(1im*φ)
 end
 
-function (s::ShotNoise)(Eω, grid::Grid.EnvGrid, energy_t=nothing, FT=nothing)
+function (s::ShotNoise)(grid::Grid.EnvGrid, FT=nothing)
     δω = grid.ω[2] - grid.ω[1]
     δt = grid.t[2] - grid.t[1]
     amp = zero(grid.ω)
     amp[grid.sidx] = @. sqrt(PhysData.ħ*grid.ω[grid.sidx]/δω)
     FFTamp = sqrt(2π)/δt*amp
-    φ = 2π*rand(s.rng, size(Eω)...)
-    @. Eω += FFTamp * exp(1im*φ)
+    φ = 2π*rand(s.rng, size(grid.ω)...)
+    @. FFTamp * exp(1im*φ)
 end
 
 """
@@ -186,19 +264,20 @@ transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
 
 """
-    (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+    (s::SpatioTemporalField)(grid, spacegrid, FT)
 
-Add the field to `Eωk` for the provided `grid`, `spacegrid` `energy_t` function
+Get the field for the provided `grid`, `spacegrid` function
 and Fourier transform `FT`
 """
-function (s::SpatioTemporalField)(Eωk, grid, spacegrid, energy_t, FT)
+function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Etr = make_Etr(s, grid, spacegrid)
+    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
-    lEωk = transform(spacegrid, FT, Etr)
+    Eωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
-        prop!(lEωk, s.propz, grid, spacegrid)
+        prop!(Eωk, s.propz, grid, spacegrid)
     end
-    Eωk .+= lEωk
+    Eωk
 end
 
 # TODO: this for FreeGrid
@@ -209,11 +288,14 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
+It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
+
+It(Et, grid::Grid.EnvGrid) = abs2.(Et)
+
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
     function energy_t(Et)
-        Eta = Maths.hilbert(Et)
-        return integrate(grid.t, abs2.(Eta), SimpsonEven())
+        return integrate(grid.t, It(Et, grid), SimpsonEven())
     end
 
     prefac = 2π/(grid.ω[end]^2)
@@ -225,7 +307,7 @@ end
 
 function energyfuncs(grid::Grid.EnvGrid)
     function energy_t(Et)
-        return integrate(grid.t, abs2.(Et), SimpsonEven())
+        return integrate(grid.t, It(Et, grid), SimpsonEven())
     end
 
     δω = grid.ω[2] - grid.ω[1]
