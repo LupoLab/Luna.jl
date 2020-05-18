@@ -157,7 +157,8 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     factor = Int(length(to)/length(t))
     zeroidx = findfirst(x -> x==0, to)
     # The time samples should be exactly the same (except fewer in t)
-    @assert isapprox(to[1:factor:end], t, atol=1e-23)
+    @assert all(to[zeroidx:factor:end] .≈ t[t .>= 0])
+    @assert all(to[zeroidx:-factor:1] .≈ t[t .<= 0][end:-1:1])
 
     return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
