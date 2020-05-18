@@ -1,6 +1,7 @@
 import Test: @test, @testset
 import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing
-import Statistics: mean
+import Statistics: mean, std
+import Random: MersenneTwister
 
 # note that most of the Fields.jl code is tested in many other modules
 
@@ -369,17 +370,36 @@ end
     λ0 = 1064e-9
     Pavg = 20.0
     Δλ = 4e-9
-    grid = Grid.EnvGrid(1.0, λ0, (300e-9, 2400e-9), 600e-12)
+    grid = Grid.EnvGrid(1.0, λ0, (980e-9, 1160e-9), 500e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
-    input = Fields.CWSech(λ0=λ0, Pavg=Pavg, Δλ=Δλ)
-    Eω = Eω = input(grid, FT)
+    input = Fields.CWSech(λ0=λ0, Pavg=Pavg, Δλ=Δλ, rng=MersenneTwister(0))
+    Eω = input(grid, FT)
     Et = FT \ Eω
-    I = Fields.It(Et, grid)
-    # the low tolerance here is due to the window function
-    @test isapprox(mean(I), Pavg, rtol=1e-1)
+    I3 = Fields.It(Et, grid)
+    istart = findfirst(isequal(1.0), grid.twin)
+    iend = findlast(isequal(1.0), grid.twin)
+    # test average power
+    @test isapprox(mean(I[istart:iend]), Pavg, rtol=5e-16)
+    # test coherence time
     @test isapprox(Processing.coherence_time(grid, Et), 3.35/(PhysData.c*(Δλ)/λ0^2*2π), rtol=1e-2)
-    # TODO: check spectrum
+    idcs = sortperm(PhysData.wlfreq.(grid.ω)) 
+    # test spectral width
+    @test isapprox(Maths.fwhm(PhysData.wlfreq.(grid.ω)[idcs], abs2.(Eω[idcs])), Δλ, rtol=3e-3)
+    # now do the same for a number of realisations
+    Eωs = hcat([Fields.CWSech(λ0=λ0, Pavg=Pavg, Δλ=Δλ, rng=MersenneTwister(i))(grid, FT) for i = 1:5]...)
+    Iωs = abs2.(Eωs)
+    Iωav = mean(Iωs, dims=2)[:,1]
+    idcs = sortperm(PhysData.wlfreq.(grid.ω)) 
+    # test average spectral width
+    @test isapprox(Maths.fwhm(PhysData.wlfreq.(grid.ω)[idcs], Iωav[idcs], minmax=:max), Δλ, rtol=6e-4)
+    Ets = FFTW.ifft(Eωs, 1)
+    Its = abs2.(Ets)
+    Itav = mean(Its[istart:iend,:])
+    # test average power
+    @test isapprox(Itav, Pavg, rtol=5e-16)
+    # test diversity of power fluctuations
+    @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
 

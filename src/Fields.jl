@@ -5,6 +5,7 @@ import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
 import Hankel
+import LinearAlgebra: norm
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -144,11 +145,22 @@ end
 Get the field for the provided `grid` and Fourier transform `FT`
 """
 function (c::CWField)(grid, FT)
-    Et = FT \ c.Aωfunc.(grid.ω)
-    # we scale before windowing to make sure we scale full average
-    Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)))
-    Et .*= grid.twin
-    FT * Et
+    Eω = c.Aωfunc.(grid.ω)
+    istart = findfirst(isequal(1.0), grid.twin)
+    iend = findlast(isequal(1.0), grid.twin)
+    shape = abs.(Eω)
+    Eω′ = Eω
+    while true
+        Eω = shape .* exp.(1im .* angle.(Eω))
+        Et = FT \ Eω
+        Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)[istart:iend]))
+        Et .*= grid.twin
+        Eω = FT * Et
+        err = norm(Eω - Eω′)/maximum(abs.(Eω))
+        err < 1e-2 && break
+        Eω′ = Eω
+    end
+    Eω
 end
 
 """
