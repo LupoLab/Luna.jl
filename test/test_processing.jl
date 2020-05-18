@@ -165,8 +165,8 @@ end
     Eω = Eω = input(grid, FT)
     Et = FT \ Eω
     IAC = Processing.intensity_autocorrelation(Et, grid)
-    # TODO get analytic AC width
-    @test isapprox(Maths.fwhm(grid.t, IAC), 1.54273372415921*30e-15, rtol=1e-4)
+    # Numerical AC width from Mathematics: 1.542811*FWHM
+    @test isapprox(Maths.fwhm(grid.t, IAC), 1.542811*30e-15, rtol=1e-6)
 end
 
 @testset "field autocorrelation" begin
