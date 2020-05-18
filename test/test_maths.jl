@@ -1,8 +1,9 @@
 import Test: @test, @testset, @test_throws, @test_broken
-import Luna: Maths
+import Luna: Maths, Grid, Fields
 import Dierckx
 import HCubature: hquadrature
 import Random: seed!
+import FFTW
 
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
@@ -293,3 +294,29 @@ end
             x -> Maths.gauss(x; fwhm=1, power=power), -10, 10)[1]
     end
 end
+
+@testset "findpeaks" begin
+    grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 10e-12)
+    dt = grid.t[2] - grid.t[1]
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = FT * x
+    fill!(Eω, 0.0)
+    positions = (-367e-15, -10e-15, 100e-15, 589e-15)
+    widths = (30e-15, 3e-15, 100e-15, 200e-15)
+    powers = (1e3, 1e4, 1e2, 2e3)
+    for i in 1:length(positions)
+        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i], τ0=positions[i])
+        Eω .+= field(grid, FT)
+    end
+    Et = FT \ Eω
+    It = Fields.It(Et, grid)
+    pks = Maths.findpeaks(grid.t, It, threshold=10.0, filterfw=false)
+    print(pks)
+    for i in 1:length(positions)
+        @test isapprox(pks[i].position, positions[i], atol=dt*1.1)
+        @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.1)
+        @test isapprox(pks[i].peak, powers[i], rtol=1e-2)
+    end
+end
+

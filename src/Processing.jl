@@ -1,6 +1,5 @@
 module Processing
 import FFTW
-import Peaks
 import DSP
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
@@ -127,73 +126,17 @@ function _energy(Eω, energyω)
 end
 
 """
-    pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
-
-Find the full width of a peak in `y` over `x` centred at index `pki`.
-
-The default `level=0.5` requests the full width at half maximum. Setting `level` to something
-different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
-
-`skipnonmono=true` skips peaks which are not monotonically increaing/decreasing before/after the peak.
-
-`closest=5` sets the minimum number of indices for the full width.
-"""
-function pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
-    val = level*y[pki]
-    iup = findnext(x -> x < val, y, pki)
-    if iup == nothing
-        iup = length(x)
-    end
-    idn = findprev(x -> x < val, y, pki)
-    if idn == nothing
-        idn = 1
-    end
-    if skipnonmono
-        if any(diff(y[pki:iup]) .> 0)
-            return missing
-        end
-        if any(diff(y[idn:pki]) .< 0)
-            return missing
-        end
-    end
-    if (iup - idn) < closest
-        return missing
-    end
-    up = Maths.linterpx(x[iup - 1], x[iup], y[iup - 1], y[iup], val)
-    dn = Maths.linterpx(x[idn], x[idn + 1], y[idn], y[idn + 1], val)
-    return up - dn
-end
-
-"""
-    findpeaks(x, y; threshold=0.0, filterfw=true)
-
-Find isolated peaks in a signal `y` over `x` and return their value, FWHM and index.
-`threshold=0.0` allows filtering peaks above a threshold value.
-If `filterfw=true` then only peaks with a clean FWHM are returned.
-"""
-function findpeaks(x, y; threshold=0.0, filterfw=true)
-    pkis, proms = Peaks.peakprom(y, Peaks.Maxima(), 10)
-    pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
-    # filter out peaks with missing fws
-    if filterfw
-        pks = filter(x -> !(x.fw === missing), pks)
-    end
-    # filter out peaks below threshold
-    pks = filter(x -> x.peak > threshold, pks)
-end
-
-"""
-    field_autocorrelation(Et)
+    field_autocorrelation(Et; dims=1)
 
 Calculate the field autocorrelation of `Et`.
 """
-function field_autocorrelation(Et, grid::EnvGrid)
-    FFTW.fftshift(FFTW.ifft(abs2.(FFTW.fft(Et))))
+function field_autocorrelation(Et, grid::EnvGrid; dims=1)
+    FFTW.fftshift(FFTW.ifft(abs2.(FFTW.fft(Et, dims)), dims), dims)
 end
 
-function field_autocorrelation(Et, grid::RealGrid)
-    fac = FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Et)), length(grid.t)))
-    Maths.hilbert(fac)
+function field_autocorrelation(Et, grid::RealGrid; dims=1)
+    fac = FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Et, dims)), length(grid.t), dims), dims)
+    Maths.hilbert(fac, dim=dims)
 end
 
 """
@@ -201,17 +144,17 @@ end
 
 Calculate the intensity autocorrelation of `Et` over `grid`.
 """
-function intensity_autocorrelation(Et, grid)
-    real.(FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Fields.It(Et, grid))), length(grid.t))))
+function intensity_autocorrelation(Et, grid; dims=1)
+    real.(FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Fields.It(Et, grid), dims)), length(grid.t), dims), dims))
 end
 
 """
-    coherence_time(grid, Et)
+    coherence_time(grid, Et; dims=1)
 
 Get the coherence time of a field `Et` over `grid`.
 """
-function coherence_time(grid, Et)
-    Maths.fwhm(grid.t, abs2.(field_autocorrelation(Et, grid)))
+function coherence_time(grid, Et; dims=1)
+    Maths.fwhm(grid.t, abs2.(field_autocorrelation(Et, grid, dims=dims)))
 end
 
 """

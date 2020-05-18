@@ -288,14 +288,9 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
-function It(Et, grid::Grid.RealGrid)
-    Eta = Maths.hilbert(Et)
-    abs2.(Eta)
-end
+It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
 
-function It(Et, grid::Grid.EnvGrid)
-    abs2.(Et)
-end
+It(Et, grid::Grid.EnvGrid) = abs2.(Et)
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
