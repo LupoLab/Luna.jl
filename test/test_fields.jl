@@ -377,7 +377,7 @@ end
     input = Fields.CWSech(λ0=λ0, Pavg=Pavg, Δλ=Δλ, rng=MersenneTwister(0))
     Eω = input(grid, FT)
     Et = FT \ Eω
-    I3 = Fields.It(Et, grid)
+    I = Fields.It(Et, grid)
     istart = findfirst(isequal(1.0), grid.twin)
     iend = findlast(isequal(1.0), grid.twin)
     # test average power

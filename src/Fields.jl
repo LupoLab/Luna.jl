@@ -156,7 +156,7 @@ function (c::CWField)(grid::Grid.EnvGrid, FT)
         Et .*= sqrt(c.Pavg) / sqrt(mean(It(Et, grid)[istart:iend]))
         Et .*= grid.twin
         Eω = FT * Et
-        err = norm(Eω - Eω′)/maximum(abs.(Eω))
+        err = norm(Eω .- Eω′)/maximum(abs.(Eω))
         err < 1e-2 && break
         Eω′ = Eω
     end

@@ -105,7 +105,7 @@ export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, Rect
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
     for field in inputs
-        out .+= field(out, grid, FT)
+        out .+= field(grid, FT)
     end
     return out
 end
