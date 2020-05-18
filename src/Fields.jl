@@ -144,7 +144,7 @@ end
 
 Get the field for the provided `grid` and Fourier transform `FT`
 """
-function (c::CWField)(grid, FT)
+function (c::CWField)(grid::Grid.EnvGrid, FT)
     Eω = c.Aωfunc.(grid.ω)
     istart = findfirst(isequal(1.0), grid.twin)
     iend = findlast(isequal(1.0), grid.twin)
