@@ -5,9 +5,10 @@ import StaticArrays: SVector
 import Cubature: hquadrature
 using Reexport
 @reexport using Luna.Modes
-import Luna: Maths
+import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
+import Luna.LinearOps: make_linop, conj_clamp
 import Luna.PhysData: wlfreq
 import Luna.Utils: subscript
 import Base: show
@@ -93,12 +94,12 @@ function neff(m::MarcatilliMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    neff(m, ω, εcl, εco, vn, m.a(z))
+    neff(m, ω, εco, vn, m.a(z))
 end
 
 # Dispatch on loss to make neff type stable
 # m.loss = Val{true}() (returns ComplexF64)
-function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a) where {Ta, Tcl, Tco}
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εco, vn, a) where {Ta, Tcl, Tco}
     if m.model == :full
         k = ω/c
         n = sqrt(complex(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
@@ -112,13 +113,63 @@ function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω, εcl, εco, vn, a)
 end
 
 # m.loss = Val{false}() (returns Float64)
-function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω, εcl, εco, vn, a) where {Ta, Tcl, Tco}
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω, εco, vn, a) where {Ta, Tcl, Tco}
     if m.model == :full
         k = ω/c
         n = real(sqrt(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
         return (n < 1e-3) ? 1e-3 : n
     elseif m.model == :reduced
         return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
+    else
+        error("model must be :full or :reduced")
+    end 
+end
+
+function neff_wg(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω; z=0) where {Ta, Tcl, Tco}
+    εcl = m.cladn(ω, z=z)^2
+    vn = get_vn(εcl, m.kind)
+    a = m.a(z)
+    if m.model == :full
+        k = ω/c
+        return (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2
+    elseif m.model == :reduced
+        return c^2*m.unm^2/(2*ω^2*a^2) + im*(c^3*m.unm^2)/(a^3*ω^3)*vn
+    else
+        error("model must be :full or :reduced")
+    end
+end
+
+function neff_wg(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω; z=0) where {Ta, Tcl, Tco}
+    εcl = m.cladn(ω, z=z)^2
+    vn = get_vn(εcl, m.kind)
+    a = m.a(z)
+    if m.model == :full
+        k = ω/c
+        return (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2
+    elseif m.model == :reduced
+        return c^2*m.unm^2/(2*ω^2*a^2)
+    else
+        error("model must be :full or :reduced")
+    end
+end
+
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg) where {Ta, Tcl, Tco}
+    if m.model == :full
+        n = sqrt(complex(εco - nwg))
+        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+    elseif m.model == :reduced
+        return ((1 + (εco - 1)/2 - nwg))
+    else
+        error("model must be :full or :reduced")
+    end 
+end
+
+function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, Tcl, Tco}
+    if m.model == :full
+        n = real(sqrt(complex(εco - nwg)))
+        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+    elseif m.model == :reduced
+        return real((1 + (εco - 1)/2 - nwg))
     else
         error("model must be :full or :reduced")
     end 
@@ -212,6 +263,31 @@ function gradient(gas, Z, P)
     dens(z) = dspl(p(z))
     coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
     return coren, dens
+end
+
+ # TODO make aconst/var a type parameter so this doesn't break tapers
+function make_linop(grid::Grid.RealGrid,
+                      mode::MarcatilliMode, λ0)
+    nwg = complex(zero(grid.ω))
+    nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
+    function linop!(out, z)
+        β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
+        for iω = 2:length(grid.ω)
+            εco = mode.coren(grid.ω[iω], z=z)^2
+            nc = conj_clamp(Modes.neff(mode, εco, nwg[iω]), grid.ω[iω])
+            out[iω] = -im*(grid.ω[iω]/c*nc - grid.ω[iω]*β1)
+        end
+        out[1] = 0
+    end
+    function βfun!(out, ω, z)
+        for iω = 2:length(grid.ω)
+            εco = mode.coren(grid.ω[iω], z=z)^2
+            n = Modes.neff(mode, εco, nwg[iω])
+            out[iω] = ω[iω]/c*real(n)
+        end
+        out[1] = 1.0
+    end
+    return linop!, βfun!
 end
 
 end

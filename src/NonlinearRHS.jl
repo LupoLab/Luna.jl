@@ -305,7 +305,7 @@ end
 function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
-    t.Eto ./= sqrt(PhysData.ε_0*PhysData.c*t.aeff(z)/2)
+    @. t.Eto /= sqrt(PhysData.ε_0*PhysData.c*t.aeff(z)/2)
     Et_to_Pt!(t.Pto, t.Eto, t.resp)
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
