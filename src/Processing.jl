@@ -415,14 +415,15 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
     return to, Eto, output["z"][zidx]
 end
 
-struct PeakWindow
+mutable struct PeakWindow
     width::Float64
     λmin::Float64
     λmax::Float64
     relative::Bool
+    lims
 end
 
-PeakWindow(width, λmin, λmax; relative=false) = PeakWindow(width, λmin, λmax, relative)
+PeakWindow(width, λmin, λmax; relative=false) = PeakWindow(width, λmin, λmax, relative, nothing)
 
 function (pw::PeakWindow)(ω, Eω)
     cidcs = CartesianIndices(size(Eω)[3:end]) # dims are ω, modes, rest...
@@ -430,14 +431,17 @@ function (pw::PeakWindow)(ω, Eω)
     cropidcs = (ω .> wlfreq(pw.λmax)) .& (ω .< wlfreq(pw.λmin))
     cropω = ω[cropidcs]
     Iω = abs2.(Eω)
+    limsA = zeros((2, size(Eω)[3:end]...))
     for cidx in cidcs
         λpeak = wlfreq(cropω[argmax(Iω[cropidcs, 1, cidx])])
         lims = pw.relative ? λpeak.*(1 .+ (-0.5, 0.5).*pw.width) : λpeak .+ (-0.5, 0.5).*pw.width
         window = ωwindow_λ(ω, lims)
+        limsA[:, cidx] .= lims
         for midx in 1:size(Eω, 2)
             out[:, midx, cidx] .= Eω[:, midx, cidx] .* window
         end
     end
+    pw.lims = limsA
     out
 end
 

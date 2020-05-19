@@ -445,7 +445,7 @@ end
 spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
     makegrid(output), output, args...; kwargs...)
 
-function spectrogram(grid, Eω::AbstractArray, specaxis=:λ; kwargs...)
+function spectrogram(grid::Grid.AbstractGrid, Eω::AbstractArray, specaxis=:λ; kwargs...)
     t, Et = getEt(grid, Eω, oversampling=1)
     spectrogram(t, Et, specaxis; kwargs...)
 end
