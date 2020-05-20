@@ -318,11 +318,11 @@ function make_linop(grid::Grid.RealGrid,
         end
         out[1] = 0
     end
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         for iω = 2:length(grid.ω)
             εco = mode.coren(grid.ω[iω], z=z)^2
             n = neff(mode, εco, nwg[iω])
-            out[iω] = ω[iω]/c*real(n)
+            out[iω] = grid.ω[iω]/c*real(n)
         end
         out[1] = 1.0
     end
@@ -350,12 +350,12 @@ function make_linop(grid::Grid.EnvGrid,
             end
         end
     end
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         fill!(out, 1.0)
         for iω in sidcs
             εco = mode.coren(grid.ω[iω], z=z)^2
             n = neff(mode, εco, nwg[iω])
-            out[iω] = ω[iω]/c*real(n)
+            out[iω] = grid.ω[iω]/c*real(n)
         end
     end
     return linop!, βfun!

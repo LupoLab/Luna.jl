@@ -115,11 +115,11 @@ function doinput_sm(grid, inputs::Fields.TimeField, FT)
     doinput_sm(grid, (inputs,), FT)
 end
 
-function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs, aeff)
+function setup(grid::Grid.RealGrid, densityfun, responses, inputs, βfun!, aeff)
     Utils.loadFFTwisdom()
     xo = Array{Float64}(undef, length(grid.to))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, aeff, βfun!)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
     Eω = doinput_sm(grid, inputs, FT)

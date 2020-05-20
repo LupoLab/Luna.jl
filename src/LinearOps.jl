@@ -255,9 +255,9 @@ conj_clamp(n, ω) = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysDa
 
 function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     β = similar(grid.ω)
-    βfun!(β, grid.ω, 0)
+    βfun!(β, 0)
     α = similar(grid.ω)
-    αfun!(α, grid.ω, 0)
+    αfun!(α, 0)
     αlim!(α)
     linop = @. -im*(β-β1*grid.ω) - α/2
     linop[1] = 0
@@ -266,9 +266,9 @@ end
 
 function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     β = similar(grid.ω)
-    βfun!(β, grid.ω, 0)
+    βfun!(β, 0)
     α = similar(grid.ω)
-    αfun!(α, grid.ω, 0)
+    αfun!(α, 0)
     αlim!(α)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
     linop[.!grid.sidx] .= 0
@@ -285,12 +285,12 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
     βconst = zero(grid.ω)
     βconst[grid.sidx] = Modes.β.(mode, grid.ω[grid.sidx])
     βconst[.!grid.sidx] .= 1
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         out .= βconst
     end
     αconst = zero(grid.ω)
     αconst[grid.sidx] = Modes.α.(mode, grid.ω[grid.sidx])
-    function αfun!(out, ω, z)
+    function αfun!(out, z)
         out .= αconst
     end
     make_const_linop(grid, βfun!, αfun!, β1const, β0const), βfun!, β1const, αfun!
@@ -301,12 +301,12 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     βconst = zero(grid.ω)
     βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
     βconst[1] = 1
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         out .= βconst
     end
     αconst = zero(grid.ω)
     αconst[2:end] = Modes.α.(mode, grid.ω[2:end])
-    function αfun!(out, ω, z)
+    function αfun!(out, z)
         out .= αconst
     end
     make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
@@ -321,8 +321,8 @@ function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
         end
         out[1] = 0
     end
-    function βfun!(out, ω, z)
-        out[2:end] .= Modes.β.(mode, ω[2:end], z=z)
+    function βfun!(out, z)
+        out[2:end] .= Modes.β.(mode, grid.ω[2:end], z=z)
         out[1] = 1.0
     end
     return linop!, βfun!
@@ -344,9 +344,9 @@ function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false
             end
         end
     end
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         fill!(out, 1.0)
-        out[grid.sidx] .= Modes.β.(mode, ω[grid.sidx], z=z)
+        out[grid.sidx] .= Modes.β.(mode, grid.ω[grid.sidx], z=z)
     end
     return linop!, βfun!
 end
