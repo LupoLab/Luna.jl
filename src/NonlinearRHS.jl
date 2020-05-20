@@ -99,14 +99,6 @@ function _cpscb_core(dest, source, N, scale, idcs)
     end
 end
 
-"Normalisation factor for modal field."
-function norm_modal(ω)
-    out = -im .* ω ./ 4
-    function norm(z)
-        return out
-    end
-end
-
 "Accumulate responses induced by Et in Pt"
 function Et_to_Pt!(Pt, Et, responses)
     for resp in responses
@@ -120,7 +112,7 @@ function Et_to_Pt!(Pt, Et, responses, idcs)
     end
 end
 
-mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
+mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT}
     ts::tsT
     full::Bool
     dimlimits::lT
@@ -136,7 +128,6 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     resp::rT
     grid::gT
     densityfun::dT
-    normfun::nT
     ncalls::Int
     z::Float64
     rtol::Float64
@@ -160,7 +151,7 @@ end
 # FT - forward FFT for the grid
 # resp - tuple of nonlinear responses
 # if full is true, we integrate over whole cross section
-function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun; rtol=1e-3, atol=0.0, mfcn=300, full=false)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
     Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
@@ -171,7 +162,7 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, normfun; 
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
     TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, normfun, 0, 0.0, rtol, atol, mfcn)
+               FT, resp, grid, densityfun, 0, 0.0, rtol, atol, mfcn)
 end
 
 function TransModal(grid::Grid.RealGrid, args...; kwargs...)
@@ -226,7 +217,7 @@ function pointcalc!(fval, xs, t::TransModal)
         Et_to_Pt!(t.Pr, t.Er, t.resp)
         @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
-        t.Prω .*= t.grid.ωwin.*t.normfun(t.z)
+        @. t.Prω *= t.grid.ωwin * (-im * t.grid.ω/4)
         # now project back to each mode
         # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
         mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))

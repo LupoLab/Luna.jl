@@ -163,7 +163,7 @@ function doinput_mm!(Eω, grid, inputs::Fields.TimeField, FT)
     doinput_mm!(Eω, grid, ((mode=1, fields=(inputs,)),), FT)
 end
 
-function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
+function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components; full=false)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
@@ -176,7 +176,7 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, normfun,
+                                 responses, densityfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -184,7 +184,7 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
+function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components; full=false)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
@@ -197,7 +197,7 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, normfun,
+                                 responses, densityfun,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
