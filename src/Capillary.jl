@@ -15,11 +15,10 @@ import Base: show
 
 export MarcatilliMode, dimlimits, neff, field, N, Aeff
 
-"Marcatili mode"
 struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
-    a::Ta # core radius callable as function of z only
-    n::Int # radial mode index
-    m::Int # azimuthal mode index
+    a::Ta # core radius callable as function of z only, or fixed core radius if a Number
+    n::Int # azimuthal mode index
+    m::Int # radial mode index
     kind::Symbol # kind of mode (transverse magnetic/electric or hybrid)
     unm::Float64 # mth zero of the nth Bessel function of the first kind
     ϕ::Float64 # overall rotation angle of the mode
@@ -31,7 +30,7 @@ struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
 end
 
 function show(io::IO, m::MarcatilliMode)
-    a = "a(z=0)=$(m.a(0))"
+    a = radius_string(m)
     loss = "loss=" * (m.loss == Val(true) ? "true" : "false")
     model = "model="*string(m.model)
     out = "MarcatilliMode{"*join([mode_string(m), a, loss, model], ", ")*"}"
@@ -39,62 +38,99 @@ function show(io::IO, m::MarcatilliMode)
 end
 
 mode_string(m::MarcatilliMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
+radius_string(m::MarcatilliMode{<:Number, Tco, Tcl, LT}) where {Tco, Tcl, LT} = "a=$(m.a)"
+radius_string(m::MarcatilliMode) = "a(z=0)=$(radius(m, 0))"
 
-function MarcatilliMode(a::Number, args...; kwargs...)
-    afun(z) = a
-    MarcatilliMode(afun, args...; kwargs...)
-end
+"""
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
 
-function MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
+Create a MarcatilliMode.
+
+# Arguments
+- `a` : Either a `Number` for constant core radius, or a function `a(z)` for variable radius.
+- `n::Int` : Azimuthal mode index (number of nodes in the field along azimuthal angle).
+- `m::Int` : Radial mode index (number of nodes in the field along radial coordinate).
+- `kind::Symbol` : `:TE` for transverse electric, `:TM` for transverse magnetic,
+                   `:HE` for hybrid mode.
+- `ϕ::Float` : Azimuthal offset angle (for linearly polarised modes, this is the angle
+                between the mode polarisation and the `:y` axis)
+- `coren` : Callable `coren(ω; z)` which returns the refractive index of the core
+- `cladn` : Callable `cladn(ω; z)` which returns the refractive index of the cladding
+- `model::Symbol=:full` : If `:full`, use the complete Marcatilli model which takes into
+                          account the dispersive influence of the cladding refractive index.
+                          If `:reduced`, use the simplified model common in the literature
+- `loss::Bool=true` : Whether to include loss.
+
+"""
+function MarcatilliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     # chkzkwarg makes sure that coren and cladn take z as a keyword argument
     aeff_intg = Aeff_Jintg(n, get_unm(n, m, kind), kind)
-    MarcatilliMode(afun, n, m, kind, get_unm(n, m, kind), ϕ,
+    MarcatilliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
                    chkzkwarg(coren), chkzkwarg(cladn),
                    model, Val(loss), aeff_intg)
 end
 
-"convenience constructor assuming single gas filling"
-function MarcatilliMode(afun, gas, P;
+"""
+    MarcatilliMode(a, gas, P; kwargs...)
+
+Create a MarcatilliMode for a capillary with radius `a` which is filled with `gas` to
+pressure `P`.
+"""
+function MarcatilliMode(a, gas, P;
                         n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full,
                         clad=:SiO2, loss=true)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
-"convenience constructor assuming single gas filling but custom cladding index"
-function MarcatilliMode(afun, gas, P, cladn;
+"""
+    MarcatilliMode(a, gas, P cladn; kwargs...)
+
+Create a MarcatilliMode for a capillary made of a cladding material defined by the refractive
+index `cladn(ω; z)` with a core radius `a` which is filled with `gas` to pressure `P`.
+"""
+function MarcatilliMode(a, gas, P, cladn;
                         n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full, loss=true)
     rfg = ref_index_fun(gas, P, T)
     coren = (ω; z) -> rfg(wlfreq(ω))
-    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
-"convenience constructor for non-constant core index"
-function MarcatilliMode(afun, coren;
+"""
+    MarcatilliMode(a, coren; kwargs...)
+
+Create a MarcatilliMode for a capillary with radius `a` with `z`-dependent gas fill determined
+by `coren(ω; z)`.
+"""
+function MarcatilliMode(a, coren;
                         n=1, m=1, kind=:HE, ϕ=0.0, model=:full, clad=:SiO2, loss=true)
     rfs = ref_index_fun(clad)
     cladn = (ω; z) -> rfs(wlfreq(ω))
-    MarcatilliMode(afun, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
-"complex effective index of Marcatilli mode with dielectric core and arbitrary
- (metal or dielectric) cladding.
+"""
+    neff(m::MarcatilliMode, ω; z=0)
+    
+Calculate the complex effective index of Marcatilli mode with dielectric core and arbitrary
+(metal or dielectric) cladding.
 
-Adapted from
+Adapted from:
+
 Marcatili, E. & Schmeltzer, R.
-Hollow metallic and dielectric waveguides for long distance optical transmission and lasers
+"Hollow metallic and dielectric waveguides for long distance optical transmission and lasers
 (Long distance optical transmission in hollow dielectric and metal circular waveguides,
-examining normal mode propagation).
+examining normal mode propagation)."
 Bell System Technical Journal 43, 1783–1809 (1964).
-"
+"""
 function neff(m::MarcatilliMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    neff(m, ω, εco, vn, m.a(z))
+    neff(m, ω, εco, vn, radius(m, z))
 end
 
 # Dispatch on loss to make neff type stable
@@ -128,7 +164,7 @@ end
 function neff_wg(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, ω; z=0) where {Ta, Tcl, Tco}
     εcl = m.cladn(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    a = m.a(z)
+    a = radius(m, z)
     if m.model == :full
         k = ω/c
         return (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2
@@ -142,7 +178,7 @@ end
 function neff_wg(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, ω; z=0) where {Ta, Tcl, Tco}
     εcl = m.cladn(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    a = m.a(z)
+    a = radius(m, z)
     if m.model == :full
         k = ω/c
         return (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2
@@ -200,25 +236,28 @@ function get_unm(n, m, kind)
     end
 end
 
-dimlimits(m::MarcatilliMode; z=0) = (:polar, (0.0, 0.0), (m.a(z), 2π))
+radius(m::MarcatilliMode{<:Number, Tco, Tcl, LT}, z) where {Tcl, Tco, LT} = m.a
+radius(m::MarcatilliMode, z) = m.a(z)
+
+dimlimits(m::MarcatilliMode; z=0) = (:polar, (0.0, 0.0), (radius(m, z), 2π))
 
 # we use polar coords, so xs = (r, θ)
 function field(m::MarcatilliMode, xs; z=0)
     if m.kind == :HE
-        return (besselj(m.n-1, xs[1]*m.unm/m.a(z)) .* SVector(
+        return (besselj(m.n-1, xs[1]*m.unm/radius(m, z)) .* SVector(
             cos(xs[2])*sin(m.n*(xs[2] + m.ϕ)) - sin(xs[2])*cos(m.n*(xs[2] + m.ϕ)),
             sin(xs[2])*sin(m.n*(xs[2] + m.ϕ)) + cos(xs[2])*cos(m.n*(xs[2] + m.ϕ))
             ))
     elseif m.kind == :TE
-        return besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(-sin(xs[2]), cos(xs[2]))
+        return besselj(1, xs[1]*m.unm/radius(m, z)) .* SVector(-sin(xs[2]), cos(xs[2]))
     elseif m.kind == :TM
-        return besselj(1, xs[1]*m.unm/m.a(z)) .* SVector(cos(xs[2]), sin(xs[2]))
+        return besselj(1, xs[1]*m.unm/radius(m, z)) .* SVector(cos(xs[2]), sin(xs[2]))
     end
 end
 
 function N(m::MarcatilliMode; z=0)
     np1 = (m.kind == :HE) ? m.n : 2
-    π/2 * m.a(z)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
+    π/2 * radius(m, z)^2 * besselj(np1, m.unm)^2 * sqrt(ε_0/μ_0)
 end
 
 function Aeff_Jintg(n, unm, kind)
@@ -228,7 +267,7 @@ function Aeff_Jintg(n, unm, kind)
     return 2π*num/den
 end
 
-Aeff(m::MarcatilliMode; z=0) = m.a(z)^2 * m.aeff_intg
+Aeff(m::MarcatilliMode; z=0) = radius(m, z)^2 * m.aeff_intg
 
 
 "Convenience function to create density and core index profiles for
@@ -267,7 +306,8 @@ end
 
  # TODO make aconst/var a type parameter so this doesn't break tapers
 function make_linop(grid::Grid.RealGrid,
-                      mode::MarcatilliMode, λ0)
+                    mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
+                    λ0)
     nwg = complex(zero(grid.ω))
     nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
     function linop!(out, z)
