@@ -129,13 +129,13 @@ function setup(grid::Grid.RealGrid, densityfun, responses, inputs, βfun!, aeff)
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs, aeff)
+function setup(grid::Grid.EnvGrid, densityfun, responses, inputs, βfun!, aeff)
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
     xo = Array{ComplexF64}(undef, length(grid.to))
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, aeff, βfun!)
     Eω = doinput_sm(grid, inputs, FT)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)

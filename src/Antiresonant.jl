@@ -54,7 +54,7 @@ function _neff(m::Capillary.MarcatilliMode, ω, wallthickness, loss; z=0)
     k0 = ω / c
     ka = k0*nco
     ϕ = k0*wallthickness*sqrt(ncl^2 - nco^2)
-    σ = 1/(ka*m.a(z))
+    σ = 1/(ka*Capillary.radius(m, z))
     if (m.kind == :TE) || (m.kind == :TM)
         A = m.unm^2/2;
         if m.kind == :TE
