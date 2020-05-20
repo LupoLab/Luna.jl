@@ -17,7 +17,6 @@ modes = (
 grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-normfun = NonlinearRHS.norm_modal(grid.ω)
 
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
@@ -30,7 +29,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                               modes, :y; full=false)
                               
 linop = LinearOps.make_const_linop(grid, modes, λ0)
