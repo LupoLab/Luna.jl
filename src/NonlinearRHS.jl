@@ -258,7 +258,6 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     Eto::Array{TT,1}
     Eωo::Array{ComplexF64,1}
     Pωo::Array{ComplexF64,1}
-    β::Array{Float64, 1} # Buffer for array of β
     FT::FTT
     resp::rT
     grid::gT
@@ -280,8 +279,7 @@ function TransModeAvg(TT, grid, FT, resp, densityfun, norm!, aeff)
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    β = zeros(Float64, length(grid.ω))
-    TransModeAvg(Pto, Eto, Eωo, Pωo, β, FT, resp, grid, densityfun, norm!, aeff)
+    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, norm!, aeff)
 end
 
 function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, norm!, aeff)
