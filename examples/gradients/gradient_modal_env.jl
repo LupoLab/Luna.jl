@@ -2,14 +2,14 @@ using Luna
 
 a = 13e-6
 gas = :Ar
-pres = 5
+pres = 7.5
 L = 15e-2
 
 τfwhm = 30e-15
 λ0 = 800e-9
 energy = 1e-6
 
-coren, densityfun = Capillary.gradient(gas, L, pres, pres);
+coren, densityfun = Capillary.gradient(gas, L, pres, 0);
 
 modes = (
     Capillary.MarcatilliMode(a, coren, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
