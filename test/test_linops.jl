@@ -1,7 +1,7 @@
-import Luna: PhysData, Grid, LinearOps
+import Luna: PhysData, Grid, LinearOps, Modes, Capillary
 import Test: @testset, @test
 import Luna.PhysData: wlfreq
-import Hankel
+import Luna: Hankel
 
 R = 5e-3
 Nr = 256
@@ -86,5 +86,53 @@ for gi in (grid, grid_thg)
     linopf(out, 0.5)
     @test all(imag(out) .≈ imag(linop))
     @test all(real(out) .≈ real(linop))
+end
+end
+
+@testset "equivalence for fast z-dependent linops" begin
+a = 125e-6
+L = 1
+grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12)
+coren, densityfun = Capillary.gradient(gas, L, pres, 0)
+m = Capillary.MarcatilliMode(a, coren)
+dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version
+
+lom!, βm! = LinearOps.make_linop(grid, m, 800e-9)
+lodm!, βdm! = LinearOps.make_linop(grid, dm, 800e-9)
+@assert typeof(lom!) != typeof(lodm!) # ...but best to check
+
+outm = complex(similar(grid.ω))
+outdm = complex(similar(grid.ω))
+for zi in range(0, L, length=10)
+    lom!(outm, zi)
+    lodm!(outdm, zi)
+    @test outm == outdm
+    βm!(outm, zi)
+    βdm!(outdm, zi)
+    @test outm == outdm
+end
+
+a = 125e-6
+L = 1
+for thg in (true, false)
+    grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12; thg=thg)
+    coren, densityfun = Capillary.gradient(gas, L, pres, 0)
+    m = Capillary.MarcatilliMode(a, coren)
+    dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version...
+
+    lom!, βm! = LinearOps.make_linop(grid, m, 800e-9; thg=thg)
+    lodm!, βdm! = LinearOps.make_linop(grid, dm, 800e-9; thg=thg)
+    @assert typeof(lom!) != typeof(lodm!) # ...but best to check
+
+    outm = complex(similar(grid.ω))
+    outdm = complex(similar(grid.ω))
+    for zi in range(0, L, length=10)
+        lom!(outm, zi)
+        lodm!(outdm, zi)
+        @test outm == outdm
+        βm!(outm, zi)
+        βdm!(outdm, zi)
+        @test outm == outdm
+    end
 end
 end
