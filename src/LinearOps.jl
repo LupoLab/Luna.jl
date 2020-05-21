@@ -312,6 +312,14 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
 end
 
+"""
+    neff_β_grid(grid, mode, λ0; ref_mode=1)
+
+Create closures which return the effective index and propagation constant
+as a function of the frequency grid **index**, rather than the frequency itself.
+Any [`Modes.AbstractMode`](@ref) may define its one method for `neff_β_grid` to
+accelerate repeated calculation on the same frequency grid.
+"""
 function neff_β_grid(grid, mode, λ0)
     let grid=grid, mode=mode
         _neff(iω; z) = Modes.neff(mode, grid.ω[iω]; z=z)
@@ -413,6 +421,14 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     linops
 end
 
+"""
+    neff_grid(grid, modes, λ0; ref_mode=1)
+
+Create a closure that returns the effective index as a function of the frequency grid and mode
+**index**, rather than the mode and frequency themselves. Any [`Modes.AbstractMode`](@ref)
+may define its one method for `neff_grid` to accelerate repeated calculation on the same
+frequency grid.
+"""
 function neff_grid(grid, modes, λ0; ref_mode=1)
     _neff = let grid=grid, modes=modes
         _neff(iω, iim; z) = Modes.neff(modes[iim], grid.ω[iω]; z=z)

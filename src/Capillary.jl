@@ -302,6 +302,9 @@ function gradient(gas, Z, P)
     return coren, dens
 end
 
+#= Avoid repeated calculation of the waveguide part of the effective index for modes with
+    constant core radius.
+    This is used by LinearOps.make_linop =# 
 function neff_β_grid(grid,
                    mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
                    λ0)
@@ -319,6 +322,7 @@ function neff_β_grid(grid,
     _neff, _β
 end
 
+# Collection of modes with fixed core radius
 FixedCoreCollection = Union{
     Tuple{Vararg{MarcatilliMode{<:Number, Tco, Tcl, LT}} where {Tco, Tcl, LT}},
     AbstractArray{MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT}}
