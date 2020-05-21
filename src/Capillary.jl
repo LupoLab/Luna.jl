@@ -8,7 +8,7 @@ using Reexport
 import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
-import Luna.LinearOps: make_linop, conj_clamp
+import Luna.LinearOps: make_linop, conj_clamp, neff_grid, β_grid, neff_β_grid
 import Luna.PhysData: wlfreq
 import Luna.Utils: subscript
 import Base: show
@@ -302,61 +302,27 @@ function gradient(gas, Z, P)
     return coren, dens
 end
 
-function make_linop(grid::Grid.RealGrid,
-                    mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
-                    λ0)
+function neff_β_grid(grid,
+                   mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
+                   λ0)
     nwg = complex(zero(grid.ω))
     nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
-    function linop!(out, z)
-        β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
-        for iω = 2:length(grid.ω)
-            εco = mode.coren(grid.ω[iω], z=z)^2
-            nc = conj_clamp(neff(mode, εco, nwg[iω]), grid.ω[iω])
-            out[iω] = -im*(grid.ω[iω]/c*nc - grid.ω[iω]*β1)
-        end
-        out[1] = 0
+    _neff = let nwg=nwg, ω=grid.ω, mode=mode
+        _neff(iω; z) = neff(mode, mode.coren(ω[iω], z=z)^2, nwg[iω])
     end
-    function βfun!(out, z)
-        for iω = 2:length(grid.ω)
-            εco = mode.coren(grid.ω[iω], z=z)^2
-            n = neff(mode, εco, nwg[iω])
-            out[iω] = grid.ω[iω]/c*real(n)
-        end
-        out[1] = 1.0
+    _β = let nwg=nwg, ω=grid.ω, _neff=_neff
+        _β(iω; z) = ω[iω]/c*real(_neff(iω; z=z))
     end
-    return linop!, βfun!
+    _neff, _β
 end
 
-function make_linop(grid::Grid.EnvGrid,
-                    mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
-                    λ0; thg=false)
-    sidcs = (1:length(grid.ω))[grid.sidx]
+function β_grid(grid,
+                   mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
+                   λ0)
     nwg = complex(zero(grid.ω))
-    nwg[grid.sidx] = neff_wg.(mode, grid.ω[grid.sidx]; z=0)
-    function linop!(out, z)
-        fill!(out, 0.0)
-        β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
-        if !thg
-            βref = Modes.β(mode, wlfreq(λ0), z=z)
-        end
-        for iω in sidcs
-            εco = mode.coren(grid.ω[iω], z=z)^2
-            nc = conj_clamp(neff(mode, εco, nwg[iω]), grid.ω[iω])
-            out[iω] = -im*(grid.ω[iω]/c*nc - (grid.ω[iω] - grid.ω0)*β1)
-            if !thg
-                out[iω] -= -im*βref
-            end
-        end
-    end
-    function βfun!(out, z)
-        fill!(out, 1.0)
-        for iω in sidcs
-            εco = mode.coren(grid.ω[iω], z=z)^2
-            n = neff(mode, εco, nwg[iω])
-            out[iω] = grid.ω[iω]/c*real(n)
-        end
-    end
-    return linop!, βfun!
+    nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
+    _β(iω; z) = grid.ω[iω]/c*real(neff(mode, mode.coren(grid.ω[iω], z=z)^2, nwg[iω]))
+    _β
 end
 
 FixedCoreCollection = Union{

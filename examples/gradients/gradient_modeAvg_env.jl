@@ -25,13 +25,11 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
-linop, βfun = LinearOps.make_linop(grid, m, λ0);
-
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop!, βfun! = LinearOps.make_linop(grid, m, λ0);
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
@@ -41,7 +39,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.density(densityfun))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
-Luna.run(Eω, grid, linop, transform, FT, output)
+Luna.run(Eω, grid, linop!, transform, FT, output)
 
 ##
 Plotting.pygui(true)

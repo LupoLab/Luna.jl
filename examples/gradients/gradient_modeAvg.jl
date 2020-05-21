@@ -13,7 +13,7 @@ L = 15e-2
 grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
 coren, densityfun = Capillary.gradient(gas, L, pres, 0);
-m = Capillary.MarcatilliMode(a, coren, loss=false, model=:full);
+m = Capillary.MarcatilliMode(a, coren, loss=false, model=:full)
 aeff = let m = m
     aeff(z) = Modes.Aeff(m, z=z)
 end
@@ -43,7 +43,7 @@ statsfun = Stats.collect_stats(grid, Eω,
                                Stats.zdw(m),
                                Stats.pressure(densityfun, gas))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
-
+##
 Luna.run(Eω, grid, linop!, transform, FT, output)
 
 ##

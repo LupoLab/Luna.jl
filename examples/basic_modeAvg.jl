@@ -18,8 +18,9 @@ end
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    densityfun(z) = dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -28,14 +29,12 @@ plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
 
-linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
-
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, responses, inputs, βfun!, aeff)
 
 statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
