@@ -191,10 +191,9 @@ end
 
 function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg) where {Ta, Tcl, Tco}
     if m.model == :full
-        n = sqrt(complex(εco - nwg))
-        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+        return sqrt(complex(εco - nwg))
     elseif m.model == :reduced
-        return ((1 + (εco - 1)/2 - nwg))
+        return complex((1 + (εco - 1)/2 - nwg))
     else
         error("model must be :full or :reduced")
     end 
@@ -202,8 +201,7 @@ end
 
 function neff(m::MarcatilliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, Tcl, Tco}
     if m.model == :full
-        n = real(sqrt(complex(εco - nwg)))
-        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+        return real(sqrt(complex(εco - nwg)))
     elseif m.model == :reduced
         return real((1 + (εco - 1)/2 - nwg))
     else
