@@ -8,7 +8,7 @@ using Reexport
 import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
-import Luna.LinearOps: make_linop, conj_clamp, neff_grid, β_grid, neff_β_grid
+import Luna.LinearOps: make_linop, conj_clamp, neff_grid, neff_β_grid
 import Luna.PhysData: wlfreq
 import Luna.Utils: subscript
 import Base: show
@@ -316,66 +316,20 @@ function neff_β_grid(grid,
     _neff, _β
 end
 
-function β_grid(grid,
-                   mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
-                   λ0)
-    nwg = complex(zero(grid.ω))
-    nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
-    _β(iω; z) = grid.ω[iω]/c*real(neff(mode, mode.coren(grid.ω[iω], z=z)^2, nwg[iω]))
-    _β
-end
-
 FixedCoreCollection = Union{
     Tuple{Vararg{MarcatilliMode{<:Number, Tco, Tcl, LT}} where {Tco, Tcl, LT}},
     AbstractArray{MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT}}
     }
 
-function make_linop(grid::Grid.RealGrid, modes::FixedCoreCollection, λ0; ref_mode=1)
+function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
     nwg = Array{ComplexF64, 2}(undef, (length(grid.ω), length(modes)))
     for (i, mi) in enumerate(modes)
         nwg[2:end, i] = neff_wg.(mi, grid.ω[2:end]; z=0)
     end
-    εco = complex(zero(grid.ω))
-    function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
-        fill!(out, 0.0)
-        # NOTE here we assume that all modes have the same gas fill
-        εco[2:end] .= modes[ref_mode].coren.(grid.ω[2:end], z=z).^2
-        for i in eachindex(modes)
-            for iω = 2:length(grid.ω)
-                nc = conj_clamp(neff(modes[i], εco[iω], nwg[iω, i]), grid.ω[iω])
-                out[iω, i] = -im*(grid.ω[iω]/c*nc - grid.ω[iω]*β1)
-            end
-        end
+    _neff = let nwg=nwg, ω=grid.ω, modes=modes
+        _neff(iω, iim; z) = neff(modes[iim], modes[iim].coren(ω[iω], z=z)^2, nwg[iω, iim])
     end
-end
-
-function make_linop(grid::Grid.EnvGrid, modes::FixedCoreCollection, λ0;
-                    ref_mode=1, thg=false)
-    sidcs = (1:length(grid.ω))[grid.sidx]
-    nwg = Array{ComplexF64, 2}(undef, (length(grid.ω), length(modes)))
-    for (i, mi) in enumerate(modes)
-        nwg[grid.sidx, i] = neff_wg.(mi, grid.ω[grid.sidx]; z=0)
-    end
-    εco = complex(zero(grid.ω))
-    function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
-        fill!(out, 0.0)
-        if !thg
-            βref = Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
-        end
-        # NOTE here we assume that all modes have the same gas fill
-        εco[grid.sidx] .= modes[ref_mode].coren.(grid.ω[grid.sidx], z=z).^2
-        for i in eachindex(modes)
-            for iω in sidcs
-                nc = conj_clamp(neff(modes[i], εco[iω], nwg[iω, i]), grid.ω[iω])
-                out[iω, i] = -im*(grid.ω[iω]/c*nc - (grid.ω[iω] - grid.ω0)*β1)
-                if !thg
-                    out[iω, i] -= -im*βref
-                end
-            end
-        end
-    end
+    _neff
 end
 
 end
