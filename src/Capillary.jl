@@ -306,7 +306,10 @@ function neff_β_grid(grid,
                    mode::MarcatilliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
                    λ0)
     nwg = complex(zero(grid.ω))
-    nwg[2:end] = neff_wg.(mode, grid.ω[2:end]; z=0)
+    sidcs = (1:length(grid.ω))[grid.sidx]
+    for iω in sidcs
+        nwg[iω] = neff_wg(mode, grid.ω[iω]; z=0)
+    end
     _neff = let nwg=nwg, ω=grid.ω, mode=mode
         _neff(iω; z) = neff(mode, mode.coren(ω[iω], z=z)^2, nwg[iω])
     end
@@ -323,8 +326,11 @@ FixedCoreCollection = Union{
 
 function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
     nwg = Array{ComplexF64, 2}(undef, (length(grid.ω), length(modes)))
+    sidcs = (1:length(grid.ω))[grid.sidx]
     for (i, mi) in enumerate(modes)
-        nwg[2:end, i] = neff_wg.(mi, grid.ω[2:end]; z=0)
+        for iω in sidcs
+            nwg[iω, i] = neff_wg(mi, grid.ω[iω]; z=0)
+        end
     end
     _neff = let nwg=nwg, ω=grid.ω, modes=modes
         _neff(iω, iim; z) = neff(modes[iim], modes[iim].coren(ω[iω], z=z)^2, nwg[iω, iim])
