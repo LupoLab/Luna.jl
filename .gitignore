@@ -9,3 +9,4 @@ Manifest.toml
 _git2_*
 docs/build
 *.info
+.vscode/spellright.dict

@@ -64,7 +64,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
                     saved += 1
                 end
             end
-            stepfun(s.yn, s.tn, s.dt, t -> interpolate(s, t))
+            stepfun(s.yn, s.tn, s.dtn, t -> interpolate(s, t))
             repeated = 0
         else
             repeated += 1
@@ -108,7 +108,9 @@ mutable struct Stepper{T<:AbstractArray, F, nT}
     norm::nT # function to calculate error metric, defaults to RK45.weaknorm
 end
 
-function Stepper(f!, y0, t, dt; rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true, norm=weaknorm)
+function Stepper(f!, y0, t, dt;
+                 rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0,
+                 locextrap=true, norm=weaknorm)
     k1 = similar(y0)
     f!(k1, y0, t)
     ks = (k1, similar(k1), similar(k1), similar(k1), similar(k1), similar(k1), similar(k1))
@@ -144,7 +146,8 @@ mutable struct PreconStepper{T<:AbstractArray, F, P, nT}
 end
 
 function PreconStepper(f!, linop, y0, t, dt;
-                       rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0, locextrap=true, norm=weaknorm)
+                       rtol=1e-6, atol=1e-10, safety=0.9, max_dt=Inf, min_dt=0,
+                       locextrap=true, norm=weaknorm)
     prop! = make_prop!(linop, y0)
     fbar! = make_fbar!(f!, prop!, y0)
     k1 = similar(y0)
@@ -157,7 +160,7 @@ function PreconStepper(f!, linop, y0, t, dt;
         float(max_dt), float(min_dt), locextrap, false, 0.0, 0.0, norm)
 end
 
-function step!(s)    
+function step!(s)
     evaluate!(s)
 
     if s.locextrap
@@ -180,6 +183,7 @@ function step!(s)
     else
         s.yn .= s.y
     end
+    prop!_maybe(s) # propagate to new time to pass correct solution to stepfun
     return s.ok
 end
 
@@ -202,7 +206,6 @@ function evaluate!(s::PreconStepper)
     # Set new time and stepsize values -- this happens at the beginning because
     # the interpolant still requires the old values after the step has finished
     s.y .= s.yn
-    s.prop!(s.y, s.t, s.tn)
     s.prop!(s.ks[1], s.t, s.tn)
     s.dt = s.dtn
     s.t = s.tn
@@ -214,6 +217,9 @@ function evaluate!(s::PreconStepper)
         s.fbar!(s.ks[ii+1], s.yn, s.t, s.t+nodes[ii]*s.dt)
     end
 end
+
+prop!_maybe(s::PreconStepper) = s.prop!(s.yn, s.t, s.tn)
+prop!_maybe(s) = nothing
 
 "Interpolate solution, aka dense output."
 function interpolate(s::Stepper, ti::Float64)
@@ -346,7 +352,7 @@ function stepcontrolP!(s)
         s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
     else
         if !isfinite(s.err) # check for NaN or Inf
-            s.dtn = s.dt/2  # if we have one then we're in bug trouble so halve the step size
+            s.dtn = s.dt/2  # if we have one then we're in big trouble so halve the step size
         else
             s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
         end
@@ -362,7 +368,7 @@ function stepcontrolPI!(s)
     β2 = -1/5 / 5
     ε = 0.8
     if s.ok
-        s.errlast == 0 && (s.errlast = 1)
+        s.errlast == 0 && (s.errlast = s.err)
         fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
         # (0.99 <= fac <= 1.01) && (fac = 1.0)
         s.dtn = fac * s.dt

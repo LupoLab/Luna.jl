@@ -7,6 +7,11 @@ import Pidfile: mkpidlock
 import HDF5
 import Luna: @hlock, settings
 
+subzero = '\u2080'
+subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
+subscript(num::AbstractString) = prod([subscript(chi) for chi in num])
+subscript(num::Int) = subscript(string(num))
+
 function git_commit()
     try
         repo = LibGit2.GitRepo(lunadir())

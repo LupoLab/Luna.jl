@@ -57,6 +57,9 @@ const metal = (:Ag,:Al)
 "Change from ω to λ and vice versa"
 wlfreq(ωλ) = 2π*c/ωλ
 
+"convert Δλ at λ to Δω"
+ΔλΔω(Δλ, λ) = (2π*c)*Δλ/λ^2
+
 eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
 "Linear coefficients"
@@ -394,6 +397,11 @@ Number density of `gas` [m^-3] at pressure `P` [bar] and temperature `T` [K].
 """
 function density(gas::Symbol, P, T=roomtemp)
     P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
+end
+
+function pressure(gas, density, T=roomtemp)
+    density == 0 ? zero(density) :
+                   CoolProp.PropsSI("P", "T", T, "DMOLAR", density/N_A, gas_str[gas])/bar
 end
 
 function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
