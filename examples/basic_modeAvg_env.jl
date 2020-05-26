@@ -16,21 +16,16 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-energyfun, energyfunω = Fields.energyfuncs(grid)
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
-
-linop, βfun, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
-
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
-    inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
-
-Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
 
 statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)

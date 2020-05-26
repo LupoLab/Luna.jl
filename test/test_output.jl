@@ -116,12 +116,11 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+    linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
@@ -184,13 +183,12 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+    linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
     # Run with arbitrary error at 3 cm
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
@@ -210,7 +208,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     # Run again, starting from 3 cm
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
@@ -220,7 +218,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     # Run from scratch with MemoryOutput
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
