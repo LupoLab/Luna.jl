@@ -148,18 +148,20 @@ mutable struct HDF5Output{sT, S} <: AbstractOutput
     compression::Bool # whether to use compression
     cache::Bool # whether to cache latest solution point (for continuing after interrupt)
     cachehash::UInt64 # safety hash to prevent cache-continuing for different propagations
+    readonly::Bool
 end
 
 "Simple constructor"
 function HDF5Output(fpath, tmin, tmax, saveN::Integer, statsfun=nostats;
-                    yname="Eω", tname="z", compression=false, script=nothing, cache=true)
+                    yname="Eω", tname="z", compression=false, script=nothing, cache=true,
+                    readonly=false)
     save_cond = GridCondition(tmin, tmax, saveN)
-    HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script, cache)
+    HDF5Output(fpath, save_cond, yname, tname, statsfun, compression, script, cache, readonly)
 end
 
 "Internal constructor - creates the file"
 function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
-                    script=nothing, cache=true)
+                    script=nothing, cache=true, readonly=false)
     if isfile(fpath) && cache
         @hlock HDF5.h5open(fpath, "cw") do file
             if HDF5.exists(file["meta"], "cache")
@@ -169,7 +171,7 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
                 error("cached HDF5Output created, file exists, but has no cache")
             end
         end
-    else
+    elseif !readonly
         if isfile(fpath)
             Logging.@warn("output file $(fpath) already exists and will be overwritten!")
             rm(fpath)
@@ -190,10 +192,18 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
         end
         chash = UInt64(0)
         saved = 0
+    else
+        chash = UInt64(0)
+        saved = 0
     end
     stats0 = Vector{Dict{String, Any}}()
     HDF5Output(fpath, save_cond, yname, tname, saved, statsfun, stats0,
-               compression, cache, chash)
+               compression, cache, chash, readonly)
+end
+
+function HDF5Output(fpath::AbstractString)
+    isfile(fpath) || error("Cannot open read-only HDF5Output: file not found")
+    HDF5Output(fpath, 0, 0, 1; readonly=true)
 end
 
 function initialise(o::HDF5Output, y)
@@ -254,6 +264,7 @@ end
     Note that from RK45.jl, this will be called with yn and tn as arguments.
 """
 function (o::HDF5Output)(y, t, dt, yfun)
+    o.readonly && error("Cannot add data to read-only output!")
     save, ts = o.save_cond(y, t, dt, o.saved)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
@@ -329,6 +340,7 @@ end
 
 "Calling the output on a dictionary writes the items to the file"
 function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing)
+    o.readonly && error("Cannot add data to read-only output!")
     @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
@@ -364,6 +376,7 @@ end
 
 "Calling the output on a key, value pair writes the value to the file"
 function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, group=nothing)
+    o.readonly && error("Cannot add data to read-only output!")
     @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         if HDF5.exists(parent, key)

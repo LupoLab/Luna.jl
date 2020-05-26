@@ -160,6 +160,18 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
         @test read(file["simulation_type"]["transform"]) == string(transform)
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
+    # Test read-only
+    o = Output.HDF5Output(fpath)
+    HDF5.h5open(o.fpath, "r") do file
+        @test read(file["λ0"]) == mem.data["λ0"]
+        Eω = reinterpret(ComplexF64, read(file["Eω"]))
+        @test Eω == mem.data["Eω"]
+        @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
+        @test read(file["z"]) == mem.data["z"]
+        @test read(file["grid"]) == Grid.to_dict(grid)
+        @test read(file["simulation_type"]["field"]) == "field-resolved"
+        @test read(file["simulation_type"]["transform"]) == string(transform)
+    end
 end
 rm(fpath)
 rm(fpath_comp)
