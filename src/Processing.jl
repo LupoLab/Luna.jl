@@ -5,6 +5,23 @@ import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
 
+"""
+    scanproc(f, folder)
+
+Iterate over the scan output files in the `folder`, apply the processing function
+`f(o::AbstractOutput)` and collect the results in arrays.
+
+`f` can return a single value, an array, or a tuple/array of arrays.
+
+# Example
+```julia
+Et, Eω = scanproc("path/to/scanfolder") do output
+    t, Et = getEt(output)
+    ω, Eω = getEω(output)
+    Et, Eω
+end
+```
+"""
 function scanproc(f, folder)
     scanfiles = String[]
     maxidx = 0
