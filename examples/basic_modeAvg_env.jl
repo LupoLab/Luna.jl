@@ -16,8 +16,6 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-energyfun, energyfunω = Fields.energyfuncs(grid)
-
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 

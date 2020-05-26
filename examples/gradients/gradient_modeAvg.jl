@@ -32,16 +32,7 @@ inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
 
-statsfun = Stats.collect_stats(grid, Eω,
-                               Stats.ω0(grid),
-                               Stats.energy(grid, energyfunω),
-                               Stats.energy_λ(grid, energyfunω, (150e-9, 300e-9), label="RDW"),
-                               Stats.peakpower(grid),
-                               Stats.peakintensity(grid, aeff),
-                               Stats.fwhm_t(grid),
-                               Stats.electrondensity(grid, ionrate, densityfun, aeff),
-                               Stats.zdw(m),
-                               Stats.pressure(densityfun, gas))
+statsfun = Stats.default(grid, Eω, m, linop!, transform; gas=gas, windows=((150e-9, 300e-9),))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 ##
 Luna.run(Eω, grid, linop!, transform, FT, output)

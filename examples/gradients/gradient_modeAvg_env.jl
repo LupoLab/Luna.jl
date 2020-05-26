@@ -30,13 +30,7 @@ linop!, βfun! = LinearOps.make_linop(grid, m, λ0);
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
-
-statsfun = Stats.collect_stats(grid, Eω,
-                               Stats.ω0(grid),
-                               Stats.energy(grid, energyfunω),
-                               Stats.peakpower(grid),
-                               Stats.fwhm_t(grid),
-                               Stats.density(densityfun))
+statsfun = Stats.default(grid, Eω, m, linop!, transform; gas=gas, windows=((150e-9, 300e-9),))
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop!, transform, FT, output)

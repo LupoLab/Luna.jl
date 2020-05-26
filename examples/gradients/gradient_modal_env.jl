@@ -28,37 +28,18 @@ inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                modes, :y; full=false)
 
-statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
-output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_linop(grid, modes, λ0)
+statsfun = Stats.default(grid, Eω, modes, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
-import FFTW
-import PyPlot:pygui, plt
-
-ω = FFTW.fftshift(grid.ω)
-t = grid.t
-
-zout = output.data["z"]
-Eout = output.data["Eω"]
-
-Etout = FFTW.ifft(Eout, 1)
-It = abs2.(Etout)
-
-Ilog = FFTW.fftshift(log10.(Maths.normbymax(abs2.(Eout))), 1)
-
-pygui(true)
-
-for i = 1:nmodes
-    plt.figure()
-    plt.subplot(121)
-    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
-    plt.clim(-6, 0)
-    plt.xlim(0,2.0)
-    plt.colorbar()
-    plt.subplot(122)
-    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
-    plt.xlim(-30.0,100.0)
-    plt.colorbar()
-end
+##
+Plotting.pygui(true)
+Plotting.stats(output)
+Plotting.prop_2D(output)
+Plotting.prop_2D(output, bandpass=(150e-9, 300e-9))
+Plotting.time_1D(output, [5e-2, 9.8e-2])
+Plotting.time_1D(output, [5e-2, 9e-2], modes=:sum, bandpass=(150e-9, 300e-9))
+Plotting.spec_1D(output, [5e-2, 9.8e-2])
+Plotting.spec_1D(output, [5e-2, 9.8e-2], modes=:sum)
