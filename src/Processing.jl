@@ -6,6 +6,40 @@ import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput
 
+
+"""
+    coherence(Eω; ndim=1)
+
+Calculate the first-order coherence function g₁₂ of the set of fields `Eω`. The ensemble
+average is taken over the last `ndim` dimensions of `Eω`, other dimensions are preserved.
+
+See J. M. Dudley and S. Coen, Optics Letters 27, 1180 (2002).
+"""
+function coherence(Eω; ndim=1)
+    dimsize = size(Eω)[end-ndim+1:end]
+    outsize = size(Eω)[1:end-ndim]
+    prodidcs = CartesianIndices(dimsize)
+    restidcs = CartesianIndices(outsize)
+    coherence(Eω, prodidcs, restidcs)
+end
+
+# function barrier for speedup
+function coherence(Eω, prodidcs, restidcs)
+    num = zeros(ComplexF64, size(restidcs))
+    den1 = zeros(ComplexF64, size(restidcs))
+    den2 = zeros(ComplexF64, size(restidcs))
+    it = Iterators.product(prodidcs, prodidcs)
+    for (idx1, idx2) in it
+        Eω1 = Eω[restidcs, idx1]
+        Eω2 = Eω[restidcs, idx2]
+        @. num += conj(Eω1)*Eω2
+        @. den1 += abs2(Eω1)
+        @. den2 += abs2(Eω2)
+    end
+    @. abs(num/sqrt(den1*den2))
+end
+
+
 """
     arrivaltime(grid, Eω; bandpass=nothing, method=:moment, oversampling=1)
 
