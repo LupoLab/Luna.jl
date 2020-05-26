@@ -1,10 +1,73 @@
 module Processing
 import FFTW
-import DSP
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
-import Luna.Output: AbstractOutput
+import Luna.Output: AbstractOutput, HDF5Output
+
+function scanproc(f, folder)
+    scanfiles = String[]
+    maxidx = 0
+    for fi in readdir(folder)
+        m = match(r".*_([0-9]{5}).h5", fi)
+        isnothing(m) && continue
+        maxidx = max(parse(Int, m.captures[1]), maxidx)
+        push!(scanfiles, fi)
+    end
+    maxidx != length(scanfiles) && error(
+        "Found $(length(scanfiles)) files but maximum index found is $maxidx")
+    sort!(scanfiles)
+    o = HDF5Output(joinpath(folder, scanfiles[1]))
+    shape = o["meta"]["scanshape"]
+    scanidcs = CartesianIndices(shape)
+    ret = f(o) # run processing once to get array shapes. f can return one or more results.
+    arrays = _arrays(ret, shape)
+    for (idx, fi) in enumerate(scanfiles)
+        ret = f(HDF5Output(joinpath(folder, fi)))
+        for (ridx, ri) in enumerate(ret)
+            idcs = CartesianIndices(ri)
+            arrays[ridx][idcs, scanidcs[idx]] .= ri
+        end
+    end
+    arrays
+end
+
+# Make array(s) with correct size to hold processing results
+_arrays(ret::Number, shape) = zeros(typeof(ret), shape)
+_arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
+_arrays(ret::Tuple, shape) = [_arrays(ri, shape) for ri in ret]
+
+"""
+    coherence(Eω; ndim=1)
+
+Calculate the first-order coherence function g₁₂ of the set of fields `Eω`. The ensemble
+average is taken over the last `ndim` dimensions of `Eω`, other dimensions are preserved.
+
+See J. M. Dudley and S. Coen, Optics Letters 27, 1180 (2002).
+"""
+function coherence(Eω; ndim=1)
+    dimsize = size(Eω)[end-ndim+1:end]
+    outsize = size(Eω)[1:end-ndim]
+    prodidcs = CartesianIndices(dimsize)
+    restidcs = CartesianIndices(outsize)
+    coherence(Eω, prodidcs, restidcs)
+end
+
+# function barrier for speedup
+function coherence(Eω, prodidcs, restidcs)
+    num = zeros(ComplexF64, size(restidcs))
+    den1 = zeros(ComplexF64, size(restidcs))
+    den2 = zeros(ComplexF64, size(restidcs))
+    it = Iterators.product(prodidcs, prodidcs)
+    for (idx1, idx2) in it
+        Eω1 = Eω[restidcs, idx1]
+        Eω2 = Eω[restidcs, idx2]
+        @. num += conj(Eω1)*Eω2
+        @. den1 += abs2(Eω1)
+        @. den2 += abs2(Eω2)
+    end
+    @. abs(num/sqrt(den1*den2))
+end
 
 """
     arrivaltime(grid, Eω; bandpass=nothing, method=:moment, oversampling=1)
