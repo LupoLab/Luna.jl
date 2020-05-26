@@ -2,9 +2,9 @@ import Test: @test, @testset
 import FFTW
 import Luna: Grid, Processing, Maths, Fields, settings, PhysData
 import Luna.PhysData: wlfreq
+import NumericalIntegration: integrate
 
 @testset "normalisation" begin
-import NumericalIntegration: integrate
 λ0 = 800e-9
 τfwhm = 30e-15
 energy = 1e-3
@@ -20,10 +20,9 @@ itr = ((rg, rFT), (eg, eFT))
 
 for ii = 1:2
     grid, FT = itr[ii]
-    input! = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
     energy_t, energy_ω = Fields.energyfuncs(grid)
-    Eω = zeros(ComplexF64, length(grid.ω))
-    input!(Eω, grid, energy_t, FT)
+    Eω = input(grid, FT)
     @test energy_ω(Eω) ≈ energy
 
     ω, Iω = Processing.getIω(Processing.getEω(grid, Eω)..., :ω)
@@ -151,3 +150,43 @@ for res in (1e12, 5e12, 10e12)
     @test isapprox(Maths.fwhm(Fg, Pf), res, rtol=1e-2)
 end
 end
+
+@testset "intensity autocorrelation" begin
+    grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 1e-12)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    input = Fields.GaussField(λ0=800e-9, τfwhm=30e-15, energy=1e-6)
+    Eω = input(grid, FT)
+    Et = FT \ Eω
+    IAC = Processing.intensity_autocorrelation(Et, grid)
+    # Gaussian IAC width is sqrt(2)*FWHM 
+    @test isapprox(Maths.fwhm(grid.t, IAC), sqrt(2)*30e-15, rtol=3e-6)
+    input = Fields.SechField(λ0=800e-9, τfwhm=30e-15, energy=1e-6)
+    Eω = input(grid, FT)
+    Et = FT \ Eω
+    IAC = Processing.intensity_autocorrelation(Et, grid)
+    # Numerical AC width from Mathematics: 1.542811*FWHM
+    @test isapprox(Maths.fwhm(grid.t, IAC), 1.542811*30e-15, rtol=1e-6)
+end
+
+@testset "field autocorrelation" begin
+    grid = Grid.EnvGrid(1.0, 800e-9, (160e-9, 3000e-9), 1e-12)
+    Δω = 2π*PhysData.c/800e-9^2*10e-9
+    Eω = sqrt.(Maths.gauss.(grid.ω, Δω, x0=PhysData.wlfreq(grid.referenceλ)))
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_fft(x)
+    Et = FFTW.fftshift(FT \ Eω)
+    τc = Processing.coherence_time(grid, Et)
+    # Gaussian spectrum with natural width Δω has coherence time of 2*sqrt(log(2))/Δω (analytic)
+    @test isapprox(τc, 2*sqrt(log(2))/Δω, rtol=6e-6)
+    grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 1e-12)
+    Δω = 2π*PhysData.c/800e-9^2*10e-9
+    Eω = sqrt.(Maths.gauss.(grid.ω, Δω, x0=PhysData.wlfreq(grid.referenceλ)))
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Et = FFTW.fftshift(FT \ Eω)
+    τc = Processing.coherence_time(grid, Et)
+    # Gaussian spectrum with natural width Δω has coherence time of 2*sqrt(log(2))/Δω (analytic)
+    @test isapprox(τc, 2*sqrt(log(2))/Δω, rtol=5e-8)
+end
+

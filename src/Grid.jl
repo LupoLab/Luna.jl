@@ -156,9 +156,9 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     @assert δt/δto ≈ minimum(vo)/minimum(v) # FFT grid -> sample at -fs/2 but not +fs/2
     factor = Int(length(to)/length(t))
     zeroidx = findfirst(x -> x==0, to)
-    # Starting at zero, time samples should be exactly the same (except fewer in t)
-    @assert all(to[zeroidx:factor:end] .== t[t .>= 0])
-    @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
+    # The time samples should be exactly the same (except fewer in t)
+    @assert all(to[zeroidx:factor:end] .≈ t[t .>= 0])
+    @assert all(to[zeroidx:-factor:1] .≈ t[t .<= 0][end:-1:1])
 
     return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
