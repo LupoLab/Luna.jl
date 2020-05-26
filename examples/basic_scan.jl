@@ -33,13 +33,11 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
-linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=$τ, energy=$energy)
 
-Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs, aeff)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
 
 statsfun = Stats.collect_stats(grid, Eω, Stats.ω0(grid))
 output = Output.@ScanHDF5Output(0, grid.zmax, 101, statsfun)
