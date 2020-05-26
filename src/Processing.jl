@@ -435,12 +435,14 @@ getEt(output::AbstractOutput, args...; kwargs...) = getEt(
     makegrid(output), output, args...; kwargs...)
 
 """
-    getEt(grid, Eω; trange=nothing, oversampling=4, bandpass=nothing)
+    getEt(grid, Eω; trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
 
 Get the envelope time-domain electric field (including the carrier wave) from the frequency-
 domain field `Eω`. The field can be cropped in time using `trange`, it is oversampled by
-a factor of `oversampling` (default 4) and can be bandpassed using a pre-defined window,
-or wavelength limits with `bandpass` (see [`window_maybe`](@ref)).
+a factor of `oversampling` (default 4) and can be bandpassed with `bandpass`
+(see [`window_maybe`](@ref)). If `FTL` is `true`, return the Fourier-transform limited pulse,
+i.e. remove any spectral phase.
+
 If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
 can be a single number or an array.
 """
@@ -466,9 +468,13 @@ end
 getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
 
 function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
-               trange=nothing, oversampling=4, bandpass=nothing)
+               trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
     t = grid.t
     Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    if FTL
+        τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+        Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    end
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
@@ -481,6 +487,15 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
     return to, Eto, output["z"][zidx]
 end
 
+"""
+    PeakWindow(width, λmin, λmax; relative=false)
+
+Window function generator which automatically tracks the peak in the spectral region given
+by `λmin` and `λmax` and applies a window of a specific `width` around the peak. If 
+`relative` is `true`, `width` is relative bandwidth instead of the wavelength width.
+
+A `PeakWindow` automatically stores the limits of the windows it applies in the field `lims`.
+"""
 mutable struct PeakWindow
     width::Float64
     λmin::Float64
