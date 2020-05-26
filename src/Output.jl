@@ -482,21 +482,31 @@ macro ScanHDF5Output(args...)
     fname = quote
         $(esc(:__SCAN__)).name*"_"*@sprintf("%05d", $(esc(:__SCANIDX__)))*".h5"
     end
-    exp = Expr(:call, HDF5Output, fname)
+    ex = Expr(:call, HDF5Output, fname)
     for arg in args
-        push!(exp.args, esc(arg))
+        push!(ex.args, esc(arg))
     end
-    push!(exp.args, Expr(:kw, :script, code))
+    push!(ex.args, Expr(:kw, :script, code))
     quote 
         begin
-            out = $exp
+            out = $ex
             out("scanidx", $(esc(:__SCANIDX__)),  meta=true)
             vars = Dict{String, Any}()
+            arrays = Dict{String, Any}()
+            order = String[] # scan order
+            shape = Int[] # scan shape
             for var in keys($(esc(:__SCAN__)).vars)
                 val = Scans.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
+                arr = $(esc(:__SCAN__)).vars[var]
                 vars[string(var)] = val
+                push!(order, string(var))
+                push!(shape, length(arr))
+                arrays[string(var)] = arr
             end
-            out(vars, meta=true, group="scanvars")
+            out(vars; meta=true, group="scanvars")
+            out(arrays; meta=true, group="scanarrays")
+            out("scanorder", order; meta=true)
+            out("scanshape", shape; meta=true)
             out
         end
     end
@@ -661,7 +671,7 @@ macro scansave(kwargs...)
             push!(ex.args, esc(arg))
         else
             # To a macro, arguments and keyword arguments look the same, so check manually
-            error("third and higher argument to `@scansave` must be keyword arguments")
+            error("@scansave only accepts")
         end
     end
     ex
