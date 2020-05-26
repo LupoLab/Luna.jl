@@ -19,12 +19,11 @@ import Luna: Output
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     energyfun, energyfunω = Fields.energyfuncs(grid)
-    normfun = NonlinearRHS.norm_modal(grid.ω)
     modes = (
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy)
-    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),
@@ -42,7 +41,7 @@ import Luna: Output
     inf = (Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy/2.0),)
     # same field in each mode
     inputs = ((mode=1, fields=inf), (mode=2, fields=inf))
-    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :xy; full=true)
     statsfun = Stats.collect_stats(grid, Eω,
                                 Stats.ω0(grid),

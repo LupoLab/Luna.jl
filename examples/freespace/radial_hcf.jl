@@ -23,8 +23,9 @@ q = Hankel.QDHT(R, N, dim=2)
 
 energyfun, energyfun_ω = Fields.energyfuncs(grid, q)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)

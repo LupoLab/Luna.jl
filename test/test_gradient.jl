@@ -12,7 +12,7 @@ pres = 5
 L = 5e-2
 
 # Common setup
-grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
+grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 0.5e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
@@ -22,10 +22,9 @@ dens(z) = dens0
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
-linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(
-    grid, dens, normfun, responses, inputs, aeff)
+    grid, dens, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -37,10 +36,9 @@ coren, densityfun = Capillary.gradient(gas, L, pres, pres)
 m = Capillary.MarcatilliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
-linop, βfun = LinearOps.make_linop(grid, m, λ0)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -52,10 +50,9 @@ coren, densityfun = Capillary.gradient(gas, [0,L], [pres, pres]);
 m = Capillary.MarcatilliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
-linop, βfun = LinearOps.make_linop(grid, m, λ0)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -75,7 +72,7 @@ pres = 5
 L = 5e-2
 
 # Common setup
-grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
+grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 0.5e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
@@ -85,9 +82,8 @@ dens(z) = dens0
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid);
-linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0);
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
-Eω, transform, FT = Luna.setup(grid, dens, normfun, responses, inputs, aeff)
+linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0);
+Eω, transform, FT = Luna.setup(grid, dens, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -99,10 +95,9 @@ coren, densityfun = Capillary.gradient(gas, L, pres, pres)
 m = Capillary.MarcatilliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
-linop, βfun = LinearOps.make_linop(grid, m, λ0)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -114,10 +109,9 @@ coren, densityfun = Capillary.gradient(gas, [0,L], [pres, pres]);
 m = Capillary.MarcatilliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
-linop, βfun = LinearOps.make_linop(grid, m, λ0)
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(
-    grid, densityfun, normfun, responses, inputs, aeff)
+    grid, densityfun, responses, inputs, βfun!, aeff)
 statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
