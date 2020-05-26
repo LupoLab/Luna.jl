@@ -44,8 +44,9 @@ Ewp .= CP * Ewp
 permutedims!(Ew, Ewp, [2, 1])
 #Et = FFTW.irfft(Ew, length(grid.t), 1);
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)

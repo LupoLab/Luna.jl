@@ -19,7 +19,7 @@ end
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
 densityfun = let dens0=PhysData.density(gas, pres)
-    densityfun(z) = dens0
+    z -> dens0
 end
 
 ionpot = PhysData.ionisation_potential(gas)

@@ -24,8 +24,9 @@ modes = (
     Capillary.MarcatilliMode(afun, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)

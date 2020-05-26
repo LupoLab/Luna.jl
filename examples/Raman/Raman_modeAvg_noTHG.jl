@@ -16,8 +16,9 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)),
              Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas), thg=false))

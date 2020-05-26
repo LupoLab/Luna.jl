@@ -16,15 +16,16 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),
              Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
 
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun!, aeff)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 

@@ -16,8 +16,9 @@ aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 

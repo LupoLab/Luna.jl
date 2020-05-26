@@ -24,8 +24,9 @@ energyfun, energyfunω = Fields.energyfuncs(grid)
 println("τ: $($τ * 1e15)")
 println("E: $($energy * 1e6)")
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)

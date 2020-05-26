@@ -18,8 +18,9 @@ end
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -41,6 +42,6 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 ##
 Plotting.pygui(true)
 Plotting.stats(output)
-Plotting.prop_2D(output; trange=(-1e-12, 1e-12), λrange=(220e-9, 2000e-9), oversampling=1)
+Plotting.prop_2D(output; trange=(-1e-12, 1e-12), λrange=(220e-9, 2000e-9))
 Plotting.time_1D(output; trange=(-1e-12, 1e-12))
 Plotting.spec_1D(output)

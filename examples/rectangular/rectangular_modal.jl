@@ -15,8 +15,9 @@ grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 modes = collect(RectModes.RectMode(a, b, gas, pres, :Ag, n=n, m=m) for m in 1:3 for n in 1:6)
 nmodes = length(modes)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
