@@ -1,52 +1,56 @@
 module Processing
 import FFTW
+import Glob: glob
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
 
 """
-    scanproc(f, folder)
+    scanproc(f, scanfiles)
+    scanproc(f, directory)
+    scanproc(f)
+    scanproc(f, pattern, directory)
 
-Iterate over the scan output files in the `folder`, apply the processing function
-`f(o::AbstractOutput)` and collect the results in arrays.
+Iterate over the scan output files, apply the processing function `f(o::AbstractOutput)`,
+and collect the results in arrays.
+
+The files can be given as:
 
 `f` can return a single value, an array, or a tuple/array of arrays.
 
 # Example
 ```julia
-Et, Eω = scanproc("path/to/scanfolder") do output
+Et, Eω = scanproc("path/to/scandir") do output
     t, Et = getEt(output)
     ω, Eω = getEω(output)
     Et, Eω
 end
 ```
 """
-function scanproc(f, folder)
-    scanfiles = String[]
-    maxidx = 0
-    for fi in readdir(folder)
-        m = match(r".*_([0-9]{5}).h5", fi)
-        isnothing(m) && continue
-        maxidx = max(parse(Int, m.captures[1]), maxidx)
-        push!(scanfiles, fi)
-    end
-    maxidx != length(scanfiles) && error(
-        "Found $(length(scanfiles)) files but maximum index found is $maxidx")
-    sort!(scanfiles)
-    o = HDF5Output(joinpath(folder, scanfiles[1]))
-    shape = o["meta"]["scanshape"]
+function scanproc(f, scanfiles::AbstractVector{<:AbstractString})
+    scanfiles = sort(scanfiles)
+    o = HDF5Output(scanfiles[1])
+    shape = Tuple(o["meta"]["scanshape"])
     scanidcs = CartesianIndices(shape)
     ret = f(o) # run processing once to get array shapes. f can return one or more results.
     arrays = _arrays(ret, shape)
     for (idx, fi) in enumerate(scanfiles)
-        ret = f(HDF5Output(joinpath(folder, fi)))
+        ret = f(HDF5Output(fi))
         for (ridx, ri) in enumerate(ret)
             idcs = CartesianIndices(ri)
             arrays[ridx][idcs, scanidcs[idx]] .= ri
         end
     end
     arrays
+end
+
+# Default pattern for files named by ScanHDF5Output is [name]_[scanidx].h5 with 5 digits
+defpattern = "*_[0-9][0-9][0-9][0-9][0-9].h5"
+
+function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=defpattern)
+    scanfiles = glob(pattern, directory) # this returns absolute paths if directory given
+    scanproc(f, scanfiles)
 end
 
 # Make array(s) with correct size to hold processing results
