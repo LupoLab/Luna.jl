@@ -1,5 +1,6 @@
 module Processing
 import FFTW
+using EllipsisNotation
 import Glob: glob
 import Luna: Maths, Fields, PhysData
 import Luna.PhysData: wlfreq, c
@@ -35,15 +36,16 @@ Et, Eω = scanproc("path/to/scandir") do output
 end
 ```
 """
-function scanproc(f, scanfiles::AbstractVector{<:AbstractString})
+function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
+    local scanidcs, arrays
     scanfiles = sort(scanfiles)
     for (idx, fi) in enumerate(scanfiles)
         o = HDF5Output(fi)
         ret = f(o)
         if idx == 1 # initialise arrays
-            shape = Tuple(o["meta"]["scanshape"])
-            global scanidcs = CartesianIndices(shape)
-            global arrays = _arrays(ret, shape)
+            isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
+            scanidcs = CartesianIndices(shape)
+            arrays = _arrays(ret, shape)
         end
         for (ridx, ri) in enumerate(ret)
             idcs = CartesianIndices(ri)
@@ -56,9 +58,10 @@ end
 # Default pattern for files named by ScanHDF5Output is [name]_[scanidx].h5 with 5 digits
 defpattern = "*_[0-9][0-9][0-9][0-9][0-9].h5"
 
-function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=defpattern)
+function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=defpattern;
+                  shape=nothing)
     scanfiles = glob(pattern, directory) # this returns absolute paths if directory given
-    scanproc(f, scanfiles)
+    scanproc(f, scanfiles; shape=shape)
 end
 
 # Make array(s) with correct size to hold processing results
@@ -469,10 +472,9 @@ function getEω(grid::EnvGrid, Eω::AbstractArray)
 end
 
 function getEω(grid, output, zslice)
-    ω, Eω = getEω(grid, output)
-    cidcs = CartesianIndices(size(Eω)[1:end-1])
     zidx = nearest_z(output, zslice)
-    return ω, Eω[cidcs, zidx], output["z"][zidx]
+    ω, Eω = getEω(grid, output["Eω", .., zidx])
+    return ω, Eω, output["z"][zidx]
 end
 
 fftnorm(grid::RealGrid) = Maths.rfftnorm(grid.t[2] - grid.t[1])
@@ -518,16 +520,15 @@ getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, outpu
 function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
                trange=nothing, oversampling=4, bandpass=nothing)
     t = grid.t
-    Eω = window_maybe(grid.ω, output["Eω"], bandpass)
+    zidx = nearest_z(output, zslice)
+    Eω = window_maybe(grid.ω, output["Eω", .., zidx], bandpass)
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
     else
         idcs = @. (t < max(trange...)) & (t > min(trange...))
     end
-    cidcs = CartesianIndices(size(Etout)[2:end-1])
-    zidx = nearest_z(output, zslice)
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs, zidx], factor=oversampling)
+    to, Eto = Maths.oversample(t[idcs], Etout[idcs, ..], factor=oversampling)
     return to, Eto, output["z"][zidx]
 end
 
