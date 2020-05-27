@@ -9,13 +9,20 @@ import Luna.Output: AbstractOutput, HDF5Output
 """
     scanproc(f, scanfiles)
     scanproc(f, directory)
+    scanproc(f, directory, pattern)
     scanproc(f)
-    scanproc(f, pattern, directory)
 
 Iterate over the scan output files, apply the processing function `f(o::AbstractOutput)`,
 and collect the results in arrays.
 
 The files can be given as:
+
+- a `Vector` of `AbstractString`s containing file paths
+- a directory to search for files according to the naming pattern of
+    [`Output@ScanHDF5Output`](@ref)
+- a directory and a `glob` pattern
+
+If nothing is specified, `scanproc` uses the current working directory.
 
 `f` can return a single value, an array, or a tuple/array of arrays.
 
