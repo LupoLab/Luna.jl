@@ -19,7 +19,7 @@ The files can be given as:
 
 - a `Vector` of `AbstractString`s containing file paths
 - a directory to search for files according to the naming pattern of
-    [`Output@ScanHDF5Output`](@ref)
+    [`Output.@ScanHDF5Output`](@ref)
 - a directory and a `glob` pattern
 
 If nothing is specified, `scanproc` uses the current working directory.
@@ -37,13 +37,14 @@ end
 """
 function scanproc(f, scanfiles::AbstractVector{<:AbstractString})
     scanfiles = sort(scanfiles)
-    o = HDF5Output(scanfiles[1])
-    shape = Tuple(o["meta"]["scanshape"])
-    scanidcs = CartesianIndices(shape)
-    ret = f(o) # run processing once to get array shapes. f can return one or more results.
-    arrays = _arrays(ret, shape)
     for (idx, fi) in enumerate(scanfiles)
-        ret = f(HDF5Output(fi))
+        o = HDF5Output(fi)
+        ret = f(o)
+        if idx == 1 # initialise arrays
+            shape = Tuple(o["meta"]["scanshape"])
+            global scanidcs = CartesianIndices(shape)
+            global arrays = _arrays(ret, shape)
+        end
         for (ridx, ri) in enumerate(ret)
             idcs = CartesianIndices(ri)
             arrays[ridx][idcs, scanidcs[idx]] .= ri
