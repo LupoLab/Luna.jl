@@ -25,7 +25,7 @@ The files can be given as:
 
 If nothing is specified, `scanproc` uses the current working directory.
 
-`f` can return a single value, an array, or a tuple/array of arrays.
+`f` can return a single value, an array, or a tuple/array of arrays/numbers.
 
 # Example
 ```julia

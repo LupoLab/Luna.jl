@@ -255,7 +255,7 @@ function getindex(o::HDF5Output, ds::AbstractString,
     end
 end
 
-# indexing with an array, e.g. o["Eω"][:, [1, 2, 3]] has to be handled separately
+# indexing with an array, e.g. o["Eω", :, [1, 2, 3]] has to be handled separately
 function getindex(o::HDF5Output, ds::AbstractString,
                   I::Union{AbstractRange, Int, Colon, Array, Ellipsis}...)
     if count(isa.(I, Array)) > 1
@@ -284,10 +284,14 @@ function getindex(o::HDF5Output, ds::AbstractString,
 end
 
 function show(io::IO, o::HDF5Output)
-    fields = @hlock HDF5.h5open(o.fpath) do file
-        names(file)
+    if isfile(o.fpath)
+        fields = @hlock HDF5.h5open(o.fpath) do file
+            names(file)
+        end
+        print(io, "HDF5Output$(fields)")
+    else
+        print(io, "HDF5Output[FILE DELETED]")
     end
-    print(io, "HDF5Output$(fields)")
 end
 
 
