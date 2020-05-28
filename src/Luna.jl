@@ -36,7 +36,8 @@ end
 
 Dictionary of global settings for `Luna`.
 """
-settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT)
+settings = Dict{String, Any}("fftw_flag" => FFTW.PATIENT,
+                             "fftw_threads" => 0)
 
 """
     set_fftw_mode(mode)
@@ -58,38 +59,53 @@ function set_fftw_mode(mode)
     settings["fftw_flag"] = flag
 end
 
+"""
+    set_fftw_threads(nthr)
+
+Set number of threads to be used by FFTW. If set to `0`, the number of threads used by 
+FFTW is determined automatically (see [`Utils.FFTWthreads()`](@ref))
+"""
+function set_fftw_threads(nthr=0)
+    settings["fftw_threads"] = nthr
+    FFTW.set_num_threads(Utils.FFTWthreads())
+end
+
+function __init__()
+    set_fftw_threads()
+end
+
 include("Utils.jl")
 include("Scans.jl")
 include("Output.jl")
 include("Maths.jl")
 include("PhysData.jl")
 include("Grid.jl")
+include("Fields.jl")
 include("RK45.jl")
 include("Modes.jl")
+include("LinearOps.jl")
 include("Capillary.jl")
 include("Antiresonant.jl")
 include("RectModes.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
-include("LinearOps.jl")
 include("Stats.jl")
 include("Polarisation.jl")
 include("Tools.jl")
+include("Processing.jl")
 include("Plotting.jl")
 include("Raman.jl")
-include("Fields.jl")
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
-       Tools, Plotting, Raman, Antiresonant, Fields
+       Tools, Plotting, Raman, Antiresonant, Fields, Processing
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
     out = fill(0.0 + 0.0im, length(grid.ω))
-    energy_t = Fields.energyfuncs(grid)[1]
-    for input! in inputs
-        input!(out, grid, energy_t, FT)
+    for field in inputs
+        out .+= field(grid, FT)
     end
     return out
 end
@@ -99,11 +115,12 @@ function doinput_sm(grid, inputs::Fields.TimeField, FT)
     doinput_sm(grid, (inputs,), FT)
 end
 
-function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs, aeff)
+function setup(grid::Grid.RealGrid, densityfun, responses, inputs, βfun!, aeff;
+               norm! = NonlinearRHS.norm_mode_average(grid, βfun!, aeff))
     Utils.loadFFTwisdom()
     xo = Array{Float64}(undef, length(grid.to))
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, norm!, aeff)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1, flags=settings["fftw_flag"])
     Eω = doinput_sm(grid, inputs, FT)
@@ -113,13 +130,14 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs, aeff
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs, aeff)
+function setup(grid::Grid.EnvGrid, densityfun, responses, inputs, βfun!, aeff;
+               norm! = NonlinearRHS.norm_mode_average(grid, βfun!, aeff))
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
     xo = Array{ComplexF64}(undef, length(grid.to))
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, normfun, aeff)
+    transform = NonlinearRHS.TransModeAvg(grid, FTo, responses, densityfun, norm!, aeff)
     Eω = doinput_sm(grid, inputs, FT)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -129,11 +147,10 @@ end
 
 # for a tuple of NamedTuple's with tuple fields we assume all is well
 function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
-    energy_t = Fields.energyfuncs(grid)[1]
     for input in inputs
         out = @view Eω[:,input.mode]
-        for input! in input.fields
-            input!(out, grid, energy_t, FT)
+        for field in input.fields
+            out .+= field(grid, FT)
         end
     end
 end
@@ -148,8 +165,9 @@ function doinput_mm!(Eω, grid, inputs::Fields.TimeField, FT)
     doinput_mm!(Eω, grid, ((mode=1, fields=(inputs,)),), FT)
 end
 
-function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
-               modes::Modes.ModeCollection, components; full=false)
+function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
+               modes::Modes.ModeCollection, components;
+               full=false, norm! = NonlinearRHS.norm_modal(grid))
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
@@ -161,7 +179,7 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, normfun,
+                                 responses, densityfun, norm!,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -169,8 +187,9 @@ function setup(grid::Grid.RealGrid, densityfun, normfun, responses, inputs,
     Eω, transform, FT
 end
 
-function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
-               modes::Modes.ModeCollection, components; full=false)
+function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
+               modes::Modes.ModeCollection, components;
+               full=false, norm! = NonlinearRHS.norm_modal(grid))
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
@@ -182,7 +201,7 @@ function setup(grid::Grid.EnvGrid, densityfun, normfun, responses, inputs,
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, normfun,
+                                 responses, densityfun, norm!,
                                  rtol=1e-3, atol=0.0, mfcn=300, full=full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
@@ -192,9 +211,8 @@ end
 
 function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
                    inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
-    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
-    for input! in inputs
-        input!(Eωk, grid, spacegrid, energy_t, FT)
+    for field in inputs
+        Eωk .+= field(grid, spacegrid, FT)
     end
 end
 
@@ -298,13 +316,11 @@ end
 
 function run(Eω, grid,
              linop, transform, FT, output;
-             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4,
+             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
 
     Et = FT \ Eω
-
-    z = 0.0
 
     function stepfun(Eω, z, dz, interpolant)
         Eω .*= grid.ωwin
@@ -314,12 +330,19 @@ function run(Eω, grid,
         output(Eω, z, dz, interpolant)
     end
 
+    # check_cache does nothing except for HDF5Outputs
+    Eωc, zc, dzc = Output.check_cache(output, Eω, z0, init_dz)
+    if zc > z0
+        Logging.@info("Found cached propagation. Resuming...")
+        Eω, z0, init_dz = Eωc, zc, dzc
+    end
+
     output(Grid.to_dict(grid), group="grid")
     output(simtype(grid, transform, linop), group="simulation_type")
     output(dumps(transform, linop), group="dumps")
 
     RK45.solve_precon(
-        transform, linop, Eω, z, init_dz, grid.zmax, stepfun=stepfun,
+        transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
         max_dt=max_dz, min_dt=min_dz,
         rtol=rtol, atol=atol, safety=safety, norm=norm,
         status_period=status_period)

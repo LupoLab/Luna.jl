@@ -1,7 +1,9 @@
 import Test: @test, @testset, @test_throws, @test_broken
-import Luna: Maths
+import Luna: Maths, Grid, Fields
 import Dierckx
+import HCubature: hquadrature
 import Random: seed!
+import FFTW
 
 @testset "Derivatives" begin
     f(x) = @. 4x^3 + 3x^2 + 2x + 1
@@ -181,14 +183,18 @@ end
     # Create new FastFinder, immediately index backwards - does this still work?
     ff = Maths.FastFinder(x)
     @test ff.(x2[end:-1:1]) == idcs_slow[end:-1:1]
+    # Accuracy
+    @test maximum(spl.(x2) - sin.(x2)) < 5e-8
+    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
+    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
     # Extrapolation
     ff = Maths.FastFinder(x)
     x3 = range(-0.5, 2π+0.5, length=200)
     @test ff.(x3[end:-1:1]) == fslow.(x3[end:-1:1])
     @test ff.(x3) == fslow.(x3)
-    @test maximum(spl.(x2) - sin.(x2)) < 5e-8
-    @test abs(Maths.derivative(spl, 1.3, 1) - cos(1.3)) < 1.7e-7
-    @test maximum(cos.(x2) - Maths.derivative.(spl, x2, 1)) < 2.1e-6
+    spl = Maths.CSpline(x, y; bounds_error=true)
+    @test_throws DomainError spl(-0.5)
+    @test_throws DomainError spl(10)
 end
 
 @testset "BSpline" begin
@@ -250,16 +256,66 @@ end
 
 @testset "randgauss" begin
     import Statistics: std, mean
-    x = Maths.randgauss(1, 0.5, 1000000, seed=1234)
+    seed!(1234)
+    x = Maths.randgauss(1, 0.5, 1000000)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
-    x = Maths.randgauss(10, 0.1, 1000000, seed=1234)
+    seed!(1234)
+    x = Maths.randgauss(10, 0.1, 1000000)
     @test isapprox(std(x), 0.1, rtol=1e-3)
     @test isapprox(mean(x), 10, rtol=1e-3)
-    x = Maths.randgauss(-1, 0.5, 1000000, seed=1234)
+    seed!(1234)
+    x = Maths.randgauss(-1, 0.5, 1000000)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), -1, rtol=1e-3)
-    x = Maths.randgauss(1, 0.5, (1000, 1000), seed=1234)
+    seed!(1234)
+    x = Maths.randgauss(1, 0.5, (1000, 1000))
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
 end
+
+@testset "linterp" begin
+    x = range(0.0, 2π, length=100)
+    y = sin.(x)
+    l = Maths.LinTerp(x, y)
+    @test all(abs.(l.(x) .- y) .< 3e-16)
+    x2 = range(0.0, 2π, length=300)
+    @test isapprox(l.(x2), sin.(x2), rtol=4e-4)
+    @test Maths.linterp(0.5, 0.0, 0.0, 1.0, 1.0) ≈ 0.5
+    @test Maths.linterp(1.5, 0.0, 0.0, 1.0, 1.0) ≈ 1.5
+    @test Maths.linterp(-0.5, 0.0, 0.0, 1.0, 1.0) ≈ -0.5
+end
+
+@testset "gaussnorm" begin
+    for power = 2:2:10
+        @test Maths.gaussnorm(1, power=power) ≈ hquadrature(
+            x -> Maths.gauss(x, 1; power=power), -10, 10)[1]
+        @test Maths.gaussnorm(fwhm=1, power=power) ≈ hquadrature(
+            x -> Maths.gauss(x; fwhm=1, power=power), -10, 10)[1]
+    end
+end
+
+@testset "findpeaks" begin
+    grid = Grid.RealGrid(1.0, 800e-9, (160e-9, 3000e-9), 10e-12)
+    dt = grid.t[2] - grid.t[1]
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = FT * x
+    fill!(Eω, 0.0)
+    positions = (-367e-15, -10e-15, 100e-15, 589e-15)
+    widths = (30e-15, 3e-15, 100e-15, 200e-15)
+    powers = (1e3, 1e4, 1e2, 2e3)
+    for i in 1:length(positions)
+        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i], τ0=positions[i])
+        Eω .+= field(grid, FT)
+    end
+    Et = FT \ Eω
+    It = Fields.It(Et, grid)
+    pks = Maths.findpeaks(grid.t, It, threshold=10.0, filterfw=false)
+    for i in 1:length(positions)
+        @test isapprox(pks[i].position, positions[i], atol=dt*1.1)
+        @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.1)
+        @test isapprox(pks[i].peak, powers[i], rtol=1e-2)
+    end
+end
+

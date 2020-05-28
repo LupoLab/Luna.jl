@@ -1,7 +1,7 @@
 using Luna
 import Luna.PhysData: wlfreq
 import FFTW
-import Hankel
+import Luna: Hankel
 import NumericalIntegration: integrate, SimpsonEven
 
 gas = :Ar
@@ -22,8 +22,9 @@ q = Hankel.QDHT(R, N, dim=2)
 
 energyfun, energyfun_ω = Fields.energyfuncs(grid, q)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
@@ -130,7 +131,7 @@ plt.plot(zout.*1e2, energy.*1e6)
 plt.xlabel("Distance [cm]")
 plt.ylabel("Energy [μJ]")
 
-jw = Plotting.cmap_white("jet", 512, 10)
+jw = Plotting.cmap_white("jet"; n=10)
 fig = plt.figure()
 fig.set_size_inches(12, 4)
 for ii in 1:3

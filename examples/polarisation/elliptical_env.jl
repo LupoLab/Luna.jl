@@ -40,8 +40,9 @@ Ewp .= CP * Ewp
 permutedims!(Ew, Ewp, [2, 1])
 Et = FFTW.ifft(Ew, 1);
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 

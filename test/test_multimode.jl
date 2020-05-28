@@ -17,11 +17,10 @@ import Test: @test, @testset, @test_throws
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+    linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -32,9 +31,8 @@ import Test: @test, @testset, @test_throws
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun, energyfunω = Fields.energyfuncs(grid)
-    normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
-    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=false)
     outputr = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
@@ -62,11 +60,10 @@ end
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    linop, βfun, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-    normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun, aeff)
+    linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
-        grid, densityfun, normfun, responses, inputs, aeff)
+        grid, densityfun, responses, inputs, βfun!, aeff)
     statsfun = Stats.collect_stats(grid, Eω,
                                Stats.ω0(grid),
                                Stats.energy(grid, energyfunω))
@@ -77,9 +74,8 @@ end
          Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun, energyfunω = Fields.energyfuncs(grid)
-    normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
-    Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=true)
     outputf = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
     linop = LinearOps.make_const_linop(grid, modes, λ0)
@@ -108,15 +104,14 @@ end
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
-    normfun = NonlinearRHS.norm_modal(grid.ω)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
-    Eω_single, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω_single, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=false)
     inputs = (Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6),)
-    Eω_tuple, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω_tuple, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=false)
     inputs = ((mode=1, fields=(Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6),)),)
-    Eω_tuple_of_namedtuples, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
+    Eω_tuple_of_namedtuples, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=false)
     @test Eω_single ≈ Eω_tuple
     @test Eω_single ≈ Eω_tuple_of_namedtuples

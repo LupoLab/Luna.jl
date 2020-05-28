@@ -12,7 +12,7 @@ a = 225e-6
 gas = :Ar
 pres = 0.4
 
-τ = 30e-15
+τfwhm = 30e-15
 λ0 = 1800e-9
 energy = 500e-6
 
@@ -23,9 +23,6 @@ nmodes = length(modes)
 grid = Grid.RealGrid(250e-2, λ0, (200e-9, 3000e-9), 1e-12)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
-normfun = NonlinearRHS.norm_modal(grid.ω)
-
-
 
 Etlin = gausspulse(grid.t)
 cenergy = energyfun(Etlin)
@@ -47,8 +44,9 @@ Ewp .= CP * Ewp
 permutedims!(Ew, Ewp, [2, 1])
 #Et = FFTW.irfft(Ew, length(grid.t), 1);
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
@@ -58,8 +56,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
-Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
-                              modes, :xy; full=false)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes, :xy; full=false)
 
 Eω .= Ew
 

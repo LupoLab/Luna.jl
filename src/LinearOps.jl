@@ -240,11 +240,24 @@ function αlim!(α)
     clamp!(α, 0.0, 3000.0)
 end
 
+"""
+    conj_clamp(n, ω)
+
+Simultaneously conjugate and clamp the effective index `n` to safe levels.
+
+The real part is lower-bounded at 1e-3 and the imaginary part upper-bounded at an attenuation
+coefficient `α` of 3000 (130 dB/cm). The limits are somewhat arbitrary and chosen empirically
+from previous bugs. See https://github.com/LupoLab/Luna/pull/142.
+
+See also [`αlim!`](@ref).
+"""
+conj_clamp(n, ω) = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*PhysData.c/ω)
+
 function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     β = similar(grid.ω)
-    βfun!(β, grid.ω, 0)
+    βfun!(β, 0)
     α = similar(grid.ω)
-    αfun!(α, grid.ω, 0)
+    αfun!(α, 0)
     αlim!(α)
     linop = @. -im*(β-β1*grid.ω) - α/2
     linop[1] = 0
@@ -253,9 +266,9 @@ end
 
 function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     β = similar(grid.ω)
-    βfun!(β, grid.ω, 0)
+    βfun!(β, 0)
     α = similar(grid.ω)
-    αfun!(α, grid.ω, 0)
+    αfun!(α, 0)
     αlim!(α)
     linop = -im.*(β .- β1.*(grid.ω .- grid.ω0) .- β0ref) .- α./2
     linop[.!grid.sidx] .= 0
@@ -278,12 +291,12 @@ function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg
     βconst = zero(grid.ω)
     βconst[grid.sidx] = Modes.β.(mode, grid.ω[grid.sidx])
     βconst[.!grid.sidx] .= 1
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         out .= βconst
     end
     αconst = zero(grid.ω)
     αconst[grid.sidx] = Modes.α.(mode, grid.ω[grid.sidx])
-    function αfun!(out, ω, z)
+    function αfun!(out, z)
         out .= αconst
     end
     make_const_linop(grid, βfun!, αfun!, β1const, β0const), βfun!, β1const, αfun!
@@ -294,47 +307,82 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     βconst = zero(grid.ω)
     βconst[2:end] = Modes.β.(mode, grid.ω[2:end])
     βconst[1] = 1
-    function βfun!(out, ω, z)
+    function βfun!(out, z)
         out .= βconst
     end
     αconst = zero(grid.ω)
     αconst[2:end] = Modes.α.(mode, grid.ω[2:end])
-    function αfun!(out, ω, z)
+    function αfun!(out, z)
         out .= αconst
     end
     make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
 end
 
-function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
-    function linop!(out, z)
-        out[2:end] .= -im.*grid.ω[2:end]./PhysData.c.*conj.(
-            Modes.neff.(mode, grid.ω[2:end], z=z))
-        out .-= -im.*grid.ω.*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
-        out[1] = 0
+"""
+    neff_β_grid(grid, mode, λ0; ref_mode=1)
+
+Create closures which return the effective index and propagation constant
+as a function of the frequency grid **index**, rather than the frequency itself.
+Any [`Modes.AbstractMode`](@ref) may define its one method for `neff_β_grid` to
+accelerate repeated calculation on the same frequency grid.
+"""
+function neff_β_grid(grid, mode, λ0)
+    let grid=grid, mode=mode
+        _neff(iω; z) = Modes.neff(mode, grid.ω[iω]; z=z)
+        _β(iω; z) = Modes.β(mode, grid.ω[iω]; z=z)
+        _neff, _β
     end
-    function βfun!(out, ω, z)
-        out[2:end] .= Modes.β.(mode, ω[2:end], z=z)
-        out[1] = 1.0
+end
+
+function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
+    neff, β = neff_β_grid(grid, mode, λ0)
+    linop! = let neff=neff, ω=grid.ω, mode=mode, ω0=wlfreq(λ0)
+        function linop!(out, z)
+            β1 = Modes.dispersion(mode, 1, ω0, z=z)::Float64
+            for iω = 2:length(ω)
+                nc = conj_clamp(neff(iω; z=z), ω[iω])
+                out[iω] = -im*(ω[iω]/PhysData.c*nc - ω[iω]*β1)
+            end
+            out[1] = 0
+        end
+    end
+    βfun! = let β=β, ω=grid.ω
+        function βfun!(out, z)
+            for iω = 2:length(ω)
+                out[iω] = β(iω; z=z)
+            end
+            out[1] = 1.0
+        end
     end
     return linop!, βfun!
 end
 
 function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
-    function linop!(out, z)
-        fill!(out, 0.0)
-        out[grid.sidx] .= -im.*(
-            grid.ω[grid.sidx]./PhysData.c.*conj.(Modes.neff.(mode, grid.ω[grid.sidx], z=z))
-            )
-        out[grid.sidx] .-= -im.*(
-            (grid.ω[grid.sidx] .- grid.ω0).*Modes.dispersion(mode, 1, wlfreq(λ0), z=z)
-            )
-        if !thg
-            out[grid.sidx] .-= -im.*Modes.β(mode, wlfreq(λ0))
+    sidcs = (1:length(grid.ω))[grid.sidx]
+    neff, β = neff_β_grid(grid, mode, λ0)
+    linop! = let neff=neff, ω=grid.ω, mode=mode, ω0=wlfreq(λ0), sidcs=sidcs
+        function linop!(out, z)
+            fill!(out, 0.0)
+            β1 = Modes.dispersion(mode, 1, ω0, z=z)::Float64
+            if !thg
+                βref = Modes.β(mode, ω0, z=z)
+            end
+            for iω in sidcs
+                nc = conj_clamp(neff(iω; z=z), ω[iω])
+                out[iω] = -im*(ω[iω]/PhysData.c*nc - (ω[iω] - grid.ω0)*β1)
+                if !thg
+                    out[iω] -= -im*βref
+                end
+            end
         end
     end
-    function βfun!(out, ω, z)
-        fill!(out, 1.0)
-        out[grid.sidx] .= Modes.β.(mode, ω[grid.sidx], z=z)
+    βfun! = let β=β, sidcs=sidcs
+        function βfun!(out, z)
+            fill!(out, 1.0)
+            for iω in sidcs
+                out[iω] = β(iω, z=z)
+            end
+        end
     end
     return linop!, βfun!
 end
@@ -385,34 +433,55 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     linops
 end
 
+"""
+    neff_grid(grid, modes, λ0; ref_mode=1)
+
+Create a closure that returns the effective index as a function of the frequency grid and mode
+**index**, rather than the mode and frequency themselves. Any [`Modes.AbstractMode`](@ref)
+may define its one method for `neff_grid` to accelerate repeated calculation on the same
+frequency grid.
+"""
+function neff_grid(grid, modes, λ0; ref_mode=1)
+    _neff = let grid=grid, modes=modes
+        _neff(iω, iim; z) = Modes.neff(modes[iim], grid.ω[iω]; z=z)
+    end
+    _neff
+end
+
 function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
-    function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
-        nmodes = length(modes)
-        fill!(out, 0.0)
-        for i = 1:nmodes
-            out[2:end, i] .= -im.*(
-                grid.ω[2:end]./PhysData.c.*conj.(Modes.neff.(modes[i], grid.ω[2:end], z=z))
-                .- grid.ω[2:end] .* β1
-                )
-            out[1, i] = 0
+    neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
+    linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
+        function linop!(out, z)
+            β1 = Modes.dispersion(modes[ref_mode], 1, ω0, z=z)::Float64
+            fill!(out, 0.0)
+            for i in eachindex(modes)
+                for iω = 2:length(ω)
+                    nc = conj_clamp(neff(iω, i; z=z), ω[iω])
+                    out[iω, i] = -im*(ω[iω]/PhysData.c*nc - ω[iω]*β1)
+                end
+            end
         end
     end
 end
 
 function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
-    function linop!(out, z)
-        β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)
-        nmodes = length(modes)
-        fill!(out, 0.0)
-        for i = 1:nmodes
-            out[grid.sidx, i] .= -im.*(
-                grid.ω[grid.sidx]./PhysData.c.*conj.(
-                    Modes.neff.(modes[i], grid.ω[grid.sidx], z=z))
-                .- (grid.ω[grid.sidx] .- grid.ω0) .* β1
-                )
+    sidcs = (1:length(grid.ω))[grid.sidx]
+    neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
+    linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
+        function linop!(out, z)
+            β1 = Modes.dispersion(modes[ref_mode], 1, ω0, z=z)::Float64
+            fill!(out, 0.0)
             if !thg
-                out[grid.sidx, i] .-= -im.*Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
+                βref = Modes.β(modes[ref_mode], ω0, z=z)
+            end
+            for i in eachindex(modes)
+                for iω in sidcs
+                    nc = conj_clamp(neff(iω, i; z=z), ω[iω])
+                    out[iω, i] = -im*(ω[iω]/PhysData.c*nc - (ω[iω] - grid.ω0)*β1)
+                    if !thg
+                        out[iω, i] -= -im*βref
+                    end
+                end
             end
         end
     end
