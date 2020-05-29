@@ -1,6 +1,7 @@
 module Fields
 import Luna
 import Luna: Grid, Maths, PhysData
+import Luna.PhysData: wlfreq
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
@@ -392,5 +393,64 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
 
     return energy_t, energy_ω
 end
+
+"""
+    prop_taylor!(Eω, grid, ϕs, λ0)
+    prop_taylor!(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
+
+Add spectral phase, given as Taylor-expansion coefficients `ϕs` around central wavelength
+`λ0`, to the frequency-domain field `Eω`. Sampling axis of `Eω` can be given either as an
+`AbstractGrid` or the frequency axis `ω`.
+"""
+function prop_taylor!(Eω, ω, ϕs, λ0)
+    Δω = ω .- wlfreq(λ0)
+    ϕ = zeros(length(ω))
+    for (n, ϕi) in enumerate(ϕs)
+        ϕ .+= Δω.^(n-1)./factorial(n-1) * ϕi
+    end
+    Eω .*= exp.(-1im.*ϕ)
+end
+
+prop_taylor!(Eω, grid::Grid.AbstractGrid, ϕs, λ0) = prop_taylor!(Eω, grid.ω, ϕs, λ0)
+
+"""
+    prop_taylor(Eω, grid, ϕs, λ0)
+    prop_taylo!(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
+
+Return a copy of the frequency-domain field `Eω` with added spectral phase, given as Taylor-expansion coefficients `ϕs` around central wavelength `λ0`.
+Sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency axis `ω`.
+"""
+prop_taylor(Eω, args...) = prop_taylor!(copy(Eω), args...)
+
+"""
+    prop_material!(Eω, ω, material, thickness, λ0=nothing;
+                   P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Linearly propagate the frequency-domain field `Eω` through a certain `thickness` of a `material`.
+If the central wavelength `λ0` is given, remove the group delay at this wavelength.
+"""
+function prop_material!(Eω, ω, material, thickness, λ0=nothing;
+                        P=1, T=PhysData.roomtemp, lookup=nothing)
+    β = ω./PhysData.c .* PhysData.ref_index.(material, wlfreq.(ω), P, T; lookup=lookup)
+    if !isnothing(λ0)
+        β .-= PhysData.dispersion(1, material, λ0, P, T; lookup=lookup) .* (ω .- wlfreq(λ0))
+    end
+    β[.!isfinite.(β)] .= 0
+    Eω .*= exp.(-1im.*real(β).*thickness)
+end
+
+prop_material!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_material!(
+    Eω, grid.ω, args...; kwargs...)
+
+"""
+    prop_material(Eω, ω, material, thickness, λ0=nothing;
+                   P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Return a copy of the frequency-domain field `Eω` after linear propagation through a certain
+`thickness` of a `material`. If the central wavelength `λ0` is given, remove the group
+delay at this wavelength.
+"""
+prop_material(Eω, args...; kwargs...) = prop_material!(copy(Eω), args...; kwargs...)
+
 
 end
