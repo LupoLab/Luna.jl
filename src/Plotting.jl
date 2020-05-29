@@ -326,9 +326,11 @@ Other `kwargs` are passed onto `plt.plot`.
 function time_1D(output, zslice=maximum(output["z"]);
                 y=:Pt, modes=nothing,
                 oversampling=4, trange=(-50e-15, 50e-15), bandpass=nothing,
+                FTL=false, propagate=nothing,
                 kwargs...)
     t, Et, zactual = getEt(output, zslice,
-                           trange=trange, oversampling=oversampling, bandpass=bandpass)
+                           trange=trange, oversampling=oversampling, bandpass=bandpass,
+                           FTL=FTL, propagate=propagate)
     if y == :Pt
         yt = abs2.(Et)
     elseif y == :Et

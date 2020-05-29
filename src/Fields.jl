@@ -7,6 +7,9 @@ import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
 import Hankel
 import LinearAlgebra: norm
+import FFTW
+import Optim
+import BlackBoxOptim
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -290,8 +293,10 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
 end
 
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
-
 It(Et, grid::Grid.EnvGrid) = abs2.(Et)
+
+iFT(Eω, grid::Grid.RealGrid) = FFTW.irfft(Eω, length(grid.t), 1)
+iFT(Eω, grid::Grid.EnvGrid) = FFTW.ifft(Eω, 1)
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
@@ -415,12 +420,20 @@ prop_taylor!(Eω, grid::Grid.AbstractGrid, ϕs, λ0) = prop_taylor!(Eω, grid.ω
 
 """
     prop_taylor(Eω, grid, ϕs, λ0)
-    prop_taylo!(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
+    prop_taylor(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
 
 Return a copy of the frequency-domain field `Eω` with added spectral phase, given as Taylor-expansion coefficients `ϕs` around central wavelength `λ0`.
 Sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency axis `ω`.
 """
 prop_taylor(Eω, args...) = prop_taylor!(copy(Eω), args...)
+
+"""
+    propagator_taylor(ϕs, λ0)
+
+Create a function `prop(grid::AbstractGrid, Eω)` which returns
+`prop_taylor(Eω, grid, ϕs, λ0)`.
+"""
+propagator_taylor(ϕs, λ0) = (grid, Eω) -> prop_taylor(Eω, grid, ϕs, λ0)
 
 """
     prop_material!(Eω, ω, material, thickness, λ0=nothing;
@@ -451,6 +464,40 @@ Return a copy of the frequency-domain field `Eω` after linear propagation throu
 delay at this wavelength.
 """
 prop_material(Eω, args...; kwargs...) = prop_material!(copy(Eω), args...; kwargs...)
+
+"""
+    propagator_material(material, thickness, λ0=nothing;
+                        P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Create a function `prop(grid::AbstractGrid, Eω)` which returns `prop_material(Eω, ω, ...)`.
+"""
+propagator_material(material, thickness, λ0=nothing; kwargs...) = 
+    (grid, Eω) -> prop_material(Eω, grid, material, thickness, λ0; kwargs...)
+
+
+function optcomp_taylor(Eω, grid, λ0; order=2)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+    target = 1e15*Maths.rms_width(grid.t, ItFTL)
+
+    function f(disp)
+        # disp here is just the dispersion terms (2nd order and higher)
+        ϕs = [0, 0, disp...]
+        Eωp = prop_taylor(Eω, grid, ϕs, λ0)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1e15 * Maths.rms_width(grid.t, Itp)
+    end
+
+    Nterms = order-1 # Taylor expansion has (order+1) terms but first 2 do change duration
+    bounds = (100e-15 .^(1:order))[2:end]
+    srange = [(-bi, bi) for bi in bounds]
+    res = BlackBoxOptim.bboptimize(f; SearchRange=srange, TraceMode=:silent, TargetFitness=target)
+
+end
+
+_It(Et::AbstractVector, grid) = It(Et, grid)
+_It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
 
 
 end

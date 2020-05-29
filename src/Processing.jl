@@ -507,35 +507,15 @@ If `zslice` is given, returs only the slices of `Eω` closest to the given dista
 can be a single number or an array.
 """
 function getEt(grid::AbstractGrid, Eω::AbstractArray;
-               trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
+               trange=nothing, oversampling=4, bandpass=nothing,
+               FTL=false, propagate=nothing)
     t = grid.t
     Eω = window_maybe(grid.ω, Eω, bandpass)
     if FTL
         τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
         Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     end
-    Etout = envelope(grid, Eω)
-    if isnothing(trange)
-        idcs = 1:length(t)
-    else
-        idcs = @. (t < max(trange...)) & (t > min(trange...))
-    end
-    cidcs = CartesianIndices(size(Etout)[2:end])
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
-    return to, Eto
-end
-
-getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
-
-function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
-               trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
-    t = grid.t
-    zidx = nearest_z(output, zslice)
-    Eω = window_maybe(grid.ω, output["Eω", .., zidx], bandpass)
-    if FTL
-        τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
-        Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
-    end
+    Eω = prop_maybe(grid, Eω, propagate)
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
@@ -543,6 +523,16 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
         idcs = @. (t < max(trange...)) & (t > min(trange...))
     end
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, ..], factor=oversampling)
+    return to, Eto
+end
+
+getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
+
+function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
+               kwargs...)
+    t = grid.t
+    zidx = nearest_z(output, zslice)
+    to, Eto = getEt(grid, output["Eω", .., zidx]; kwargs...)
     return to, Eto, output["z"][zidx]
 end
 
@@ -604,6 +594,9 @@ window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
 window_maybe(ω, Eω, win::NTuple{3, Number}) = Eω .* ωwindow_λ(ω, win[1:2]; winwidth=win[3])
 window_maybe(ω, Eω, win::PeakWindow) = win(ω, Eω)
 window_maybe(ω, Eω, window::AbstractVector) = Eω.*window
+
+prop_maybe(grid, Eω, ::Nothing) = Eω
+prop_maybe(grid, Eω, propagator) = propagator(grid, Eω)
 
 
 """
