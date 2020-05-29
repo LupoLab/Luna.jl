@@ -475,29 +475,38 @@ propagator_material(material, thickness, λ0=nothing; kwargs...) =
     (grid, Eω) -> prop_material(Eω, grid, material, thickness, λ0; kwargs...)
 
 
-function optcomp_taylor(Eω, grid, λ0; order=2)
+function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2)
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     ItFTL = _It(iFT(EωFTL, grid), grid)
-    target = 1e15*Maths.rms_width(grid.t, ItFTL)
+    target = 1e12/maximum(ItFTL)
 
     function f(disp)
         # disp here is just the dispersion terms (2nd order and higher)
         ϕs = [0, 0, disp...]
         Eωp = prop_taylor(Eω, grid, ϕs, λ0)
         Itp = _It(iFT(Eωp, grid), grid)
-        1e15 * Maths.rms_width(grid.t, Itp)
+        1e12/maximum(Itp)
     end
 
     Nterms = order-1 # Taylor expansion has (order+1) terms but first 2 do change duration
     bounds = (100e-15 .^(1:order))[2:end]
     srange = [(-bi, bi) for bi in bounds]
-    res = BlackBoxOptim.bboptimize(f; SearchRange=srange, TraceMode=:silent, TargetFitness=target)
+    res = BlackBoxOptim.bboptimize(f; SearchRange=srange,
+                                   TraceMode=:silent, TargetFitness=target)
+    Fields.prop_taylor(Eω, grid, [0, 0, BlackBoxOptim.best_candidate(res)...], λ0)
+end
 
+function optcomp_taylor(Eω, grid, λ0; order=2)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    for ci in cidcs
+        out[:, :, ci] = optcomp_taylor(Eω[:, :, ci], grid, λ0; order=order)
+    end
+    out
 end
 
 _It(Et::AbstractVector, grid) = It(Et, grid)
 _It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
-
 
 end
