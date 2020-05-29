@@ -3,9 +3,25 @@ import Luna: Grid, Maths, PhysData
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
-import PyPlot: ColorMap, plt, pygui
+import PyPlot: ColorMap, plt, pygui, Figure
 import FFTW
 import Printf: @sprintf
+import Base: display
+
+"""
+    displayall()
+
+[`display`](@ref) all currently open PyPlot figures.
+"""
+function displayall()
+    for fign in plt.get_fignums()
+        fig = plt.figure(fign)
+        display(fig)
+    end
+
+end
+
+display(figs::AbstractArray{Figure, N}) where N = [display(fig) for fig in figs]
 
 """
     cmap_white(cmap, N=512, n=8)
@@ -149,6 +165,7 @@ function stats(output; kwargs...)
         end
         ffig.tight_layout()
     end
+    [pfig, ffig]
 end
 
 """
@@ -196,12 +213,15 @@ function prop_2D(output, specaxis=:f;
     multimode, modes = get_modes(output)
 
     if multimode
-        _prop2D_mm(modes, t, z, specx, It, Iω,
-                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
+        fig = _prop2D_mm(modes, t, z, specx, It, Iω,
+                         speclabel, speclims, trange, dBmin, window_str(bandpass);
+                         kwargs...)
     else
-        _prop2D_sm(t, z, specx, It, Iω,
-                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
-    end    
+        fig = _prop2D_sm(t, z, specx, It, Iω,
+                         speclabel, speclims, trange, dBmin, window_str(bandpass);
+                         kwargs...)
+    end
+    fig
 end
 
 # Helper function to convert λrange to the correct numbers depending on specaxis
@@ -238,8 +258,9 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
 end
 
 # multi-mode 2D propagation plots
-function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
-    pfigs = []
+function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr;
+                    kwargs...)
+    pfigs = Figure[]
     Iω = Maths.normbymax(Iω)
     for mi in 1:length(modes)
         num = "Propagation ($(modes[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
@@ -353,6 +374,7 @@ function time_1D(output, zslice=maximum(output["z"]);
     y == :Et || plt.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    sfig
 end
 
 # Automatically find power unit depending on scale of electric field.
@@ -422,6 +444,7 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     plt.xlim(speclims...)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    sfig
 end
 
 dashes = [(0, (10, 1)),
@@ -470,13 +493,14 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
 
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))
 
-    plt.figure()
+    fig = plt.figure()
     plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; kwargs...)
     plt.ylim(speclims...)
     plt.ylabel(speclabel)
     plt.xlabel("Time (fs)")
     log && plt.clim(dBmin, 0)
     plt.colorbar()
+    fig
 end
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
