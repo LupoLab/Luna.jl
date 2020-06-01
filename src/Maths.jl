@@ -362,20 +362,19 @@ end
 
 function _taper(xc, x1, x2, x3, x4)
     if xc < x1
-        return 0
+        return zero(xc)
     elseif x1 < xc < x2
-        z12 = @. (x2 - x1) / (xc - x1) + (x2 - x1) / (xc - x2)
+        z12 = (x2 - x1) / (xc - x1) + (x2 - x1) / (xc - x2)
         return 1 / (1 + exp(z12))
     elseif x2 <= xc <= x3
         return 1
     elseif x3 < xc < x4
-        z34 = @. (x3 - x4) / (xc - x3) + (x3 - x4) / (xc - x4)
+        z34 = (x3 - x4) / (xc - x3) + (x3 - x4) / (xc - x4)
         return 1 / (1 + exp(z34))
     else
-        return 0
+        return zero(xc)
     end
 end
-
 
 """
 Hypergaussian window
