@@ -428,7 +428,7 @@ Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` i
 """
 function plan_hilbert!(x; dim=1)
     loadFFTwisdom()
-    FT = FFTW.plan_fft(x, dim, flags=Luna.settings["fftw_flag"])
+    FT = FFTW.plan_fft(copy(x), dim, flags=Luna.settings["fftw_flag"])
     saveFFTwisdom()
     xf = Array{ComplexF64}(undef, size(FT))
     idxlo = CartesianIndices(size(xf)[1:dim - 1])

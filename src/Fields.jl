@@ -9,6 +9,7 @@ import Hankel
 import LinearAlgebra: norm
 import FFTW
 import BlackBoxOptim
+import Optim
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -427,28 +428,16 @@ Sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency
 prop_taylor(Eω, args...) = prop_taylor!(copy(Eω), args...)
 
 """
-    propagator_taylor(ϕs, λ0)
-
-Create a function `prop(grid::AbstractGrid, Eω)` which returns
-`prop_taylor(Eω, grid, ϕs, λ0)`.
-"""
-propagator_taylor(ϕs, λ0) = (grid, Eω) -> prop_taylor(Eω, grid, ϕs, λ0)
-
-"""
     prop_material!(Eω, ω, material, thickness, λ0=nothing;
                    P=1, T=PhysData.roomtemp, lookup=nothing)
 
 Linearly propagate the frequency-domain field `Eω` through a certain `thickness` of a `material`.
 If the central wavelength `λ0` is given, remove the group delay at this wavelength.
+Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
 """
-function prop_material!(Eω, ω, material, thickness, λ0=nothing;
-                        P=1, T=PhysData.roomtemp, lookup=nothing)
-    β = ω./PhysData.c .* PhysData.ref_index.(material, wlfreq.(ω), P, T; lookup=lookup)
-    if !isnothing(λ0)
-        β .-= PhysData.dispersion(1, material, λ0, P, T; lookup=lookup) .* (ω .- wlfreq(λ0))
-    end
-    β[.!isfinite.(β)] .= 0
-    Eω .*= exp.(-1im.*real(β).*thickness)
+function prop_material!(Eω, ω, material, thickness, λ0=nothing; kwargs...)
+    propagator_material(material; kwargs...)(Eω, ω, thickness, λ0)
 end
 
 prop_material!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_material!(
@@ -460,18 +449,48 @@ prop_material!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_material
 
 Return a copy of the frequency-domain field `Eω` after linear propagation through a certain
 `thickness` of a `material`. If the central wavelength `λ0` is given, remove the group
-delay at this wavelength.
+delay at this wavelength. Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
 """
 prop_material(Eω, args...; kwargs...) = prop_material!(copy(Eω), args...; kwargs...)
 
 """
-    propagator_material(material, thickness, λ0=nothing;
-                        P=1, T=PhysData.roomtemp, lookup=nothing)
+    propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
 
-Create a function `prop(grid::AbstractGrid, Eω)` which returns `prop_material(Eω, ω, ...)`.
+Create a function `prop!(Eω, ω, thickness, λ0)` which propagates the field `Eω` through
+a certain `thickness` of a `material`. If the central wavelength `λ0` is given, remove the group
+delay at this wavelength.  Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
 """
-propagator_material(material, thickness, λ0=nothing; kwargs...) = 
-    (grid, Eω) -> prop_material(Eω, grid, material, thickness, λ0; kwargs...)
+function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
+    n = PhysData.ref_index_fun(material, P, T; lookup=lookup)
+    β1 = PhysData.dispersion_func(1, n)
+    function prop!(Eω, ω, thickness, λ0=nothing)
+        β = ω./PhysData.c .* n.(wlfreq.(ω))
+        if !isnothing(λ0)
+            β .-= β1(λ0) .* (ω .- wlfreq(λ0))
+        end
+        β[.!isfinite.(β)] .= 0
+        Eω .*= exp.(-1im.*real(β).*thickness)
+    end
+    prop!
+end
+
+"""
+    prop_mirror!(Eω, ω, mirror, reflections)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
+"""
+function prop_mirror!(Eω, ω, mirror, reflections)
+    λ = wlfreq.(ω)
+    t = PhysData.lookup_mirror(mirror).(λ) # transfer function
+    t[.!isfinite.(t)] .= 0
+    Eω .*= t.^reflections
+end
+
+prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)
+
+prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
 
 
 """
@@ -494,24 +513,69 @@ function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2)
         1e12/maximum(Itp)
     end
 
-    Nterms = order-1 # Taylor expansion has (order+1) terms but first 2 do change duration
     bounds = (100e-15 .^(1:order))[2:end]
     srange = [(-bi, bi) for bi in bounds]
     res = BlackBoxOptim.bboptimize(f; SearchRange=srange,
                                    TraceMode=:silent, TargetFitness=target)
-    Fields.prop_taylor(Eω, grid, [0, 0, BlackBoxOptim.best_candidate(res)...], λ0)
+    ϕs = [0, 0, BlackBoxOptim.best_candidate(res)...]
+    ϕs, prop_taylor(Eω, grid, ϕs, λ0)
 end
 
 function optcomp_taylor(Eω, grid, λ0; order=2)
     out = similar(Eω)
     cidcs = CartesianIndices(size(Eω)[3:end])
+    ϕsout = zeros(order+2, size(cidcs)...)
     for ci in cidcs
-        out[:, :, ci] = optcomp_taylor(Eω[:, :, ci], grid, λ0; order=order)
+        ϕsi, Eωi = optcomp_taylor(Eω[:, :, ci], grid, λ0; order=order)
+        out[:, :, ci] .= Eωi
+        ϕsout[ci] .= ϕsi
     end
-    out
+    ϕsout, out
 end
 
 _It(Et::AbstractVector, grid) = It(Et, grid)
 _It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
+
+"""
+    optcomp_material(Eω, grid, material, λ0; kwargs...)
+
+Maximise the peak power of the field `Eω` by linear propagation through the `material`. 
+Keyword arguments `kwargs` are the same as for [`prop_material`](@ref).
+"""
+function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,
+                          min_thickness, max_thickness; kwargs...)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+    target = 1e12/maximum(ItFTL)
+
+    prop! = propagator_material(material; kwargs...)
+
+    function f(d)
+        # d is the material insertion
+        Eωp = copy(Eω)
+        prop!(Eωp, grid.ω, d, λ0)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1e12/maximum(Itp)
+    end
+
+    # res = BlackBoxOptim.bboptimize(f; SearchRange=[srange],
+    #                                TraceMode=:silent, TargetFitness=target)
+    # prop_material(Eω, grid, material, BlackBoxOptim.best_candidate(res), λ0; kwargs...)
+    res = Optim.optimize(f, min_thickness, max_thickness)
+    res.minimizer, prop_material(Eω, grid, material, res.minimizer, λ0; kwargs...)
+end
+
+function optcomp_material(Eω, args...; kwargs...)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    dout = zeros(size(cidcs))
+    for ci in cidcs
+        di, Eωi = optcomp_material(Eω[:, :, ci], args...; kwargs...)
+        out[:, :, ci] .= Eωi
+        dout[ci] = di
+    end
+    dout, out
+end
 
 end
