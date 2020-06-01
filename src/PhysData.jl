@@ -1398,7 +1398,6 @@ function raman_parameters(material)
     rp
 end
 
-import PyPlot: plt
 function lookup_mirror(type)
     if type == :PC70
         # λ (nm), R(5deg) (%), R(19deg) (%)
