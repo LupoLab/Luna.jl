@@ -403,3 +403,38 @@ end
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
 
+@testset "Propagation" begin
+    λ0 = 800e-9
+    τfwhm = 2.5e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    Eωβ1 = Fields.prop_taylor(Eω, grid, [0, 10e-15], λ0)
+    Et = FT \ Eωβ1
+    @test isapprox(Maths.moment(grid.t, abs2.(Maths.hilbert(Et))), 10e-15, rtol=1e-6)
+
+    # Test sign of dispersion
+    Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 15e-30], λ0) # positive chirp
+    Et = FT \ Eωβ2
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15) # spectrogram
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2] # mean frequency at earlier time should be lower (upchirp)
+
+    # Test sign of dispersion for glass
+    Eωglass = Fields.prop_material(Eω, grid, :SiO2, 0.5e-3, λ0)
+    Et = FT \ Eωglass
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2]
+
+    # Test sign of dispersion for chirped mirrors
+    Eωmirr = Fields.prop_mirror(Eω, grid, :PC70, 2) # one double-angle pair
+    Et = FT \ Eωmirr
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] > ω0[2] # PC70 induce negative chirp, so frequency should go down with time
+end
+
+
