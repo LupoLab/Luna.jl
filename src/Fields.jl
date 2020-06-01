@@ -8,7 +8,6 @@ import Statistics: mean
 import Hankel
 import LinearAlgebra: norm
 import FFTW
-import Optim
 import BlackBoxOptim
 
 abstract type AbstractField end
@@ -475,6 +474,12 @@ propagator_material(material, thickness, λ0=nothing; kwargs...) =
     (grid, Eω) -> prop_material(Eω, grid, material, thickness, λ0; kwargs...)
 
 
+"""
+    optcomp_taylor(Eω, grid, λ0; order=2)
+
+Maximise the peak power of the field `Eω` by adding Taylor-expanded spectral phases up to
+order `order`. 
+"""
 function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2)
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
