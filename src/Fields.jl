@@ -10,6 +10,7 @@ import LinearAlgebra: norm
 import FFTW
 import BlackBoxOptim
 import Optim
+import CSV
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -165,6 +166,52 @@ function (c::CWField)(grid::Grid.EnvGrid, FT)
         Eω′ = Eω
     end
     Eω
+end
+
+"""
+    DataField(ω, Iω, ϕω, energy)
+
+Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
+radial frequency axis `ω`.
+"""
+struct DataField <: TimeField
+    ω::Vector{Float64}
+    Iω::Vector{Float64}
+    ϕω::Vector{Float64}
+    energy::Float64
+end
+
+"""
+    DataField(fpath, energy)
+
+Create a `DataField` by loading `ω`, `Iω`, and `ϕω` from the file at `fpath`. The file must
+contain 3 columns:
+
+- frequency in Hz
+- spectral power density (arbitrary units)
+- unwrapped spectral phase
+"""
+function DataField(fpath, energy)
+    dat = CSV.read(fpath)
+    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3], energy)
+end
+
+"""
+    (d::DataField)(grid, FT)
+
+Interpolate the `DataField` onto the provided `grid` (note the argument `FT` is unused).
+"""
+function (d::DataField)(grid, FT)
+    energy_ω = Fields.energyfuncs(grid)[2]
+    ϕg = Maths.BSpline(d.ω, d.ϕω).(grid.ω)
+    Ig = Maths.BSpline(d.ω, d.Iω).(grid.ω)
+    Ig[Ig .< 0] .= 0
+    Ig[.!(minimum(d.ω) .< grid.ω .< maximum(d.ω))] .= 0
+    Ig .*= grid.ωwin
+    Eω = sqrt.(Ig) .* exp.(1im.*ϕg)
+    Eω .*= sqrt(d.energy/energy_ω(Eω))
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    Eω .*= exp.(-1im .* grid.ω .* τ)
 end
 
 """
