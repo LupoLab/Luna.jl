@@ -269,8 +269,8 @@ Returns the new specaxis grid and smoothed spectrum.
 """
 function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
     if isnothing(window)
-        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
-            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
+        window = let ng=Maths.gaussnorm(fwhm=resolution), σ=resolution/(2*(2*log(2))^(1/2))
+            (x,x0) -> exp(-0.5*((x - x0)/σ)^2)/ng
         end
     end
     if specaxis == :λ
