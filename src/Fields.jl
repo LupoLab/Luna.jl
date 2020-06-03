@@ -201,7 +201,7 @@ end
 
 Interpolate the `DataField` onto the provided `grid` (note the argument `FT` is unused).
 """
-function (d::DataField)(grid, FT)
+function (d::DataField)(grid::Grid.AbstractGrid, FT)
     energy_ω = Fields.energyfuncs(grid)[2]
     ϕg = Maths.BSpline(d.ω, d.ϕω).(grid.ω)
     Ig = Maths.BSpline(d.ω, d.Iω).(grid.ω)
