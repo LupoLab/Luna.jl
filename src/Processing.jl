@@ -342,7 +342,7 @@ because the integral is still over a frequency grid (with appropriate frequency 
 integration bounds).
 """
 function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
-    for ii in cidcs
+    @inbounds @fastmath for ii in cidcs
         for j in 1:size(Ix, 1)
             for k in istart[j]:iend[j]
                 Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
