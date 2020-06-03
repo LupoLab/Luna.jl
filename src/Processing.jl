@@ -269,8 +269,8 @@ Returns the new specaxis grid and smoothed spectrum.
 """
 function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
     if isnothing(window)
-        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
-            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
+        window = let ng=Maths.gaussnorm(fwhm=resolution), σ=resolution/(2*(2*log(2))^(1/2))
+            (x,x0) -> exp(-0.5*((x - x0)/σ)^2)/ng
         end
     end
     if specaxis == :λ
@@ -342,7 +342,7 @@ because the integral is still over a frequency grid (with appropriate frequency 
 integration bounds).
 """
 function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
-    for ii in cidcs
+    @inbounds @fastmath for ii in cidcs
         for j in 1:size(Ix, 1)
             for k in istart[j]:iend[j]
                 Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
