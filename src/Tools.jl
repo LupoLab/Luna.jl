@@ -151,7 +151,7 @@ function λRDW(a::Number, gas::Symbol, pressure, λ0; ub=100e-9, lb=0.9*λ0, kwa
 end
 
 function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO2, kwargs...)
-    # cladn is likely based on interpolation so requires file I/O
+    # cladn is likely based on interpolation so requires creating the BSpline
     # by creating the function here we only have to do that once
     rfc = PhysData.ref_index_fun(clad)
     cladn = (ω; z) -> rfc(wlfreq(ω))
