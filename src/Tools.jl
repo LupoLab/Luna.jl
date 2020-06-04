@@ -1,5 +1,7 @@
 module Tools
 import Luna: Modes, PhysData, Capillary, RectModes
+import Luna.PhysData: wlfreq
+import Roots: find_zero
 import Base: show
 import Printf: @sprintf
 
@@ -47,7 +49,7 @@ function getN0n0n2(ω, material; P=1.0, T=PhysData.roomtemp)
     N0, n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
 end
 
-"Get soliotn order"
+"Get soliton order"
 function getN(P0, τfw, γ, β2; shape=:sech)
     sqrt(Ld(τfw, β2, shape=:sech)/Lnl(P0, γ))
 end
@@ -111,12 +113,15 @@ function params(E, τfw, λ, mode, material; shape=:sech, P=1.0, T=PhysData.room
          mode=mode)
 end
 
-function capillary_params(E, τfw, λ, a, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, kind=:HE, ϕ=0.0)
+function capillary_params(E, τfw, λ, a, material;
+                          shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1,kind=:HE, ϕ=0.0)
     mode = Capillary.MarcatilliMode(a, material, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, clad=clad)
     params(E, τfw, λ, mode, material, shape=shape, P=P, T=T)
 end
 
-function rectangular_params(E, τfw, λ, a, b, material; shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, pol=:x)
+function rectangular_params(E, τfw, λ, a, b, material;
+                            shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1, 
+                            pol=:x)
     mode = RectModes.RectMode(a, b, material, P, clad, T=T, n=n, m=m, pol=pol)
     params(E, τfw, λ, mode, material, shape=shape, P=P, T=T)
 end
@@ -126,5 +131,46 @@ function gas_ratio(gas1, gas2, λ)
     β2r = PhysData.dispersion(2, gas1, λ) / PhysData.dispersion(2, gas2, λ)
     β2r, χ3r
 end
+
+function λRDW(m::Modes.AbstractMode, λ0; z=0, ub=100e-9, lb=0.9*λ0)
+    ω0 = wlfreq(λ0)
+    β1 = Modes.dispersion(m, 1, ω0; z=z)
+    β0 = Modes.β(m, ω0; z=z)
+    Δβ(ω) = Modes.β(m, ω; z=z) - β1*(ω.-ω0) - β0
+    try
+        ωRDW = find_zero(Δβ, (wlfreq(lb), wlfreq(ub)))
+        wlfreq(ωRDW)
+    catch
+        missing
+    end
+end
+
+function λRDW(a::Number, gas::Symbol, pressure, λ0; ub=100e-9, lb=0.9*λ0, kwargs...)
+    m = Capillary.MarcatilliMode(a, gas, pressure; kwargs...)
+    λRDW(m, λ0; ub=ub, lb=lb)
+end
+
+function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO2, kwargs...)
+    # cladn is likely based on interpolation so requires file I/O
+    # by creating the function here we only have to do that once
+    rfc = PhysData.ref_index_fun(clad)
+    cladn = (ω; z) -> rfc(wlfreq(ω))
+    ω0 = wlfreq(λ0)
+    ω_target = wlfreq(λ_target)
+    function Δβ(P)
+        m = Capillary.MarcatilliMode(a, gas, P, cladn; kwargs...)
+        β1 = Modes.dispersion(m, 1, ω0)
+        β0 = Modes.β(m, ω0)
+        Modes.β(m, ω_target) - β1*(ω_target.-ω0) - β0
+    end
+
+    try
+        find_zero(Δβ, (1e-6, Pmax))
+    catch
+        missing
+    end
+end
+
+
 
 end
