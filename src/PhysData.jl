@@ -208,6 +208,59 @@ function sellmeier_glass(material::Symbol)
     end
 end
 
+function sellmeier_crystal(material, axis)
+    if material == :BBO
+        if axis == :o
+            return μm -> sqrt(complex(1
+                + 0.90291/(1-0.003926/μm^2)
+                + 0.83155/(1-0.018786/μm^2)
+                + 0.76536/(1-60.01/μm^2)
+                ))
+        elseif axis == :e
+            return μm -> sqrt(complex(1
+                + 1.151075/(1-0.007142/μm^2)
+                + 0.21803/(1-0.02259/μm^2)
+                + 0.656/(1-263/μm^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown BBO axis $axis"))
+        end
+    elseif material == :LBO
+        # C Chen et al., J Opt. Soc. Am. 6, 616-621 (1989)
+        # F. Hanson and D. Dick., Opt. Lett. 16, 205-207 (1991).
+        if axis == :x
+            return μm -> sqrt(complex(
+                2.45768
+                + 0.0098877/(μm^2-0.026095)
+                - 0.013847*μm^2
+            ))
+        elseif axis == :y
+            return μm -> sqrt(complex(
+                2.52500
+                + 0.017123/(μm^2+0.0060517)
+                - 0.0087838*μm^2
+            ))
+        elseif axis == :z
+            return μm -> sqrt(complex(
+                2.58488
+                + 0.012737/(μm^2-0.021414)
+                - 0.016293*μm^2
+            ))
+        else
+            throw(DomainError(axis, "Unknown LBO axis $axis"))
+        end
+    else
+        throw(DomainError(material, "Unknown crystal $material"))
+    end
+end
+
+function ref_index_fun_uniax(material; axes=(:o, :e))
+    n_o = sellmeier_crystal(material, axes[1])
+    n_e = sellmeier_crystal(material, axes[2])
+    n(λ, θ) = sqrt(1/((cos(θ)/n_o(λ*1e6))^2+(sin(θ)/n_e(λ*1e6))^2))
+    return n
+end
+
 "Get function to return χ1 as a function of:
     wavelength in SI units
     pressure in bar
