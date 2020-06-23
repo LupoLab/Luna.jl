@@ -381,6 +381,18 @@ function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
 end
 
 """
+    ωwindow_λ(ω, λlims; winwidth=:auto)
+
+Create a ω-axis filtering window to filter in `λlims`. `winwidth`, if a `Number`, sets
+the smoothing width of the window in rad/s.
+"""
+function ωwindow_λ(ω, λlims; winwidth=:auto)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
+    window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
+end
+
+"""
     getIω(ω, Eω, specaxis; specrange=nothing, resolution=nothing)
 
 Get spectral energy density and x-axis given a frequency array `ω` and frequency-domain field
