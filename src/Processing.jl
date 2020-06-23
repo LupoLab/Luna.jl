@@ -458,13 +458,14 @@ getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args.
 getEω(grid, output) = getEω(grid, output["Eω"])
 
 function getEω(grid::RealGrid, Eω::AbstractArray)
-    ω = grid.ω[grid.sidx]
-    Eω = Eω[grid.sidx, CartesianIndices(size(Eω)[2:end])]
+    posω = grid.ω .> 0
+    ω = grid.ω[posω]
+    Eω = Eω[posω, CartesianIndices(size(Eω)[2:end])]
     return ω, Eω*fftnorm(grid)
 end
 
 function getEω(grid::EnvGrid, Eω::AbstractArray)
-    idcs = FFTW.fftshift(grid.sidx)
+    idcs = FFTW.fftshift(grid.ω .> 0)
     Eωs = FFTW.fftshift(Eω, 1)
     ω = FFTW.fftshift(grid.ω)[idcs]
     Eω = Eωs[idcs, CartesianIndices(size(Eω)[2:end])]
