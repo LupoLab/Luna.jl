@@ -282,7 +282,7 @@ function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamp
     end
     xg, Ix
 end
-import PyPlot: plt
+
 function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     # build output grid and array
     x = ωtox.(ω)
