@@ -282,7 +282,7 @@ function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamp
     end
     xg, Ix
 end
-
+import PyPlot: plt
 function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     # build output grid and array
     x = ωtox.(ω)
@@ -312,9 +312,10 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     iend = Array{Int,1}(undef,nxg)
     δω = ω[2] - ω[1]
     i0 = argmin(abs.(ω))
+    ωs = ω[i0]
     for i in 1:nxg
-        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
-        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        i1 = i0 + round(Int, (xtoω(xg[i] + resolution*nspan) - ωs)/δω)
+        i2 = i0 + round(Int, (xtoω(xg[i] - resolution*nspan) - ωs)/δω)
         # we want increasing indices
         if i1 > i2
             i1,i2 = i2,i1
@@ -458,14 +459,13 @@ getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args.
 getEω(grid, output) = getEω(grid, output["Eω"])
 
 function getEω(grid::RealGrid, Eω::AbstractArray)
-    posω = grid.ω .> 0
-    ω = grid.ω[posω]
-    Eω = Eω[posω, CartesianIndices(size(Eω)[2:end])]
+    ω = grid.ω[grid.sidx]
+    Eω = Eω[grid.sidx, CartesianIndices(size(Eω)[2:end])]
     return ω, Eω*fftnorm(grid)
 end
 
 function getEω(grid::EnvGrid, Eω::AbstractArray)
-    idcs = FFTW.fftshift(grid.ω .> 0)
+    idcs = FFTW.fftshift(grid.sidx)
     Eωs = FFTW.fftshift(Eω, 1)
     ω = FFTW.fftshift(grid.ω)[idcs]
     Eω = Eωs[idcs, CartesianIndices(size(Eω)[2:end])]
