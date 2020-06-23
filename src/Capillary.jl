@@ -277,7 +277,7 @@ function gradient(gas, L, p0, p1)
             z <= 0 ? p0 : 
             sqrt(p0^2 + z/L*(p1^2 - p0^2))
     dens(z) = dspl(p(z))
-    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
+    coren(ω; z) = sqrt(1 + γ(wlfreq(ω)*1e6)*dens(z))
     return coren, dens
 end
 
@@ -298,7 +298,7 @@ function gradient(gas, Z, P)
         end
     end
     dens(z) = dspl(p(z))
-    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
+    coren(ω; z) = sqrt(1 + γ(wlfreq(ω)*1e6)*dens(z))
     return coren, dens
 end
 
