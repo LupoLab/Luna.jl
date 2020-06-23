@@ -312,9 +312,10 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     iend = Array{Int,1}(undef,nxg)
     δω = ω[2] - ω[1]
     i0 = argmin(abs.(ω))
+    ωs = ω[i0]
     for i in 1:nxg
-        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
-        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        i1 = i0 + round(Int, (xtoω(xg[i] + resolution*nspan) - ωs)/δω)
+        i2 = i0 + round(Int, (xtoω(xg[i] - resolution*nspan) - ωs)/δω)
         # we want increasing indices
         if i1 > i2
             i1,i2 = i2,i1
@@ -352,18 +353,6 @@ function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
     Ix[Ix .<= 0.0] .= minimum(Ix[Ix .> 0.0])
 end
 
-"""
-    ωwindow_λ(ω, λlims; winwidth=:auto)
-
-Create a ω-axis filtering window to filter in `λlims`. `winwidth`, if a `Number`, sets
-the smoothing width of the window in rad/s.
-"""
-function ωwindow_λ(ω, λlims; winwidth=:auto)
-    ωmin, ωmax = extrema(wlfreq.(λlims))
-    winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
-    window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-end
-
 function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
     cidcs = CartesianIndices(size(Ix)[2:end])
     if !isnothing(specrange)
@@ -378,6 +367,18 @@ function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
         Ix = Ix[idcs, cidcs]
     end
     x, Ix
+end
+
+"""
+    ωwindow_λ(ω, λlims; winwidth=:auto)
+
+Create a ω-axis filtering window to filter in `λlims`. `winwidth`, if a `Number`, sets
+the smoothing width of the window in rad/s.
+"""
+function ωwindow_λ(ω, λlims; winwidth=:auto)
+    ωmin, ωmax = extrema(wlfreq.(λlims))
+    winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
+    window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
 end
 
 """
