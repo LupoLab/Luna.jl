@@ -260,7 +260,7 @@ function make_const_linop(grid::Grid.RealGrid, βfun!, αfun!, β1)
     αfun!(α, 0)
     αlim!(α)
     linop = @. -im*(β-β1*grid.ω) - α/2
-    linop[1] = 0
+    linop[.!grid.sidx] .= 0
     return linop
 end
 
@@ -329,23 +329,24 @@ function neff_β_grid(grid, mode, λ0)
 end
 
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
+    sidcs = (1:length(grid.ω))[grid.sidx]
     neff, β = neff_β_grid(grid, mode, λ0)
     linop! = let neff=neff, ω=grid.ω, mode=mode, ω0=wlfreq(λ0)
         function linop!(out, z)
+            fill!(out, 0.0)
             β1 = Modes.dispersion(mode, 1, ω0, z=z)::Float64
-            for iω = 2:length(ω)
+            for iω in sidcs
                 nc = conj_clamp(neff(iω; z=z), ω[iω])
                 out[iω] = -im*(ω[iω]/PhysData.c*nc - ω[iω]*β1)
             end
-            out[1] = 0
         end
     end
     βfun! = let β=β, ω=grid.ω
         function βfun!(out, z)
-            for iω = 2:length(ω)
+            fill!(out, 1.0)
+            for iω in sidcs
                 out[iω] = β(iω; z=z)
             end
-            out[1] = 1.0
         end
     end
     return linop!, βfun!
@@ -392,7 +393,7 @@ function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     for i = 1:nmodes
         βconst = zero(grid.ω)
         βconst[grid.sidx] = Modes.β.(modes[i], grid.ω[grid.sidx])
-        βconst[.!grid.sidx] = 1
+        βconst[.!grid.sidx] .= 1
         α = zeros(length(grid.ω))
         α[grid.sidx] .= Modes.α.(modes[i], grid.ω[grid.sidx])
         αlim!(α)
@@ -437,13 +438,14 @@ function neff_grid(grid, modes, λ0; ref_mode=1)
 end
 
 function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
+    sidcs = (1:length(grid.ω))[grid.sidx]
     neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
     linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
         function linop!(out, z)
             β1 = Modes.dispersion(modes[ref_mode], 1, ω0, z=z)::Float64
             fill!(out, 0.0)
             for i in eachindex(modes)
-                for iω = 2:length(ω)
+                for iω in sidcs
                     nc = conj_clamp(neff(iω, i; z=z), ω[iω])
                     out[iω, i] = -im*(ω[iω]/PhysData.c*nc - ω[iω]*β1)
                 end

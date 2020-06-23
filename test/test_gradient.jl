@@ -1,5 +1,5 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes, Fields
 import Luna.PhysData: wlfreq
 import Test: @test, @testset
 
@@ -59,8 +59,8 @@ statsfun = Stats.collect_stats(grid, Eω,
 output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
-@test all(output_grad.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
-@test all(output_grad_array.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
+@test all(output_grad.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])
+@test all(output_grad_array.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])
 end
 
 @testset "envelope" begin
