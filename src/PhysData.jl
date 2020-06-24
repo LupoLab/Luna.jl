@@ -1402,13 +1402,13 @@ function lookup_mirror(type)
     if type == :PC70
         # λ (nm), R(5deg) (%), R(19deg) (%)
         Rdat = CSV.read(joinpath(Utils.datadir(), "PC70_R.csv"))
-        # λ (nm), GDD(5deg) (fs^2), R(19deg) (fs^2)
+        # λ (nm), GDD(5deg) (fs^2), GDD(19deg) (fs^2)
         GDDdat = CSV.read(joinpath(Utils.datadir(), "PC70_GDD.csv"))
-        # Double sqrt creates average reflectivity per _reflection_
+        # Double sqrt creates average reflectivity per _reflection_ rather than per pair
         rspl = Maths.BSpline(Rdat[:, 1]*1e-9, sqrt.(sqrt.(Rdat[:, 2]/100 .* Rdat[:, 3]/100)))
         λGDD = GDDdat[:, 1]
         ω = wlfreq.(λGDD*1e-9)
-        # average phase per _reflection_ 
+        # average phase per _reflection_ rather than per pair
         ϕ = 1e-30/2 * Maths.cumtrapz(Maths.cumtrapz(GDDdat[:, 2].+GDDdat[:, 3], ω), ω)
         # ϕ has a large linear component - remove that
         ωfs = ω*1e-15
