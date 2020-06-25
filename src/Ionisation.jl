@@ -147,7 +147,7 @@ function makePPTaccel(E, rate)
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
     # Interpolating the log and re-exponentiating makes the spline more accurate
-    ir(E) = E <= Emin ? 0.0 : exp(cspl(E))
+    ir(E) = abs(E) <= Emin ? 0.0 : exp(cspl(abs(E)))
     function ionrate!(out, E)
         out .= ir.(E)
     end
