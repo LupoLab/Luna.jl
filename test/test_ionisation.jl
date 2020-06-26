@@ -33,6 +33,10 @@ out = similar(E)
 ratefun!(out, E)
 @test all(isapprox.(out, rate, rtol=1e-3))
 
+outneg = similar(out)
+ratefun!(outneg, -E)
+@test out == outneg
+
 # import PyPlot: plt, pygui
 # pygui(true)
 # k = collect(range(8, stop=12, length=1000))
