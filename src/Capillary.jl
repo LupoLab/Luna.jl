@@ -342,4 +342,9 @@ function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
     _neff
 end
 
+function transmission(a, λ, L; n=1, m=1)
+    mode = MarcatilliMode(a, :He, 0; n=n, m=m)
+    Modes.transmission(mode, wlfreq(λ), L)
+end
+
 end
