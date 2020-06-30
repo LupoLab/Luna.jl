@@ -1,5 +1,5 @@
 module Plotting
-import Luna: Grid, Maths, PhysData
+import Luna: Grid, Maths, PhysData, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
@@ -504,6 +504,46 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     plt.colorbar()
     fig
 end
+
+function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
+    e = Processing.energy(output; bandpass=bandpass)
+    eall = Processing.energy(output)
+
+    multimode, modestrs = get_modes(output)
+    if multimode
+        e0 = sum(eall[:, 1])
+        modes = isnothing(modes) ? (1:size(e, 1)) : modes
+        if modes == :sum
+            e = dropdims(sum(e, dims=1), dims=1)
+            modestrs = join(modestrs, "+")
+            nmodes = 1
+        else
+            isnothing(modes) && (modes = 1:length(modestrs))
+            e = e[modes, :]
+            modestrs = modestrs[modes]
+            nmodes = length(modes)
+        end
+    else
+        e0 = eall[1]
+    end
+
+    z = output["z"]*100
+
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.plot(z, 1e6*e')
+    ax.set_xlim(extrema(z)...)
+    ax.set_ylim(ymin=0)
+    ax.set_xlabel("Distance (cm)")
+    ax.set_ylabel("Energy (μJ)")
+    rax = ax.twinx()
+    rax.plot(z, 100*(e/e0)', linewidth=0)
+    lims = ax.get_ylim()
+    rax.set_ylim(100/(1e6*e0).*lims)
+    rax.set_ylabel("Conversion efficiency (%)")
+    fig.set_size_inches(figsize...)
+end
+
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
                                     text=nothing, units="fs")

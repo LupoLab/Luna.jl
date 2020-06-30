@@ -213,6 +213,11 @@ function energy(grid, Eω; bandpass=nothing)
     _energy(Eω, energyω)
 end
 
+function energy(output::AbstractOutput; bandpass=nothing)
+    grid = makegrid(output)
+    energy(grid, output["Eω"]; bandpass=bandpass)
+end
+
 _energy(Eω::Vector, energyω) = energyω(Eω)
 
 function _energy(Eω, energyω)
