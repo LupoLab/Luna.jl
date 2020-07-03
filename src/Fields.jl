@@ -1,6 +1,5 @@
 module Fields
-import Luna
-import Luna: Grid, Maths, PhysData
+import Luna: Grid, Maths, PhysData, Modes
 import Luna.PhysData: wlfreq
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
@@ -11,6 +10,7 @@ import FFTW
 import BlackBoxOptim
 import Optim
 import CSV
+import HCubature: hquadrature
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -538,6 +538,27 @@ end
 prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)
 
 prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
+
+"""
+    prop_mirror!(Eω, ω, mirror, reflections)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
+"""
+function prop_mode!(Eω, ω, mode, distance, λ0=nothing)
+    β(z) = ω./PhysData.c .* Modes.neff.(mode, ω; z=z)
+    β1(z) = Modes.dispersion(mode, 1, wlfreq(λ0); z=z)
+    βint, err = hquadrature(β, 0, abs(distance))
+    if !isnothing(λ0)
+        β1int, err = hquadrature(β1, 0, abs(distance))
+        βint .-= β1int .* (ω .- wlfreq(λ0))
+    end
+    βint[.!isfinite.(βint)] .= 0
+    Eω .*= exp.(-1im.*sign(distance).*conj(βint))
+end
+
+prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, args...)
+
+prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 
 
 """
