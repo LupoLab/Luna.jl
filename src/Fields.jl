@@ -552,8 +552,9 @@ function prop_mode!(Eω, ω, mode, distance, λ0=nothing)
         β1int, err = hquadrature(β1, 0, abs(distance))
         βint .-= β1int .* (ω .- wlfreq(λ0))
     end
-    βint[.!isfinite.(βint)] .= 0
-    Eω .*= exp.(-1im.*sign(distance).*conj(βint))
+    expφ = exp.(-1im.*sign(distance).*conj(βint))
+    expφ[.!isfinite.(expφ)] .= 0
+    Eω .*= expφ
 end
 
 prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, args...)
