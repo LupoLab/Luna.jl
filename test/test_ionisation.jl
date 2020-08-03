@@ -7,6 +7,9 @@ import Luna: Ionisation, Maths
 @test Ionisation.ionrate_ADK(:Ar , 7e9) ≈ 2.4422306306649472e-08
 @test Ionisation.ionrate_ADK(:Ar , 8e9) ≈ 4.494711488416766e-05
 
+E = collect(range(1e9, 1e11; length=32))
+@test Ionisation.ionrate_ADK(:He, E) == Ionisation.ionrate_ADK(:He, -E)
+
 @test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1e10), 2.4329e-12, rtol=1e-3)
 @test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1.3e10), 3.0825e-07, rtol=1e-3)
 
@@ -32,6 +35,10 @@ ratefun! = Ionisation.ionrate_fun!_PPTaccel(:He, 800e-9)
 out = similar(E)
 ratefun!(out, E)
 @test all(isapprox.(out, rate, rtol=1e-3))
+
+outneg = similar(out)
+ratefun!(outneg, -E)
+@test out == outneg
 
 # import PyPlot: plt, pygui
 # pygui(true)
