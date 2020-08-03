@@ -1420,6 +1420,27 @@ function lookup_mirror(type)
         ϕspl = Maths.BSpline(GDDdat[:, 1]*1e-9, ϕ)
         return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
             λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
+    elseif type == :ThorlabsUMC
+        # λ (nm), R(p) (%), R(s) (%)
+        Rdat = CSV.read(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
+        # λ (nm), GD(p) (fs^2), GD(s) (fs^2)
+        GDdat = CSV.read(joinpath(Utils.datadir(), "UCxx-15FS_GD.csv"))
+        # Default to s-pol
+        rspl = Maths.BSpline(Rdat[:, 1]*1e-9, sqrt.(Rdat[:, 3]/100))
+        λGD = GDdat[:, 1]
+        ω = wlfreq.(λGD*1e-9)
+        # average phase per reflection, default to s-pol
+        ϕ = Maths.cumtrapz(1e-15*GDdat[:, 3], ω)
+        # ϕ has a large linear component - remove that
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(800e-9)*1e-15
+        idcs =  2 .< ωfs .< 4 # large kinks at edge of frequency window confuse the fit
+        p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 3)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGD*1e-9, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 640e-9, 650e-9, 1050e-9, 1100e-9)
     else
         throw(DomainError("Unknown mirror type $type"))
     end

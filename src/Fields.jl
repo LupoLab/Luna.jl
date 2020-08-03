@@ -11,6 +11,7 @@ import BlackBoxOptim
 import Optim
 import CSV
 import HCubature: hquadrature
+import DSP: unwrap
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -180,6 +181,14 @@ struct DataField <: TimeField
     ϕω::Vector{Float64}
     energy::Float64
 end
+
+"""
+    DataField(ω, Eω, energy)
+
+Create a `DataField` from the complex frequency-domain field `Eω` sampled on radial
+frequency grid `ω`.
+"""
+DataField(ω, Eω, energy) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)), energy)
 
 """
     DataField(fpath, energy)
@@ -593,11 +602,11 @@ end
 function optcomp_taylor(Eω, grid, λ0; order=2)
     out = similar(Eω)
     cidcs = CartesianIndices(size(Eω)[3:end])
-    ϕsout = zeros(order+2, size(cidcs)...)
+    ϕsout = zeros(order+1, size(cidcs)...)
     for ci in cidcs
         ϕsi, Eωi = optcomp_taylor(Eω[:, :, ci], grid, λ0; order=order)
         out[:, :, ci] .= Eωi
-        ϕsout[ci] .= ϕsi
+        ϕsout[:, ci] .= ϕsi
     end
     ϕsout, out
 end
