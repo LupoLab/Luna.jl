@@ -111,6 +111,13 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
         parent[k] = v
     end
 
+    function dict2h5(k::AbstractString, v::BitArray, parent)
+        if HDF5.exists(parent, k) && !force
+            error("Dataset $k exists in $fpath. Set force=true to overwrite.")
+        end
+        parent[k] = Array{Bool, 1}(v)
+    end
+
     function dict2h5(k::AbstractString, v::Nothing, parent)
         if HDF5.exists(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
