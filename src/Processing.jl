@@ -113,9 +113,13 @@ Extract the arrival time of the pulse in the wavelength limits `λlims`.
 - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
 """
 function arrivaltime(grid::AbstractGrid, Eω;
-                     bandpass=nothing, method=:moment, oversampling=1)
+                     bandpass=nothing, method=:moment, oversampling=1, sumdims=nothing)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
-    arrivaltime(to, abs2.(Eto); method=method)
+    Pt = abs2.(Eto)
+    if !isnothing(sumdims)
+        Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
+    end
+    arrivaltime(to, Pt; method=method)
 end
 
 function arrivaltime(t::AbstractVector, It::AbstractVector; method)
@@ -555,26 +559,29 @@ mutable struct PeakWindow
     λmin::Float64
     λmax::Float64
     relative::Bool
+    ndims
     lims
 end
 
-PeakWindow(width, λmin, λmax; relative=false) = PeakWindow(width, λmin, λmax, relative, nothing)
+function PeakWindow(width, λmin, λmax; relative=false, ndims=2)
+    PeakWindow(width, λmin, λmax, relative, ndims, nothing)
+end
 
 function (pw::PeakWindow)(ω, Eω)
-    cidcs = CartesianIndices(size(Eω)[3:end]) # dims are ω, modes, rest...
+    cidcs = CartesianIndices(size(Eω)[(pw.ndims+1):end])
     out = similar(Eω)
     cropidcs = (ω .> wlfreq(pw.λmax)) .& (ω .< wlfreq(pw.λmin))
     cropω = ω[cropidcs]
     Iω = abs2.(Eω)
-    limsA = zeros((2, size(Eω)[3:end]...))
+    limsA = zeros((2, size(Eω)[(pw.ndims+1):end]...))
     for cidx in cidcs
-        λpeak = wlfreq(cropω[argmax(Iω[cropidcs, 1, cidx])])
+        Iω_this = Iω[.., cidx]
+        Iωsum = sum(Iω_this; dims=2:ndims(Iω_this))
+        λpeak = wlfreq(cropω[argmax(Iωsum[cropidcs])])
         lims = pw.relative ? λpeak.*(1 .+ (-0.5, 0.5).*pw.width) : λpeak .+ (-0.5, 0.5).*pw.width
         window = ωwindow_λ(ω, lims)
         limsA[:, cidx] .= lims
-        for midx in 1:size(Eω, 2)
-            out[:, midx, cidx] .= Eω[:, midx, cidx] .* window
-        end
+        out[.., cidx] .= Eω[.., cidx] .* window
     end
     pw.lims = limsA
     out
@@ -591,13 +598,14 @@ Apply a frequency window to the field `Eω` if required. Possible values for `wi
 - 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
 - `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
 - `PeakWindow` : automatically track the peak in a given range and apply the window around it
+- `window(ω, Eω)` : an arbitrary user-supplied window function
 """
 window_maybe(ω, Eω, ::Nothing) = Eω
 window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
     ω, sort(wlfreq.(collect(win)))...)
 window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
 window_maybe(ω, Eω, win::NTuple{3, Number}) = Eω .* ωwindow_λ(ω, win[1:2]; winwidth=win[3])
-window_maybe(ω, Eω, win::PeakWindow) = win(ω, Eω)
+window_maybe(ω, Eω, window) = window(ω, Eω)
 window_maybe(ω, Eω, window::AbstractVector) = Eω.*window
 
 prop_maybe(grid, Eω, ::Nothing) = Eω
