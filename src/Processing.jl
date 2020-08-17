@@ -357,7 +357,7 @@ function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
     cidcs = CartesianIndices(size(Ix)[2:end])
     if !isnothing(specrange)
         specrange = extrema(specrange)
-        idcs = (x .>= specrange[1] .& (x .<= specrange[2]))
+        idcs = ((x .>= specrange[1]) .& (x .<= specrange[2]))
         x = x[idcs]
         Ix = Ix[idcs, cidcs]
     end
