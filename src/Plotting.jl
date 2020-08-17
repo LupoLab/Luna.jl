@@ -391,9 +391,13 @@ Other `kwargs` are passed onto `plt.plot`.
 """
 function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
                  modes=nothing, λrange=(150e-9, 1200e-9),
-                 log10=true, log10min=1e-6,
+                 log10=true, log10min=1e-6, resolution=nothing,
                  kwargs...)
-    specx, Iω, zactual = getIω(output, specaxis, zslice)
+    if specaxis == :λ
+        specx, Iω, zactual = getIω(output, specaxis, zslice, specrange=λrange, resolution=resolution)
+    else
+        specx, Iω, zactual = getIω(output, specaxis, zslice, resolution=resolution)
+    end
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
     multimode, modestrs = get_modes(output)
     if multimode
