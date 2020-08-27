@@ -111,6 +111,8 @@ Extract the arrival time of the pulse in the wavelength limits `λlims`.
 - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
                     the time of peak power
 - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
+- `sumdims` : Single `Int` or `Tuple` of `Int`s. The time-domain power will be summed over
+            these dimensions (e.g. modes) before extracting the arrival time.
 """
 function arrivaltime(grid::AbstractGrid, Eω;
                      bandpass=nothing, method=:moment, oversampling=1, sumdims=nothing)
@@ -149,8 +151,8 @@ is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the T
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
-function time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
-    fwt = fwhm_t(grid, Eω; bandpass=bandpass, oversampling=oversampling)
+function time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
+    fwt = fwhm_t(grid, Eω; bandpass=bandpass, oversampling=oversampling, sumdims=nothing)
     fwf = fwhm_f(grid, Eω; bandpass=bandpass)
     fwt.*fwf
 end
@@ -161,11 +163,16 @@ end
 
 Extract the temporal FWHM. If `bandpass` is given, bandpass the fieldaccording to
 [`window_maybe`](@ref). If `oversampling` > 1, the  time-domain field is oversampled before
-extracting the FWHM.
+extracting the FWHM. If `sumdims` is given, the time-domain power is summed over these
+dimensions (e.g. modes) before extracting the FWHM.
 """
-function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
-    fwhm(to, abs2.(Eto))
+    Pt = abs2.(Eto)
+    if !isnothing(sumdims)
+        Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
+    end
+    fwhm(to, Pt)
 end
 
 
@@ -173,11 +180,15 @@ end
     fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)
 
 Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to
-[`window_maybe`](@ref).
+[`window_maybe`](@ref). If `sumdims` is given, the energy density is summed over these
+dimensions (e.g. modes) before extracting the FWHM. 
 """
-function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
     Eω = window_maybe(grid.ω, Eω, bandpass)
     f, If = getIω(getEω(grid, Eω)..., :f)
+    if !isnothing(sumdims)
+        If = dropdims(sum(If; dims=sumdims); dims=sumdims)
+    end
     fwhm(f, If)
 end
 
@@ -563,6 +574,7 @@ mutable struct PeakWindow
     lims
 end
 
+"""TODO TURN THIS INTO A MORE GENERAL FORM"""
 function PeakWindow(width, λmin, λmax; relative=false, ndims=2)
     PeakWindow(width, λmin, λmax, relative, ndims, nothing)
 end
