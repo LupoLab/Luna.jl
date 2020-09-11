@@ -3,3 +3,10 @@
 *.jl.mem
 deps/deps.jl
 *.mem
+*.h5
+.vscode/settings.json
+Manifest.toml
+_git2_*
+docs/build
+*.info
+.vscode/spellright.dict

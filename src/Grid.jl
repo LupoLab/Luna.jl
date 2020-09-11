@@ -6,16 +6,24 @@ import Luna: PhysData, Maths
 
 abstract type AbstractGrid end
 
-struct RealGrid <: AbstractGrid
+abstract type TimeGrid <: AbstractGrid end
+abstract type SpaceGrid <: AbstractGrid end
+
+struct RealGrid <: TimeGrid
     zmax::Float64
     referenceλ::Float64
     t::Array{Float64, 1}
     ω::Array{Float64, 1}
     to::Array{Float64, 1}
     ωo::Array{Float64, 1}
+    sidx::BitArray{1}
     ωwin::Array{Float64, 1}
     twin::Array{Float64, 1}
     towin::Array{Float64, 1}
+end
+
+function RealGrid(;zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    RealGrid(zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
 end
 
 function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
@@ -46,20 +54,23 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     t = @. (Nt-tsamples/2)*δt
 
     # Make apodisation windows
-    ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax_win) 
+    ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win) 
 
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
+
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
 
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
-    return RealGrid(zmax, referenceλ, t, ω, to, ωo, ωwindow, twindow, towindow)
+    return RealGrid(float(zmax), referenceλ, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
-struct EnvGrid{T} <: AbstractGrid
+struct EnvGrid{T} <: TimeGrid
     zmax::Float64
     referenceλ::Float64
     ω0::Float64
@@ -71,6 +82,10 @@ struct EnvGrid{T} <: AbstractGrid
     ωwin::Array{Float64, 1}
     twin::Array{Float64, 1}
     towin::Array{Float64, 1}
+end
+
+function EnvGrid(;zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
 end
 
 function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
@@ -130,10 +145,11 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     t = @. (Nt - tsamples/2)*δt
     
     ω = v .+ ω0 # True frequency grid
-    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win) 
     
     # Make apodisation windows
-    ωwindow = Maths.planck_taper(ω, 0, ωmin, ωmax, ωmax_win)
+    ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win)
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
     
@@ -142,11 +158,84 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     @assert δt/δto ≈ minimum(vo)/minimum(v) # FFT grid -> sample at -fs/2 but not +fs/2
     factor = Int(length(to)/length(t))
     zeroidx = findfirst(x -> x==0, to)
-    # Starting at zero, time samples should be exactly the same (except fewer in t)
-    @assert all(to[zeroidx:factor:end] .== t[t .>= 0])
-    @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
+    # The time samples should be exactly the same (except fewer in t)
+    @assert all(to[zeroidx:factor:end] .≈ t[t .>= 0])
+    @assert all(to[zeroidx:-factor:1] .≈ t[t .<= 0][end:-1:1])
 
-    return EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+    return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+end
+
+struct FreeGrid <: SpaceGrid
+    x::Vector{Float64}
+    y::Vector{Float64}
+    kx::Vector{Float64}
+    ky::Vector{Float64}
+    r::Array{Float64, 3}
+    xywin::Array{Float64, 3}
+end
+
+function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
+    Rxw = Rx * (1 + window_factor)
+    Ryw = Ry * (1 + window_factor)
+
+    δx = 2Rxw/Nx
+    nx = collect(range(0, length=Nx))
+    x = @. (nx-Nx/2) * δx
+    kx = 2π*FFTW.fftfreq(Nx, 1/δx)
+
+    δy = 2Ryw/Ny
+    ny = collect(range(0, length=Ny))
+    y = @. (ny-Ny/2) * δy
+    ky = 2π*FFTW.fftfreq(Ny, 1/δy)
+
+    r = sqrt.(reshape(y, (1, Ny)).^2 .+ reshape(x, (1, 1, Nx)).^2)
+
+    xwin = Maths.planck_taper(x, -Rxw, -Rx, Rx, Rxw)
+    ywin = Maths.planck_taper(y, -Ryw, -Ry, Ry, Ryw)
+    xywin = reshape(xwin, (1, length(xwin))) .* reshape(xwin, (1, 1, length(xwin)))
+
+    FreeGrid(x, y, kx, ky, r, xywin)
+end
+
+FreeGrid(R, N) = FreeGrid(R, N, R, N)
+
+
+function to_dict(g::GT) where GT <: AbstractGrid
+    d = Dict{String, Any}()
+    for field in fieldnames(GT)
+        d[string(field)] = getfield(g, field)
+    end
+    d
+end
+
+function from_dict(gridtype, d)
+    kwargs = (Symbol(k) => v for (k, v) in pairs(d))
+    grid = gridtype(;kwargs...)
+
+    # Make sure the grid is valid
+    validate(grid)
+    return grid
+end
+
+function validate(grid::TimeGrid)
+    δt = grid.t[2] - grid.t[1]
+    δto = grid.to[2] - grid.to[1]
+    @assert δt/δto ≈ length(grid.to)/length(grid.t)
+    @assert length(grid.towin) == length(grid.to)
+    @assert length(grid.ωwin) == length(grid.ω)
+    @assert length(grid.sidx) == length(grid.ω)
+    if grid isa EnvGrid
+        δω = grid.ω[2] - grid.ω[1]
+        Δω = length(grid.ω)*δω
+        @assert δt ≈ 2π/Δω
+        @assert length(grid.t) == length(grid.ω)
+        @assert length(grid.to) == length(grid.ωo)
+    else
+        Δω = maximum(grid.ω)
+        @assert δt ≈ π/Δω
+        @assert length(grid.t) == 2*(length(grid.ω)-1)
+        @assert length(grid.to) == 2*(length(grid.ωo)-1)
+    end
 end
 
 end
