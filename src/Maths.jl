@@ -5,15 +5,11 @@ import SpecialFunctions: erf, erfc, gamma
 import StaticArrays: SVector
 import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
-<<<<<<< HEAD
-import FunctionZeros: besselj_zero
-=======
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Roots: fzero
 import Dierckx
 import Peaks
->>>>>>> upstream/master
 
 #= Pre-created finite difference methods for speed.
     Above order=7, this would create overflow errors in central_fwm() =#
@@ -51,9 +47,7 @@ gaussnorm(;fwhm, power=2) = gaussnorm(fwhm_to_σ(fwhm; power=power); power=power
 
 """
     randgauss([rng=GLOBAL_RNG], μ, σ, args...)
-
 Generate random numbers with normal distribution centred on `μ` with standard deviation `σ`.
-
 Any additional `args` are passed onto `randn` and can be used to specify the output dimensions.
 """
 randgauss(μ, σ, args...) = randgauss(GLOBAL_RNG, μ, σ, args...)
@@ -88,18 +82,13 @@ end
 
 """
     fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
-
 Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
-
 `method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
 `:nearest` finds the closest values either side of the crossing point and interpolates linearly.
-
 If `baseline` is true, the width is not taken at
 `level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
-
 `minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
-
 The default `level=0.5` requests the full width at half maximum. Setting `level` to something
 different computes the corresponding width. E.g. `level=0.1` for the 10% width.
 """
@@ -110,15 +99,11 @@ end
 
 """
     level_xings(x, y; method=:linear, baseline=false, minmax=:min)
-
 Find crossings of the curve `y` on the axis `x` with the value `level * maximum(y)`.
-
 `method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
 `:nearest` finds the closest values either side of the crossing point and interpolates linearly.
-
 If `baseline` is true, the width is not taken at
 `level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
-
 `minmax` determines whether the crossings are taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
 """
@@ -177,10 +162,8 @@ end
 
 """
     linterpx(x1, x2, y1, y2, val)
-
 Given two points on a straight line, `(x1, y1)` and `(x2, y2)`, calculate the value of `x` 
 at which this straight line intercepts with `val`.
-
 # Examples
 ```jldoctest
 julia> x1 = 0; x2 = 1; y1 = 0; y2 = 2; # y = 2x
@@ -196,7 +179,6 @@ end
 
 """
     hwhm(f, x0=0; direction=:fwd)
-
 Find the value `x` where the function `f(x)` drops to half of its maximum, which is located
 at `x0`. For `direction==:fwd`, search in the region `x > x0`, for :bwd, search in `x < x0`.
 """
@@ -213,11 +195,8 @@ end
 
 """
     cumtrapz!([out, ] y, x; dim=1)
-
 Trapezoidal integration for multi-dimensional arrays or vectors, in-place or with output array.
-
 If `out` is omitted, `y` is integrated in place. Otherwise the result is placed into `out`.
-
 `x` can be an array (the x axis) or a number (the x axis spacing).
 """
 function cumtrapz! end
@@ -230,7 +209,6 @@ end
 
 """
     _cumtrapz!([out, ] y, x, idxlo, idxhi)
-
 Inner function for multi-dimensional `cumtrapz!` - uses 1-D routine internally
 """
 function _cumtrapz!(y, x, idxlo, idxhi)
@@ -274,7 +252,6 @@ end
 
 """
     _dx(x, i)
-
 Calculate the axis spacing at index `i` given an axis `x`. If `x` is a number, interpret this
 as `δx` directly
 """
@@ -284,9 +261,7 @@ _dx(δx::Number, i) = δx
 
 """
     cumtrapz(y, x; dim=1)
-
 Calculate the cumulative trapezoidal integral of `y`.
-
 `x` can be an array (the x axis) or a number (the x axis spacing).
 """
 function cumtrapz(y, x; dim=1)
@@ -325,9 +300,7 @@ end
 
 """
     planck_taper(x, xmin, xmax, ε)
-
 Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)).
-
 #Arguments
 -`xmin` : lower limit (window is 0 here)
 -`xmax` : upper limit (window is 0 here)
@@ -346,7 +319,6 @@ end
 
 """
     planck_taper(x, left0, left1, right1, right0)
-
 Planck taper window, but finding the taper width by defining 4 points:
 The window increases from 0 to 1 between `left0` and `left1`, and then drops again
 to 0 between `right1` and `right0`.
@@ -391,7 +363,6 @@ end
 
 """
     gabor(t, A, ts, fw)
-
 Compute the Gabor transform (aka spectrogram or time-gated Fourier transform) of the vector
 `A`, sampled on axis `t`, with windows centred at `ts` and a window FWHM of `fw`.
 """
@@ -408,7 +379,6 @@ _gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
 
 """
     hilbert(x; dim=1)
-
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
@@ -424,9 +394,7 @@ end
 
 """
     plan_hilbert!(x; dim=1)
-
 Pre-plan a Hilbert transform.
-
 Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` in `out`.
 """
 function plan_hilbert!(x; dim=1)
@@ -451,11 +419,8 @@ end
 
 """
     plan_hilbert(x; dim=1)
-
 Pre-plan a Hilbert transform.
-
 Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` without allocation.
-
 !!! warning
     The closure returned always returns a reference to the same array buffer, which could lead
     to unexpected results if it is called from more than one location. To avoid this the array
@@ -583,25 +548,8 @@ function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     return x1, success, n
 end
 
-<<<<<<< HEAD
-function get_unm(n, m; kind=:HE)
-    if (kind == :TE) || (kind == :TM)
-        if (n != 0) || (m != 1)
-            error("n=0, m=1 for TE or TM modes")
-        end
-        unm = besselj_zero(1, 1)
-    elseif kind == :HE
-        unm = besselj_zero(n-1, m)
-    elseif kind == :EH
-        unm = besselj_zero(n+1, m)
-    else
-        error("kind must be :TE, :TM, :EH, or :HE")
-    end
-    return unm
-=======
 """
     check_spline_args(x, y)
-
 Ensure that the x array contains unique and sorted values (while preserving the
 relaionship between the x and y values).
 """
@@ -619,7 +567,6 @@ end
 
 """
      make_spline_ifun(x, ifun)
-
 If `ifun != nothing` then `ifun(x0)` should return the index of the first element in x
 which is bigger than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
@@ -647,7 +594,6 @@ end
 
 """
     CSpline
-
 Simple cubic spline, see e.g.:
 http://mathworld.wolfram.com/CubicSpline.html Boundary        
 conditions extrapolate with initially constant gradient
@@ -665,9 +611,7 @@ Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 """
     CSpline(x, y [, ifun]; bounds_error=false)
-
 Construct a `CSpline` to interpolate the values `y` on axis `x`.
-
 If given, `ifun(x0)` should return the index of the first element in x which is bigger
 than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
@@ -693,7 +637,6 @@ end
 
 """
     (c::CSpline)(x0)
-
 Evaluate the `CSpline` at coordinate `x0`
 """
 function (c::CSpline)(x0)
@@ -713,19 +656,16 @@ end
 
 """
     linterp(x, x1, y1, x2, y2)
-
 Linear interpolation of `y` at position `xp`, between points `(x1, y1)` and `(x2, y2)`.
 For `xp` outside interval `[x1, x2]` this corresponds to linear extrapolation.
 """
 function linterp(xp, x1, y1, x2, y2)
     t = (xp - x1) / (x2 - x1)
     (1 - t) * y1 + t * y2
->>>>>>> upstream/master
 end
 
 """
     LinTerp
-
 Linear interpolation.
 """
 struct LinTerp{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
@@ -739,7 +679,6 @@ Broadcast.broadcastable(l::LinTerp) = Ref(l)
 
 """
     LinTerp(xp, xs, ys)
-
 Construct a linear interpolator over `xs`, `ys`.
 """
 function LinTerp(xs, ys)
@@ -748,7 +687,6 @@ end
 
 """
     (l::LinTerp)(x)
-
 Evaluate a linear interpolator `LinTerp` at point `x`.
 """
 function (l::LinTerp)(x)
@@ -780,7 +718,6 @@ fftnorm(δt) = δt/sqrt(2π)
 
 """
     FastFinder
-
 Callable type which accelerates index finding for the case where inputs are usually in order.
 """
 mutable struct FastFinder{xT, xeT}
@@ -794,9 +731,7 @@ end
 
 """
     FastFinder(x)
-
 Construct a `FastFinder` to find indices in the array `x`.
-
 !!! warning
     `x` must be sorted in ascending order for `FastFinder` to work.
 """
@@ -810,9 +745,7 @@ end
 
 """
     (f::FastFinder)(x0)
-
 Find the first index in `f.x` which is larger than `x0`.
-
 This is similar to [`findfirst`](@ref), but it starts at the index which was last used.
 If the new value `x0` is close to the previous `x0`, this is much faster than `findfirst`.
 """
@@ -876,15 +809,12 @@ Broadcast.broadcastable(cs::CmplxBSpline) = Ref(cs)
 
 """
     BSpline(x, y)
-
 Construct a `RealBSpline` or `CmplxSpline` of given `order` (1 to 5, default=3)
 to interpolate the values `y` on axis `x`.
-
 If given, `ifun(x0)` should return the index of the first element in x which is bigger
 than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
 2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
-
 # Note
 For accurate derivatives use 5th order splines
 """
@@ -903,7 +833,6 @@ end
 
 """
     (cs::RealBSpline)(x)
-
 Evaluate the `RealBSpline` at coordinate(s) `x`
 """
 function (rs::RealBSpline)(x)
@@ -912,7 +841,6 @@ end
 
 """
     (cs::CmplxSpline)(x)
-
 Evaluate the `CmplxBSpline` at coordinate(s) `x`
 """
 function (cs::CmplxBSpline)(x)
@@ -921,7 +849,6 @@ end
 
 """
     derivative(rs::RealBSpline, x, order::Integer)
-
 Calculate derivative of the spline `rs`. For `1 <= order < k` (where `k` is the spline order)
 this uses an optimised routine.
 For `order >= k` this falls back to the generic finite difference based method.
@@ -938,7 +865,6 @@ end
 
 """
     derivative(cs::CmplxBSpline, x, order::Integer)
-
 Calculate derivative of the spline `cs`. For `1 <= order < k` (where `k` is the spline order)
 this uses an optimised routine.
 For `order >= k` this falls back to the generic finite difference based method.
@@ -949,7 +875,6 @@ end
 
 """
     differentiate_spline(rs::RealBSpline; order::Integer=1)
-
 Return a new spline which is the derivative of `rs` and has the same support.
 Higher orders are obtained by repeated spline differentiation.
 """
@@ -965,7 +890,6 @@ end
 
 """
     roots(rs::RealBSpline)
-
 Find the roots of the spline `rs`.
 """
 function roots(rs::RealBSpline; maxn::Int=128)
@@ -975,9 +899,7 @@ end
 
 """
     splev!(h, hh, t, c, k, x, ifun)
-
 Evaluate a spline s(x) of degree k, given in its b-spline representation.
-
 # Arguments
 - `h::ArrayPT<:Real,1}`: work space
 - `hh::ArrayPT<:Real,1}`: work space
@@ -986,7 +908,6 @@ Evaluate a spline s(x) of degree k, given in its b-spline representation.
 - `k::Integer`: the degree of s(x)
 - `x::Real`: the point to evaluate at
 - `ifun::Function`: a function to find the index `i` s.t. `t[i] > x`
-
 Adapted from splev.f from Dierckx
 http://www.netlib.org/dierckx/index.html
 """
@@ -1014,11 +935,9 @@ end
 
 """
     fpbspl!(h, hh, t, k, x, l)
-
 Evaluate the (k+1) non-zero b-splines of
 degree k at t[l] <= x < t[l+1] using the stable recurrence
 relation of de boor and cox.
-
 # Arguments
 - `h::ArrayPT<:Real,1}`: work space
 - `hh::ArrayPT<:Real,1}`: work space
@@ -1026,7 +945,6 @@ relation of de boor and cox.
 - `k::Integer`: the degree of s(x)
 - `x::Real`: the point to evaluate at
 - `l::Integer`: the active knot location: `t[l] <= x < t[l+1]`
-
 Adapted from fpbspl.f from Dierckx
 http://www.netlib.org/dierckx/index.html
 """
@@ -1054,14 +972,10 @@ end
 
 """
     pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
-
 Find the full width of a peak in `y` over `x` centred at index `pki`.
-
 The default `level=0.5` requests the full width at half maximum. Setting `level` to something
 different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
-
 `skipnonmono=true` skips peaks which are not monotonically increaing/decreasing before/after the peak.
-
 `closest=5` sets the minimum number of indices for the full width.
 """
 function pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
@@ -1092,7 +1006,6 @@ end
 
 """
     findpeaks(x, y; threshold=0.0, filterfw=true)
-
 Find isolated peaks in a signal `y` over `x` and return their value, FWHM and index.
 `threshold=0.0` allows filtering peaks above a threshold value.
 If `filterfw=true` then only peaks with a clean FWHM are returned.
