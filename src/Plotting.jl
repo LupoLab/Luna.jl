@@ -82,7 +82,7 @@ end
 
 Plot all statistics available in `output`. Additional `kwargs` are passed onto `plt.plot()`
 """
-function stats(output; kwargs...)
+function stats(dir, output; kwargs...)
     stats = output["stats"]
 
     pstats = [] # pulse statistics
@@ -149,6 +149,8 @@ function stats(output; kwargs...)
         end
         ffig.tight_layout()
     end
+    plt.savefig(dir*"stats.png")
+    plt.close()
 end
 
 """
@@ -182,7 +184,7 @@ the sum of all modes.
 - `dBmin::Float64` : lower colour-scale limit for logarithmic spectral plot
 - `resolution::Real` smooth the spectral energy density as defined by [`getIω`](@ref).
 """
-function prop_2D(output, specaxis=:f;
+function prop_2D(dir, output, specaxis=:f;
                  trange=(-50e-15, 50e-15), bandpass=nothing,
                  λrange=(150e-9, 2000e-9), dBmin=-60,
                  resolution=nothing,
@@ -208,7 +210,9 @@ function prop_2D(output, specaxis=:f;
     else
         _prop2D_sm(t, z, specx, It, Iω,
                    speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
-    end    
+    end
+    plt.savefig(dir*"prop_2D.png")
+    plt.close()
 end
 
 # Helper function to convert λrange to the correct numbers depending on specaxis
@@ -309,7 +313,7 @@ The keyword argument `oversampling` determines the amount of oversampling done b
 
 Other `kwargs` are passed onto `plt.plot`.
 """
-function time_1D(output, zslice=maximum(output["z"]);
+function time_1D(dir, output, zslice=maximum(output["z"]);
                 y=:Pt, modes=nothing,
                 oversampling=4, trange=(-50e-15, 50e-15), bandpass=nothing,
                 kwargs...)
@@ -360,6 +364,8 @@ function time_1D(output, zslice=maximum(output["z"]);
     y == :Et || plt.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    plt.savefig(dir*"time_1D.png")
+    plt.close()
 end
 
 # Automatically find power unit depending on scale of electric field.
@@ -389,7 +395,7 @@ a single index, a `range` or `:sum`. In the latter case, the sum of modes is plo
 
 Other `kwargs` are passed onto `plt.plot`.
 """
-function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
+function spec_1D(dir, output, zslice=maximum(output["z"]), specaxis=:λ;
                  modes=nothing, λrange=(150e-9, 1200e-9),
                  log10=true, log10min=1e-6, resolution=nothing,
                  kwargs...)
@@ -433,6 +439,8 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     plt.xlim(speclims...)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    plt.savefig(dir*"spec_1D.png")
+    plt.close()
 end
 
 dashes = [(0, (10, 1)),
@@ -453,21 +461,21 @@ function _plot_slice_mm(ax, x, y, z, modestrs, log10=false, fwhm=false; kwargs..
     end
 end
 
-spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
+spectrogram(dir, output::AbstractOutput, args...; kwargs...) = spectrogram(dir,
     makegrid(output), output, args...; kwargs...)
 
-function spectrogram(grid, Eω::AbstractArray, specaxis=:λ; kwargs...)
+function spectrogram(dir, grid, Eω::AbstractArray, specaxis=:λ; kwargs...)
     t, Et = getEt(grid, Eω, oversampling=1)
-    spectrogram(t, Et, specaxis; kwargs...)
+    spectrogram(tdir, t, Et, specaxis; kwargs...)
 end
 
-function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ; kwargs...)
+function spectrogram(dir, grid::Grid.AbstractGrid, output, zslice, specaxis=:λ; kwargs...)
     t, Et, zactual = getEt(output, zslice, oversampling=1)
     Et = Et[:, 1]
-    spectrogram(t, Et, specaxis; kwargs...)
+    spectrogram(dir, t, Et, specaxis; kwargs...)
 end
 
-function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
+function spectrogram(dir, t::AbstractArray, Et::AbstractArray, specaxis=:λ;
                      trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
                      kwargs...)
     ω = Maths.rfftfreq(t)[2:end]
@@ -488,6 +496,8 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     plt.xlabel("Time (fs)")
     log && plt.clim(dBmin, 0)
     plt.colorbar()
+    plt.savefig(dir*"spectrogram.png")
+    plt.close()
 end
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
