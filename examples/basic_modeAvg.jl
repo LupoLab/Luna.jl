@@ -1,7 +1,7 @@
 using Luna
 
-folder = "Ar_2bar_15um_4uJ_kerr_plasma\\"
-dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\old\\"*folder
+folder = "Ar_2bar_15um_4uJ_kerr_plasma(physdata_finished)\\"
+dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\new\\"*folder
 
 a = 15e-6
 gas = :Ar
