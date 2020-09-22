@@ -5,6 +5,8 @@ import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import CSV
 import Luna: Maths, Utils
+using Dierckx
+using HDF5
 
 "Speed of light"
 const c = ustrip(CODATA2014.SpeedOfLightInVacuum)
@@ -39,7 +41,8 @@ const N_A = ustrip(CODATA2014.N_A)
 "Amagat (Loschmidt constant)"
 const amg = atm/(k_B*273.15)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2,
+             :O2, :O3, :HeO2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -48,7 +51,10 @@ const gas_str = Dict(
     :Kr => "Krypton",
     :Xe => "Xenon",
     :Air => "Air",
-    :N2 => "Nitrogen",
+    :O2 => "O2",
+    :N2 => "N2",
+    :O3 => "O3",
+    :HeO2 => "HeO2",
     :H2 => "Hydrogen"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
@@ -207,6 +213,17 @@ function sellmeier_glass(material::Symbol)
     end
 end
 
+"read complex data set"
+function read_compound(dset::HDF5.HDF5Dataset, T::DataType)
+    filetype = HDF5.datatype(dset)
+    memtype_id = HDF5.h5t_get_native_type(filetype.id)
+    @assert sizeof(T) == HDF5.h5t_get_size(memtype_id) "type size mismatch"
+    out = Array{T}(undef, size(dset))
+    HDF5.h5d_read(dset.id, memtype_id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, out)
+    HDF5.h5t_close(memtype_id)
+    out
+end
+
 "Get function to return χ1 as a function of:
     wavelength in SI units
     pressure in bar
@@ -223,9 +240,45 @@ function χ1_fun(gas::Symbol)
 end
 
 function χ1_fun(gas::Symbol, P, T)
-    γ = sellmeier_gas(gas)
-    dens = density(gas, P, T)
-    return λ -> γ(λ*1e6)*dens
+    # https://refractiveindex.info/?shelf=main&book=O2&page=Zhang
+    if gas == :O2
+        n(λ) = 1+1.181494e-4+9.708931e-3/(75.4-(λ*1e6)^-2)
+        f = let P=P, T=T
+            function χ1(λ)
+                return @. (n(λ)^2 -1)*P*293.15/(1.01325*T)
+            end
+        end
+    elseif gas == :O3
+        path = joinpath(@__DIR__, "data")
+        fid = HDF5.h5open(joinpath(path, "ozone"), "r")
+        freq::Array{Float64} = vec(read(fid["freq"]))
+        freq = freq[:,1]
+        O3dispersion::Array{Float64} = vec(read(fid["dispersion"]))
+        close(fid)
+        λ = 2pi*c./freq
+        λb = 50.0 .< λ*1e9 .< 4000.0 
+        
+        data = O3dispersion[λb]
+        freq = freq[λb]
+        
+        Reχ = data.*(2.0 .+ data)
+        spl0 = Spline1D(freq, Reχ; k=3, bc="nearest", s=1e-7) # not sure if BSpline function in math can give the same results due to smoothness
+        spl(λ) = spl0(2pi*c/λ)
+        f = let spl=spl, P=P, T=T
+            function χ1(λ)
+                return spl(λ)*P*272.15/(1*T)
+            end
+        end
+    else
+        γ = sellmeier_gas(gas)
+        f = let gas = gas
+            dens = density(gas, P, T)
+            function χ1(λ)
+                return γ(λ*1e6)*dens
+            end
+        end
+    end
+    return f
 end
 
 "Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
@@ -269,6 +322,22 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     else
         throw(DomainError(material, "Unknown material $material"))
     end
+end
+
+"Get function which returns refractive index for gas mixture."
+function ref_index_fun(materials::Array{Symbol}, P::Float64, PP, T=roomtemp)::Function    
+    funs = [χ1_fun(mi, P*PP[ii], T) for (ii, mi) in enumerate(materials)]
+    ngas = let funs=funs
+        function ngas(λ)
+            res = 0.0
+            for ii in 1:length(materials) 
+                χ10(λ) = funs[ii](λ)
+                res += χ10(λ)
+            end
+            return sqrt(1 + res)
+        end
+    end
+    return ngas
 end
 
 """
@@ -342,7 +411,7 @@ TODO: More Bishop/Shelton; Wahlstrand updated values.
 "
 function γ3_gas(material::Symbol; source=nothing)
     if source == nothing
-        if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
+        if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :O2)
             source = :Lehmeier
         elseif material in (:H2,)
             source = :Shelton
@@ -365,6 +434,8 @@ function γ3_gas(material::Symbol; source=nothing)
             fac = 188.2
         elseif material == :N2
             fac = 21.1
+        elseif material == :O2
+            fac = 21.86
         else
             throw(DomainError(material, "Lehmeier model does not include $material"))
         end
@@ -375,6 +446,12 @@ function γ3_gas(material::Symbol; source=nothing)
             return 2.2060999099841444e-26 / dens # TODO: check this carefully
         else
             throw(DomainError(material, "Shelton model does not include $material"))
+        end
+    elseif source == :Mix
+        if material == :Air
+            return 0.20946*γ3_gas(:O2)+(1-0.20946-0.009340)*γ3_gas(:N2)+0.00934*γ3_gas(:Ar)
+        elseif material == :HeO2
+            return 0.21*γ3_gas(:O2)+0.79*γ3_gas(:He)
         end
     else
         throw(DomainError(source, "Unkown γ3 model $source"))
@@ -388,6 +465,16 @@ end
 function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)
     n0 = ref_index(material, λ, P, T)
     return @. 3/4 * χ3_gas(material, P, T, source=source) / (ε_0*c*n0^2)
+end
+
+"get n2 for gas mixture"
+function n2_gas(gases::Array{Symbol,1}, P::Float64, PP::Array{Float64,1}, T=roomtemp, λ=800e-9; source=nothing)
+    n0 = ref_index_fun(gases, P, PP, T)(λ)
+    res = 0.0
+    for ii in 1:length(gases)
+        res += PP[ii]*χ3_gas(gases[ii], P, T, source=source)
+    end
+    return @. 3/4 * res / (ε_0*c*n0^2)
 end
 
 """
@@ -427,6 +514,15 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5726
     elseif material == :H2
         Ip = 0.5669
+    elseif material == :O2m
+        # m stands for molecular ADK, see ionization rate
+        Ip = 0.4458 # = :Xe
+    elseif material == :N2m
+        Ip = 0.5792 # = :Ar
+    elseif material == :O2dis
+        Ip = 0.56961
+    elseif material == :O3dis
+        Ip = 0.35
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -1335,15 +1431,15 @@ function raman_parameters(material)
               rotation = :nonrigid,
               vibration = :sdo,
               B = 144.0, # [2]
-              D = 0.0, # TODO
+              D = 4.84e-4, # [8,9]
               qJodd = 1,
               qJeven = 0,
               Δα = 10.2e-31, # [2]
-              # TODO τ2r = 
+              τ2r = 38e-12, # at 12 bar HeO2, gussed using Nitrogen scales with pressure
               dαdQ = 1.46e-20, # [1]
               Ωv = 3e14, # [1]
               μ = 1.3e-26, # [1]
-              # TODO τ2v = 
+              τ2v = 2e-12 # just a guess
               )
     elseif material == :N2O
         rp = (kind = :molecular,
