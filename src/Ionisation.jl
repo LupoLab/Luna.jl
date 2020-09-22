@@ -43,6 +43,35 @@ function ionrate_fun!_ADK(material::Symbol)
     return ionrate_fun!_ADK(ionisation_potential(material))
 end
 
+function mixture_rate(ionpots::Array{Symbol}; weights::Array{Float64,1}=[1.0])
+    if length(ionpots) != length(weights)
+        error("ionpots and weights must have the same length")
+    end
+    funs = [ionrate_fun!_ADK(ionpot) for ionpot in ionpots]
+    function ionrate!(out, E)
+        temp0 = zeros(Float64, size(out))
+        for ii in 1:length(ionpots)
+            temp = zeros(Float64, size(out))
+            funs[ii](temp, E)
+            if ionpots[ii] == :O2m
+                # molecular-ADK implemetation
+                temp0 .+= temp*0.01*weights[ii]
+            elseif ionpots[ii] == :N2m
+                # molecular-ADK implemetation
+                temp0 .+= temp*1.15*weights[ii]
+            else
+                temp0 .+= temp*weights[ii]
+            end
+        end
+        out .= temp0
+    end
+    return ionrate!
+end
+
+function inFiber_rate(ionpots::Array{Symbol,1}, weights::Array{Float64,1})
+    [mixture_rate(ionpots, weights=[weights[index]]) for index in 1:length(weights)]
+end
+
 function ionrate_ADK(IP_or_material, E)
     out = zero(E)
     ionrate_fun!_ADK(IP_or_material)(out, E)
