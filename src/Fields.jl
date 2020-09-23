@@ -540,8 +540,12 @@ Propagate the field `Eω` linearly by adding a number of `reflections` from the 
 function prop_mirror!(Eω, ω, mirror, reflections)
     λ = wlfreq.(ω)
     t = PhysData.lookup_mirror(mirror).(λ) # transfer function
-    t[.!isfinite.(t)] .= 0
-    Eω .*= t.^reflections
+    tn = t.^reflections
+    tn[.!isfinite.(tn)] .= 0
+    if reflections < 0
+        tn = exp.(1im .* angle.(tn))
+    end
+    Eω .*= tn
 end
 
 prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)

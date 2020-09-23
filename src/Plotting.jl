@@ -470,13 +470,15 @@ end
 spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
     makegrid(output), output, args...; kwargs...)
 
-function spectrogram(grid::Grid.AbstractGrid, Eω::AbstractArray, specaxis=:λ; kwargs...)
-    t, Et = getEt(grid, Eω, oversampling=1)
+function spectrogram(grid::Grid.AbstractGrid, Eω::AbstractArray, specaxis=:λ;
+                     propagate=nothing, kwargs...)
+    t, Et = getEt(grid, Eω; propagate=propagate, oversampling=1)
     spectrogram(t, Et, specaxis; kwargs...)
 end
 
-function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ; kwargs...)
-    t, Et, zactual = getEt(output, zslice, oversampling=1)
+function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
+                     propagate=nothing, kwargs...)
+    t, Et, zactual = getEt(output, zslice; oversampling=1, propagate=propagate)
     Et = Et[:, 1]
     spectrogram(t, Et, specaxis; kwargs...)
 end
