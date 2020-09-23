@@ -58,21 +58,6 @@ function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun,
     make_const_linop(grid, xygrid, n, β1, β0const; thg=thg)
 end
 
-"Make linear operator from provided data"
-function make_linop_from_data(grid::Grid.RealGrid, L)
-    Z = round.(LinRange(0, grid.zmax, Int(grid.zmax*1000)), digits=3)
-    linop = let L=L, Z=Z
-        function linop(z)
-            index = findfirst(x -> x >= z, Z)
-            if index === nothing && z > Z[end]
-                index = length(Z)
-            end
-            return L[index,:]
-        end
-    end
-    return linop
-end
-
 """
     make_linop(grid, xygrid, nfun)
 
@@ -330,6 +315,21 @@ function make_const_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     make_const_linop(grid, βfun!, αfun!, β1const), βfun!, β1const, αfun!
 end
 
+"Make linear operator from provided data"
+function make_linop_from_data(grid::Grid.RealGrid, L)
+    Z = round.(LinRange(0, grid.zmax, Int(grid.zmax*1000)), digits=3)
+    linop = let L=L, Z=Z
+        function linop(z)
+            index = findfirst(x -> x >= z, Z)
+            if index === nothing && z > Z[end]
+                index = length(Z)
+            end
+            L[index,:]
+        end
+    end
+    return linop
+end
+
 """
     neff_β_grid(grid, mode, λ0; ref_mode=1)
 
@@ -516,14 +516,14 @@ function load_ozone_loss(grid, gw)
 end
 
 # get linear ozone loss from its density
-function α(grid, dens, loss)
-    zlength = length(0:1e-3:grid.zmax)
-    loss = zeros(Float64, (zlength, length(grid.ω)))
-    for i in 1:zlength
-        loss[i,:] = loss.*dens
-    end
-    return loss
-end
+# function α(grid, dens, loss)
+#     zlength = length(0:1e-3:grid.zmax)
+#     loss = zeros(Float64, (zlength, length(grid.ω)))
+#     for i in 1:zlength
+#         loss[i,:] = loss.*dens
+#     end
+#     return loss
+# end
 
 # Pre-caculate ozone dispersion
 function gen_HeO2_table(file, a, pres, grid; fiberloss=0.0)
