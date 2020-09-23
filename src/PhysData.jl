@@ -328,7 +328,7 @@ end
 function ref_index_fun(materials::Array{Symbol}, P::Float64, PP, T=roomtemp)::Function    
     funs = [χ1_fun(mi, P*PP[ii], T) for (ii, mi) in enumerate(materials)]
     ngas = let funs=funs
-        function ngas(λ)
+        function ngas(λ, PP)
             res = 0.0
             for ii in 1:length(materials) 
                 χ10(λ) = funs[ii](λ)

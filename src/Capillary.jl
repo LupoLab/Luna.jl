@@ -86,6 +86,17 @@ function MarcatilliMode(a, gas, P;
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
 
+"MarcatilliMode for gas mixture using precaculated rfg and rfs"
+function MarcatilliMode(a, rfg, rfs, PP::Array{Float64,1};
+                        n=1, m=1, kind=:HE, ϕ=0.0, T=roomtemp, model=:full,
+                        clad=:SiO2, loss=true)
+    # rfg = ref_index_fun(gas, P, T)
+    # rfs = ref_index_fun(clad)
+    coren = (ω; z) -> rfg(wlfreq(ω), PP)
+    cladn = (ω; z) -> rfs(wlfreq(ω))
+    MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
+end
+
 """
     MarcatilliMode(a, gas, P cladn; kwargs...)
 

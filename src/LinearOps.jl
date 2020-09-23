@@ -55,6 +55,21 @@ function make_const_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun,
     make_const_linop(grid, xygrid, n, β1, β0const; thg=thg)
 end
 
+"Make linear operator from provided data"
+function make_linop_from_data(grid::Grid.RealGrid, L)
+    Z = round.(LinRange(0, grid.zmax, Int(grid.zmax*1000)), digits=3)
+    linop = let L=L, Z=Z
+        function linop(z)
+            index = findfirst(x -> x >= z, Z)
+            if index === nothing && z > Z[end]
+                index = length(Z)
+            end
+            return L[index,:]
+        end
+    end
+    return linop
+end
+
 """
     make_linop(grid, xygrid, nfun)
 

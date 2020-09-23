@@ -2,7 +2,7 @@ module Stats
 import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.NonlinearRHS: TransModal, TransModeAvg
-import Luna.Nonlinear: PlasmaCumtrapz
+import Luna.Nonlinear: PlasmaCumtrapz, DissCumtrapz
 import Luna.Capillary: MarcatilliMode
 import FFTW
 import LinearAlgebra: mul!
@@ -186,6 +186,7 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
         ionfrac!(frac, real(Eto))
         d["electrondensity"] = maximum(frac)*dfun(z)
+        println("called")
     end
 end
 
@@ -222,6 +223,17 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
             ionfrac!(frac, real(Et0[:, 1]))
         end
         d["electrondensity"] = maximum(frac)*dfun(z)
+    end
+end
+
+"""
+    dissDensity(resp)
+Create stats function to get the number of the dissociated molecules from resp.
+"""
+function dissDensity(resp::DissCumtrapz)
+    function addstat!(d, Eω, Et, z, dz)
+        name = resp.ionpots[1]
+        d["$name"] = resp.adkfraction
     end
 end
 
@@ -420,6 +432,31 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
             ed = electrondensity(grid, resp.ratefunc, transform.densityfun, modes,
                                  components=pol)
             push!(funs, ed)
+        end
+    end
+    if !isnothing(windows)
+        for win in windows
+            push!(funs, energy_λ(grid, energyfunω, win))
+        end
+    end
+    collect_stats(grid, Eω, funs...)
+end
+
+function ozoneStat(grid, Eω, mode::Modes.AbstractMode, linop, transform;
+                 windows=nothing, gas=nothing)
+    _, energyfunω = Fields.energyfuncs(grid)
+    pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
+    funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
+            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop), pd]
+    for resp in transform.resp
+        if resp isa PlasmaCumtrapz
+            ir = resp.ratefunc
+            ed = electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff)
+            push!(funs, ed)
+        end
+        if resp isa DissCumtrapz
+            diss = dissDensity(resp)
+            push!(funs, diss)
         end
     end
     if !isnothing(windows)

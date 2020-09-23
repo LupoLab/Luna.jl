@@ -1,7 +1,7 @@
 module Nonlinear
 import Luna
 import Luna.PhysData: ε_0, e_ratio
-import Luna: Maths, Utils
+import Luna: Maths, Utils, PhysData
 import FFTW
 import LinearAlgebra: mul!
 
@@ -14,7 +14,7 @@ Scale the response function `resp` by the factor `scale`. `shape` should be `siz
 function scaled_response(resp, scale, shape)
     buffer = Array{ComplexF64}(undef, shape)
     let buffer=buffer, resp=resp
-        function resp!(out, E)
+        function resp!(out, E, z)
             fill!(buffer, 0)
             resp(buffer, E)
             @. out += scale*buffer
@@ -41,7 +41,7 @@ end
 "Kerr response for real field"
 function Kerr_field(γ3)
     Kerr = let γ3 = γ3
-        function Kerr(out, E)
+        function Kerr(out, E, z)
             if size(E,2) == 1
                 KerrScalar(out, E, ε_0*γ3)
             else
@@ -80,7 +80,7 @@ end
 "Kerr response for envelope"
 function Kerr_env(γ3)
     Kerr = let γ3 = γ3
-        function Kerr(out, E)
+        function Kerr(out, E, z)
             if size(E,2) == 1
                 KerrScalarEnv(out, E, ε_0*γ3)
             else
@@ -95,7 +95,7 @@ end
 function Kerr_env_thg(γ3, ω0, t)
     C = exp.(2im*ω0.*t)
     Kerr = let γ3 = γ3, C = C
-        function Kerr(out, E)
+        function Kerr(out, E, z)
             @. out += ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
@@ -124,7 +124,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
 end
 
-function (Plas::PlasmaCumtrapz)(out, Et)
+function (Plas::PlasmaCumtrapz)(out, Et, z)
     if ndims(Et) > 1
         if size(Et, 2) == 1
             E = reshape(Et, size(Et,1))
@@ -149,6 +149,72 @@ function (Plas::PlasmaCumtrapz)(out, Et)
         out .+= reshape(Plas.P, size(Et))
     else
         @. out += Plas.P
+    end
+end
+
+mutable struct DissCumtrapz{R, EType, tType}
+    ratefunc::R
+    ionpots::Array{Symbol}
+    weights::Array{Float64,1}
+    adkfraction::Float64
+    rate::EType
+    fraction::EType
+    phase::EType
+    J::EType
+    P::EType
+    t::tType
+    δt::Float64
+    zmax::Float64
+end
+
+function DissCumtrapz(t, E, ratefunc, ionpots, zmax; weights=[[1.0]])
+    rate = similar(E)
+    fraction = similar(E)
+    adkfraction = 0.0
+    phase = similar(E)
+    J = similar(E)
+    P = similar(E)
+    return DissCumtrapz(ratefunc, ionpots, weights, adkfraction, rate, fraction, phase, J, P, t, t[2]-t[1], zmax)
+end
+
+function (Diss::DissCumtrapz)(out, Et, z)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1
+            E = reshape(Et, size(Et,1))
+        else
+            error("vector plasma not yet implemented")
+        end
+    else
+        E = Et
+    end
+
+    Z = round.(LinRange(0, Diss.zmax, Int(Diss.zmax*1000)), digits=3)
+    index = findfirst(x -> x >= z, Z)
+    if index === nothing && z > Z[end]
+        index = length(Z)
+    end
+
+    Diss.ratefunc[index](Diss.rate, E)
+    Maths.cumtrapz!(Diss.fraction, Diss.rate, Diss.δt)
+    @. Diss.fraction = 1-exp(-Diss.fraction)
+    Diss.adkfraction = Diss.fraction[end]
+    @. Diss.phase = 0.0
+    Maths.cumtrapz!(Diss.J, Diss.phase, Diss.δt)
+
+    for ii in eachindex(E)
+        if abs(E[ii]) > 0
+            if Diss.ionpots[1] == :O3diss || Diss.ionpots[1] == :O2dis
+                Diss.J[ii] += PhysData.ionisation_potential(Diss.ionpots[1])*Diss.weights[index] * Diss.rate[ii] * (1-Diss.fraction[ii])/E[ii]
+            else
+                Diss.J[ii] += PhysData.ionisation_potential(Diss.ionpots[1])*Diss.weights[1] * Diss.rate[ii] * (1-Diss.fraction[ii])/E[ii]
+            end
+        end
+    end
+    Maths.cumtrapz!(Diss.P, Diss.J, Diss.δt)
+    if ndims(Et) > 1
+        out .+= reshape(Diss.P, size(Et))
+    else
+        @. out += Diss.P
     end
 end
 
@@ -270,7 +336,7 @@ function sqr!(R::RamanPolarEnv, E)
 end
 
 "Calculate Raman polarisation for field/envelope Et"
-function (R::RamanPolar)(out, Et)
+function (R::RamanPolar)(out, Et, z)
     # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
