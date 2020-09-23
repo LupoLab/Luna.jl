@@ -2,23 +2,23 @@ using Luna
 
 const N0 =  2.5000013629442974e25
 
-folder = "Ar_2bar_15um_4uJ_kerr_plasma(stat)\\"
+folder = "HeO2_12bar_15um_2.5uJ_kerr_plasma2\\"
 dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\new\\"*folder
 
 a = 15e-6
-gas = :Ar
-pres = 2.0
-PP = [1.0]
+gas = :HeO2
+pres = 12.0
+PP = [0.79, 0.21]
 flength = 0.225
 
 τfwhm = 30e-15
 λ0 = 800e-9
-energy = 4e-6
+energy = 2.5e-6
 
 grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 g = grid
 
-rfg = PhysData.ref_index_fun([:Ar], pres, PP)
+rfg = PhysData.ref_index_fun([:He, :O2], pres, PP)
 rfs = PhysData.ref_index_fun(:SiO2)
 m = Capillary.MarcatilliMode(a, rfg, rfs, PP, loss=false)
 
@@ -30,19 +30,26 @@ energyfun, energyfunω = Fields.energyfuncs(grid)
 
 densityfun(z) = N0*pres
 
-ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+# ionpot = PhysData.ionisation_potential(:O2m)
+# ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+
+ionpots1 = [:O2m]
+weights1 = fill(0.21, (Int(g.zmax*1000+1)))
+ionrate1 = Ionisation.inFiber_rate(ionpots1, weights1)
+plasmaO = Nonlinear.DissCumtrapz(grid.to, grid.to, ionrate1, ionpots1, g.zmax; weights=weights1, includephase=true)
 
 ionpots2 = [:O2dis]
-weights2 = fill(0.1, (Int(g.zmax*1000+1)))
+weights2 = fill(0.21, (Int(g.zmax*1000+1)))
 ionrate2 = Ionisation.inFiber_rate(ionpots2, weights2)
 dissO = Nonlinear.DissCumtrapz(grid.to, grid.to, ionrate2, ionpots2, g.zmax; weights=weights2)
 
-plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
 responses = (
-             Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             plasma,
+             Nonlinear.Kerr_field(PhysData.γ3_gas(gas, source=:Mix)),
+            #  plasma,
+            #  the resp below does not work since it does not have mo-adk implementation
+            #  Nonlinear.scaled_response(Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot), 0.21, size(grid.to)),
             #  Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)),
+             plasmaO,
              dissO,
             )
 

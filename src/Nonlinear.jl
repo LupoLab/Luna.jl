@@ -16,12 +16,11 @@ function scaled_response(resp, scale, shape)
     let buffer=buffer, resp=resp
         function resp!(out, E, z)
             fill!(buffer, 0)
-            resp(buffer, E)
+            resp(buffer, E, z)
             @. out += scale*buffer
         end
     end
 end
-
 
 function KerrScalar(out, E, fac)
     @. out += fac*E^3
@@ -160,6 +159,7 @@ mutable struct DissCumtrapz{R, EType, tType}
     rate::EType
     fraction::EType
     phase::EType
+    includephase::Bool
     J::EType
     P::EType
     t::tType
@@ -167,14 +167,15 @@ mutable struct DissCumtrapz{R, EType, tType}
     zmax::Float64
 end
 
-function DissCumtrapz(t, E, ratefunc, ionpots, zmax; weights=[[1.0]])
+function DissCumtrapz(t, E, ratefunc, ionpots, zmax; weights=[[1.0]], includephase=false)
     rate = similar(E)
     fraction = similar(E)
     adkfraction = 0.0
     phase = similar(E)
     J = similar(E)
     P = similar(E)
-    return DissCumtrapz(ratefunc, ionpots, weights, adkfraction, rate, fraction, phase, J, P, t, t[2]-t[1], zmax)
+    return DissCumtrapz(ratefunc, ionpots, weights, adkfraction, rate, fraction, 
+                         phase, includephase, J, P, t, t[2]-t[1], zmax)
 end
 
 function (Diss::DissCumtrapz)(out, Et, z)
@@ -198,7 +199,11 @@ function (Diss::DissCumtrapz)(out, Et, z)
     Maths.cumtrapz!(Diss.fraction, Diss.rate, Diss.δt)
     @. Diss.fraction = 1-exp(-Diss.fraction)
     Diss.adkfraction = Diss.fraction[end]
-    @. Diss.phase = 0.0
+    if Diss.includephase
+        @. Diss.phase = Diss.fraction * e_ratio * E
+    else
+        @. Diss.phase = 0.0
+    end
     Maths.cumtrapz!(Diss.J, Diss.phase, Diss.δt)
 
     for ii in eachindex(E)

@@ -92,7 +92,7 @@ function MarcatilliMode(a, rfg, rfs, PP::Array{Float64,1};
                         clad=:SiO2, loss=true)
     # rfg = ref_index_fun(gas, P, T)
     # rfs = ref_index_fun(clad)
-    coren = (ω; z) -> rfg(wlfreq(ω), PP)
+    coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> rfs(wlfreq(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end

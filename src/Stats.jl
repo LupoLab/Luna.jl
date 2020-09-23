@@ -186,7 +186,6 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
         ionfrac!(frac, real(Eto))
         d["electrondensity"] = maximum(frac)*dfun(z)
-        println("called")
     end
 end
 
@@ -445,9 +444,11 @@ end
 function ozoneStat(grid, Eω, mode::Modes.AbstractMode, linop, transform;
                  windows=nothing, gas=nothing)
     _, energyfunω = Fields.energyfuncs(grid)
-    pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
+    # pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
+    # funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
+    #         peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop), pd]
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
-            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop), pd]
+            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop)]
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc
@@ -459,11 +460,11 @@ function ozoneStat(grid, Eω, mode::Modes.AbstractMode, linop, transform;
             push!(funs, diss)
         end
     end
-    if !isnothing(windows)
-        for win in windows
-            push!(funs, energy_λ(grid, energyfunω, win))
-        end
-    end
+    # if !isnothing(windows)
+    #     for win in windows
+    #         push!(funs, energy_λ(grid, energyfunω, win))
+    #     end
+    # end
     collect_stats(grid, Eω, funs...)
 end
 

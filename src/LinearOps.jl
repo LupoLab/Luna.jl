@@ -2,7 +2,10 @@ module LinearOps
 import FFTW
 import Hankel
 import Luna: Modes, Grid, PhysData, Maths
+import Luna
 import Luna.PhysData: wlfreq
+import HDF5
+import Dierckx
 
 #=================================================#
 #===============    FREE SPACE     ===============#
@@ -492,5 +495,80 @@ function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     end
 end
 
+# load ozone loss data
+function load_ozone_loss(grid, gw)
+    dataDir = cd(pwd, string(@__DIR__)*"/data/")
+    fid = HDF5.h5open(joinpath(dataDir, "ozone"), "r")
+    freq = vec(read(fid["freq"]))
+    freq = freq[:,1]
+    lossdata = vec(read(fid["loss"]))
+    lossdata = lossdata[:,1]
+    lossdata .*= 1e-4
+    λ  = 2pi*3e8./freq*1e9
+    λ_bound = 50.0 .< λ .< 1200.0
+
+    lossdata = lossdata[λ_bound]
+    freq1 = freq[λ_bound]
+    spl_loss = Dierckx.Spline1D(freq1, lossdata; k=3, bc="nearest", s=0.0)
+    loss0 = spl_loss(grid.ω).*gw
+    close(fid)
+    loss0
+end
+
+# get linear ozone loss from its density
+function α(grid, dens, loss)
+    zlength = length(0:1e-3:grid.zmax)
+    loss = zeros(Float64, (zlength, length(grid.ω)))
+    for i in 1:zlength
+        loss[i,:] = loss.*dens
+    end
+    return loss
+end
+
+# Pre-caculate ozone dispersion
+function gen_HeO2_table(file, a, pres, grid; fiberloss=0.0)
+    if isfile(file)
+        fid = HDF5.h5open(file, "r+")
+    else
+        fid = HDF5.h5open(file, "cw")
+    end
+
+    N0 =  2.5000013629442974e25 
+    λ0 = 800e-9
+    factor = 1e-3*pi*a^2 # used to transfere from concentration to actual number of molecules inside the fiber. #Mo = Mc*factor
+    M0 = N0*pres*factor # number of air molecules inside the fiber (1e-3 for 1 mm, pi*a^2 is fiber area) per m^3
+    Mc = N0*pres
+
+    gw = Maths.planck_taper(grid.ω, 0, 2pi*3e8/3000e-9, 2pi*3e8/160e-9, 1.1*2pi*3e8/140e-9)
+
+    gases = [:He, :O2, :O3]
+    PP = [0.79, 0.21, 0.0]
+    rfg = PhysData.ref_index_fun(gases, pres, PP)
+    rfs = PhysData.ref_index_fun(:SiO2)
+
+    loss0 = load_ozone_loss(grid, gw)
+
+    dens = Dict{Symbol, Array{Float64}}()
+    rO3=0.0
+    while rO3 < Mc/10
+        ppO3 = round(rO3/Mc, digits=4)
+        rO2 = (2*0.21*Mc-3*rO3)/2
+        ppO2 = round(rO2/Mc, digits=4)
+        gases = [:He, :O2, :O3]
+        PP = [0.79, ppO2, ppO3]
+        println(ppO3)
+        if HDF5.exists(fid, "$ppO3")
+            continue
+        else
+            m = Luna.Capillary.MarcatilliMode(a, rfg, rfs, PP, loss=false)
+            # linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
+            linop, βfun, frame_vel, αfun = make_const_linop(grid, m, λ0)
+            linop .-= loss0*rO3/2 .+ 2.3*fiberloss/10/2
+            fid["$ppO3"] = linop
+        end
+        rO3 += Mc/10000
+    end
+    close(fid)
+end
 
 end

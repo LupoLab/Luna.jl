@@ -328,7 +328,7 @@ end
 function ref_index_fun(materials::Array{Symbol}, P::Float64, PP, T=roomtemp)::Function    
     funs = [χ1_fun(mi, P*PP[ii], T) for (ii, mi) in enumerate(materials)]
     ngas = let funs=funs
-        function ngas(λ, PP)
+        function ngas(λ)
             res = 0.0
             for ii in 1:length(materials) 
                 χ10(λ) = funs[ii](λ)
@@ -419,8 +419,8 @@ function γ3_gas(material::Symbol; source=nothing)
             error("no default γ3 source for material: $material")
         end
     end
-    dens = density(material, atm/bar, 273.15)
     if source == :Lehmeier
+        dens = density(material, atm/bar, 273.15)
         # Table 1 in [3]
         if material in (:He, :HeJ)
             fac = 1
