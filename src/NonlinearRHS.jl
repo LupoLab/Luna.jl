@@ -100,9 +100,9 @@ function _cpscb_core(dest, source, N, scale, idcs)
 end
 
 "Accumulate responses induced by Et in Pt"
-function Et_to_Pt!(Pt, Et, responses)
+function Et_to_Pt!(Pt, Et, responses, z::Float64)
     for resp in responses
-        resp(Pt, Et)
+        resp(Pt, Et, z)
     end
 end
 
@@ -297,7 +297,7 @@ function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
     @. t.Eto /= nlscale*sqrt(t.aeff(z))
-    Et_to_Pt!(t.Pto, t.Eto, t.resp)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, z)
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
     dens = t.densityfun(z)

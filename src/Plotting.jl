@@ -106,6 +106,10 @@ function stats(dir, output; kwargs...)
     fstats = [] # fibre/waveguide/propagation statistics
     haskey(stats, "electrondensity") && push!(
         fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+    haskey(stats, "O2dis") && push!(
+        fstats, (stats["O2dis"], "Dissociated Oxygen (\$molecules/m^3\$)"))
+    haskey(stats, "O3dis") && push!(
+        fstats, (stats["O3dis"], "Dissociated Ozone (\$molecules/m^3\$)"))
     haskey(stats, "density") && push!(
         fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
     haskey(stats, "pressure") && push!(
@@ -133,7 +137,9 @@ function stats(dir, output; kwargs...)
         end
         pfig.tight_layout()
     end
-    
+    plt.savefig(dir*"stats1.png")
+    plt.close()
+
     Npl = length(fstats)
     if Npl > 0
         ffig, axs = subplotgrid(Npl, title="Other stats")
@@ -149,7 +155,7 @@ function stats(dir, output; kwargs...)
         end
         ffig.tight_layout()
     end
-    plt.savefig(dir*"stats.png")
+    plt.savefig(dir*"stats2.png")
     plt.close()
 end
 
