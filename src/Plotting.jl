@@ -5,6 +5,7 @@ import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
 import PyPlot: ColorMap, plt, pygui
 import FFTW
+import HDF5
 import Printf: @sprintf
 
 """
@@ -546,6 +547,157 @@ function add_fwhm_legends(ax, unit)
         s *= @sprintf(" [%.2f %s]", fw, unit)
         t.set_text(s)
     end
+end
+
+function plot_ozone_single(dir, a, num, g, zpos; scale="log", wl=200, wh=1200)
+    # newDir = get_dir(dir)
+    file1 = joinpath(dir, "file$num.h5")
+    file2 = joinpath(dir, "dens$num")
+    fid1 = HDF5.h5open(file1, "r")
+    fid2 = HDF5.h5open(file2, "r")
+
+    λ = 2pi*PhysData.c./g.ω;
+    λb = wl .< λ*1e9 .< wh
+    λb = vec(λb)
+    z = collect(0:1e-3:g.zmax)
+    index = findfirst(x -> x >= zpos, z)
+    Eout = reinterpret(ComplexF64, read(fid1["Eω"]));
+    
+    Etout = FFTW.irfft(Eout, length(g.t), 1)./sqrt(2/(PhysData.ε_0*PhysData.c*1.5*a^2));
+    idcs = @. (g.t < 100e-15) & (g.t >-100e-15);
+    to, Eto = Maths.oversample(g.t[idcs], Etout[idcs, :], factor=1);
+    It = abs2.(Maths.hilbert(Eto));
+
+    Elout = zeros(Float64, size(Eout));
+    for ii in 1:length(Elout[1,:])
+        Elout[:,ii] = abs2.(Eout[:,ii])./λ.^2*PhysData.c;
+    end;
+
+    # energy = zeros(length(z))
+    # for ii = 1:size(Etout, 2)
+    #     energy[ii] = energyfun(g.t, Etout[:, ii].*sqrt(2/(PhysData.ε_0*PhysData.c*Ozone.effectiveArea(a))))
+    # end
+    
+    lspec = 10*log10.(Elout);
+    lspec = lspec .- maximum(lspec);
+    lspec[.~isfinite.(lspec)] .= -300;
+
+    pygui(false)
+    plt.figure()
+    plt.pcolormesh(λ[λb]*1e9, z, transpose(lspec[λb,:]), cmap="jet")
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Distance (m)")
+    plt.clim(-40, 0)
+    plt.ylim(0,g.zmax)
+    plt.xlim(wl,wh)
+    cp = plt.colorbar()
+    cp.set_label("SP (dB)")
+    plt.savefig(dir*"/$num fig1.png")
+
+    pygui(false)
+    plt.figure()
+    if scale == "log"
+        plt.plot(λ[λb]*1e9, log10.(Elout[λb,index]./maximum(Elout[λb,index])), label="out_spectrum")
+    else
+        plt.plot(λ[λb]*1e9, Elout[λb,index]./maximum(Elout[λb,index]), label="out_spectrum")
+    end
+    plt.legend(loc="upper right")
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Counts (a.u)")
+    plt.savefig(dir*"/$num out_spectrum.png")
+
+    densO3 = read(fid2["O3"])
+    densO2 = read(fid2["O2"])
+
+    pygui(false)
+    plt.figure()
+    plt.plot(z[1:length(densO3)], densO3, label="O3")
+    plt.legend(loc="upper right")
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Ozone concetration (\$molecules/m^3\$)")
+    plt.savefig(dir*"/$num figO3.png")
+
+    pygui(false)
+    plt.figure()
+    plt.plot(z[1:length(densO2)], densO2, label="O2")
+    plt.legend(loc="upper right")
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Oxygen concetration (\$molecules/m^3\$)")
+    plt.savefig(dir*"/$num figO2.png")
+
+    # pygui(false)
+    # plt.figure()
+    # plt.plot(z, energy.*1e6, label="energy")
+    # plt.legend(loc="upper right")
+    # plt.xlabel("Distance (m)")
+    # plt.ylabel("energy \$ \\mu J \$")
+    # plt.savefig(dir*"/$num energy.png")
+
+    plt.figure()
+    plt.pcolormesh(to*1e15, z[1:length(densO3)], transpose(It)/maximum(transpose(It)), cmap="jet")
+    cbar = plt.colorbar()
+    cbar.set_ticks([0,1])
+    plt.xlim(-100, 100)
+    plt.xlabel("Delay (fs)")
+    plt.ylabel("Distance (m)")
+    plt.savefig(dir*"/$num intensity.png")
+
+    λb = 200 .< λ*1e9 .< 400
+    pygui(false)
+    plt.figure()
+    if scale == "log"
+        plt.plot(λ[λb]*1e9, log10.(Elout[λb,index]./Elout[λb,index]), label="DW_spectrum")
+    else
+        plt.plot(λ[λb]*1e9, Elout[λb,index]./maximum(Elout[λb,index]), label="DW_spectrum")
+    end
+    plt.legend(loc="upper right")
+    plt.savefig(dir*"/$num DW_spectrum.png")
+    println("done! check dir for plots")
+    plt.close("all")
+end
+
+function plot_ozone_group(dir, num, cm, name, iterations, g; wl=200, wh=1200)
+    # newDir = get_dir(dir)
+    ω = g.ω
+
+    sold = Array{ComplexF64}(undef, (length(ω), num))
+    percentage = Array{Float64}(undef, num)
+    peakIntensity = Array{Float64}(undef, num)
+
+    for ii in 1:num
+        file = joinpath(dir, "file$ii.h5")
+        fid = HDF5.h5open(file, "r")
+        sol = reinterpret(ComplexF64, fid["Eω"][:,cm])
+        sold[:,ii] = sol
+        close(fid)
+    end
+
+    λ = 2pi*3e8./ω
+    λb = wl .< λ*1e9 .< wh
+    λb = vec(λb)
+
+    t = collect(LinRange(0, num*iterations, num+1)[2:end].*1e-3);
+
+    Elout = zeros(Float64, size(sold));
+    λ = 2pi*PhysData.c./ω;
+    for ii in 1:length(Elout[1,:])
+        Elout[:,ii] = abs2.(sold[:,ii])./λ.^2*PhysData.c;
+    end;
+
+    lspec = 10*log10.(Elout);
+    lspec = lspec .- maximum(lspec);
+    lspec[.~isfinite.(lspec)] .= -300;
+    pygui(false)
+    plt.figure()
+    plt.pcolormesh(λ[λb]*1e9, t, transpose(lspec[λb,:]), cmap="jet")
+    plt.clim(-40, 0)
+    plt.ylim(0.0,num*iterations*1e-3)
+    plt.xlim(wl,wh)
+    plt.colorbar()
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Time (s)")
+    plt.savefig(dir*"/$name.png")
+    println("done! check dir for plots")
 end
 
 end

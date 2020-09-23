@@ -10,7 +10,7 @@ using Dierckx
 
 const N0 =  2.5000013629442974e25
 
-folder = "HeO2_12bar_15um_2.5uJ_kerr_plasma4(from_ozonetest)\\"
+folder = "HeO2_12bar_15um_2.5uJ_third_test\\"
 dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\new\\"*folder
 
 dataDir = cd(pwd, string(@__DIR__)*"/../../src/data/")
@@ -32,8 +32,8 @@ const M0 = N0*pres*factor # number of air molecules inside the fiber (1e-3 for 1
 const Mc = N0*pres # or N0*pres # gas concentration inside the fiber (particles/m^3)
 externalDens = nothing
 
-iterations = 1 # number of chapman calculation using the same pulse profile
-count = 2 # number of pulse propagation calculation
+iterations = 5 # number of chapman calculation using the same pulse profile
+count = 5 # number of pulse propagation calculation
 tlim=(0.0,1e-3)
 
 # Diffusion coefficients in He
@@ -101,27 +101,43 @@ end
 
 zlength = length(0:1e-3:grid.zmax)
 
-function work(dens, m, iterations, count; tlim=tlim)
+function work(dens, rfg, rfs, iterations, count; tlim=tlim)
+    L = zeros(ComplexF64, (length(grid.ω), zlength))
+    for jj in 1:zlength
+        ppO2 = round.(dens[:O2][jj]/Mc, digits=4)
+        ppO3 = round.(dens[:O3][jj]/Mc, digits=4)
+        gases = [:He, :O2, :O3]
+        PP = [0.79, ppO2, ppO3]
+
+        global m
+        m = Capillary.MarcatilliMode(a, rfg, rfs, PP, loss=false)
+        
+        linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
+        linop .-= loss0.*dens[:O3][jj]/2
+        L[:,jj] = linop
+    end
     aeff = let m=m
         z -> Modes.Aeff(m, z=z)
     end
+
+    Linop0 = LinearOps.make_linop_from_data(grid, transpose(L))
 
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
     densityfun(z) = N0*pres
 
     ionpots1 = [:O2m]
-    weights1 = fill(0.21, (Int(g.zmax*1000+1)))
+    weights1 = dens[:O2]./Mc
     ionrate1 = Ionisation.inFiber_rate(ionpots1, weights1)
     plasmaO = Nonlinear.DissCumtrapz(grid.to, grid.to, ionrate1, ionpots1, g.zmax; weights=weights1, includephase=true)
 
     ionpots2 = [:O2dis]
-    weights2 = fill(0.21, (Int(g.zmax*1000+1)))
+    weights2 = dens[:O2]./Mc
     ionrate2 = Ionisation.inFiber_rate(ionpots2, weights2)
     dissO2 = Nonlinear.DissCumtrapz(grid.to, grid.to, ionrate2, ionpots2, g.zmax; weights=weights2)
 
     ionpots3 = [:O3dis]
-    weights3 = fill(0.0, (Int(g.zmax*1000+1)))
+    weights3 = dens[:O3]./Mc
     ionrate3 = Ionisation.inFiber_rate(ionpots3, weights3)
     dissO3 = Nonlinear.DissCumtrapz(grid.to, grid.to, ionrate3, ionpots3, g.zmax; weights=weights3)
 
@@ -139,15 +155,13 @@ function work(dens, m, iterations, count; tlim=tlim)
     linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
-
     Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
 
-    # statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
     ozoneStat = Stats.ozoneStat(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),)) 
     global output
-    output = Output.HDF5Output(dir*"file.h5", 0, grid.zmax, Int(g.zmax*1000+1), ozoneStat)
+    output = Output.HDF5Output(dir*"file$count.h5", 0, grid.zmax, Int(g.zmax*1000+1), ozoneStat)
 
-    Luna.run(Eω, grid, linop, transform, FT, output)
+    Luna.run(Eω, grid, Linop0, transform, FT, output)
 
     adkO20 = output["stats"]["O2dis"]
     adkO30 = output["stats"]["O3dis"]
@@ -253,7 +267,7 @@ function run(stop, iterations)
     m = Capillary.MarcatilliMode(a, rfg, rfs, PP, loss=false)
     while count != stop    
         # work(dens, m, iterations, count; tlim=tlim)
-        ndens = work(dens, m, iterations, count; tlim=tlim)
+        ndens = work(dens, rfg, rfs, iterations, count; tlim=tlim)
         dens[:O] = ndens[:O]
         dens[:O2] = ndens[:O2]
         dens[:O3] = ndens[:O3]
