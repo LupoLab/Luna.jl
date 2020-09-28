@@ -219,3 +219,25 @@ It2new /= norm(It2new)
 Itm2 = Itm[:, 2]/norm(Itm[:, 2])
 @test all(isapprox.(Itm2, It2new, atol=1e-3*maximum(abs.(It2new))))
 end
+
+##
+@testset "Orthogonality" begin
+a = 100e-6
+m1 = Capillary.MarcatilliMode(a; n=1, m=1)
+m2 = Capillary.MarcatilliMode(a; n=1, m=2)
+@test Modes.overlap(m1, m1) ≈ 1
+@test isapprox(Modes.overlap(m1, m2), 0; atol=1e-10)
+@test Modes.orthonormal((m1, m2))
+# Capillary EH modes are all orthonormal
+mm = collect([Capillary.MarcatilliMode(a; n=1, m=mi) for mi=1:5])
+@test Modes.orthonormal(mm)
+# Two identical modes in the list - not a valid basis set
+@test !Modes.orthonormal([mm..., m1])
+
+m1 = Capillary.MarcatilliMode(a)
+m2 = Capillary.MarcatilliMode(a; ϕ=π/2)
+@test isapprox(Modes.overlap(m1, m2), 0; atol=1e-10)
+
+m2 = Capillary.MarcatilliMode(2a; ϕ=π/2)
+@test_throws ErrorException Modes.overlap(m1, m2)
+end
