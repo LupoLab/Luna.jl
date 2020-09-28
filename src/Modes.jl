@@ -253,9 +253,8 @@ function _overlap(mode1::AbstractMode, mode2::AbstractMode)
         error("Integration limits for both modes must be the same")
     end
     function f(xs)
-        r, θ = xs
         ret = 1/2*sqrt(ε_0/μ_0)*dot(conj(Exy(mode1, xs)), Exy(mode2, xs))
-        dl[1] == :polar ? r*ret : ret
+        dl[1] == :polar ? xs[1]*ret : ret
     end
     val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
 end
