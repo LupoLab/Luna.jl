@@ -231,10 +231,10 @@ end
 
 function get_unm(n, m, kind)
     if (kind == :TE) || (kind == :TM)
-        if (n != 0) || (m != 1)
-            error("n=0, m=1 for TE or TM modes")
+        if (n != 0)
+            error("n=0 for TE or TM modes")
         end
-        besselj_zero(1, 1)
+        besselj_zero(1, m)
     elseif kind == :HE
         besselj_zero(n-1, m)
     else
