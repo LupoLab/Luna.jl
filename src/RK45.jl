@@ -276,32 +276,32 @@ function make_prop!(linop::AbstractArray, y0)
     end
 end
 
-function make_prop!(linop, y0)
-    linop_int = similar(y0)
-    prop! = let linop=linop, linop_int=linop_int
-        function prop!(y, t1, t2,  bwd=false)
-            linop_int .= linop(t1)
-            dt = bwd ? (t1-t2) : (t2-t1)
-            @. y *= exp(linop_int*dt)
-        end
-    end
-end
-
-# "Make propagator for the case of non-constant linear operator"
-# function make_prop!(linop!, y0)
+# function make_prop!(linop, y0)
 #     linop_int = similar(y0)
-#     lastt2 = [typemin(Float64)]
-#     function prop!(y, t1, t2, bwd=false)
-#         #= linop is always evaluated at later time, even for backward propagation
-#             therefore, linop is often evaluated at the same t2 twice in a row=#
-#         # (lastt2[1] != t2) && linop!(linop_int, t2)
-#         linop!(linop_int, t2)
-#         lastt2[1] = t2
-#         dt = bwd ? (t1-t2) : (t2-t1)
-#         @. y *= exp(linop_int*dt)
+#     prop! = let linop=linop, linop_int=linop_int
+#         function prop!(y, t1, t2,  bwd=false)
+#             linop_int .= linop(t1)
+#             dt = bwd ? (t1-t2) : (t2-t1)
+#             @. y *= exp(linop_int*dt)
+#         end
 #     end
-#     return prop!
 # end
+
+"Make propagator for the case of non-constant linear operator"
+function make_prop!(linop!, y0)
+    linop_int = similar(y0)
+    lastt2 = [typemin(Float64)]
+    function prop!(y, t1, t2, bwd=false)
+        #= linop is always evaluated at later time, even for backward propagation
+            therefore, linop is often evaluated at the same t2 twice in a row=#
+        # (lastt2[1] != t2) && linop!(linop_int, t2)
+        linop!(linop_int, t2)
+        lastt2[1] = t2
+        dt = bwd ? (t1-t2) : (t2-t1)
+        @. y *= exp(linop_int*dt)
+    end
+    return prop!
+end
 
 "Make closure for the pre-conditioned RHS function."
 function make_fbar!(f!, prop!, y0)

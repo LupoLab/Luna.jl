@@ -4,14 +4,12 @@ import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearR
 import Logging
 import FFTW, HDF5
 import NumericalIntegration: integrate, SimpsonEven
-import DifferentialEquations: ODEProblem, solve, Tsit5, init, step!
+import DifferentialEquations: ODEProblem, solve, Tsit5
 import LinearAlgebra: Tridiagonal
 using Dierckx
+using Formatting
 
 const N0 =  2.5000013629442974e25
-
-folder = "HeO2_12bar_15um_2.5uJ_third_test\\"
-dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\new\\"*folder
 
 dataDir = cd(pwd, string(@__DIR__)*"/../../src/data/")
 # table = HDF5.h5open(joinpath(pwd(), "15um_12bar_He-O2_noLoss"), "r+")
@@ -35,6 +33,9 @@ externalDens = nothing
 iterations = 5 # number of chapman calculation using the same pulse profile
 count = 5 # number of pulse propagation calculation
 tlim=(0.0,1e-3)
+
+folder = format("PCF_HeO2_{}um_{}bar_{}fs_{}uJ_{}it(correct_diffusion)\\", a*1e6, pres, Int(τfwhm*1e15), energy*1e6, iterations)
+dir = raw"C:\Users\mo_is\Dropbox (Heriot-Watt University Team)\RES_EPS_Lupo\Projects\Mohammed\phd\simulation data\new\\"*folder
 
 # Diffusion coefficients in He
 # values are from 
@@ -91,11 +92,16 @@ function chapmanDiffu!(du,u,p,t)
     D1 = DO*Ax*O
     D2 = DO2*Ax*O2
     D3 = DO3*Ax*O3
+
+    D1[1] = 0
+    D1[end] = 0
+    D2[1] = 0
+    D2[end] = 0
+    D3[1] = 0
+    D3[end] = 0
     
     du1 .= @. D1 + 2*k1*O2-k2*O*O2*M+k3*O3-k4*O*O3
     du2 .= @. D2 - k1*O2 - k2*O2*M*O + k3*O3 + 2*k4*O*O3 
-    du2[1] = du2[2]
-    du2[end] = du2[end-1]
     du3 .= @. D3 + k2*O*O2*M - k3*O3- k4*O*O3 
 end
 
@@ -200,15 +206,6 @@ function work(dens, rfg, rfs, iterations, count; tlim=tlim)
     Ax = Array(Tridiagonal([1.0 for i in 1:length(zout)-1],[-2.0 for i in 1:length(zout)],[1.0 for i in 1:length(zout)-1]))
     Ax .= Ax./dx^2
 
-
-    BC = zeros(2,3)
-    BC[1,1] = 0.0 # BC for O at x = 0
-    BC[2,1] = 0.0 # BC for O at x = L
-    BC[1,2] = 0.21*Mc # BC for O2 at x = 0
-    BC[2,2] = 0.21*Mc # BC for O2 at x = L
-    BC[1,3] = 0.0 # BC for O3 at x = 0
-    BC[2,3] = 0.0 # BC for O3 at x = L
-
     for jj in 1:iterations
         rO, rO2, rO3 = dens[:O].*factor, dens[:O2].*factor, dens[:O3].*factor # rO is the number of O atoms in 1mm inside the fiber
         disO, disO2, disO3 = calculate_adkdis(zout, t, ω, aeff(0.0), factor, adkO2, adkO3, It, Iw, loss0, rO, rO2, rO3)
@@ -235,6 +232,13 @@ function work(dens, rfg, rfs, iterations, count; tlim=tlim)
         dens[:O] = round.(sol.u[end][:,1])
         dens[:O2] = round.(sol.u[end][:,2])
         dens[:O3] = round.(sol.u[end][:,3])
+
+        dens[:O][1] = 0
+        dens[:O][end] = 0
+        dens[:O2][1] = 0.21*Mc
+        dens[:O2][end] = 0.21*Mc
+        dens[:O3][1] = 0
+        dens[:O3][end] = 0
     end
     return dens
 end
