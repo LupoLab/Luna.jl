@@ -132,27 +132,50 @@ function gas_ratio(gas1, gas2, λ)
     β2r, χ3r
 end
 
-function λRDW(m::Modes.AbstractMode, λ0; z=0, ub=100e-9, lb=0.9*λ0)
+"""
+    λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
+
+Calculate the phase-matching wavelength for resonant dispersive wave (RDW) emission in the
+mode `m` when pumping at `λ0`. 
+
+This neglects the nonlinear contribution to the phase mismatch.
+"""
+function λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
     ω0 = wlfreq(λ0)
     β1 = Modes.dispersion(m, 1, ω0; z=z)
     β0 = Modes.β(m, ω0; z=z)
     Δβ(ω) = Modes.β(m, ω; z=z) - β1*(ω.-ω0) - β0
     try
-        ωRDW = find_zero(Δβ, (wlfreq(lb), wlfreq(ub)))
+        ωRDW = find_zero(Δβ, extrema(wlfreq.(λlims)))
         wlfreq(ωRDW)
     catch
         missing
     end
 end
 
-function λRDW(a::Number, gas::Symbol, pressure, λ0; ub=100e-9, lb=0.9*λ0, kwargs...)
+"""
+    λRDW(a::Number, gas::Symbol, pressure, λ0; λlims=(100e-9, 0.9λ0), kwargs...)
+
+Calculate the phase-matching wavelength for resonant dispersive wave (RDW) emission in a 
+capillary with core radius `a` filled with `gas` at a certain `pressure`
+when pumping at `λ0`. Additional `kwargs` are passed onto `Capillary.MarcatilliMode`.
+
+This neglects the nonlinear contribution to the phase mismatch.
+"""
+function λRDW(a::Number, gas::Symbol, pressure, λ0; λlims=(100e-9, 0.9λ0), kwargs...)
     m = Capillary.MarcatilliMode(a, gas, pressure; kwargs...)
-    λRDW(m, λ0; ub=ub, lb=lb)
+    λRDW(m, λ0; λlims=λlims)
 end
 
+"""
+    pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO2, kwargs...)
+
+Calculate the phase-matching pressure for resonant dispersive wave (RDW) emission at
+`λ_target` in a capillary with core radius `a` filled with `gas` when pumping at `λ0`. 
+"""
 function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO2, kwargs...)
-    # cladn is likely based on interpolation so requires creating the BSpline
-    # by creating the function here we only have to do that once
+    # cladn is likely based on interpolation so requires creating the BSpline.
+    # By creating the function here we only have to do that once
     rfc = PhysData.ref_index_fun(clad)
     cladn = (ω; z) -> rfc(wlfreq(ω))
     ω0 = wlfreq(λ0)
