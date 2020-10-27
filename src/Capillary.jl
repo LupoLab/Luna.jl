@@ -342,8 +342,15 @@ function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
     _neff
 end
 
-function transmission(a, λ, L; n=1, m=1)
-    mode = MarcatilliMode(a, :He, 0; n=n, m=m)
+"""
+    transmission(a, λ, L; kind=:HE, n=1, m=1)
+
+Calculate the transmission through a capillary with core radius `a` and length `L` at the
+wavelength `λ` when propagating the `MarcatilliMode` defined by `kind`, `n` and `m`.
+"""
+function transmission(a, λ, L; kind=:HE, n=1, m=1)
+    # TODO hardcoded fill needs to be updated if using absorbing materials
+    mode = MarcatilliMode(a, :He, 0; n=n, m=m, kind=kind)
     Modes.transmission(mode, wlfreq(λ), L)
 end
 
