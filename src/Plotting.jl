@@ -120,8 +120,13 @@ function stats(output; kwargs...)
     haskey(stats, "ω0") && push!(pstats, (1e9*wlfreq.(stats["ω0"]), "Central wavelength (nm)"))
 
     fstats = [] # fibre/waveguide/propagation statistics
-    haskey(stats, "electrondensity") && push!(
-        fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+    if haskey(stats, "electrondensity")
+        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+        if haskey(stats, "density")
+            push!(fstats,
+                 (100*stats["electrondensity"]./stats["density"], "Ionisation fraction (%)"))
+        end
+    end
     haskey(stats, "density") && push!(
         fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
     haskey(stats, "pressure") && push!(
