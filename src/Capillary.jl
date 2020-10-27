@@ -293,7 +293,7 @@ function gradient(gas, Z, P)
         elseif z >= Z[end]
             return P[end]
         else
-            i = findfirst(x -> x < z, Z)
+            i = findlast(x -> x < z, Z)
             return sqrt(P[i]^2 + (z - Z[i])/(Z[i+1] - Z[i])*(P[i+1]^2 - P[i]^2))
         end
     end
