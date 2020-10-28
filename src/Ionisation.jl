@@ -170,6 +170,22 @@ end
 
 """
     ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
+
+Create closure to calculate PPT ionisation rate.
+
+Following:
+
+[1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
+Ionization of atoms in the tunnelling regime with experimental evidence
+using Hg atoms. Journal of Physics B: Atomic, Molecular and Optical
+Physics 25, 4005–4020 (1992)
+
+[2] 1.Bergé, L., Skupin, S., Nuter, R., Kasparian, J. & Wolf, J.-P.
+Ultrashort filaments of light in weakly ionized, optically transparent
+media. Rep. Prog. Phys. 70, 1633–1713 (2007)
+(Appendix A)
+
+
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     Ip_au = ionpot / au_energy
@@ -198,17 +214,19 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
                 mabs = abs(m)
                 flm = ((2l + 1)*factorial(l + mabs)
                     / (2^mabs*factorial(mabs)*factorial(l - mabs)))
-                # Following 5 lines are from Ilkov et al. and lead to identical results:
+                # Following 5 lines are [1] eq. 8 and lead to identical results:
                 # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
                 # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
                 # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
                 # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
                 # lret *= Am*exp(-2*E0_au*G/(3E_au))
+                # [2] eq. (A14) 
                 lret = 4sqrt(2)/π*Cnl2
                 lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
                 lret *= flm/factorial(mabs)
                 lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
                 lret *= Ip_au * γ2/(1+γ2)
+                # Remove cycle average factor, see eq. (2) of [1]
                 if rcycle
                     lret *= sqrt(π*E0_au/(3E_au))
                 end
@@ -233,6 +251,14 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     return ionrate
 end
 
+"""
+    φ(m, x)
+
+Calculate the φ function for the PPT ionisation rate.
+
+Note that w_m(x) in [1] and φ_m(x) in [2] look slightly different but
+are in fact identical.
+"""
 function φ(m, x)
     mabs = abs(m)
     return (exp(-x^2)
