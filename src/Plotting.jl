@@ -180,13 +180,20 @@ the sum of all modes.
 - `λrange::Tuple(Float64, Float64)` : x-axis limits for spectral plot (wavelength in metres)
 - `trange::Tuple(Float64, Float64)` : x-axis limits for time-domain plot (time in seconds)
 - `dBmin::Float64` : lower colour-scale limit for logarithmic spectral plot
+- `resolution::Real` smooth the spectral energy density as defined by [`getIω`](@ref).
 """
 function prop_2D(output, specaxis=:f;
                  trange=(-50e-15, 50e-15), bandpass=nothing,
                  λrange=(150e-9, 2000e-9), dBmin=-60,
+                 resolution=nothing,
                  kwargs...)
     z = output["z"]*1e2
-    specx, Iω = getIω(output, specaxis)
+    if specaxis == :λ
+            specx, Iω = getIω(output, specaxis, specrange=λrange, resolution=resolution)
+    else
+            specx, Iω = getIω(output, specaxis, resolution=resolution)
+    end
+
     t, Et = getEt(output, trange=trange, bandpass=bandpass)
     It = abs2.(Et)
 
@@ -384,9 +391,13 @@ Other `kwargs` are passed onto `plt.plot`.
 """
 function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
                  modes=nothing, λrange=(150e-9, 1200e-9),
-                 log10=true, log10min=1e-6,
+                 log10=true, log10min=1e-6, resolution=nothing,
                  kwargs...)
-    specx, Iω, zactual = getIω(output, specaxis, zslice)
+    if specaxis == :λ
+        specx, Iω, zactual = getIω(output, specaxis, zslice, specrange=λrange, resolution=resolution)
+    else
+        specx, Iω, zactual = getIω(output, specaxis, zslice, resolution=resolution)
+    end
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
     multimode, modestrs = get_modes(output)
     if multimode

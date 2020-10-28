@@ -40,6 +40,10 @@ outneg = similar(out)
 ratefun!(outneg, -E)
 @test out == outneg
 
+outneg = similar(out)
+ratefun!(outneg, -E)
+@test out == outneg
+
 # import CSV
 # import PyPlot: plt, pygui
 # pygui(true)

@@ -124,7 +124,7 @@ function loadPPTaccel(fpath)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16, Emax=nothing)
-    Emax = isnothing(Emax) ? 5*barrier_suppression(ionpot, Z) : Emax
+    Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
     # Emin = ω0*sqrt(2m_e*ionpot)/electron/0.5 # Keldysh parameter of 0.5
@@ -154,7 +154,7 @@ function makePPTaccel(E, rate)
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
     # Interpolating the log and re-exponentiating makes the spline more accurate
-    ir(E) = E <= Emin ? 0.0 : exp(cspl(E))
+    ir(E) = abs(E) <= Emin ? 0.0 : exp(cspl(abs(E)))
     function ionrate!(out, E)
         out .= ir.(E)
     end
