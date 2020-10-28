@@ -33,18 +33,51 @@ out = similar(E)
 ratefun!(out, E)
 @test all(isapprox.(out, rate, rtol=1e-3))
 
-# import PyPlot: plt, pygui
-# pygui(true)
-# k = collect(range(8, stop=12, length=1000))
-# E = 10 .^ k
-# ppt = Ionisation.ionrate_PPT(:He, 800e-9, E)
-# adk = Ionisation.ionrate_ADK(:He, E)
+outneg = similar(out)
+ratefun!(outneg, -E)
+@test out == outneg
 
-# dat = CSV.read("C:\\Users\\cbrahms\\Documents\\GitHub\\luna\\test\\Ilkov_PPT_He.csv")
-# dat = convert(Matrix, dat) # ionrate [1/s] vs field [V/cm]
+##
+import CSV
+import PyPlot: plt, pygui
+pygui(true)
+k = collect(range(8, stop=12, length=200))
+E = 10 .^ k
+ppt = Ionisation.ionrate_PPT(:He, 10.6e-6, E)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, rcycle=false)
+adk = Ionisation.ionrate_ADK(:He, E)
 
-# import CSV
-# plt.figure()
-# plt.loglog(E, ppt, "--")
-# plt.loglog(E, adk)
-# plt.loglog(dat[:, 1].*100, dat[:, 2], "--")
+this_folder = dirname(@__FILE__)
+dat = CSV.read(joinpath(this_folder, "Ilkov_PPT_He.csv"))
+dat = convert(Matrix, dat) # ionrate [1/s] vs field [V/cm]
+##
+plt.figure()
+plt.loglog(E, ppt, label="PPT")
+plt.loglog(E, ppt_cycavg, label="PPT cycle averaged")
+plt.loglog(E, adk, label="ADK")
+plt.loglog(dat[:, 1].*100, dat[:, 2], label="Ilkov et al. PPT")
+plt.xlim(1e9, 1e12)
+plt.ylim(1, 1e18)
+plt.legend()
+
+##
+dat = CSV.read(joinpath(this_folder, "Chang_PPT.csv"))
+dat = convert(Matrix, dat) # ionrate [1/fs] vs intensity [1e14 W/cm^2]
+intensity = range(0.1, 25; length=1000) * 1e18 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+ppt = Ionisation.ionrate_PPT(:He, 390e-9, E)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 390e-9, E, rcycle=false)
+adk = Ionisation.ionrate_ADK(:He, E)
+
+s = sortperm(dat[:, 1])
+
+plt.figure()
+plt.loglog(intensity*1e-18, ppt*1e-15, label="PPT")
+plt.loglog(intensity*1e-18, adk*1e-15, label="ADK")
+plt.loglog(intensity*1e-18, ppt_cycavg*1e-15, label="PPT cycle averaged")
+plt.loglog(dat[s, 1], dat[s, 2], label="Chang PPT")
+plt.ylim(1e-14, 1)
+plt.xlim(extrema(intensity.*1e-18))
+plt.legend()
+plt.xlabel("Intensity (10\$^{14}\$ W/cm\$^2\$)")
+plt.ylabel("Ionisation rate (1/fs)")

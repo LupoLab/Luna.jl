@@ -161,7 +161,7 @@ function ionrate_fun!_PPT(args...)
     return ionrate!
 end
 
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2*Ip_au)
     ls = ns-1
@@ -193,7 +193,9 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4)
                 lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
                 lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2ns - mabs - 3/2)
                 lret *= Am*exp(-2*E0_au*G/(3E_au))
-                # lret *= sqrt(π*E0_au/(3*E_au))
+                if rcycle
+                    lret *= sqrt(π*E0_au/(3*E_au))
+                end
                 k = ceil(v)
                 n0 = ceil(v)
                 sumfunc = let k=k, β=β, m=m
@@ -225,20 +227,20 @@ function φ(m, x)
             / (2*gamma(3/2 + mabs)))
 end
 
-function ionrate_fun_PPT(material::Symbol, λ0)
+function ionrate_fun_PPT(material::Symbol, λ0; kwargs...)
     n, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
-    return ionrate_fun_PPT(ip, λ0, Z, l)
+    return ionrate_fun_PPT(ip, λ0, Z, l; kwargs...)
 end
 
-function ionrate_PPT(ionpot, λ0, Z, l, E)
-    return ionrate_fun_PPT(ionpot, λ0, Z, l).(E)
+function ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
+    return ionrate_fun_PPT(ionpot, λ0, Z, l; kwargs...).(E)
 end
 
-function ionrate_PPT(material::Symbol, λ0, E)
+function ionrate_PPT(material::Symbol, λ0, E; kwargs...)
     n, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
-    return ionrate_PPT(ip, λ0, Z, l, E)
+    return ionrate_PPT(ip, λ0, Z, l, E; kwargs...)
 end
 
 end
