@@ -4,7 +4,7 @@ import GSL: hypergeom
 import HDF5
 import Pidfile: mkpidlock
 import Logging: @info
-import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield
+import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths
 import Luna: @hlock
@@ -143,6 +143,13 @@ function barrier_suppression(ionpot, Z)
     Z^3/(16*ns^4) * au_Efield
 end
 
+function keldysh(material, λ, E)
+    Ip_au = ionisation_potential(material)/au_energy
+    E_au = E/au_Efield
+    ω0_au = wlfreq(λ)*au_time
+    ω0_au*sqrt(2Ip_au)/E_au
+end
+
 function makePPTaccel(E, rate)
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
@@ -161,11 +168,14 @@ function ionrate_fun!_PPT(args...)
     return ionrate!
 end
 
+"""
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
+"""
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     Ip_au = ionpot / au_energy
-    ns = Z/sqrt(2*Ip_au)
+    ns = Z/sqrt(2Ip_au)
     ls = ns-1
-    Cnl2 = 2^(2*ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
+    Cnl2 = 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
 
     ω0 = 2π*c/λ0
     ω0_au = au_time*ω0
@@ -174,27 +184,33 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     ionrate = let ω0_au=ω0_au, Cnl2=Cnl2, ns=ns, sum_tol=sum_tol
         function ionrate(E)
             E_au = abs(E)/au_Efield
-            g = ω0_au/sqrt(2Ip_au)/E_au
-            g2 = g*g
-            β = 2g/sqrt(1 + g2)
-            α = 2*(asinh(g) - g/sqrt(1+g2))
+            γ = ω0_au*sqrt(2Ip_au)/E_au
+            γ2 = γ*γ
+            β = 2γ/sqrt(1 + γ2)
+            α = 2*(asinh(γ) - γ/sqrt(1+γ2))
             Up_au = E_au^2/(4*ω0_au^2)
             Uit_au = Ip_au + Up_au
             v = Uit_au/ω0_au
-            G = 3/(2g)*((1 + 1/(2g2))*asinh(g) - sqrt(1 + g2)/(2g))
             ret = 0
             divider = 0
             for m = -l:l
                 divider += 1
                 mabs = abs(m)
-                flm = ((2*l + 1)*factorial(l + mabs)
-                    / (2 ^ mabs*factorial(mabs)*factorial(l - mabs)))
-                Am = 4/(sqrt(3π)*factorial(mabs))*g2/(1 + g2)
-                lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
-                lret *= (2*E0_au/(E_au*sqrt(1 + g2))) ^ (2ns - mabs - 3/2)
-                lret *= Am*exp(-2*E0_au*G/(3E_au))
+                flm = ((2l + 1)*factorial(l + mabs)
+                    / (2^mabs*factorial(mabs)*factorial(l - mabs)))
+                # Following 5 lines are from Ilkov et al. and lead to identical results:
+                # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
+                # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
+                # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
+                # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+                # lret *= Am*exp(-2*E0_au*G/(3E_au))
+                lret = 4sqrt(2)/π*Cnl2
+                lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+                lret *= flm/factorial(mabs)
+                lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
+                lret *= Ip_au * γ2/(1+γ2)
                 if rcycle
-                    lret *= sqrt(π*E0_au/(3*E_au))
+                    lret *= sqrt(π*E0_au/(3E_au))
                 end
                 k = ceil(v)
                 n0 = ceil(v)
