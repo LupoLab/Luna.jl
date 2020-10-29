@@ -7,7 +7,7 @@ flength = 25e-2
 
 τfwhm = 30e-15
 λ0 = 1500e-9
-energy = 1.7e-6*3/2
+energy = 1.7e-6 #*3/2
 
 grid = Grid.RealGrid(flength, λ0, (200e-9, 3000e-9), 2e-12)
 
@@ -37,7 +37,7 @@ Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes,
                                :xy; full=false)
 
 statsfun = Stats.default(grid, Eω, modes, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
-output = Output.HDF5Output("modalvector_CP.h5", 0, grid.zmax, 201, statsfun)
+output = Output.HDF5Output("modalvectorns_CP.h5", 0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
