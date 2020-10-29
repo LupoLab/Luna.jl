@@ -132,6 +132,9 @@ function gas_ratio(gas1, gas2, λ)
     β2r, χ3r
 end
 
+field_to_intensity(E) = 0.5*PhysData.ε_0*PhysData.c*E^2
+intensity_to_field(I) = sqrt(2I/PhysData.ε_0/PhysData.c)
+
 """
     λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
 
@@ -193,7 +196,5 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
         missing
     end
 end
-
-
 
 end
