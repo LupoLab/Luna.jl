@@ -127,4 +127,9 @@ end
     include(joinpath(testdir, "test_processing.jl"))
 end
 
+@testset "Vector plasma" begin
+    @info("================= test_vectorplasma.jl")
+    include(joinpath(testdir, "test_vectorplasma.jl"))
+end
+
 end
