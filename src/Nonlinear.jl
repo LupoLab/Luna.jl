@@ -177,14 +177,14 @@ end
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
 function (Plas::PlasmaCumtrapz)(out, Et)
     if ndims(Et) > 1
-        if size(Et, 2) == 1
+        if size(Et, 2) == 1 # handle scalar case but within modal simulation
             E = reshape(Et, size(Et,1))
         else
-            PlasmaVector!(out, Plas, Et)
+            PlasmaVector!(out, Plas, Et) # vector case
             return
         end
     else
-        E = Et
+        E = Et # straight scalar case
     end
     PlasmaScalar!(out, Plas, E)
     if ndims(Et) > 1
@@ -316,13 +316,14 @@ function (R::RamanPolar)(out, Et)
     # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
-        if size(Et, 2) == 1
+        if size(Et, 2) == 1 # handle scalar case but within modal simulation
             E = reshape(Et, n)
         else
+            # handle vector case
             error("vector Raman not yet implemented")
         end
     else
-        E = Et
+        E = Et # handle straight scalar case
     end
 
     # square the field or envelope in first half
