@@ -312,7 +312,6 @@ end
     Et = FT \ Eω
     It = Fields.It(Et, grid)
     pks = Maths.findpeaks(grid.t, It, threshold=10.0, filterfw=false)
-    print(pks)
     for i in 1:length(positions)
         @test isapprox(pks[i].position, positions[i], atol=dt*1.1)
         @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.1)

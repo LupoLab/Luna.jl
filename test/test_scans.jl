@@ -1,5 +1,5 @@
 import Test: @test, @testset, @test_throws
-import Luna: Scans, Utils, Output
+import Luna: Scans, Utils, Output, Processing
 import Luna.Scans: @scanvar, @scan, @scaninit
 import HDF5
 
@@ -44,7 +44,7 @@ push!(ARGS, "--range", "1:4")
 @test __SCAN__.name == "scantest"
 @test !__SCAN__.parallel
 
-@scanvar dummy = range(1, length=10)
+@scanvar dummy = collect(range(1, length=10))
 @test __SCAN__.vars[:dummy] == dummy
 @test __SCAN__.values[dummy] == dummy
 
@@ -59,7 +59,7 @@ end
 push!(ARGS, "--batch", "1,3")
 @scaninit "scantest"
 @test __SCAN__.mode == :batch
-@scanvar dummy = range(1, length=10)
+@scanvar dummy = collect(range(1, length=10))
 @test __SCAN__.batch == (1, 3)
 @test __SCAN__.idcs == [1, 4, 7, 10]
 @scan begin
@@ -88,7 +88,7 @@ push!(ARGS, "--local")
     em = fill(1.0*slength, (2, slength))
     stats = Dict("energy" => e, "energym" => em)
     xx, yy = $x, $y
-    Output.@scansave(out, stats, keyword=[xx, yy])
+    Output.@scansave(Eω=out, stats=stats, keyword=[xx, yy])
 end
 HDF5.h5open("scantest_collected.h5", "r") do file
     @test read(file["scanvariables"]["x"]) == x
@@ -122,4 +122,36 @@ rm("scantest_collected.h5")
 end
 catch
 rm("scantest_collected.h5")
+end
+
+##
+@testset "ScanHDF5Output" begin
+for _ in eachindex(ARGS)
+    pop!(ARGS)
+end
+push!(ARGS, "--local")
+@scaninit "scantest"
+@scanvar var1 = collect(range(1, length=5))
+@scanvar var2 = collect(1:3)
+files = String[]
+@scan begin
+    out = Output.@ScanHDF5Output(0, 1, 10)
+    @test out["meta"]["scanarrays"]["var1"] == var1
+    @test out["meta"]["scanarrays"]["var2"] == var2
+    @test out["meta"]["scanvars"]["var1"] == $var1
+    @test out["meta"]["scanvars"]["var2"] == $var2
+    @test out["meta"]["scanshape"] == [length(var1), length(var2)]
+    @test out["meta"]["scanorder"] == ["var1", "var2"]
+    for z = range(0, 1; length=10)
+        out([1.0, 1.0], z, 0.1, t -> [0.0, 0.0])
+    end
+    push!(files, out.fpath)
+end
+z, vvar1, vvar2 = Processing.scanproc() do output
+    output["z"], output["meta"]["scanarrays"]["var1"], output["meta"]["scanarrays"]["var2"]
+end
+@test all(vvar1 .== var1)
+@test all(vvar2 .== var2)
+@test all(z .== collect(range(0, 1; length=10)))
+rm.(files)
 end

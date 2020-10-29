@@ -23,8 +23,9 @@ x = xygrid.x
 y = xygrid.y
 energyfun, energyfunω = Fields.energyfuncs(grid, xygrid)
 
-dens0 = PhysData.density(gas, pres)
-densityfun(z) = dens0
+densityfun = let dens0=PhysData.density(gas, pres)
+    z -> dens0
+end
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
