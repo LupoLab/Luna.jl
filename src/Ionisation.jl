@@ -73,7 +73,7 @@ function ionrate_fun!_PPTaccel(material::Symbol, λ0; kwargs...)
 end
 
 function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)
-    E, rate = makePPTcache(ionpot, λ0, Z, l, kwargs...)
+    E, rate = makePPTcache(ionpot, λ0, Z, l; kwargs...)
     return makePPTaccel(E, rate)
 end
 
@@ -84,9 +84,9 @@ function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-4, N=2^16, Emax=nothing,
+                                sum_tol=1e-4, rcycle=true, N=2^16, Emax=nothing,
                                 cachedir=joinpath(homedir(), ".luna", "pptcache"))
-    h = hash((ionpot, λ0, Z, l, sum_tol, N, Emax))
+    h = hash((ionpot, λ0, Z, l, sum_tol, rcycle, N, Emax))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
@@ -98,7 +98,8 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
         close(pidlock)
         return rate
     else
-        E, rate = makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=sum_tol, N=N, Emax=Emax)
+        E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
+                               sum_tol=sum_tol, rcycle=rcycle, N=N, Emax=Emax)
         @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
         pidlock = mkpidlock(lockpath)
         if isfile(fpath) # makePPTcache takes a while - has another process saved first?
@@ -123,7 +124,8 @@ function loadPPTaccel(fpath)
     makePPTaccel(E, rate)
 end
 
-function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16, Emax=nothing)
+function makePPTcache(ionpot::Float64, λ0, Z, l;
+                      sum_tol=1e-4, rcycle=true, N=2^16, Emax=nothing)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -132,7 +134,7 @@ function makePPTcache(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, N=2^16, Emax=not
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-    rate = ionrate_PPT(ionpot, λ0, Z, l, E);
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, rcycle=rcycle);
     @info "PPT pre-calcuation done"
     return E, rate
 end
