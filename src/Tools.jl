@@ -127,4 +127,7 @@ function gas_ratio(gas1, gas2, λ)
     β2r, χ3r
 end
 
+field_to_intensity(E) = 0.5*PhysData.ε_0*PhysData.c*E^2
+intensity_to_field(I) = sqrt(2I/PhysData.ε_0/PhysData.c)
+
 end
