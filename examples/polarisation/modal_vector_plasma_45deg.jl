@@ -30,54 +30,20 @@ plasma = Nonlinear.PlasmaCumtrapz(grid.to, Array{Float64}(undef, length(grid.to)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
 
-normfun = NonlinearRHS.norm_modal(grid.ω)
-
 inputs = ((mode=1, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)),
           (mode=2, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)))
 
-Eω, transform, FT = Luna.setup(grid, densityfun, normfun, responses, inputs,
-                               modes, :xy; full=false)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes,
+                               :xy; full=false)
 
-statsfun = Stats.collect_stats(grid, Eω,
-                              Stats.ω0(grid),
-                              Stats.energy(grid, energyfunω),
-                              Stats.peakpower(grid),
-                              Stats.peakintensity(grid, modes),
-                              Stats.fwhm_t(grid),
-                              Stats.fwhm_r(grid, modes),
-                              Stats.electrondensity(grid, ionrate, densityfun, modes)
-                              )
-output = Output.HDF5Output("modalvector.h5", 0, grid.zmax, 201, statsfun)
+statsfun = Stats.default(grid, Eω, modes, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
+output = Output.HDF5Output("modalvector_lin45deg.h5", 0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
-import FFTW
-import PyPlot:pygui, plt
-
-ω = grid.ω
-t = grid.t
-
-zout = output["z"]
-Eout = output["Eω"]
-
-Etout = FFTW.irfft(Eout, length(grid.t), 1)
-It = abs2.(Maths.hilbert(Etout))
-
-pygui(true)
-
-λ = PhysData.wlfreq.(ω)[2:end]
-Ilog = log10.(Maths.normbymax(abs2.(Eout[2:end,:,:]) ./ λ.^2) .+ 1e-30)
-
-for i = 1:nmodes
-    plt.figure()
-    plt.subplot(121)
-    plt.pcolormesh(λ, zout, transpose(Ilog[:,i,:]))
-    plt.clim(-3, 0)
-    plt.xlim(550e-9,1800e-9)
-    plt.colorbar()
-    plt.subplot(122)
-    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
-    plt.xlim(-500.0,100.0)
-    plt.colorbar()
-end
+Plotting.pygui(true)
+Plotting.stats(output)
+Plotting.prop_2D(output, :λ, λrange=(500e-9,1800e-9), trange=(-500e-15,100e-15), dBmin=-30.0)
+Plotting.time_1D(output, [5e-2, 15e-2, 25e-2])
+Plotting.spec_1D(output, [5e-2, 15e-2, 25e-2])

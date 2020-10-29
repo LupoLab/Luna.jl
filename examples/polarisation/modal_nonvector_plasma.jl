@@ -23,7 +23,7 @@ densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
-plasma = Nonlinear.PlasmaCumtrapz(grid.to, Array{Float64}(undef, length(grid.to), 2),
+plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to,
                                   ionrate, ionpot)
                                   
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
@@ -32,10 +32,10 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes,
-                               :xy; full=false)
+                               :y; full=false)
 
 statsfun = Stats.default(grid, Eω, modes, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
-output = Output.HDF5Output("modalvector_lin0deg.h5", 0, grid.zmax, 201, statsfun)
+output = Output.HDF5Output("modalnonvector_lin0deg.h5", 0, grid.zmax, 201, statsfun)
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
