@@ -587,13 +587,13 @@ function (pw::PeakWindow)(ω, Eω)
     Iω = abs2.(Eω)
     limsA = zeros((2, size(Eω)[(pw.ndims+1):end]...))
     for cidx in cidcs
-        Iω_this = Iω[.., cidx]
+        Iω_this = Iω[.., Tuple(cidx)...]
         Iωsum = sum(Iω_this; dims=2:ndims(Iω_this))
         λpeak = wlfreq(cropω[argmax(Iωsum[cropidcs])])
         lims = pw.relative ? λpeak.*(1 .+ (-0.5, 0.5).*pw.width) : λpeak .+ (-0.5, 0.5).*pw.width
         window = ωwindow_λ(ω, lims)
-        limsA[:, cidx] .= lims
-        out[.., cidx] .= Eω[.., cidx] .* window
+        limsA[:, Tuple(cidx)...] .= lims
+        out[.., Tuple(cidx)...] .= Eω[.., Tuple(cidx)...] .* window
     end
     pw.lims = limsA
     out
