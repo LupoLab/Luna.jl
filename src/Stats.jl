@@ -1,5 +1,5 @@
 module Stats
-import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields
+import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.NonlinearRHS: TransModal, TransModeAvg
 import Luna.Nonlinear: PlasmaCumtrapz
@@ -7,6 +7,7 @@ import Luna.Capillary: MarcatilliMode
 import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf
+import Logging: @warn
 
 """
     ω0(grid)
@@ -92,6 +93,45 @@ function peakpower(grid)
     end
     return addstat!
 end
+
+"""
+    peakpower(grid, Eω, window; label)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+window function `window`. `window` must have the same length as `grid.ω`. The stats
+dataset is labeled as `peakpower_[label]`.
+"""
+function peakpower(grid, Eω, window::Vector{<:Real}; label)
+    Etbuf, analytic! = plan_analytic(grid, Eω) # output buffer and function for inverse FT
+    Eωbuf = similar(Eω) # buffer for Eω with window applied
+    key = "peakpower_$label"
+    function addstat!(d, Eω, Et, z, dz)
+        Eωbuf .= Eω .* window
+        analytic!(Etbuf, Eωbuf)
+        if ndims(Etbuf) > 1
+            d[key] = dropdims(maximum(abs2.(Etbuf), dims=1), dims=1)
+        else
+            d[key] = maximum(abs2.(Etbuf))
+        end
+    end
+end
+
+"""
+    peakpower(grid, Eω, λlims; label=nothing)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+wavelength limits `λlims`. If `label` is given, the stats dataset is labeled as
+`peakpower_[label]`, otherwise `label` is created automatically from `λlims`.
+"""
+function peakpower(grid, Eω, λlims::NTuple{2, <:Real}; label=nothing, winwidth=:auto)
+    window = Processing.ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    if isnothing(label)
+        λnm = 1e9.*λlims
+        label = @sprintf("%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
+    end
+    peakpower(grid, Eω, window; label=label)
+end
+
 
 """
     peakintensity(grid, aeff)
@@ -394,7 +434,7 @@ function collect_stats(grid, Eω, funcs...)
 end
 
 function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
-                 windows=nothing, gas=nothing)
+                 windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
@@ -411,11 +451,19 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
             push!(funs, energy_λ(grid, energyfunω, win))
         end
     end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $idx is already present in the default set"
+                  *"and will be ignored")
+        else
+            push!(funs, uf)
+        end
+    end
     collect_stats(grid, Eω, funs...)
 end
 
 function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
-                 windows=nothing, gas=nothing)
+                 windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
     pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
@@ -433,6 +481,14 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
     if !isnothing(windows)
         for win in windows
             push!(funs, energy_λ(grid, energyfunω, win))
+        end
+    end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $idx is already present in the default set"
+                  *"and will be ignored")
+        else
+            push!(funs, uf)
         end
     end
     collect_stats(grid, Eω, funs...)
