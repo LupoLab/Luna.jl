@@ -3,6 +3,22 @@ import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearR
 import Luna.PhysData: wlfreq
 import Test: @test, @testset
 
+@testset "multi-point" begin
+Z = [0, 0.25, 0.5, 1]
+P = [0, 1, 0.5, 0]
+coren, densityfun = Capillary.gradient(:He, Z, P)
+for ii = 1:3
+    λ = Z[ii+1] - Z[ii]
+    ζ = range(0, λ; length=10)
+    z = range(Z[ii], Z[ii+1]; length=10)
+    p0, p1 = P[ii], P[ii+1]
+    Pζ = @. sqrt(p0^2 + ζ/λ*(p1^2 - p0^2))
+    ρζ = PhysData.density.(:He, Pζ)
+    ρz = densityfun.(z)
+    @test all(isapprox.(ρζ, ρz, rtol=1e-10))
+end
+end
+
 @testset "field" begin
 a = 13e-6
 gas = :Ar

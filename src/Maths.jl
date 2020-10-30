@@ -118,7 +118,8 @@ If `baseline` is true, the width is not taken at
 `minmax` determines whether the crossings are taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
 """
-function level_xings(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
+function level_xings(x::AbstractVector, y::AbstractVector;
+                     method=:linear, baseline=false, minmax=:min, level=0.5)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
         val = minimum(y) + level*(maximum(y) - minimum(y))

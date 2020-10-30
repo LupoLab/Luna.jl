@@ -1,5 +1,5 @@
-import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, RK45, Stats, Output, LinearOps, Polarisation
+using Luna
+import Luna.PhysData: wlfreq
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
@@ -23,6 +23,8 @@ nmodes = length(modes)
 grid = Grid.RealGrid(250e-2, λ0, (200e-9, 3000e-9), 1e-12)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
+
+gausspulse(t) = sqrt.(Maths.gauss.(t; fwhm=τfwhm)) .* cos.(wlfreq(λ0).*t)
 
 Etlin = gausspulse(grid.t)
 cenergy = energyfun(Etlin)
@@ -90,6 +92,7 @@ plt.plot(ω./2π.*1e-15, log10.(abs2.(Eoutp)))
 #plt.ylim(-6, 0)
 plt.xlim(0,2.0)
 
+##
 plt.figure()
 It = abs2.(Maths.hilbert(FFTW.irfft(Eout[:,:,end], length(grid.t), 1)))
 plt.plot(t/1e-15, It[:,1]./maximum(It[:,1]))
@@ -100,7 +103,7 @@ plt.plot(t/1e-15, Itp[:,2]./maximum(Itp[:,2]))
 plt.xlim(-50.0,50.0)
 
 println("$(sum(Itp)/sum(It))")
-
+##
 Etout = FFTW.irfft(Eout, length(grid.t), 1)
 It = Maths.normbymax(abs2.(Maths.hilbert(Etout)))
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
