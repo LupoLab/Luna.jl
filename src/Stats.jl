@@ -453,8 +453,7 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
     end
     for (idx, uf) in enumerate(userfuns)
         if uf in funs
-            @warn("userfun $idx is already present in the default set"
-                  *"and will be ignored")
+            @warn("userfun $idx is already present in the default set and will be ignored")
         else
             push!(funs, uf)
         end
@@ -485,8 +484,7 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
     end
     for (idx, uf) in enumerate(userfuns)
         if uf in funs
-            @warn("userfun $idx is already present in the default set"
-                  *"and will be ignored")
+            @warn("userfun $uf is already present in the default set and will be ignored")
         else
             push!(funs, uf)
         end
