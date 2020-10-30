@@ -92,6 +92,12 @@ function stats(output; kwargs...)
         str = "Energy "*replace(k[8:end], "_" => " ")*" (μJ)"
         push!(pstats, (1e6*stats[k], str))
     end
+    for (k, v) in pairs(stats)
+        startswith(k, "peakpower_") || continue
+        Pfac, unit = power_unit(stats[k])
+        str = "Peak power "*replace(k[11:end], "_" => " ")*" ($unit)"
+        push!(pstats, (Pfac*stats[k], str))
+    end
     if haskey(stats, "peakpower")
         Pfac, unit = power_unit(stats["peakpower"])
         push!(pstats, (Pfac*stats["peakpower"], "Peak power ($unit)"))
