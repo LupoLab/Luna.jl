@@ -1,7 +1,7 @@
 using Luna
 
 a = 13e-6
-gas = :H2
+gas = :N2
 pres = 5
 flength = 200e-2
 

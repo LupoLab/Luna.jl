@@ -20,8 +20,17 @@ densityfun = let dens0=PhysData.density(gas, pres)
     z -> dens0
 end
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),
-             Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
+
+ionpot = PhysData.ionisation_potential(gas)
+ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+
+plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
+
+responses = (
+             Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),
+             Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)),
+             plasma,
+             )
 
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
