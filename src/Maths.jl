@@ -13,7 +13,7 @@ import Peaks
 
 #= Pre-created finite difference methods for speed.
     Above order=7, this would create overflow errors in central_fwm() =#
-FDMs = [FiniteDifferences.central_fdm(order+6, order) for order=1:7]
+FDMs = [FiniteDifferences.central_fdm(order+6, order, adapt=2) for order=1:5]
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
@@ -22,7 +22,7 @@ function derivative(f, x, order::Integer)
     else
         # use (order+6)th order central finite differences with 2 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FDMs[order], y->f(y*scale), x/scale, adapt=2)/scale^order
+        FDMs[order](y->f(y*scale), x/scale)/scale^order
     end
 end
 
@@ -1078,7 +1078,7 @@ Find isolated peaks in a signal `y` over `x` and return their value, FWHM and in
 If `filterfw=true` then only peaks with a clean FWHM are returned.
 """
 function findpeaks(x, y; threshold=0.0, filterfw=true)
-    pkis, proms = Peaks.peakprom(y, Peaks.Maxima(), 10)
+    pkis, proms = Peaks.peakprom(Peaks.Maxima(), y, 10)
     pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
     # filter out peaks with missing fws
     if filterfw
