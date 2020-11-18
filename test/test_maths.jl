@@ -251,7 +251,7 @@ end
     @test abs(Maths.derivative(spl_k5, 1.3, 2) + sin(1.3)) < 1.9e-8
     @test abs(Maths.derivative(spl_k5, 1.3, 3) + cos(1.3)) < 1.6e-7
     @test abs(Maths.derivative(spl_k5, 1.3, 4) - sin(1.3)) < 2e-4
-    @test abs(Maths.derivative(spl_k5, 1.3, 5) - cos(1.3)) < 3e-5
+    @test abs(Maths.derivative(spl_k5, 1.3, 5) - cos(1.3)) < 2e-3
 end
 
 @testset "randgauss" begin
