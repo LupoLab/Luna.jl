@@ -48,3 +48,4 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 FiniteDifferences = "0.11"
+HDF5 = "0.13"
