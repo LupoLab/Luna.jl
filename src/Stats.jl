@@ -494,12 +494,12 @@ end
 
 # For constant linop, ZDW is also constant
 function zdw_linop(mode::Modes.AbstractMode, linop::AbstractArray)
-    zdw = Modes.zdw(mode)
+    zdw = missnan(Modes.zdw(mode))
     (d, Eω, Et, z, dz) -> d["zdw"] = zdw
 end
 
 function zdw_linop(modes, linop::AbstractArray)
-    zdw = [Modes.zdw(mode) for mode in modes]
+    zdw = [missnan(Modes.zdw(mode)) for mode in modes]
     (d, Eω, Et, z, dz) -> d["zdw"] = zdw
 end
 
