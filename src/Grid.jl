@@ -165,6 +165,45 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
 end
 
+struct GNLSEGrid <: TimeGrid
+    zmax::Float64
+    t::Vector{Float64}
+    ω::Vector{Float64}
+    sidx::BitArray{1}
+    ωwin::Vector{Float64}
+    twin::Vector{Float64}
+end
+
+function GNLSEGrid(zmax, ωmax, tmax)
+    ωmax_win = ωmax * 1.1 # make space for apodisation
+    tmax_win = tmax * 1.1
+    fmax = ωmax_win/2π
+    δt = 1/2fmax
+    samples = 2^(ceil(Int, log2(2tmax/δt)))
+    tmax_even = δt*samples/2
+    δω = π/tmax_even
+
+    N = collect(range(0, length=samples))
+    t = @. (N-samples/2)*δt # time grid, centre on 0
+    ω = @. (N-samples/2)*δω # freq grid, centre on 0
+    ω = FFTW.fftshift(ω)
+
+    sidx = trues(length(ω))
+
+    ωwindow = Maths.planck_taper(ω, -ωmax_win, -ωmax, ωmax, ωmax_win)
+    twindow = Maths.planck_taper(t, minimum(t), -tmax, tmax, maximum(t))
+
+    # Checks
+    δω = ω[2] - ω[1]
+    Δω = length(ω)*δω
+    δt = t[2] - t[1]
+    @assert δt ≈ 2π/Δω
+    @assert length(t) == length(ω)
+
+    GNLSEGrid(zmax, t, ω, sidx, ωwindow, twindow)
+end
+
+
 struct FreeGrid <: SpaceGrid
     x::Vector{Float64}
     y::Vector{Float64}

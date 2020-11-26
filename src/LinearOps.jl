@@ -422,6 +422,21 @@ function make_const_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     linops
 end
 
+function make_const_linop(grid::Grid.GNLSEGrid, βs, α=0)
+    linop = zeros(ComplexF64, length(grid.ω))
+    for (n, βn) in enumerate(βs)
+        linop .+= -im .* grid.ω.^(n+1) .* βn / factorial(n+1)
+    end
+    if α > 0
+        linop .-= α/2
+    end
+    linop
+end
+
+function make_const_linop(grid::Grid.GNLSEGrid, β2::Number)
+    make_const_linop(grid, [β2])
+end
+
 """
     neff_grid(grid, modes, λ0; ref_mode=1)
 

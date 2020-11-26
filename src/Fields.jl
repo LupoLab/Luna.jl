@@ -99,6 +99,11 @@ function make_Et(p::PulseField, grid::Grid.EnvGrid)
     @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
 end
 
+function make_Et(p::PulseField, grid::Grid.GNLSEGrid)
+    t = grid.t .- p.τ0
+    @. sqrt(p.Itshape(t))*exp(im*(p.ϕ))
+end
+
 """
     (p::PulseField)(Eω, grid, energy_t, FT)
 
@@ -290,7 +295,7 @@ end
 
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
 
-It(Et, grid::Grid.EnvGrid) = abs2.(Et)
+It(Et, grid) = abs2.(Et)
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
@@ -305,7 +310,7 @@ function energyfuncs(grid::Grid.RealGrid)
     return energy_t, energy_ω
 end
 
-function energyfuncs(grid::Grid.EnvGrid)
+function energyfuncs(grid)
     function energy_t(Et)
         return integrate(grid.t, It(Et, grid), SimpsonEven())
     end
