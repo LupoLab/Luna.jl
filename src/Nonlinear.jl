@@ -90,18 +90,6 @@ function Kerr_env(γ3)
     end
 end
 
-function Kerr_gnlse(γ)
-    Kerr = let γ = γ
-        function Kerr(out, E)
-            if size(E,2) == 1
-                KerrScalarEnv(out, E, γ)
-            else
-                error("GNLSE simulations only run single-mode!")
-            end
-        end
-    end
-end
-
 "Kerr response for envelope but with THG"
 # see Eq. 4, Genty et al., Opt. Express 15 5382 (2007)
 function Kerr_env_thg(γ3, ω0, t)

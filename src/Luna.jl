@@ -145,11 +145,11 @@ function setup(grid::Grid.EnvGrid, densityfun, responses, inputs, βfun!, aeff;
     Eω, transform, FT
 end
 
-function setup(grid::Grid.GNLSEGrid, responses, inputs)
+function setup(grid::Grid.GNLSEGrid, inputs; γ, shock=0.0, responses=[])
     Utils.loadFFTwisdom()
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransGNLSE(grid, FT, responses)
+    transform = NonlinearRHS.TransGNLSE(grid, FT, γ, shock, responses)
     Eω = doinput_sm(grid, inputs, FT)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     Utils.saveFFTwisdom()

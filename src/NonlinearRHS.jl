@@ -322,30 +322,35 @@ function norm_mode_average(grid, βfun!, aeff; shock=true)
     end
 end
 
-struct TransGNLSE{FTT, rT}
+struct TransGNLSE{FTT, rT, γT}
     grid::Grid.GNLSEGrid
     FT::FTT
     resp::rT
     Pt::Vector{ComplexF64}
     Et::Vector{ComplexF64}
+    γ::γT
+    shock::Float64
 end
 
-function TransGNLSE(grid, FT, responses)
+function TransGNLSE(grid, FT, γ, shock, responses=[])
     Pt = zeros(ComplexF64, length(grid.t))
     Et = similar(Pt)
-    TransGNLSE(grid, FT, responses, Pt, Et)
+    TransGNLSE(grid, FT, responses, Pt, Et, γ, shock)
 end
 
 
 function (t::TransGNLSE)(nl, Eω, z)
-    fill!(t.Pt, 0)
     ldiv!(t.Et, t.FT, Eω)
+    t.Pt .= γz(t.γ, z) .* abs2.(t.Et).*t.Et
     Et_to_Pt!(t.Pt, t.Et, t.resp)
     t.Pt .*= t.grid.twin
     mul!(nl, t.FT, t.Pt)
     nl .*= t.grid.ωwin
-    nl .*= -1im
+    nl .*= -1im.*(1 .+ t.shock*t.grid.ω)
 end
+
+γz(γ::Number, z) = γ
+γz(γ, z) = γ(z)
 
 """
     TransRadial
