@@ -104,36 +104,34 @@ end
 "Response type for cumtrapz-based plasma polarisation, adapted from:
 M. Geissler, G. Tempea, A. Scrinzi, M. Schnürer, F. Krausz, and T. Brabec, Physical Review Letters 83, 2930 (1999)."
 struct PlasmaCumtrapz{R, EType, tType}
-    ratefunc::R
-    ionpot::Float64
-    rate::EType
-    fraction::EType
-    phase::EType
-    J::EType
-    P::EType
-    t::tType
-    δt::Float64
+    ratefunc::R # the ionization rate function
+    ionpot::Float64 # the ionization potential (for calculation of ionization loss)
+    rate::tType # buffer to hold the rate
+    fraction::tType # buffer to hold the ionization fraction
+    phase::EType # buffer to hold the plasma induced (mostly) phase modulation
+    J::EType # buffer to hold the plasma current
+    P::EType # buffer to hold the plasma polarisation
+    δt::Float64 # the time step
 end
 
+"""
+    PlasmaCumtrapz(t, E, ratefunc, ionpot)
+
+Construct the Plasma polarisation response for a field on time grid `t`
+with example electric field like `E`, an ionization rate callable
+`ratefunc` and ionization potential `ionpot`.
+"""
 function PlasmaCumtrapz(t, E, ratefunc, ionpot)
-    rate = similar(E)
-    fraction = similar(E)
+    rate = similar(t)
+    fraction = similar(t)
     phase = similar(E)
     J = similar(E)
     P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t, t[2]-t[1])
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
 end
 
-function (Plas::PlasmaCumtrapz)(out, Et)
-    if ndims(Et) > 1
-        if size(Et, 2) == 1
-            E = reshape(Et, size(Et,1))
-        else
-            error("vector plasma not yet implemented")
-        end
-    else
-        E = Et
-    end
+"The plasma response for a scalar electric field"
+function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -145,6 +143,50 @@ function (Plas::PlasmaCumtrapz)(out, Et)
         end
     end
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+end
+
+"""
+The plasma response for a vector electric field.
+
+We take the magnitude of the electric field to calculate the ionization
+rate and fraction, and then solve the plasma polarisation component-wise
+for the vector field.
+
+A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.  
+"""
+function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
+    Ex = E[:,1]
+    Ey = E[:,2]
+    Em = @. hypot.(Ex, Ey)
+    Plas.ratefunc(Plas.rate, Em)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
+    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.phase = Plas.fraction * e_ratio * E
+    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
+    for ii in eachindex(Em)
+        if abs(Em[ii]) > 0
+            pre = Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/Em[ii]^2
+            Plas.J[ii,1] +=  pre*Ex[ii]
+            Plas.J[ii,2] +=  pre*Ey[ii]
+        end
+    end
+    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+    @. out += Plas.P
+end
+
+"Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
+function (Plas::PlasmaCumtrapz)(out, Et)
+    if ndims(Et) > 1
+        if size(Et, 2) == 1 # handle scalar case but within modal simulation
+            E = reshape(Et, size(Et,1))
+        else
+            PlasmaVector!(out, Plas, Et) # vector case
+            return
+        end
+    else
+        E = Et # straight scalar case
+    end
+    PlasmaScalar!(out, Plas, E)
     if ndims(Et) > 1
         out .+= reshape(Plas.P, size(Et))
     else
@@ -274,13 +316,14 @@ function (R::RamanPolar)(out, Et)
     # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
-        if size(Et, 2) == 1
+        if size(Et, 2) == 1 # handle scalar case but within modal simulation
             E = reshape(Et, n)
         else
+            # handle vector case
             error("vector Raman not yet implemented")
         end
     else
-        E = Et
+        E = Et # handle straight scalar case
     end
 
     # square the field or envelope in first half

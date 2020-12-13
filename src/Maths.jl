@@ -12,17 +12,17 @@ import Dierckx
 import Peaks
 
 #= Pre-created finite difference methods for speed.
-    Above order=7, this would create overflow errors in central_fwm() =#
-FDMs = [FiniteDifferences.central_fdm(order+6, order) for order=1:7]
+   Use (order+6)th order central finite differences with 2 adaptive steps up to
+   11th order. Above that creates overflow errors, so we cap it. =#
+FDMs = [FiniteDifferences.central_fdm(min(order+6, 11), order, adapt=2) for order=1:7]
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
     else
-        # use (order+6)th order central finite differences with 2 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FDMs[order], y->f(y*scale), x/scale, adapt=2)/scale^order
+        FDMs[order](y->f(y*scale), x/scale)/scale^order
     end
 end
 
@@ -118,7 +118,8 @@ If `baseline` is true, the width is not taken at
 `minmax` determines whether the crossings are taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
 """
-function level_xings(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
+function level_xings(x::AbstractVector, y::AbstractVector;
+                     method=:linear, baseline=false, minmax=:min, level=0.5)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
         val = minimum(y) + level*(maximum(y) - minimum(y))
@@ -1077,7 +1078,7 @@ Find isolated peaks in a signal `y` over `x` and return their value, FWHM and in
 If `filterfw=true` then only peaks with a clean FWHM are returned.
 """
 function findpeaks(x, y; threshold=0.0, filterfw=true)
-    pkis, proms = Peaks.peakprom(y, Peaks.Maxima(), 10)
+    pkis, proms = Peaks.peakprom(Peaks.Maxima(), y, 10)
     pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
     # filter out peaks with missing fws
     if filterfw

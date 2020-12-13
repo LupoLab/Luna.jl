@@ -1,5 +1,5 @@
 module Stats
-import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields
+import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.NonlinearRHS: TransModal, TransModeAvg
 import Luna.Nonlinear: PlasmaCumtrapz
@@ -7,6 +7,7 @@ import Luna.Capillary: MarcatilliMode
 import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf
+import Logging: @warn
 
 """
     ω0(grid)
@@ -92,6 +93,45 @@ function peakpower(grid)
     end
     return addstat!
 end
+
+"""
+    peakpower(grid, Eω, window; label)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+window function `window`. `window` must have the same length as `grid.ω`. The stats
+dataset is labeled as `peakpower_[label]`.
+"""
+function peakpower(grid, Eω, window::Vector{<:Real}; label)
+    Etbuf, analytic! = plan_analytic(grid, Eω) # output buffer and function for inverse FT
+    Eωbuf = similar(Eω) # buffer for Eω with window applied
+    key = "peakpower_$label"
+    function addstat!(d, Eω, Et, z, dz)
+        Eωbuf .= Eω .* window
+        analytic!(Etbuf, Eωbuf)
+        if ndims(Etbuf) > 1
+            d[key] = dropdims(maximum(abs2.(Etbuf), dims=1), dims=1)
+        else
+            d[key] = maximum(abs2.(Etbuf))
+        end
+    end
+end
+
+"""
+    peakpower(grid, Eω, λlims; label=nothing)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+wavelength limits `λlims`. If `label` is given, the stats dataset is labeled as
+`peakpower_[label]`, otherwise `label` is created automatically from `λlims`.
+"""
+function peakpower(grid, Eω, λlims::NTuple{2, <:Real}; label=nothing, winwidth=:auto)
+    window = Processing.ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    if isnothing(label)
+        λnm = 1e9.*λlims
+        label = @sprintf("%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
+    end
+    peakpower(grid, Eω, window; label=label)
+end
+
 
 """
     peakintensity(grid, aeff)
@@ -291,7 +331,15 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
 function zdw(modes; ub=100e-9, lb=3000e-9)
-    λ00 = [Modes.zdw(mode; ub=ub, lb=lb, z=0) for mode in modes]
+    λ00 = zeros(length(modes))
+    for (ii, mode) in enumerate(modes)
+        tmp = Modes.zdw(mode; ub=ub, lb=lb, z=0)
+        if ismissing(tmp)
+            λ00[ii] = ub
+        else
+            λ00[ii] = tmp
+        end
+    end
     function addstat!(d, Eω, Et, z, dz)
         d["zdw"] = [missnan(Modes.zdw(modes[ii], λ00[ii]; z=z)) for ii in eachindex(modes)]
         λ00 .= d["zdw"]
@@ -386,7 +434,7 @@ function collect_stats(grid, Eω, funcs...)
 end
 
 function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
-                 windows=nothing, gas=nothing)
+                 windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
             peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop),
@@ -406,11 +454,18 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
             push!(funs, energy_λ(grid, energyfunω, win))
         end
     end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $idx is already present in the default set and will be ignored")
+        else
+            push!(funs, uf)
+        end
+    end
     collect_stats(grid, Eω, funs...)
 end
 
 function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
-                 windows=nothing, gas=nothing)
+                 windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
@@ -432,17 +487,24 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
             push!(funs, energy_λ(grid, energyfunω, win))
         end
     end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $uf is already present in the default set and will be ignored")
+        else
+            push!(funs, uf)
+        end
+    end
     collect_stats(grid, Eω, funs...)
 end
 
 # For constant linop, ZDW is also constant
 function zdw_linop(mode::Modes.AbstractMode, linop::AbstractArray)
-    zdw = Modes.zdw(mode)
+    zdw = missnan(Modes.zdw(mode))
     (d, Eω, Et, z, dz) -> d["zdw"] = zdw
 end
 
 function zdw_linop(modes, linop::AbstractArray)
-    zdw = [Modes.zdw(mode) for mode in modes]
+    zdw = [missnan(Modes.zdw(mode)) for mode in modes]
     (d, Eω, Et, z, dz) -> d["zdw"] = zdw
 end
 

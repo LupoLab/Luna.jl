@@ -293,8 +293,8 @@ Returns the new specaxis grid and smoothed spectrum.
 """
 function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
     if isnothing(window)
-        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
-            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
+        window = let ng=Maths.gaussnorm(fwhm=resolution), σ=resolution/(2*(2*log(2))^(1/2))
+            (x,x0) -> exp(-0.5*((x - x0)/σ)^2)/ng
         end
     end
     if specaxis == :λ
@@ -336,9 +336,10 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     iend = Array{Int,1}(undef,nxg)
     δω = ω[2] - ω[1]
     i0 = argmin(abs.(ω))
+    ωs = ω[i0]
     for i in 1:nxg
-        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
-        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        i1 = i0 + round(Int, (xtoω(xg[i] + resolution*nspan) - ωs)/δω)
+        i2 = i0 + round(Int, (xtoω(xg[i] - resolution*nspan) - ωs)/δω)
         # we want increasing indices
         if i1 > i2
             i1,i2 = i2,i1
@@ -366,7 +367,7 @@ because the integral is still over a frequency grid (with appropriate frequency 
 integration bounds).
 """
 function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
-    for ii in cidcs
+    @inbounds @fastmath for ii in cidcs
         for j in 1:size(Ix, 1)
             for k in istart[j]:iend[j]
                 Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
@@ -374,6 +375,22 @@ function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
         end
     end
     Ix[Ix .<= 0.0] .= minimum(Ix[Ix .> 0.0])
+end
+
+function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
+    cidcs = CartesianIndices(size(Ix)[2:end])
+    if !isnothing(specrange)
+        specrange = extrema(specrange)
+        idcs = ((x .>= specrange[1]) .& (x .<= specrange[2]))
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    if sortx
+        idcs = sortperm(x)
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    x, Ix
 end
 
 """
@@ -386,22 +403,6 @@ function ωwindow_λ(ω, λlims; winwidth=:auto)
     ωmin, ωmax = extrema(wlfreq.(λlims))
     winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
     window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-end
-
-function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
-    cidcs = CartesianIndices(size(Ix)[2:end])
-    if !isnothing(specrange)
-        specrange = extrema(specrange)
-        idcs = (x .>= specrange[1] .& (x .<= specrange[2]))
-        x = x[idcs]
-        Ix = Ix[idcs, cidcs]
-    end
-    if sortx
-        idcs = sortperm(x)
-        x = x[idcs]
-        Ix = Ix[idcs, cidcs]
-    end
-    x, Ix
 end
 
 """

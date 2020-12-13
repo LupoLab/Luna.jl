@@ -277,7 +277,7 @@ function gradient(gas, L, p0, p1)
             z <= 0 ? p0 : 
             sqrt(p0^2 + z/L*(p1^2 - p0^2))
     dens(z) = dspl(p(z))
-    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
+    coren(ω; z) = sqrt(1 + γ(wlfreq(ω)*1e6)*dens(z))
     return coren, dens
 end
 
@@ -293,12 +293,12 @@ function gradient(gas, Z, P)
         elseif z >= Z[end]
             return P[end]
         else
-            i = findfirst(x -> x < z, Z)
+            i = findlast(x -> x < z, Z)
             return sqrt(P[i]^2 + (z - Z[i])/(Z[i+1] - Z[i])*(P[i+1]^2 - P[i]^2))
         end
     end
     dens(z) = dspl(p(z))
-    coren(ω; z) = sqrt(1 + (γ(wlfreq(ω)*1e6)*dens(z)))
+    coren(ω; z) = sqrt(1 + γ(wlfreq(ω)*1e6)*dens(z))
     return coren, dens
 end
 
@@ -340,6 +340,18 @@ function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
         _neff(iω, iim; z) = neff(modes[iim], modes[iim].coren(ω[iω], z=z)^2, nwg[iω, iim])
     end
     _neff
+end
+
+"""
+    transmission(a, λ, L; kind=:HE, n=1, m=1)
+
+Calculate the transmission through a capillary with core radius `a` and length `L` at the
+wavelength `λ` when propagating the `MarcatilliMode` defined by `kind`, `n` and `m`.
+"""
+function transmission(a, λ, L; kind=:HE, n=1, m=1)
+    # TODO hardcoded fill needs to be updated if using absorbing materials
+    mode = MarcatilliMode(a, :He, 0; n=n, m=m, kind=kind)
+    Modes.transmission(mode, wlfreq(λ), L)
 end
 
 end
