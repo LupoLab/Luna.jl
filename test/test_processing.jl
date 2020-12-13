@@ -190,3 +190,32 @@ end
     @test isapprox(τc, 2*sqrt(log(2))/Δω, rtol=5e-8)
 end
 
+@testset "AutoWindow" begin
+    λ0 = 800e-9 
+    grid = Grid.RealGrid(1, λ0, (100e-9, 3000e-9), 0.5e-12)
+    FT = FFTW.plan_rfft(similar(grid.t), flags=settings["fftw_flag"])
+    Eω1 = Fields.GaussField(λ0=λ0, τfwhm=10e-15, energy=100e-6)(grid, FT)
+    Eω2 = Fields.GaussField(λ0=500e-9, τfwhm=30e-15, energy=100e-6)(grid, FT)
+    Eω3 = Fields.GaussField(λ0=200e-9, τfwhm=3e-15, energy=10e-6)(grid, FT)
+
+    pw = Processing.PeakWindow(0.2, 100e-9, 1200e-9; relative=true)
+    Eωw = pw(grid.ω, Eω1)
+    @test grid.ω[argmax(abs2.(Eωw))] == grid.ω[argmax(abs2.(Eω1))]
+
+    pw = Processing.PeakWindow(0.2, 100e-9, 700e-9; relative=true)
+    Eωw = pw(grid.ω, Eω1+Eω2+Eω3)
+    @test grid.ω[argmax(abs2.(Eωw))] == grid.ω[argmax(abs2.(Eω2))]
+
+    pw = Processing.PeakWindow(0.2, 100e-9, 400e-9; relative=true)
+    Eωw = pw(grid.ω, Eω1+Eω2+Eω3)
+    @test grid.ω[argmax(abs2.(Eωw))] == grid.ω[argmax(abs2.(Eω3))]
+    
+    pw = Processing.PeakWindow(0.2, 100e-9, 1200e-9; relative=true)
+    Eωw = pw(grid.ω, hcat(Eω1, Eω2, Eω3))
+    for (ii, Eω) in enumerate((Eω1, Eω2, Eω3))
+        λ0 = wlfreq(grid.ω[argmax(abs2.(Eω))])
+        l = [0.9, 1.1] .* λ0
+        @test l == pw.lims[:, ii]
+    end
+end
+

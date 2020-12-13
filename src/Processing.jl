@@ -558,29 +558,37 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
 end
 
 """
-    PeakWindow(width, λmin, λmax; relative=false)
+    AutoWindow(width, λmin, λmax, ω0fun; relative=false, ndims=1)
 
-Window function generator which automatically tracks the peak in the spectral region given
-by `λmin` and `λmax` and applies a window of a specific `width` around the peak. If 
-`relative` is `true`, `width` is relative bandwidth instead of the wavelength width.
+Window function generator which automatically tracks the central frequency in the spectral
+region given by `λmin` and `λmax` and applies a window of a specific `width` around the peak.
+The central frequency is found using the function `ω0fun(ω, Iω::AbstractVector)`, where
+`ω` and `Iω` are already cropped to within the wavelength limits given.
+If `relative` is `true`, `width` is relative bandwidth instead of the wavelength width.
+`ndims` determines how many dimensions of the array to sum over. For a field array with size
+`(Nω, N1, N2, ...)`, the first dimension is always assumed to be frequency. `ndim=1` means
+each field to be analysed is 1-dimensional, so the window iterates over all of `(N1, N2, ...)`.
+`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be 
+summed over its second dimension before finding the central frequency. The window iterates
+over all other dimensions, `(N2, ...)`.
 
-A `PeakWindow` automatically stores the limits of the windows it applies in the field `lims`.
+A `AutoWindow` automatically stores the limits of the windows it applies in the field `lims`.
 """
-mutable struct PeakWindow
+mutable struct AutoWindow
     width::Float64
     λmin::Float64
     λmax::Float64
+    ω0fun
     relative::Bool
     ndims
     lims
 end
 
-"""TODO TURN THIS INTO A MORE GENERAL FORM"""
-function PeakWindow(width, λmin, λmax; relative=false, ndims=2)
-    PeakWindow(width, λmin, λmax, relative, ndims, nothing)
+function AutoWindow(width, λmin, λmax, ω0fun; relative=false, ndims=1)
+    AutoWindow(width, λmin, λmax, ω0fun, relative, ndims, nothing)
 end
 
-function (pw::PeakWindow)(ω, Eω)
+function (pw::AutoWindow)(ω, Eω)
     cidcs = CartesianIndices(size(Eω)[(pw.ndims+1):end])
     out = similar(Eω)
     cropidcs = (ω .> wlfreq(pw.λmax)) .& (ω .< wlfreq(pw.λmin))
@@ -590,14 +598,37 @@ function (pw::PeakWindow)(ω, Eω)
     for cidx in cidcs
         Iω_this = Iω[.., Tuple(cidx)...]
         Iωsum = sum(Iω_this; dims=2:ndims(Iω_this))
-        λpeak = wlfreq(cropω[argmax(Iωsum[cropidcs])])
-        lims = pw.relative ? λpeak.*(1 .+ (-0.5, 0.5).*pw.width) : λpeak .+ (-0.5, 0.5).*pw.width
+        λ0 = wlfreq(pw.ω0fun(cropω, Iωsum[cropidcs]))
+        lims = pw.relative ? λ0.*(1 .+ (-0.5, 0.5).*pw.width) : λ0 .+ (-0.5, 0.5).*pw.width
         window = ωwindow_λ(ω, lims)
         limsA[:, Tuple(cidx)...] .= lims
         out[.., Tuple(cidx)...] .= Eω[.., Tuple(cidx)...] .* window
     end
     pw.lims = limsA
     out
+end
+
+"""
+    PeakWindow(width, λmin, λmax; relative=false, ndims=1)
+
+An [`AutoWindow`](@ref) which uses the peak of the spectral energy density as the central
+frequency. 
+"""
+function PeakWindow(width, λmin, λmax; relative=false, ndims=1)
+    ω0fun = (ω, Iω) ->  ω[argmax(Iω)]
+    AutoWindow(width, λmin, λmax, ω0fun; relative=relative, ndims=ndims)
+end
+
+"""
+    CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
+
+An [`AutoWindow`](@ref) which uses the centroid (centre of mass or first moment) of the
+spectral energy density as the central frequency. Before calculating the centroid, the 
+SED is raised to the `power` given.
+"""
+function CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
+    ω0fun = (ω, Iω) -> Maths.moment(ω, Iω.^power)
+    AutoWindow(width, λmin, λmax, ω0fun; relative=relative, ndims=ndims)
 end
 
 """
