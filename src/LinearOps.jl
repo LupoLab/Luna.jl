@@ -477,6 +477,10 @@ function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
     end
 end
 
+#=================================================#
+#==================    GNLSE    ==================#
+#=================================================#
+
 function make_const_linop(grid::Grid.GNLSEGrid, βs, α=0)
     linop = zeros(ComplexF64, length(grid.ω))
     for (n, βn) in enumerate(βs)

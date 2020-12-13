@@ -175,8 +175,8 @@ struct GNLSEGrid <: TimeGrid
 end
 
 function GNLSEGrid(zmax, ωmax, tmax)
-    ωmax_win = ωmax * 1.1 # make space for apodisation
-    tmax_win = tmax * 1.1
+    ωmax_win = ωmax * 1.05 # make space for apodisation
+    tmax_win = tmax * 1.05
     fmax = ωmax_win/2π
     δt = 1/2fmax
     samples = 2^(ceil(Int, log2(2tmax/δt)))
