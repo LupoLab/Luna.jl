@@ -213,7 +213,7 @@ the sum of all modes.
 function prop_2D(output, specaxis=:f;
                  trange=(-50e-15, 50e-15), bandpass=nothing,
                  λrange=(150e-9, 2000e-9), dBmin=-60,
-                 resolution=nothing,
+                 resolution=nothing, modes=nothing,
                  kwargs...)
     z = output["z"]*1e2
     if specaxis == :λ
@@ -228,10 +228,10 @@ function prop_2D(output, specaxis=:f;
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
     specx .*= specxfac
 
-    multimode, modes = get_modes(output)
+    multimode, modelabels = get_modes(output)
 
     if multimode
-        fig = _prop2D_mm(modes, t, z, specx, It, Iω,
+        fig = _prop2D_mm(modelabels, modeidcs(modes, modelabels), t, z, specx, It, Iω,
                          speclabel, speclims, trange, dBmin, window_str(bandpass);
                          kwargs...)
     else
@@ -241,6 +241,11 @@ function prop_2D(output, specaxis=:f;
     end
     fig
 end
+
+modeidcs(m::Int, ml) = [m]
+modeidcs(m::Symbol, ml) = (m == :sum) ? [] : error("modes must be :sum, a single integer, or iterable")
+modeidcs(m::Nothing, ml) = 1:length(ml)
+modeidcs(m, ml) = m
 
 # Helper function to convert λrange to the correct numbers depending on specaxis
 function getspeclims(λrange, specaxis)
@@ -276,12 +281,13 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
 end
 
 # multi-mode 2D propagation plots
-function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr;
+function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
+                    speclabel, speclims, trange, dBmin, bpstr;
                     kwargs...)
     pfigs = Figure[]
     Iω = Maths.normbymax(Iω)
-    for mi in 1:length(modes)
-        num = "Propagation ($(modes[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    for mi in modes
+        num = "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = plt.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
