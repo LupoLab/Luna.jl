@@ -15,6 +15,17 @@ import Base: show
 
 export MarcatilliMode, dimlimits, neff, field, N, Aeff
 
+"""
+    MarcatilliMode
+
+Type representing a mode of a hollow capillary as presented in:
+
+Marcatili, E. & Schmeltzer, R.
+"Hollow metallic and dielectric waveguides for long distance optical transmission and lasers
+(Long distance optical transmission in hollow dielectric and metal circular waveguides,
+examining normal mode propagation)."
+Bell System Technical Journal 43, 1783–1809 (1964).
+"""
 struct MarcatilliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
     a::Ta # core radius callable as function of z only, or fixed core radius if a Number
     n::Int # azimuthal mode index
@@ -87,7 +98,7 @@ function MarcatilliMode(a, gas, P;
 end
 
 """
-    MarcatilliMode(a, gas, P cladn; kwargs...)
+    MarcatilliMode(a, gas, P, cladn; kwargs...)
 
 Create a MarcatilliMode for a capillary made of a cladding material defined by the refractive
 index `cladn(ω; z)` with a core radius `a` which is filled with `gas` to pressure `P`.
@@ -268,8 +279,13 @@ end
 Aeff(m::MarcatilliMode; z=0) = radius(m, z)^2 * m.aeff_intg
 
 
-"Convenience function to create density and core index profiles for
-simple two-point gradient fills."
+"""
+    gradient(gas, L, p0, p1)
+
+Convenience function to create density and core index profiles for
+simple two-point gradient fills defined by the waveguide length `L` and the pressures at
+`z=0` and `z=L`.
+"""
 function gradient(gas, L, p0, p1)
     γ = sellmeier_gas(gas)
     dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1))
@@ -281,8 +297,12 @@ function gradient(gas, L, p0, p1)
     return coren, dens
 end
 
-"Convenience function to create density and core index profiles for
-multi-point gradient fills."
+"""
+    gradient(gas, Z, P)
+
+Convenience function to create density and core index profiles for
+multi-point gradient fills defined by positions `Z` and pressures `P`.
+"""
 function gradient(gas, Z, P)
     γ = sellmeier_gas(gas)
     ex = extrema(P)

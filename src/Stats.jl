@@ -314,8 +314,8 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(mode::Modes.AbstractMode; ub=100e-9, lb=3000e-9)
-    λ00 = Modes.zdw(mode; ub=ub, lb=lb, z=0)
+function zdw(mode::Modes.AbstractMode; λmin=100e-9, λmax=3000e-9)
+    λ00 = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
     function addstat!(d, Eω, Et, z, dz)
         d["zdw"] = missnan(Modes.zdw(mode, λ00; z=z))
         λ00 = d["zdw"]
@@ -330,12 +330,12 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(modes; ub=100e-9, lb=3000e-9)
+function zdw(modes; λmin=100e-9, λmax=3000e-9)
     λ00 = zeros(length(modes))
     for (ii, mode) in enumerate(modes)
-        tmp = Modes.zdw(mode; ub=ub, lb=lb, z=0)
+        tmp = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
         if ismissing(tmp)
-            λ00[ii] = ub
+            λ00[ii] = λmin
         else
             λ00[ii] = tmp
         end

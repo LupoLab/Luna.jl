@@ -1,6 +1,6 @@
 module Modes
 import Roots: find_zero, Order2
-import Cubature: hcubature
+import Cubature: hcubature, hquadrature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths, Grid
@@ -19,22 +19,34 @@ ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
-"Maximum dimensional limits of validity for this mode"
-function dimlimits(m::AbstractMode; z=0.0)
-    error("abstract method called")
-end
+"""
+    dimlimits(m::AbstractMode; z=0.0)
 
-"Get the field components `(Ex, Ey)`` at position `xs`, `z`"
-function field(m::AbstractMode, xs; z=0.0)
-    error("abstract method called")
-end
+Maximum dimensional limits of validity for mode `m` at position `z`.
+"""
+function dimlimits end
 
-"Create function of coords that returns (xs) -> (Ex, Ey)"
+"""
+    field(m::AbstractMode, xs; z=0.0)
+
+Get the field components `(Ex, Ey)`` at position `xs`, `z`
+"""
+function field end
+
+"""
+    field(m::AbstractMode; z=0)
+
+Create function of coords that returns (xs) -> (Ex, Ey) for the mode `m`.
+"""
 field(m::AbstractMode; z=0) =  (xs) -> field(m, xs, z=z)
 
-"Get mode normalization constant"
-# we memoize this so it is only called once for each mode and z position
+"""
+    N(m::AbstractMode; z=0.0)
+
+Get mode normalization constant of mode `m` at longitudinal position `z`.
+"""
 @memoize function N(m::AbstractMode; z=0.0)
+    # we memoize this so it is only called once for each mode and z position
     f = field(m, z=z)
     dl = dimlimits(m, z=z)
     function Nfunc(xs)
@@ -46,21 +58,42 @@ field(m::AbstractMode; z=0) =  (xs) -> field(m, xs, z=z)
     0.5*abs(val)
 end
 
-"Get the normalised field components at position `xs`, `z`"
+"""
+    Exy(m::AbstractMode, xs; z=0.0)
+
+Get the normalised field components at position `xs`, `z`.
+"""
 Exy(m::AbstractMode, xs; z=0.0) = field(m, xs, z=z) ./ sqrt(N(m, z=z))
 
-"Create function that returns normalised (xs) -> (Ex, Ey)"
+"""
+    Exy(m::AbstractMode; z=0.0)
+
+Create function that returns normalised (xs) -> (Ex, Ey)"""
 Exy(m::AbstractMode; z=0.0) = (xs) -> Exy(m, xs, z=z)
 
-"Get the field norm `|E|`` at position `xs`, `z`"
+"""
+    absE(m::AbstractMode, xs; z=0.0)
+
+Get the field norm ``|E|`` at position `xs`, `z`
+"""
 absE(m::AbstractMode, xs; z=0.0) = norm(Exy(m, xs, z=z))
 
-"Create function that returns normalised (xs) -> |E|"
+"""
+    absE(m::AbstractMode; z=0.0)
+
+Create function that returns normalised (xs) -> ``|E|``.
+"""
 absE(m::AbstractMode; z=0.0) = (xs) -> absE(m, xs, z=z)
 
-"Get effective area of mode"
-# we memoize this so it is only called once for each mode and z position
+"""
+    Aeff(m::AbstractMode; z=0.0)
+
+Get effective area of mode `m` and longitudinal position `z`.
+
+This is the brute-force implementation valid for any mode.
+"""
 @memoize function Aeff(m::AbstractMode; z=0.0)
+    # we memoize this so it is only called once for each mode and z position
     em = absE(m, z=z)
     dl = dimlimits(m, z=z)
     # Numerator
@@ -79,21 +112,52 @@ absE(m::AbstractMode; z=0.0) = (xs) -> absE(m, xs, z=z)
     return num / den
 end
 
-"full complex refractive index of a mode"
-function neff(m::AbstractMode, ω; z=0.0)
-    error("abstract method called")
-end
+"""
+    neff(m::AbstractMode, ω; z=0.0)
 
+Get the full complex refractive index of mode `m` at frequency `ω`
+and longitudinal position `z`.
+"""
+function neff end
+
+"""
+    β(m::AbstractMode, ω; z=0.0)
+
+Calculate the propagation constant ``β`` for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function β(m::AbstractMode, ω; z=0.0)
     return ω/c*real(neff(m, ω, z=z))
 end
 
+"""
+    α(m::AbstractMode, ω; z=0.0)
+
+Calculate the attenuation constant ``α`` for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function α(m::AbstractMode, ω; z=0.0)
     return 2*ω/c*imag(neff(m, ω, z=z))
 end
 
+"""
+    losslength(m::AbstractMode, ω; z=0.0)
+
+Calculate the losslength (``1/α``) for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function losslength(m::AbstractMode, ω; z=0.0)
     return 1/α(m, ω, z=z)
+end
+
+"""
+    dB_per_m(m::AbstractMode, ω; z=0.0)
+
+Calculate the attenuation in dB/m for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
+function dB_per_m(m::AbstractMode, ω; z=0.0)
+    return 10/log(10).*α(m, ω; z=z)
 end
 
 """
@@ -106,27 +170,33 @@ function transmission(m::AbstractMode, ω, L; z=0.0)
     return exp(-α(m, ω)*L)
 end
 
-function dB_per_m(m::AbstractMode, ω; z=0.0)
-    return 10/log(10).*α(m, ω)
-end
+"""
+    dispersion_func(m::AbstractMode, order; z=0.0)
 
+Get a function `βn(ω)` which returns the dispersion of a given `order` at frequency `ω`.
+"""
 function dispersion_func(m::AbstractMode, order; z=0.0)
     βn(ω) = Maths.derivative(ω -> β(m, ω, z=z), ω, order)
     return βn
 end
 
+"""
+    dispersion_func(m::AbstractMode, order; z=0.0)
+
+Calculate the dispersion of a given `order` at frequency `ω`.
+"""
 function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 
 """
-    zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
+    zdw(m::AbstractMode; λmin=100e-9, λmax=3000e-9, z=0.0)
 
 Calculate the zero-dispersion wavelength (ZDW) of mode `m` within the range `ub` to `lb`.
 """
-function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
-    ubω = 2π*c/ub
-    lbω = 2π*c/lb
+function zdw(m::AbstractMode; λmin=100e-9, λmax=3000e-9, z=0.0)
+    ubω = 2π*c/λmin
+    lbω = 2π*c/λmax
     ω0 = missing
     try
         ω0 = find_zero(dispersion_func(m, 2, z=z), (lbω, ubω))
@@ -154,12 +224,22 @@ function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
     return 2π*c/ω0
 end
 
+"""
+    β_ret(m::AbstractMode, ω; z=0, λ0)
+
+Calculate the propagation constant ``β`` for mode `m` transformed into a frame which moves with
+the group and phase velocity of `m` at wavelength `λ0`.
+"""
 function β_ret(m::AbstractMode, ω; z=0, λ0)
     ω0 = 2π*c/λ0
     β.(m, ω; z=z) .- dispersion(m, 1, ω0; z=z)*(ω.-ω0) .- β(m, ω0; z=z)
 end
 
-"Check that function accepts z keyword argument and add it if necessary"
+"""
+    chkzkwarg(func)
+
+Check that function accepts `z` keyword argument and add it if necessary.
+"""
 function chkzkwarg(func)
     try
         func(2.5e15, z=0.0)
@@ -251,7 +331,6 @@ function overlap(modes::ModeCollection, newgrid::Grid.RealGrid, oldgrid::Grid.Re
     end
     Egm
 end
-    
 
 struct ToSpace{mT,iT}
     ms::mT
@@ -377,7 +456,7 @@ function to_space(Emω, xs, ms; components=:xy, z=0.0)
 end
 
 struct DelegatedMode{mT, idT} <: AbstractMode
-    mode::mT # wrapper mode
+    mode::mT # wrapped mode
     id::idT # unique identifier type to distinguish different DelegatedModes
 end
 
