@@ -8,8 +8,12 @@ import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
 
-"Transform A(ω) to A(t) on oversampled time grid - real field"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
+"""
+    to_time!(Ato, Aω, Aωo, IFTplan)
+
+Transform ``A(ω)`` on normal grid to ``A(t)`` on oversampled time grid.
+"""
+function to_time!(Ato::Array{<:Real, D}, Aω, Aωo, IFTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
@@ -18,8 +22,7 @@ function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     mul!(Ato, IFTplan, Aωo)
 end
 
-"Transform A(ω) to A(t) on oversampled time grid - envelope"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
+function to_time!(Ato::Array{<:Complex, D}, Aω, Aωo, IFTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = No/N # Scale factor makes up for difference in FFT array length
@@ -28,8 +31,12 @@ function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
     mul!(Ato, IFTplan, Aωo)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - real field"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
+"""
+    to_freq!(Aω, Aωo, Ato, FTplan)
+
+Transform oversampled A(t) to A(ω) on normal grid
+"""
+function to_freq!(Aω, Aωo, Ato::Array{<:Real, D}, FTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
@@ -37,8 +44,7 @@ function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
     copy_scale!(Aω, Aωo, N, scale)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - envelope"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
+function to_freq!(Aω, Aωo, Ato::Array{<:Complex, D}, FTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = N/No # Scale factor makes up for difference in FFT array length
@@ -46,15 +52,25 @@ function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
     copy_scale_both!(Aω, Aωo, N÷2, scale)
 end
 
-"Copy first N elements from source to dest and simultaneously multiply by scale factor"
+"""
+    copy_scale!(dest, source, N, scale)
+
+Copy first N elements from source to dest and simultaneously multiply by scale factor.
+For multi-dimensional `dest` and `source`, work along first axis.
+"""
 function copy_scale!(dest::Vector, source::Vector, N, scale)
     for i = 1:N
         dest[i] = scale * source[i]
     end
 end
 
-"""Copy first and last N elements from source to first and last N elements in dest
-and simultaneously multiply by scale factor"""
+"""
+    copy_scale_both!(dest::Vector, source::Vector, N, scale)
+
+Copy first and last N elements from source to first and last N elements in dest
+and simultaneously multiply by scale factor.
+For multi-dimensional `dest` and `source`, work along first axis.
+"""
 function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     for i = 1:N
         dest[i] = scale * source[i]
@@ -64,7 +80,6 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     end
 end
 
-"copy_scale! for multi-dim arrays. Works along first axis"
 function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
@@ -80,7 +95,6 @@ function _cpsc_core(dest, source, N, scale, idcs)
     end
 end
 
-"copy_scale_both! for multi-dim arrays. Works along first axis"
 function copy_scale_both!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
@@ -99,7 +113,11 @@ function _cpscb_core(dest, source, N, scale, idcs)
     end
 end
 
-"Accumulate responses induced by Et in Pt"
+"""
+    Et_to_Pt!(Pt, Et, responses)
+
+Accumulate responses induced by Et in Pt.
+"""
 function Et_to_Pt!(Pt, Et, responses)
     for resp in responses
         resp(Pt, Et)
@@ -271,6 +289,11 @@ function norm_modal(grid; shock=true)
     shock ? withshock! : withoutshock!
 end
 
+"""
+    TransModeAvg
+
+Transform E(ω) -> Pₙₗ(ω) for mode-averaged single-mode propagation.
+"""
 struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     Pto::Array{TT,1}
     Eto::Array{TT,1}
@@ -310,7 +333,6 @@ end
 
 const nlscale = sqrt(PhysData.ε_0*PhysData.c/2)
 
-"Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
     fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
