@@ -1,5 +1,6 @@
 import Test: @test, @testset, @test_throws
-import Luna: Output
+import Luna: Output, Processing
+using EllipsisNotation
 
 @testset "HDF5" begin
     import HDF5
@@ -111,10 +112,13 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
-    aeff(z) = Modes.Aeff(m, z=z)
+    aeff = let m=m
+        z -> Modes.Aeff(m, z=z)
+    end
     energyfun, energyfunω = Fields.energyfuncs(grid)
-    dens0 = PhysData.density(gas, pres)
-    densityfun(z) = dens0
+    densityfun = let dens0=PhysData.density(gas, pres)
+        z -> dens0
+    end
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -128,7 +132,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     hdf5c = Output.HDF5Output(fpath_comp, 0, grid.zmax, 51, statsfun,
                               compression=true)
     mem = Output.MemoryOutput(0, grid.zmax, 51, statsfun)
-    function output(args...; kwargs...)
+    function outfun(args...; kwargs...)
         hdf5(args...; kwargs...)
         hdf5c(args...; kwargs...)
         mem(args...; kwargs...)
@@ -137,7 +141,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
         o(Dict("λ0" => λ0))
         o("τ", τ)
     end
-    Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
+    Luna.run(Eω, grid, linop, transform, FT, outfun, status_period=10)
     HDF5.h5open(hdf5.fpath, "r") do file
         @test read(file["λ0"]) == mem.data["λ0"]
         Eω = reinterpret(ComplexF64, read(file["Eω"]))
@@ -159,6 +163,35 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
         @test read(file["simulation_type"]["transform"]) == string(transform)
     end
     @test stat(hdf5.fpath).size >= stat(hdf5c.fpath).size
+    # Test read-only
+    o = Output.HDF5Output(fpath)
+    HDF5.h5open(o.fpath, "r") do file
+        @test read(file["λ0"]) == mem.data["λ0"]
+        Eω = reinterpret(ComplexF64, read(file["Eω"]))
+        @test Eω == mem.data["Eω"]
+        @test read(file["stats"]["ω0"]) == mem.data["stats"]["ω0"]
+        @test read(file["z"]) == mem.data["z"]
+        @test read(file["grid"]) == Grid.to_dict(grid)
+        @test read(file["simulation_type"]["field"]) == "field-resolved"
+        @test read(file["simulation_type"]["transform"]) == string(transform)
+    end
+    # test slice reading
+    @test o["Eω", :, 1] == mem["Eω"][:, 1]
+    @test o["Eω", 1, :] == mem["Eω"][1, :]
+    @test o["Eω", :, 1:5] == mem["Eω"][:, 1:5]
+    @test o["Eω", :, [1, 2, 50]] == mem["Eω"][:, [1, 2, 50]]
+    @test o["Eω", .., 1] == mem["Eω"][:, 1]
+    @test o["Eω", .., [1, 2, 50]] == mem["Eω"][:, [1, 2, 50]]
+    @test mem["Eω", :, 1] == mem["Eω"][:, 1]
+    @test mem["Eω", 1, :] == mem["Eω"][1, :]
+    @test mem["Eω", :, 1:5] == mem["Eω"][:, 1:5]
+    @test mem["Eω", :, [1, 2, 50]] == mem["Eω"][:, [1, 2, 50]]
+    @test mem["Eω", .., 1] == mem["Eω"][:, 1]
+    @test mem["Eω", .., [1, 2, 50]] == mem["Eω"][:, [1, 2, 50]]
+    # test slice reading in processing functions
+    ω, Eω, zac = Processing.getEω(o, 5e-2)
+    @test (ω, Eω[:, 1]) == Processing.getEω(grid, mem["Eω"][:, 51])
+    @test zac[1] == 5e-2
 end
 rm(fpath)
 rm(fpath_comp)
