@@ -6,25 +6,22 @@ import FFTW
 import LinearAlgebra: mul!
 
 """
-    scaled_response(resp, scale, shape)
+    scaled_response(resp, scale)
 
-Scale the response function `resp` by the factor `scale`. `shape` should be `size(Eto)` where
-`Eto` is the oversampled field in time.
+Scale the response function `resp` by the factor `scale`.
 """
-function scaled_response(resp, scale, shape)
-    buffer = Array{ComplexF64}(undef, shape)
-    let buffer=buffer, resp=resp
+function scaled_response(resp, scale)
+    let resp=resp
         function resp!(out, E)
-            fill!(buffer, 0)
-            resp(buffer, E)
-            @. out += scale*buffer
+            resp(out, E)
+            out .*= scale
         end
     end
 end
 
 
 function KerrScalar(out, E, fac)
-    @. out += fac*E^3
+    @. out = fac*E^3
 end
 
 function KerrVector(out, E, fac)
@@ -33,8 +30,8 @@ function KerrVector(out, E, fac)
         Ey = E[i,2]
         Ex2 = Ex^2
         Ey2 = Ey^2
-        out[i,1] += fac*(Ex2 + Ey2)*Ex
-        out[i,2] += fac*(Ex2 + Ey2)*Ey
+        out[i,1] = fac*(Ex2 + Ey2)*Ex
+        out[i,2] = fac*(Ex2 + Ey2)*Ey
     end
 end
 
@@ -57,13 +54,13 @@ function Kerr_field_nothg(γ3, n)
     hilbert = Maths.plan_hilbert(E)
     Kerr = let γ3 = γ3, hilbert = hilbert
         function Kerr(out, E)
-            out .+= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
+            out .= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
         end
     end
 end
 
 function KerrScalarEnv(out, E, fac)
-    @. out += 3/4*fac*abs2(E)*E
+    @. out = 3/4*fac*abs2(E)*E
 end
 
 function KerrVectorEnv(out, E, fac)
@@ -72,8 +69,8 @@ function KerrVectorEnv(out, E, fac)
         Ey = E[i,2]
         Ex2 = abs2(Ex)
         Ey2 = abs2(Ey)
-        out[i,1] += 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
-        out[i,2] += 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
+        out[i,1] = 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
+        out[i,2] = 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
     end
 end
 
@@ -96,7 +93,7 @@ function Kerr_env_thg(γ3, ω0, t)
     C = exp.(2im*ω0.*t)
     Kerr = let γ3 = γ3, C = C
         function Kerr(out, E)
-            @. out += ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
+            @. out = ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
 end
@@ -171,7 +168,7 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
         end
     end
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-    @. out += Plas.P
+    out .= Plas.P
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
@@ -188,9 +185,9 @@ function (Plas::PlasmaCumtrapz)(out, Et)
     end
     PlasmaScalar!(out, Plas, E)
     if ndims(Et) > 1
-        out .+= reshape(Plas.P, size(Et))
+        out .= reshape(Plas.P, size(Et))
     else
-        @. out += Plas.P
+        out .= Plas.P
     end
 end
 
@@ -345,9 +342,9 @@ function (R::RamanPolar)(out, Et)
     
     # add to output in dimensions requested
     if ndims(Et) > 1
-        out .+= reshape(R.Pout, size(Et))
+        out .= reshape(R.Pout, size(Et))
     else
-        @. out += R.Pout
+        out .= R.Pout
     end
 end
 
