@@ -17,15 +17,17 @@ aeff = let m=m
 end
 
 densityfun = let dens0=PhysData.density(gas, pres)
-    z -> dens0
+    z -> [dens0/2, dens0/2]
 end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             plasma)
+responses = ((Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)),
+             (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)))
+
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -35,8 +37,8 @@ Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aef
 
 ppwin = Stats.peakpower(grid, Eω, (150e-9, 300e-9)) # peak power of dispersive wave
 statsfun = Stats.default(grid, Eω, m, linop, transform;
-                         gas=gas, windows=((150e-9, 300e-9),), userfuns=(ppwin,))
-output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
+                         gas=(gas, gas), windows=((150e-9, 300e-9),), userfuns=(ppwin,))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun) # statsfun
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 

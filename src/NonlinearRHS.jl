@@ -99,16 +99,32 @@ function _cpscb_core(dest, source, N, scale, idcs)
     end
 end
 
+
 "Accumulate responses induced by Et in Pt"
-function Et_to_Pt!(Pt, Et, responses)
-    for resp in responses
-        resp(Pt, Et)
+function Et_to_Pt!(Pt, Ptbuf, Et, responses, density::Number)
+    fill!(Pt, 0)
+    for resp! in responses
+        fill!(Ptbuf, 0)
+        resp!(Ptbuf, Et)
+        Pt .+= density .* Ptbuf
     end
 end
 
-function Et_to_Pt!(Pt, Et, responses, idcs)
+function Et_to_Pt!(Pt, Ptbuf, Et, responses, density::AbstractVector)
+    fill!(Pt, 0)
+    for ii in eachindex(density)
+        for resp! in responses[ii]
+            fill!(Ptbuf, 0)
+            resp!(Ptbuf, Et)
+            Pt .+= density[ii] .* Ptbuf
+        end
+    end
+end
+
+
+function Et_to_Pt!(Pt, Ptbuf, Et, responses, density, idcs)
     for i in idcs
-        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses)
+        Et_to_Pt!(view(Pt, :, i), Ptbuf, view(Et, :, i), responses, density)
     end
 end
 
@@ -254,10 +270,11 @@ function norm_modal(grid; shock=true)
 end
 
 struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
-    Pto::Array{TT,1}
-    Eto::Array{TT,1}
-    Eωo::Array{ComplexF64,1}
-    Pωo::Array{ComplexF64,1}
+    Pto::Vector{TT}
+    Ptobuf::Vector{TT}
+    Eto::Vector{TT}
+    Eωo::Vector{ComplexF64}
+    Pωo::Vector{ComplexF64}
     FT::FTT
     resp::rT
     grid::gT
@@ -278,8 +295,9 @@ function TransModeAvg(TT, grid, FT, resp, densityfun, norm!, aeff)
     Eωo = zeros(ComplexF64, length(grid.ωo))
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
+    Ptobuf = similar(Eto)
     Pωo = similar(Eωo)
-    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, norm!, aeff)
+    TransModeAvg(Pto, Ptobuf, Eto, Eωo, Pωo, FT, resp, grid, densityfun, norm!, aeff)
 end
 
 function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, norm!, aeff)
@@ -294,17 +312,15 @@ const nlscale = sqrt(PhysData.ε_0*PhysData.c/2)
 
 "Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
-    fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
     @. t.Eto /= nlscale*sqrt(t.aeff(z))
-    Et_to_Pt!(t.Pto, t.Eto, t.resp)
+    Et_to_Pt!(t.Pto, t.Ptobuf, t.Eto, t.resp, t.densityfun(z))
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
-    dens = t.densityfun(z)
     t.norm!(nl, z)
     for i in eachindex(nl)
         !t.grid.sidx[i] && continue
-        nl[i] *= t.grid.ωwin[i] * dens
+        nl[i] *= t.grid.ωwin[i]
     end
 end
 
