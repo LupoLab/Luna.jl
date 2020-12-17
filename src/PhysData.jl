@@ -504,6 +504,8 @@ function quantum_numbers(material)
         return 2, 1, 1;
     elseif material == :Kr
         return 4, 1, 1
+    elseif material == :Xe
+        return 5, 1, 1
     elseif material in (:He, :HeJ)
         return 1, 0, 1
     else
