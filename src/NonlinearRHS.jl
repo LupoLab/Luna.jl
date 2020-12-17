@@ -126,7 +126,7 @@ function Et_to_Pt!(Pt, Ptbuf, Et, responses, density, idcs)
     end
 end
 
-mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
+mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT}
     ts::tsT
     full::Bool
     dimlimits::lT
@@ -135,6 +135,7 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     Erωo::Array{ComplexF64,2}
     Er::Array{TT,2}
     Pr::Array{TT,2}
+    Prbuf::Array{TT,2}
     Prω::Array{ComplexF64,2}
     Prωo::Array{ComplexF64,2}
     Prmω::Array{ComplexF64,2}
@@ -142,6 +143,7 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     resp::rT
     grid::gT
     densityfun::dT
+    density::ddT
     norm!::nT
     ncalls::Int
     z::Float64
@@ -173,12 +175,13 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
     Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
     Er = Array{tT,2}(undef, length(grid.to), ts.npol)
     Pr = Array{tT,2}(undef, length(grid.to), ts.npol)
+    Prbuf = similar(Pr)
     Prω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
-    TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, norm!, 0, 0.0, rtol, atol, mfcn)
+    TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prbuf, Prω, Prωo, Prmω,
+               FT, resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn)
 end
 
 function TransModal(grid::Grid.RealGrid, args...; kwargs...)
@@ -194,6 +197,7 @@ function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.ncalls = 0
     t.z = z
     t.dimlimits = Modes.dimlimits(t.ts.ms[1], z=z)
+    t.density = t.densityfun(z)
 end
 
 function pointcalc!(fval, xs, t::TransModal)
@@ -229,8 +233,7 @@ function pointcalc!(fval, xs, t::TransModal)
         Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
-        fill!(t.Pr, 0.0)
-        Et_to_Pt!(t.Pr, t.Er, t.resp)
+        Et_to_Pt!(t.Pr, t.Prbuf, t.Er, t.resp, t.density)
         @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
         @. t.Prω *= t.grid.ωwin
@@ -257,7 +260,7 @@ function (t::TransModal)(nl, Eω, z)
             (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
-    nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
+    nl .= reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
 function norm_modal(grid; shock=true)
@@ -349,6 +352,7 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     grid::gT # time grid
     densityfun::dT # callable which returns density
     Pto::Array{TT,2} # Buffer array for NL polarisation on oversampled time grid
+    Ptobuf::Vector{TT} # Buffer to be used in Et_to_Pt!
     Eto::Array{TT,2} # Buffer array for field on oversampled time grid
     Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
     Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
@@ -369,9 +373,10 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
     Eωo = zeros(ComplexF64, (length(grid.ωo), HT.N))
     Eto = zeros(TT, (length(grid.to), HT.N))
     Pto = similar(Eto)
+    Ptobuf = zeros(TT, length(grid.to))
     Pωo = similar(Eωo)
     idcs = CartesianIndices(size(Pto)[2:end])
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
+    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Ptobuf, Eto, Eωo, Pωo, idcs)
 end
 
 """
@@ -402,14 +407,13 @@ Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field
 place the result in `nl`
 """
 function (t::TransRadial)(nl, Eω, z)
-    fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
     ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    Et_to_Pt!(t.Pto, t.Ptobuf, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
-    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
 """
@@ -470,6 +474,7 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     xygrid::xygT
     densityfun::dT # callable which returns density
     Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+    Ptobuf::Array{TT, 1} # buffer for Et_to_Pt!
     Eto::Array{TT, 3} # buffer for oversampled time-domain field
     Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
     Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
@@ -493,10 +498,11 @@ function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
     Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
     Eto = zeros(TT, (length(grid.to), Ny, Nx))
     Pto = similar(Eto)
+    Ptobuf = zeros(TT, length(grid.to))
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
     TransFree(FT, normfun, responses, grid, xygrid, densityfun,
-              Pto, Eto, Eωo, Pωo, scale, idcs)
+              Pto, Ptobuf, Eto, Eωo, Pωo, scale, idcs)
 end
 
 """
@@ -533,15 +539,14 @@ Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the f
 and place the result in `nl`.
 """
 function (t::TransFree)(nl, Eωk, z)
-    fill!(t.Pto, 0)
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    Et_to_Pt!(t.Pto, t.Ptobuf, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
-    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
 """
