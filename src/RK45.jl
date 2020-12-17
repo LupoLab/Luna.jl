@@ -55,6 +55,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
                     s.tn/tmax*100, Dates.format(etad, "HH:MM:SS"), s.dt, s.err, repeated_tot)
             end
             tic = Dates.now()
+            flush(stderr)
         end
         if ok
             if output
