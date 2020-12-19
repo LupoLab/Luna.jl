@@ -11,13 +11,13 @@ energy = 1e-6
 
 grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatilliMode(a, (gas, gas), (pres/2, pres/2), loss=false)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-densityfun = let dens0=PhysData.density(gas, pres)
-    z -> [dens0/2, dens0/2]
+densityfun = let dens0=PhysData.density(gas, pres/2)
+    z -> [dens0, dens0]
 end
 
 ionpot = PhysData.ionisation_potential(gas)
