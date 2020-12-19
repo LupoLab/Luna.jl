@@ -107,7 +107,6 @@ struct PlasmaCumtrapz{R, EType, tType}
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
     J::EType # buffer to hold the plasma current
-    P::EType # buffer to hold the plasma polarisation
     δt::Float64 # the time step
 end
 
@@ -123,8 +122,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     fraction = similar(t)
     phase = similar(E)
     J = similar(E)
-    P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, t[2]-t[1])
 end
 
 "The plasma response for a scalar electric field"
@@ -139,7 +137,7 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
-    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+    Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
 """
@@ -163,31 +161,23 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
     for ii in eachindex(Em)
         if abs(Em[ii]) > 0
             pre = Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/Em[ii]^2
-            Plas.J[ii,1] +=  pre*Ex[ii]
-            Plas.J[ii,2] +=  pre*Ey[ii]
+            Plas.J[ii,1] += pre*Ex[ii]
+            Plas.J[ii,2] += pre*Ey[ii]
         end
     end
-    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-    out .= Plas.P
+    Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
 function (Plas::PlasmaCumtrapz)(out, Et)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
-            E = reshape(Et, size(Et,1))
+            PlasmaScalar!(out, Plas, reshape(Et, size(Et, 1)))
         else
             PlasmaVector!(out, Plas, Et) # vector case
-            return
         end
     else
-        E = Et # straight scalar case
-    end
-    PlasmaScalar!(out, Plas, E)
-    if ndims(Et) > 1
-        out .= reshape(Plas.P, size(Et))
-    else
-        out .= Plas.P
+        PlasmaScalar!(out, Plas, Et)
     end
 end
 
@@ -340,7 +330,7 @@ function (R::RamanPolar)(out, Et)
         R.Pout[i] = E[i]*R.P[(n ÷ 2) - 1 + i]
     end
     
-    # add to output in dimensions requested
+    # copy to output in dimensions requested
     if ndims(Et) > 1
         out .= reshape(R.Pout, size(Et))
     else
