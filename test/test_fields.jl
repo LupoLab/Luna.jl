@@ -1,5 +1,5 @@
 import Test: @test, @testset
-import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing
+import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing, Modes, Tools, Maths
 import Statistics: mean, std
 import Random: MersenneTwister
 
@@ -402,4 +402,72 @@ end
     # test diversity of power fluctuations
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
+
+@testset "Propagation" begin
+    λ0 = 800e-9
+    τfwhm = 2.5e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    Eωβ1 = Fields.prop_taylor(Eω, grid, [0, 10e-15], λ0)
+    Et = FT \ Eωβ1
+    @test isapprox(Maths.moment(grid.t, abs2.(Maths.hilbert(Et))), 10e-15, rtol=1e-6)
+
+    # Test sign of dispersion
+    Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 15e-30], λ0) # positive chirp
+    Et = FT \ Eωβ2
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15) # spectrogram
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2] # mean frequency at earlier time should be lower (upchirp)
+
+    # Test pulse stretching for Gaussian pulse
+    τfwhm = 30e-15
+    τ0 = Tools.τfw_to_τ0(τfwhm, :gauss)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    Eω = input(grid, FT)
+    Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, τ0^2], λ0) # should lead to √2 increase
+    Et = FT \ Eωβ2
+    τfwβ2 = Maths.fwhm(grid.t, abs2.(Maths.hilbert(Et)); method=:spline)
+    τ0β2 = Tools.τfw_to_τ0(τfwβ2, :gauss)
+    @test τ0β2 ≈ √2 * τ0
+
+    # Test pulse stretching and sign of the dispersion for modal propagation
+    ω0 = PhysData.wlfreq(λ0)
+    # Artificial mode with τ0^2 2nd order dispersion over 2 m and α=0.1
+    β(ω; z=0) = ω0/PhysData.c + 1/(0.999*PhysData.c)*(ω-ω0) + τ0^2/4*(ω-ω0)^2
+    α(ω; z=0) = 0.1
+    m = Modes.arbitrary(neff=Modes.neff_from_αβ(α, β))
+    Eωm = copy(Eω)
+    Fields.prop_mode!(Eωm, grid.ω, m, 2, λ0)
+    Et = FT \ Eωm
+    τfwm = Maths.fwhm(grid.t, abs2.(Maths.hilbert(Et)); method=:spline)
+    τ0m = Tools.τfw_to_τ0(τfwm, :gauss)
+    @test τ0m ≈ √2 * τ0
+    # Check signs are correct:
+    # α = 0.1 should give loss
+    et, eω = Fields.energyfuncs(grid)
+    @test eω(Eω)*exp(-0.2) ≈ eω(Eωm)
+    # β2 > 0 should give positive chirp:
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2]
+
+
+    # Test sign of dispersion for glass
+    Eωglass = Fields.prop_material(Eω, grid, :SiO2, 0.5e-3, λ0)
+    Et = FT \ Eωglass
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2]
+
+    # Test sign of dispersion for chirped mirrors
+    Eωmirr = Fields.prop_mirror(Eω, grid, :PC70, 2) # one double-angle pair
+    Et = FT \ Eωmirr
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] > ω0[2] # PC70 induce negative chirp, so frequency should go down with time
+end
+
 

@@ -217,6 +217,9 @@ function from_dict(gridtype, d)
     return grid
 end
 
+RealGrid(d::AbstractDict) = from_dict(RealGrid, d)
+EnvGrid(d::AbstractDict) = from_dict(EnvGrid, d)
+
 function validate(grid::TimeGrid)
     δt = grid.t[2] - grid.t[1]
     δto = grid.to[2] - grid.to[1]

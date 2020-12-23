@@ -330,7 +330,7 @@ Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf
 -`xmax` : upper limit (window is 0 here)
 -`ε` : fraction of window width over which to increase from 0 to 1
 """
-function planck_taper(x::AbstractArray, xmin, xmax, ε)
+function planck_taper(x, xmin, xmax, ε)
     x0 = (xmax + xmin) / 2
     xc = x .- x0
     X = (xmax - xmin)
@@ -338,7 +338,7 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
     x2 = -X / 2 * (1 - 2ε)
     x3 = X / 2 * (1 - 2ε)
     x4 = X / 2
-    return _taper(xc, x1, x2, x3, x4)
+    return _taper.(xc, x1, x2, x3, x4)
 end
 
 """
@@ -348,7 +348,7 @@ Planck taper window, but finding the taper width by defining 4 points:
 The window increases from 0 to 1 between `left0` and `left1`, and then drops again
 to 0 between `right1` and `right0`.
 """
-function planck_taper(x::AbstractArray, left0, left1, right1, right0)
+function planck_taper(x, left0, left1, right1, right0)
     x0 = (right0 + left0) / 2
     xc = x .- x0
     X = right0 - left0
@@ -358,23 +358,23 @@ function planck_taper(x::AbstractArray, left0, left1, right1, right0)
     x2 = -X / 2 * (1 - 2εleft)
     x3 = X / 2 * (1 - 2εright)
     x4 = X / 2
-    return _taper(xc, x1, x2, x3, x4)
+    return _taper.(xc, x1, x2, x3, x4)
 end
 
-"""
-Planck taper helper function, common to both versions of planck_taper
-"""
 function _taper(xc, x1, x2, x3, x4)
-    idcs12 = x1 .< xc .< x2
-    idcs23 = x2 .<= xc .<= x3
-    idcs34 = x3 .< xc .< x4
-    z12 = @. (x2 - x1) / (xc[idcs12] - x1) + (x2 - x1) / (xc[idcs12] - x2)
-    z34 = @. (x3 - x4) / (xc[idcs34] - x3) + (x3 - x4) / (xc[idcs34] - x4)
-    out = zero(xc)
-    @. out[idcs12] = 1 / (1 + exp(z12))
-    @. out[idcs23] = 1
-    @. out[idcs34] = 1 / (1 + exp(z34))
-    return out
+    if xc < x1
+        return zero(xc)
+    elseif x1 < xc < x2
+        z12 = (x2 - x1) / (xc - x1) + (x2 - x1) / (xc - x2)
+        return 1 / (1 + exp(z12))
+    elseif x2 <= xc <= x3
+        return one(xc)
+    elseif x3 < xc < x4
+        z34 = (x3 - x4) / (xc - x3) + (x3 - x4) / (xc - x4)
+        return 1 / (1 + exp(z34))
+    else
+        return zero(xc)
+    end
 end
 
 """
@@ -428,7 +428,7 @@ Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` i
 """
 function plan_hilbert!(x; dim=1)
     loadFFTwisdom()
-    FT = FFTW.plan_fft(x, dim, flags=Luna.settings["fftw_flag"])
+    FT = FFTW.plan_fft(copy(x), dim, flags=Luna.settings["fftw_flag"])
     saveFFTwisdom()
     xf = Array{ComplexF64}(undef, size(FT))
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
