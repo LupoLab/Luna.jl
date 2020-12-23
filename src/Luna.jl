@@ -96,10 +96,11 @@ include("Polarisation.jl")
 include("Tools.jl")
 include("Plotting.jl")
 include("Raman.jl")
+include("Interface.jl")
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
-       Tools, Plotting, Raman, Antiresonant, Fields, Processing
+       Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)

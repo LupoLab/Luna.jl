@@ -18,26 +18,24 @@ Represents a temporal pulse with shape defined by `Itshape`.
 # Fields
 - `λ0::Float64`: the central field wavelength
 - `energy::Float64`: the pulse energy
-- `ϕ::Float64`: the CEO phase
-- `τ0::Float64`: the temproal shift from grid time 0
+- `ϕ::Vector{Float64}`: spectral phases (CEP, group delay, GDD, TOD, ...)
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
 struct PulseField{iT} <: TimeField
     λ0::Float64
     energy::Float64
-    ϕ::Float64
-    τ0::Float64
+    ϕ::Vector{Float64}
     Itshape::iT
 end
 
 """
-    GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
+    GaussField(;λ0, τfwhm, energy, ϕ, m=1)
 
 Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`, either
 `energy` or peak `power` specified, superGaussian parameter `m=1` and other parameters
 as defined for [`PulseField`](@ref).
 """
-function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=0.0, τ0=0.0, m=1)
+function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=Float64[], m=1)
     if !isnothing(power)
         if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
@@ -47,7 +45,7 @@ function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=0.0, τ0=0.0
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
+    PulseField(λ0, energy, ϕ, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
 end
 
 """
@@ -59,7 +57,7 @@ natural width `τw`, or the intensity/power FWHM `τfwhm`, and either
 Other parameters are as defined for [`PulseField`](@ref).
 """
 function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=nothing,
-                    ϕ=0.0, τ0=0.0)
+                    ϕ=Float64[])
     if !isnothing(τfwhm)
         if !isnothing(τw)
             error("only one of `τw` or `τfwhm` can be specified")
@@ -78,7 +76,7 @@ function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=noth
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
+    PulseField(λ0, energy, ϕ, t -> sech(t/τw)^2)
 end
 
 """
@@ -107,7 +105,9 @@ Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier 
 function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
     energy_t = Fields.energyfuncs(grid)[1]
-    FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    Eω = FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    prop_taylor!(Eω, grid, p.ϕ, p.λ0)
+    Eω
 end
 
 """
