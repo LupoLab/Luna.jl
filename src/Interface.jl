@@ -11,7 +11,8 @@ function prop_capillary(radius, flength, gas, pressure;
                         pulseshape=:gauss,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=true,
-                        saveN=201, filename=nothing)
+                        saveN=201, filepath=nothing,
+                        status_period=5)
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss)
@@ -19,6 +20,12 @@ function prop_capillary(radius, flength, gas, pressure;
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg)
     inputs = makeinputs(mode_s, λ0, τfwhm, τ0, phases,
                         peakpower, energy, peakintensity, pulseshape)
+    linop, Eω, transform, FT = setup(grid, mode_s, radius, pressure, density, resp, inputs)
+    stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
+    output = makeoutput(grid, saveN, stats, filepath)
+
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
 end
 
 function makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
@@ -63,7 +70,7 @@ function makedensity(flength, gas, pressure::Number)
 end
 
 function makedensity(flength, gas, pressure::NTuple{2, <:Number})
-    _, density = Capillary.gradient(flength, gas, pressure...)
+    _, density = Capillary.gradient(gas, flength, pressure...)
     density
 end
 
@@ -138,6 +145,47 @@ function makeinputs(args...)
     N = maximum(arglength, args)
     argsT = [maketuple(arg, N) for arg in args]
     Tuple([makeinputs(aargs...) for aargs in zip(argsT...)])
+end
+
+function setup(grid, mode::Modes.AbstractMode, radius::Number, pressure::Number,
+               density, responses, inputs)
+    linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
+
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
+                                   βfun!, z -> Modes.Aeff(mode, z=z))
+    linop, Eω, transform, FT
+end
+
+function setup(grid, mode::Modes.AbstractMode, radius, pressure,
+               density, responses, inputs)
+    linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
+
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
+                            βfun!, z -> Modes.Aeff(mode, z=z))
+    linop, Eω, transform, FT
+end
+
+function setup(grid, modes, radius::Number, pressure::Number,
+               density, responses, inputs)
+    linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
+                                   :y; full=false)
+    linop, Eω, transform, FT
+end
+
+function setup(grid, modes, radius, pressure, density, responses, inputs)
+    linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
+                                   :y; full=false)
+    linop, Eω, transform, FT
+end
+
+function makeoutput(grid, saveN, stats, filepath::Nothing)
+    Output.MemoryOutput(0, grid.zmax, saveN, stats)
+end
+
+function makeoutput(grid, saveN, stats, filepath)
+    Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
 end
 
 end

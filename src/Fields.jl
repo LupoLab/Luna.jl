@@ -86,15 +86,15 @@ Create electric field for `PulseField`, either the field (for `RealGrid`) or
 the envelope (for `EnvGrid`)
 """
 function make_Et(p::PulseField, grid::Grid.RealGrid)
-    t = grid.t .- p.τ0
+    t = grid.t
     ω0 = PhysData.wlfreq(p.λ0)
-    @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
+    @. sqrt(p.Itshape(t))*cos(ω0*t)
 end
 
 function make_Et(p::PulseField, grid::Grid.EnvGrid)
-    t = grid.t .- p.τ0
+    t = grid.t
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
-    @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
+    @. sqrt(p.Itshape(t))*exp(im*(Δω*t))
 end
 
 """
@@ -106,7 +106,7 @@ function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
     energy_t = Fields.energyfuncs(grid)[1]
     Eω = FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
-    prop_taylor!(Eω, grid, p.ϕ, p.λ0)
+    (length(p.ϕ) >= 1) && prop_taylor!(Eω, grid, p.ϕ, p.λ0)
     Eω
 end
 
