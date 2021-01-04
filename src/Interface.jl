@@ -285,7 +285,10 @@ function ellphase(phases)
 end
 
 ellfac(pol::Symbol) = (1/2, 1/2) # circular
-ellfac(ε::Number) = (1-ε^2/(1+ε^2), ε^2/(1+ε^2))
+function ellfac(ε::Number)
+    (0 <= ε <= 1) || throw(DomainError(ε, "Ellipticity must be between 0 and 1."))
+    (1-ε^2/(1+ε^2), ε^2/(1+ε^2))
+end
 # sqrt(px/py) = ε => px = ε^2*py; px+py = 1 => px = ε^2*(1-px) => px = ε^2/(1+ε^2)
 
 
