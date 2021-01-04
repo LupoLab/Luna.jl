@@ -4,18 +4,110 @@ import Luna.PhysData: wlfreq
 import Luna: Grid, Modes
 import Logging
 
+"""
+    prop_capillary(radius, flength, gas, pressure; kwargs...)
+
+Simulate pulse propagation in a hollow fibre using the capillary model.
+
+# Mandatory arguments
+- `radius`: Core radius of the fibre. Can be a `Number` for constant radius, or a function
+    `a(z)` which returns the `z`-dependent radius.
+- `flength::Number`: Length of the fibre.
+- `gas::Symbol`: Filling gas species.
+- `pressure`: Gas pressure. Can be a `Number` for constant pressure, a 2-`Tuple` of `Number`s
+    for a simple pressure gradient, or a `Tuple` of `(Z, P)` where `Z` and `P`
+    contain `z` positions and the pressures at those positions.
+- `λ0`: Keyword argument. Can be a `Number` for input pulse(s) at the same wavelength or a
+    `Tuple` of several wavelengths. In the latter case, the first element of `λ0`
+    is taken as the global reference wavelength for the moving frame and ionisation.
+
+# Grid options
+- `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
+    Defaults to a grid from 90 nm to 4 μm.
+- `trange::Number`: The total width of the time grid. Defaults to 1 ps.
+    To make the number of samples a power of 2, the actual grid used is usually bigger.
+- `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
+    By default, envelope simulations ignore third-harmonic generation.
+    Plasma has not yet been implemented for envelope fields.
+- `thg::Bool`: Whether to include third-harmonic generation for envelope fields.
+    Defaults to `false`. This option has no effect for full-field simulations
+- `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
+    this is determined by the wavelength grid. If `δt` is given **and smaller** than the
+    required value, it is used instead.
+
+# Input pulse options
+All of these arguments can be given either as a single value or a `Tuple` of values. If
+all are scalar, a single input pulse is created. If any value is a `Tuple`, multiple input
+pulses are created. Scalar values are applied to all pulses.
+If more than one value is a `Tuple`, all must be the same length.
+
+`τfwhm` and `τ0` are mutually exclusive for each input (i.e. the other must be `nothing`).
+`peakpower`, `energy`, and `peakintensity` are also mutually exclusive.
+
+All inputs are placed in the first mode.
+
+- `λ0`: Central wavelength
+- `τfwhm`: The pulse duration as defined by the full width at half maximum.
+- `τ0`: The "natural" pulse duration. Only available if pulseshape is `sech`.
+- `phases`: Spectral phases to be applied to the transform-limited pulse. Elements are
+    the usual polynomial phases ϕ₀ (CEP), ϕ₁ (group delay), ϕ₂ (GDD), ϕ₃ (TOD), etc.
+    Note that to apply different phases to different input pulses, you must supply
+    a `Tuple` of `Vector`s.
+- `energy`: Pulse energy.
+- `peakpower`: Peak power **of the transform-limited pulse before phases are added**.
+- `peakintensity`: Peak intensity **of the transform-limited pulse**. Intensity is taken
+    as the mode-averaged value, i.e. peak power divided by effective area.
+- `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
+    or `:sech` for a sech² pulse.
+- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
+    or a `Number` between `0` and `1` which defines the ellipticity. The major axis for
+    elliptical polarisation is always the y-axis.
+- `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
+
+# Modes options
+- `modes`: Defines which modes are included in the propagation. Can be any of:
+    - a single mode signifier (default: :HE11), which leads to mode-averaged propagation
+        (as long as all inputs are linearly polarised).
+    - a list of mode signifiers, which leads to multi-mode propagation in those modes.
+    - a `Number` `N` of modes, which simply creates the first `N` `HE` modes.
+    Note that when elliptical or circular polarisation is included, each mode is present
+    twice in the output, once for `x` and once for `y` polarisation.
+- `model::Symbol`: Can be `:full`, which includes the full complex refractive index of the cladding
+    in the effective index of the mode, or `:reduced`, which uses the simpler model more
+    commonly seen in the literature. See `Luna.Capillary` for more details.
+    Defaults to `:full`.
+- `loss::Bool`: Whether to include propagation loss. Defaults to `true`.
+
+# Nonlinear interaction options
+- `kerr`: Whether to include the Kerr effect. Defaults to `true`.
+- `raman`: Whether to include the Raman effect. Defaults to `false`.
+- `plasma`: Can be one of
+    - `:ADK` -- include plasma using the ADK ionisation rate.
+    - `:PPT` -- include plasma using the PPT ionisation rate.
+    - `true` (default) -- same as `:PPT`.
+    - `false` -- ignore plasma.
+    Note that plasma is only available for full-field simulations.
+
+# Output options
+- `saveN::Integer`: Number of points along z at which to save the field.
+- `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
+    only in the working memory. If not `nothing`, should be a file path as a `String`,
+    and the results are saved in a file at this location.
+- `status_period::Number`: Interval (in seconds) between printed status updates.
+"""
 function prop_capillary(radius, flength, gas, pressure;
                         λlims=(90e-9, 4e-6), trange=1e-12, envelope=false, thg=nothing, δt=1,
-                        λ0=nothing, τfwhm=nothing, τ0=nothing, phases=Float64[],
+                        λ0, τfwhm=nothing, τ0=nothing, phases=Float64[],
                         peakpower=nothing, energy=nothing, peakintensity=nothing,
                         pulseshape=:gauss, polarisation=:linear,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
-                        raman=false, kerr=true, plasma=true,
+                        raman=false, kerr=true, plasma=nothing,
                         saveN=201, filepath=nothing,
                         status_period=5)
 
     pol = needpol(polarisation)
+    plasma = isnothing(plasma) ? !envelope : plasma
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
@@ -23,7 +115,9 @@ function prop_capillary(radius, flength, gas, pressure;
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, τfwhm, τ0, phases,
                         peakpower, energy, peakintensity, pulseshape, polarisation)
-    linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol)
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
+    linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
+                                     const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
     output = makeoutput(grid, saveN, stats, filepath)
 
@@ -42,7 +136,11 @@ function needpol(pol::Symbol)
 end
 
 needpol(pol::Number) = true
+needpol(pol::Tuple) = any(needpol, pol)
 needpol(pol) = error("Polarisation must be :linear, :circular, or an ellipticity")
+
+const_linop(radius::Number, pressure::Number) = Val(true)
+const_linop(radius, pressure) = Val(false)
 
 
 function makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
@@ -140,7 +238,7 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
     push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 end
 
-function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg)
+function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
@@ -157,15 +255,22 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg)
     Tuple(out)
 end
 
+getAeff(mode::Modes.AbstractMode) = Modes.Aeff(mode)
+getAeff(modes) = Modes.Aeff(modes[1])
+
 function makefield(mode_s, λ0::Number, τfwhm, τ0, phases,
                    peakpower, energy, peakintensity, pulseshape, pfac)
-    isnothing(peakintensity) || error("TODO: peak intensity input")
     !isnothing(peakpower) && (peakpower *= pfac)
     !isnothing(energy) && (energy *= pfac)
+    if !isnothing(peakintensity)
+        isnothing(peakpower) || error("Only one of peak intensity or power can be set.")
+        peakpower = getAeff(mode_s) * peakintensity * pfac
+    end
     if pulseshape == :gauss
+        isnothing(τ0) || error("τ0 pulse duration only applies to sech² pulses.")
         return Fields.GaussField(;λ0, τfwhm, energy, power=peakpower, ϕ=phases)
     elseif pulseshape == :sech
-        return Fields.SechField(;λ0, energy, power=peakpower, τ0, τfwhm, ϕ=phases)
+        return Fields.SechField(;λ0, energy, power=peakpower, τw=τ0, τfwhm, ϕ=phases)
     end
 end
 
@@ -191,7 +296,7 @@ function makeinputs(mode_s, λ0::Number, τfwhm::Union{Number, Nothing},
     if polarisation == :linear
         field = makefield(mode_s, λ0, τfwhm, τ0, phases,
                           peakpower, energy, peakintensity, pulseshape, 1)
-        return ((mode=1, fields=(f1,)),)
+        return ((mode=1, fields=(field,)),)
     else
         py, px = ellfac(polarisation)
         f1 = makefield(mode_s, λ0, τfwhm, τ0, phases,
@@ -213,15 +318,20 @@ function makeinputs(args...)
     N = maximum(arglength, args)
     argsT = [maketuple(arg, N) for arg in args]
     polarisation = args[end]
-    fields = Tuple([makefield(aargs...) for aargs in zip(argsT...)])
-    if polarisation == :circular
-        return ((mode=1, fields=fields), (mode=2, fields=fields))
-    else
-        return ((mode=1, fields=fields),)
-    end
+    Tuple(collect(Iterators.flatten([makeinputs(aargs...) for aargs in zip(argsT...)])))
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, polarisation)
+function shotnoise_maybe(inputs, mode::Modes.AbstractMode, shotnoise::Bool)
+    shotnoise || return inputs
+    (inputs..., (mode=1, fields=(Fields.ShotNoise(),)))
+end
+
+function shotnoise_maybe(inputs, modes, shotnoise::Bool)
+    shotnoise || return inputs
+    (inputs..., [(mode=ii, fields=(Fields.ShotNoise(),)) for ii in eachindex(modes)]...)
+end
+
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{true})
     linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
 
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
@@ -229,22 +339,23 @@ function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, polar
     linop, Eω, transform, FT
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, polarisation)
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{false})
     linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
 
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
-                            βfun!, z -> Modes.Aeff(mode, z=z))
+                                   βfun!, z -> Modes.Aeff(mode, z=z))
     linop, Eω, transform, FT
 end
 
-function setup(grid, modes, density, responses, inputs, pol)
+function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
+    # TODO: automatically switch to full modal integral for modes other than HE1m
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
                                    pol ? :xy : :y; full=false)
     linop, Eω, transform, FT
 end
 
-function setup(grid, modes, density, responses, inputs)
+function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
     linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
                                    pol ? :xy : :y; full=false)

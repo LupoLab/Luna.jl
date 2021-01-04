@@ -98,9 +98,12 @@ include("Plotting.jl")
 include("Raman.jl")
 include("Interface.jl")
 
+prop_capillary = Interface.prop_capillary
+
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
-       Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface
+       Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface,
+       prop_capillary
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
@@ -114,6 +117,14 @@ end
 # for a single Fields.TimeField we assume a single input for mode 1
 function doinput_sm(grid, inputs::Fields.TimeField, FT)
     doinput_sm(grid, (inputs,), FT)
+end
+
+function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
+    if any([i.mode ≠ 1 for i in inputs])
+        error("For mode-averaged propagation, all inputs must be in 1st mode.")
+    end
+    inputs_flat = Tuple(Iterators.flatten([i.fields for i in inputs]))
+    doinput_sm(grid, inputs_flat, FT)
 end
 
 function setup(grid::Grid.RealGrid, densityfun, responses, inputs, βfun!, aeff;
@@ -149,7 +160,7 @@ end
 # for a tuple of NamedTuple's with tuple fields we assume all is well
 function doinput_mm!(Eω, grid, inputs::Tuple{Vararg{T} where T <: NamedTuple{<:Any, <:Tuple{Vararg{Any}}}}, FT)
     for input in inputs
-        out = @view Eω[:,input.mode]
+        out = @view Eω[:, input.mode]
         for field in input.fields
             out .+= field(grid, FT)
         end
