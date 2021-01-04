@@ -33,7 +33,8 @@ function show(io::IO, m::MarcatilliMode)
     a = radius_string(m)
     loss = "loss=" * (m.loss == Val(true) ? "true" : "false")
     model = "model="*string(m.model)
-    out = "MarcatilliMode{"*join([mode_string(m), a, loss, model], ", ")*"}"
+    angle = "ϕ=$(m.ϕ/π)π"
+    out = "MarcatilliMode{"*join([mode_string(m), a, loss, model, angle], ", ")*"}"
     print(io, out)
 end
 
