@@ -572,6 +572,7 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
     rax.set_ylim(100/(1e6*e0).*lims)
     rax.set_ylabel("Conversion efficiency (%)")
     fig.set_size_inches(figsize...)
+    fig
 end
 
 
