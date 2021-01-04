@@ -463,11 +463,13 @@ end
     @test ω0[1] < ω0[2]
 
     # Test sign of dispersion for chirped mirrors
-    Eωmirr = Fields.prop_mirror(Eω, grid, :PC70, 2) # one double-angle pair
-    Et = FT \ Eωmirr
-    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
-    ω0 = Maths.moment(grid.ω, abs2.(gab))
-    @test ω0[1] > ω0[2] # PC70 induce negative chirp, so frequency should go down with time
+    for mirror in (:PC70, :ThorlabsUMC)
+        Eωmirr = Fields.prop_mirror(Eω, grid, mirror, 2) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+    end
 end
 
 
