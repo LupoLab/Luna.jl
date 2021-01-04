@@ -553,9 +553,11 @@ prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω,
 prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
 
 """
-    prop_mirror!(Eω, ω, mirror, reflections)
+    prop_mode!(Eω, ω, mode, distance, λ0=nothing)
 
-Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
+Propagate the field `Eω` linearly by a certain `distance` in the given `mode`. If the
+central wavelength `λ0` is given, remove the group delay at this wavelength. Propagation
+includes both dispersion and loss.
 """
 function prop_mode!(Eω, ω, mode, distance, λ0=nothing)
     β(z) = ω./PhysData.c .* Modes.neff.(mode, ω; z=z)
