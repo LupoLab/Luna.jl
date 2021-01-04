@@ -125,7 +125,7 @@ function prop_capillary(radius, flength, gas, pressure;
     output
 end
 
-function needpol(pol::Symbol)
+function needpol(pol)
     if pol == :linear
         return false
     elseif pol == :circular
@@ -137,7 +137,6 @@ end
 
 needpol(pol::Number) = true
 needpol(pol::Tuple) = any(needpol, pol)
-needpol(pol) = error("Polarisation must be :linear, :circular, or an ellipticity")
 
 const_linop(radius::Number, pressure::Number) = Val(true)
 const_linop(radius, pressure) = Val(false)
