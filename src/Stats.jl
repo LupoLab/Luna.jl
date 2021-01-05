@@ -470,7 +470,8 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
     pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
             peakintensity(grid, modes, components=pol), fwhm_t(grid),
-            zdw_linop(modes, linop), density(transform.densityfun)]
+            zdw_linop(modes, linop), density(transform.densityfun),
+            fwhm_r(grid, modes; components=pol)]
     if !isnothing(gas)
         push!(funs, pressure(transform.densityfun, gas))
     end
