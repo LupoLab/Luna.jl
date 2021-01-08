@@ -12,6 +12,7 @@ import Optim
 import CSV
 import HCubature: hquadrature
 import DSP: unwrap
+import Logging: @warn
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -211,6 +212,9 @@ end
 Interpolate the `DataField` onto the provided `grid` (note the argument `FT` is unused).
 """
 function (d::DataField)(grid::Grid.AbstractGrid, FT)
+    if maximum(grid.ω) < maximum(d.ω)
+        @warn("Interpolating onto a coarser grid may clip the input spectrum.")
+    end
     energy_ω = Fields.energyfuncs(grid)[2]
     ϕg = Maths.BSpline(d.ω, d.ϕω).(grid.ω)
     Ig = Maths.BSpline(d.ω, d.Iω).(grid.ω)
