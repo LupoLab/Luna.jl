@@ -583,21 +583,29 @@ prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 Maximise the peak power of the field `Eω` by adding Taylor-expanded spectral phases up to
 order `order`. 
 """
-function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2)
+function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2, boundfac=8)
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     ItFTL = _It(iFT(EωFTL, grid), grid)
-    target = 1e12/maximum(ItFTL)
+    target = 1/maximum(ItFTL)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
 
     function f(disp)
         # disp here is just the dispersion terms (2nd order and higher)
         ϕs = [0, 0, disp...]
-        Eωp = prop_taylor(Eω, grid, ϕs, λ0)
+        Eωp = prop_taylor(Eωnorm, grid, ϕs, λ0)
         Itp = _It(iFT(Eωp, grid), grid)
-        1e12/maximum(Itp)
+        1/maximum(Itp)
     end
 
-    bounds = (100e-15 .^(1:order))[2:end]
+    τ0FTL = Maths.fwhm(grid.t, ItFTL)/(2*sqrt(log(2)))
+    τ0 = Maths.fwhm(grid.t, _It(iFT(Eω, grid), grid))/(2*sqrt(log(2)))
+
+    ϕ2_0 = τ0FTL*sqrt(τ0^2 - τ0FTL^2) # GDD to stretch Gaussian from FTL to actual duration
+
+    # for Gaussian with pure GDD, sqrt(ϕ2_0) is the FTL duration, so use that as guide
+    bounds = boundfac*(sqrt(ϕ2_0) .^(2:order))
     srange = [(-bi, bi) for bi in bounds]
     res = BlackBoxOptim.bboptimize(f; SearchRange=srange,
                                    TraceMode=:silent, TargetFitness=target)
@@ -631,16 +639,18 @@ function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     ItFTL = _It(iFT(EωFTL, grid), grid)
-    target = 1e12/maximum(ItFTL)
+    target = 1/maximum(ItFTL)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
 
     prop! = propagator_material(material; kwargs...)
 
     function f(d)
         # d is the material insertion
-        Eωp = copy(Eω)
+        Eωp = copy(Eωnorm)
         prop!(Eωp, grid.ω, d, λ0)
         Itp = _It(iFT(Eωp, grid), grid)
-        1e12/maximum(Itp)
+        1/maximum(Itp)
     end
 
     # res = BlackBoxOptim.bboptimize(f; SearchRange=[srange],
