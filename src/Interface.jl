@@ -2,7 +2,7 @@ module Interface
 using Luna
 import Luna.PhysData: wlfreq
 import Luna: Grid, Modes
-import Logging
+import Logging: @info
 
 """
     prop_capillary(radius, flength, gas, pressure; kwargs...)
@@ -334,14 +334,16 @@ function shotnoise_maybe(inputs, modes, shotnoise::Bool)
 end
 
 function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{true})
+    @info("Using mode-averaged propagation.")
     linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
-
+    
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
-                                   βfun!, z -> Modes.Aeff(mode, z=z))
+    βfun!, z -> Modes.Aeff(mode, z=z))
     linop, Eω, transform, FT
 end
 
 function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{false})
+    @info("Using mode-averaged propagation.")
     linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
 
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
@@ -349,18 +351,25 @@ function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, 
     linop, Eω, transform, FT
 end
 
+needfull(modes) = !all(modes) do mode
+    (mode.kind == :HE) && (mode.n == 1)
+end
+
 function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
-    # TODO: automatically switch to full modal integral for modes other than HE1m
+    nf = needfull(modes)
+    @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=false)
+    pol ? :xy : :y; full=nf)
     linop, Eω, transform, FT
 end
 
 function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
+    nf = needfull(modes)
+    @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=false)
+                                   pol ? :xy : :y; full=nf)
     linop, Eω, transform, FT
 end
 
