@@ -1,11 +1,18 @@
 module Fields
-import Luna
-import Luna: Grid, Maths, PhysData
+import Luna: Grid, Maths, PhysData, Modes
+import Luna.PhysData: wlfreq
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
 import Hankel
 import LinearAlgebra: norm
+import FFTW
+import BlackBoxOptim
+import Optim
+import CSV
+import HCubature: hquadrature
+import DSP: unwrap
+import Logging: @warn
 
 abstract type AbstractField end
 abstract type TimeField <: AbstractField end
@@ -164,6 +171,63 @@ function (c::CWField)(grid::Grid.EnvGrid, FT)
 end
 
 """
+    DataField(ω, Iω, ϕω, energy)
+
+Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
+radial frequency axis `ω`.
+"""
+struct DataField <: TimeField
+    ω::Vector{Float64}
+    Iω::Vector{Float64}
+    ϕω::Vector{Float64}
+    energy::Float64
+end
+
+"""
+    DataField(ω, Eω, energy)
+
+Create a `DataField` from the complex frequency-domain field `Eω` sampled on radial
+frequency grid `ω`.
+"""
+DataField(ω, Eω, energy) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)), energy)
+
+"""
+    DataField(fpath, energy)
+
+Create a `DataField` by loading `ω`, `Iω`, and `ϕω` from the file at `fpath`. The file must
+contain 3 columns:
+
+- frequency in Hz
+- spectral power density (arbitrary units)
+- unwrapped spectral phase
+"""
+function DataField(fpath, energy)
+    dat = CSV.read(fpath)
+    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3], energy)
+end
+
+"""
+    (d::DataField)(grid, FT)
+
+Interpolate the `DataField` onto the provided `grid` (note the argument `FT` is unused).
+"""
+function (d::DataField)(grid::Grid.AbstractGrid, FT)
+    if maximum(grid.ω) < maximum(d.ω)
+        @warn("Interpolating onto a coarser grid may clip the input spectrum.")
+    end
+    energy_ω = Fields.energyfuncs(grid)[2]
+    ϕg = Maths.BSpline(d.ω, d.ϕω).(grid.ω)
+    Ig = Maths.BSpline(d.ω, d.Iω).(grid.ω)
+    Ig[Ig .< 0] .= 0
+    Ig[.!(minimum(d.ω) .< grid.ω .< maximum(d.ω))] .= 0
+    Ig .*= grid.ωwin
+    Eω = sqrt.(Ig) .* exp.(1im.*ϕg)
+    Eω .*= sqrt(d.energy/energy_ω(Eω))
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    Eω .*= exp.(-1im .* grid.ω .* τ)
+end
+
+"""
     ShotNoise(rng=GLOBAL_RNG)
 
 Creates one photon per mode quantum noise (shot noise) to add to an input field.
@@ -289,8 +353,10 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
 end
 
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
-
 It(Et, grid::Grid.EnvGrid) = abs2.(Et)
+
+iFT(Eω, grid::Grid.RealGrid) = FFTW.irfft(Eω, length(grid.t), 1)
+iFT(Eω, grid::Grid.EnvGrid) = FFTW.ifft(Eω, 1)
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)
@@ -391,6 +457,223 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     energy_ω(Eω) = prefac * sum(abs2.(Eω))
 
     return energy_t, energy_ω
+end
+
+"""
+    prop_taylor!(Eω, grid, ϕs, λ0)
+    prop_taylor!(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
+
+Add spectral phase, given as Taylor-expansion coefficients `ϕs` around central wavelength
+`λ0`, to the frequency-domain field `Eω`. Sampling axis of `Eω` can be given either as an
+`AbstractGrid` or the frequency axis `ω`.
+"""
+function prop_taylor!(Eω, ω, ϕs, λ0)
+    Δω = ω .- wlfreq(λ0)
+    ϕ = zeros(length(ω))
+    for (n, ϕi) in enumerate(ϕs)
+        ϕ .+= Δω.^(n-1)./factorial(n-1) * ϕi
+    end
+    Eω .*= exp.(-1im.*ϕ)
+end
+
+prop_taylor!(Eω, grid::Grid.AbstractGrid, ϕs, λ0) = prop_taylor!(Eω, grid.ω, ϕs, λ0)
+
+"""
+    prop_taylor(Eω, grid, ϕs, λ0)
+    prop_taylor(Eω, grid::Grid.AbstractGrid, ϕs, λ0)
+
+Return a copy of the frequency-domain field `Eω` with added spectral phase, given as Taylor-expansion coefficients `ϕs` around central wavelength `λ0`.
+Sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency axis `ω`.
+"""
+prop_taylor(Eω, args...) = prop_taylor!(copy(Eω), args...)
+
+"""
+    prop_material!(Eω, ω, material, thickness, λ0=nothing;
+                   P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Linearly propagate the frequency-domain field `Eω` through a certain `thickness` of a `material`.
+If the central wavelength `λ0` is given, remove the group delay at this wavelength.
+Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
+"""
+function prop_material!(Eω, ω, material, thickness, λ0=nothing; kwargs...)
+    propagator_material(material; kwargs...)(Eω, ω, thickness, λ0)
+end
+
+prop_material!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_material!(
+    Eω, grid.ω, args...; kwargs...)
+
+"""
+    prop_material(Eω, ω, material, thickness, λ0=nothing;
+                   P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Return a copy of the frequency-domain field `Eω` after linear propagation through a certain
+`thickness` of a `material`. If the central wavelength `λ0` is given, remove the group
+delay at this wavelength. Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
+"""
+prop_material(Eω, args...; kwargs...) = prop_material!(copy(Eω), args...; kwargs...)
+
+"""
+    propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Create a function `prop!(Eω, ω, thickness, λ0)` which propagates the field `Eω` through
+a certain `thickness` of a `material`. If the central wavelength `λ0` is given, remove the group
+delay at this wavelength.  Keyword arguments `P` (pressure), `T` (temperature)
+and `lookup` (whether to use lookup table instead of Sellmeier expansion).
+"""
+function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
+    n = PhysData.ref_index_fun(material, P, T; lookup=lookup)
+    β1 = PhysData.dispersion_func(1, n)
+    function prop!(Eω, ω, thickness, λ0=nothing)
+        β = ω./PhysData.c .* n.(wlfreq.(ω))
+        if !isnothing(λ0)
+            β .-= β1(λ0) .* (ω .- wlfreq(λ0))
+        end
+        β[.!isfinite.(β)] .= 0
+        Eω .*= exp.(-1im.*real(β).*thickness)
+    end
+    prop!
+end
+
+"""
+    prop_mirror!(Eω, ω, mirror, reflections)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
+"""
+function prop_mirror!(Eω, ω, mirror, reflections)
+    λ = wlfreq.(ω)
+    t = PhysData.lookup_mirror(mirror).(λ) # transfer function
+    tn = t.^reflections
+    tn[.!isfinite.(tn)] .= 0
+    if reflections < 0
+        tn = exp.(1im .* angle.(tn))
+    end
+    Eω .*= tn
+end
+
+prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)
+
+prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
+
+"""
+    prop_mode!(Eω, ω, mode, distance, λ0=nothing)
+
+Propagate the field `Eω` linearly by a certain `distance` in the given `mode`. If the
+central wavelength `λ0` is given, remove the group delay at this wavelength. Propagation
+includes both dispersion and loss.
+"""
+function prop_mode!(Eω, ω, mode, distance, λ0=nothing)
+    β(z) = ω./PhysData.c .* Modes.neff.(mode, ω; z=z)
+    β1(z) = Modes.dispersion(mode, 1, wlfreq(λ0); z=z)
+    βint, err = hquadrature(β, 0, abs(distance))
+    if !isnothing(λ0)
+        β1int, err = hquadrature(β1, 0, abs(distance))
+        βint .-= β1int .* (ω .- wlfreq(λ0))
+    end
+    expφ = exp.(-1im.*sign(distance).*conj(βint))
+    expφ[.!isfinite.(expφ)] .= 0
+    Eω .*= expφ
+end
+
+prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, args...)
+
+prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
+
+
+"""
+    optcomp_taylor(Eω, grid, λ0; order=2)
+
+Maximise the peak power of the field `Eω` by adding Taylor-expanded spectral phases up to
+order `order`. 
+"""
+function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2, boundfac=8)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+    target = 1/maximum(ItFTL)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
+
+    function f(disp)
+        # disp here is just the dispersion terms (2nd order and higher)
+        ϕs = [0, 0, disp...]
+        Eωp = prop_taylor(Eωnorm, grid, ϕs, λ0)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1/maximum(Itp)
+    end
+
+    τ0FTL = Maths.fwhm(grid.t, ItFTL)/(2*sqrt(log(2)))
+    τ0 = Maths.fwhm(grid.t, _It(iFT(Eω, grid), grid))/(2*sqrt(log(2)))
+
+    ϕ2_0 = τ0FTL*sqrt(τ0^2 - τ0FTL^2) # GDD to stretch Gaussian from FTL to actual duration
+
+    # for Gaussian with pure GDD, sqrt(ϕ2_0) is the FTL duration, so use that as guide
+    bounds = boundfac*(sqrt(ϕ2_0) .^(2:order))
+    srange = [(-bi, bi) for bi in bounds]
+    res = BlackBoxOptim.bboptimize(f; SearchRange=srange,
+                                   TraceMode=:silent, TargetFitness=target)
+    ϕs = [0, 0, BlackBoxOptim.best_candidate(res)...]
+    ϕs, prop_taylor(Eω, grid, ϕs, λ0)
+end
+
+function optcomp_taylor(Eω, grid, λ0; order=2)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    ϕsout = zeros(order+1, size(cidcs)...)
+    for ci in cidcs
+        ϕsi, Eωi = optcomp_taylor(Eω[:, :, ci], grid, λ0; order=order)
+        out[:, :, ci] .= Eωi
+        ϕsout[:, ci] .= ϕsi
+    end
+    ϕsout, out
+end
+
+_It(Et::AbstractVector, grid) = It(Et, grid)
+_It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
+
+"""
+    optcomp_material(Eω, grid, material, λ0; kwargs...)
+
+Maximise the peak power of the field `Eω` by linear propagation through the `material`. 
+Keyword arguments `kwargs` are the same as for [`prop_material`](@ref).
+"""
+function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,
+                          min_thickness, max_thickness; kwargs...)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+    target = 1/maximum(ItFTL)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
+
+    prop! = propagator_material(material; kwargs...)
+
+    function f(d)
+        # d is the material insertion
+        Eωp = copy(Eωnorm)
+        prop!(Eωp, grid.ω, d, λ0)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1/maximum(Itp)
+    end
+
+    # res = BlackBoxOptim.bboptimize(f; SearchRange=[srange],
+    #                                TraceMode=:silent, TargetFitness=target)
+    # prop_material(Eω, grid, material, BlackBoxOptim.best_candidate(res), λ0; kwargs...)
+    res = Optim.optimize(f, min_thickness, max_thickness)
+    res.minimizer, prop_material(Eω, grid, material, res.minimizer, λ0; kwargs...)
+end
+
+function optcomp_material(Eω, args...; kwargs...)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    dout = zeros(size(cidcs))
+    for ci in cidcs
+        di, Eωi = optcomp_material(Eω[:, :, ci], args...; kwargs...)
+        out[:, :, ci] .= Eωi
+        dout[ci] = di
+    end
+    dout, out
 end
 
 end

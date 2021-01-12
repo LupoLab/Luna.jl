@@ -3,6 +3,8 @@ module PhysData
 import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
+import CSV
+import Polynomials
 import Luna: Maths, Utils
 
 include("data/lookup_tables.jl")
@@ -52,7 +54,7 @@ const gas_str = Dict(
     :N2 => "Nitrogen",
     :H2 => "Hydrogen"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
 
 "Change from ω to λ and vice versa"
@@ -203,6 +205,37 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
+    elseif material == :MgF2
+        return μm -> @. sqrt(complex(1
+            + 0.27620
+            + 0.60967/(1-(0.08636/μm)^2)
+            + 0.0080/(1-(18.0/μm)^2)
+            + 2.14973/(1-(25.0/μm)^2)
+            ))
+    elseif material == :ADPo
+        return μm -> @. sqrt(complex(
+            2.302842
+            + 15.102464*μm^2/(μm^2-400)
+            + 0.011125165/(μm^2-0.01325366)
+        ))
+    elseif material == :ADPe
+        return μm -> @. sqrt(complex(
+            2.163510
+            + 5.919896*μm^2/(μm^2-400)
+            + 0.009616676/(μm^2-0.01298912)
+        ))
+    elseif material == :KDPo
+        return μm -> @. sqrt(complex(
+            2.259276
+            + 13.00522*μm^2/(μm^2-400)
+            + 0.01008956/(μm^2-0.0129426)
+        ))
+    elseif material == :KDPe
+        return μm -> @. sqrt(complex(
+            2.132668
+            + 3.2279924*μm^2/(μm^2-400)
+            + 0.008637494/(μm^2-0.0122810)
+        ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -645,6 +678,54 @@ function raman_parameters(material)
         throw(DomainError(material, "Unknown material $material"))
     end
     rp
+end
+
+function lookup_mirror(type)
+    if type == :PC70
+        # λ (nm), R(5deg) (%), R(19deg) (%)
+        Rdat = CSV.File(joinpath(Utils.datadir(), "PC70_R.csv"))
+        # λ (nm), GDD(5deg) (fs^2), GDD(19deg) (fs^2)
+        GDDdat = CSV.File(joinpath(Utils.datadir(), "PC70_GDD.csv"))
+        # Double sqrt creates average reflectivity per _reflection_ rather than per pair
+        rspl = Maths.BSpline(Rdat.Wlgth*1e-9, sqrt.(sqrt.(Rdat.Rp5deg/100 .* Rdat.Rp19deg/100)))
+        λGDD = GDDdat.Wlgth
+        ω = wlfreq.(λGDD*1e-9)
+        # average phase per _reflection_ rather than per pair
+        ϕ = 1e-30/2 * Maths.cumtrapz(Maths.cumtrapz(GDDdat.GDDrp5deg.+GDDdat.GDDrp19deg, ω), ω)
+        # ϕ has a large linear component - remove that
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(800e-9)*1e-15
+        idcs =  2 .< ωfs .< 4 # large kinks at edge of frequency window confuse the fit
+        p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD*1e-9, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
+    elseif type == :ThorlabsUMC
+        # λ (nm), R(p) (%), R(s) (%)
+        Rdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
+        # λ (nm), GD(p) (fs^2), GD(s) (fs^2)
+        GDdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_GD.csv"))
+        # Default to s-pol
+        rspl = Maths.BSpline(Rdat.wl*1e-9, sqrt.(Rdat.Rs/100))
+        λGD = GDdat.wl
+        ω = wlfreq.(λGD*1e-9)
+        # average phase per reflection, default to s-pol
+        ϕ = Maths.cumtrapz(1e-15*GDdat.GDs, ω)
+        # ϕ has a large linear component - remove that
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(800e-9)*1e-15
+        idcs =  2 .< ωfs .< 4 # large kinks at edge of frequency window confuse the fit
+        p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 3)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGD*1e-9, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 640e-9, 650e-9, 1050e-9, 1100e-9)
+    else
+        throw(DomainError("Unknown mirror type $type"))
+    end
 end
 
 end

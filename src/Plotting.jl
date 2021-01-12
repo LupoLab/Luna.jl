@@ -1,11 +1,27 @@
 module Plotting
-import Luna: Grid, Maths, PhysData
+import Luna: Grid, Maths, PhysData, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
-import PyPlot: ColorMap, plt, pygui
+import PyPlot: ColorMap, plt, pygui, Figure
 import FFTW
 import Printf: @sprintf
+import Base: display
+
+"""
+    displayall()
+
+[`display`](@ref) all currently open PyPlot figures.
+"""
+function displayall()
+    for fign in plt.get_fignums()
+        fig = plt.figure(fign)
+        display(fig)
+    end
+
+end
+
+display(figs::AbstractArray{Figure, N}) where N = [display(fig) for fig in figs]
 
 """
     cmap_white(cmap, N=512, n=8)
@@ -110,8 +126,13 @@ function stats(output; kwargs...)
     haskey(stats, "ω0") && push!(pstats, (1e9*wlfreq.(stats["ω0"]), "Central wavelength (nm)"))
 
     fstats = [] # fibre/waveguide/propagation statistics
-    haskey(stats, "electrondensity") && push!(
-        fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+    if haskey(stats, "electrondensity")
+        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+        if haskey(stats, "density")
+            push!(fstats,
+                 (100*stats["electrondensity"]./stats["density"], "Ionisation fraction (%)"))
+        end
+    end
     haskey(stats, "density") && push!(
         fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
     haskey(stats, "pressure") && push!(
@@ -155,6 +176,7 @@ function stats(output; kwargs...)
         end
         ffig.tight_layout()
     end
+    [pfig, ffig]
 end
 
 """
@@ -191,7 +213,7 @@ the sum of all modes.
 function prop_2D(output, specaxis=:f;
                  trange=(-50e-15, 50e-15), bandpass=nothing,
                  λrange=(150e-9, 2000e-9), dBmin=-60,
-                 resolution=nothing,
+                 resolution=nothing, modes=nothing,
                  kwargs...)
     z = output["z"]*1e2
     if specaxis == :λ
@@ -206,16 +228,24 @@ function prop_2D(output, specaxis=:f;
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
     specx .*= specxfac
 
-    multimode, modes = get_modes(output)
+    multimode, modelabels = get_modes(output)
 
     if multimode
-        _prop2D_mm(modes, t, z, specx, It, Iω,
-                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
+        fig = _prop2D_mm(modelabels, modeidcs(modes, modelabels), t, z, specx, It, Iω,
+                         speclabel, speclims, trange, dBmin, window_str(bandpass);
+                         kwargs...)
     else
-        _prop2D_sm(t, z, specx, It, Iω,
-                   speclabel, speclims, trange, dBmin, window_str(bandpass); kwargs...)
-    end    
+        fig = _prop2D_sm(t, z, specx, It, Iω,
+                         speclabel, speclims, trange, dBmin, window_str(bandpass);
+                         kwargs...)
+    end
+    fig
 end
+
+modeidcs(m::Int, ml) = [m]
+modeidcs(m::Symbol, ml) = (m == :sum) ? [] : error("modes must be :sum, a single integer, or iterable")
+modeidcs(m::Nothing, ml) = 1:length(ml)
+modeidcs(m, ml) = m
 
 # Helper function to convert λrange to the correct numbers depending on specaxis
 function getspeclims(λrange, specaxis)
@@ -251,11 +281,13 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
 end
 
 # multi-mode 2D propagation plots
-function _prop2D_mm(modes, t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
-    pfigs = []
+function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
+                    speclabel, speclims, trange, dBmin, bpstr;
+                    kwargs...)
+    pfigs = Figure[]
     Iω = Maths.normbymax(Iω)
-    for mi in 1:length(modes)
-        num = "Propagation ($(modes[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    for mi in modes
+        num = "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = plt.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
@@ -318,9 +350,11 @@ Other `kwargs` are passed onto `plt.plot`.
 function time_1D(output, zslice=maximum(output["z"]);
                 y=:Pt, modes=nothing,
                 oversampling=4, trange=(-50e-15, 50e-15), bandpass=nothing,
+                FTL=false, propagate=nothing,
                 kwargs...)
     t, Et, zactual = getEt(output, zslice,
-                           trange=trange, oversampling=oversampling, bandpass=bandpass)
+                           trange=trange, oversampling=oversampling, bandpass=bandpass,
+                           FTL=FTL, propagate=propagate)
     if y == :Pt
         yt = abs2.(Et)
     elseif y == :Et
@@ -366,6 +400,7 @@ function time_1D(output, zslice=maximum(output["z"]);
     y == :Et || plt.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    sfig
 end
 
 # Automatically find power unit depending on scale of electric field.
@@ -439,6 +474,7 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     plt.xlim(speclims...)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
+    sfig
 end
 
 dashes = [(0, (10, 1)),
@@ -462,13 +498,15 @@ end
 spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
     makegrid(output), output, args...; kwargs...)
 
-function spectrogram(grid, Eω::AbstractArray, specaxis=:λ; kwargs...)
-    t, Et = getEt(grid, Eω, oversampling=1)
+function spectrogram(grid::Grid.AbstractGrid, Eω::AbstractArray, specaxis=:λ;
+                     propagate=nothing, kwargs...)
+    t, Et = getEt(grid, Eω; propagate=propagate, oversampling=1)
     spectrogram(t, Et, specaxis; kwargs...)
 end
 
-function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ; kwargs...)
-    t, Et, zactual = getEt(output, zslice, oversampling=1)
+function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
+                     propagate=nothing, kwargs...)
+    t, Et, zactual = getEt(output, zslice; oversampling=1, propagate=propagate)
     Et = Et[:, 1]
     spectrogram(t, Et, specaxis; kwargs...)
 end
@@ -487,14 +525,56 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
 
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))
 
-    plt.figure()
+    fig = plt.figure()
     plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; kwargs...)
     plt.ylim(speclims...)
     plt.ylabel(speclabel)
     plt.xlabel("Time (fs)")
     log && plt.clim(dBmin, 0)
     plt.colorbar()
+    fig
 end
+
+function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
+    e = Processing.energy(output; bandpass=bandpass)
+    eall = Processing.energy(output)
+
+    multimode, modestrs = get_modes(output)
+    if multimode
+        e0 = sum(eall[:, 1])
+        modes = isnothing(modes) ? (1:size(e, 1)) : modes
+        if modes == :sum
+            e = dropdims(sum(e, dims=1), dims=1)
+            modestrs = join(modestrs, "+")
+            nmodes = 1
+        else
+            isnothing(modes) && (modes = 1:length(modestrs))
+            e = e[modes, :]
+            modestrs = modestrs[modes]
+            nmodes = length(modes)
+        end
+    else
+        e0 = eall[1]
+    end
+
+    z = output["z"]*100
+
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.plot(z, 1e6*e')
+    ax.set_xlim(extrema(z)...)
+    ax.set_ylim(ymin=0)
+    ax.set_xlabel("Distance (cm)")
+    ax.set_ylabel("Energy (μJ)")
+    rax = ax.twinx()
+    rax.plot(z, 100*(e/e0)', linewidth=0)
+    lims = ax.get_ylim()
+    rax.set_ylim(100/(1e6*e0).*lims)
+    rax.set_ylabel("Conversion efficiency (%)")
+    fig.set_size_inches(figsize...)
+    fig
+end
+
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
                                     text=nothing, units="fs")
