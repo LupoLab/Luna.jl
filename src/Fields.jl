@@ -169,29 +169,34 @@ function (c::CWField)(grid::Grid.EnvGrid, FT)
     Eω
 end
 
-"""
-    DataField(ω, Iω, ϕω, energy)
-
-Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
-radial frequency axis `ω`.
-"""
 struct DataField <: TimeField
     ω::Vector{Float64}
     Iω::Vector{Float64}
     ϕω::Vector{Float64}
     energy::Float64
+    ϕ::Vector{Float64}
+    λ0::Float64
 end
 
 """
-    DataField(ω, Eω, energy)
+    DataField(ω, Iω, ϕω; energy, ϕ=Float64[], λ0=NaN)
+
+Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
+radial frequency axis `ω`.
+"""
+DataField(ω, Iω, ϕω; energy, ϕ=Float64[], λ0=NaN) = DataField(ω, Iω, ϕω, energy, ϕ, λ0)
+
+"""
+    DataField(ω, Eω; energy, ϕ=Float64[], λ0=NaN)
 
 Create a `DataField` from the complex frequency-domain field `Eω` sampled on radial
 frequency grid `ω`.
 """
-DataField(ω, Eω, energy) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)), energy)
+DataField(ω, Eω; energy, ϕ=Float64[], λ0=NaN) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)),
+                                                          energy, ϕ, λ0)
 
 """
-    DataField(fpath, energy)
+    DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
 
 Create a `DataField` by loading `ω`, `Iω`, and `ϕω` from the file at `fpath`. The file must
 contain 3 columns:
@@ -200,9 +205,9 @@ contain 3 columns:
 - spectral power density (arbitrary units)
 - unwrapped spectral phase
 """
-function DataField(fpath, energy)
+function DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
     dat = CSV.read(fpath)
-    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3], energy)
+    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3]; energy, ϕ)
 end
 
 """
@@ -221,6 +226,11 @@ function (d::DataField)(grid::Grid.AbstractGrid, FT)
     Eω .*= sqrt(d.energy/energy_ω(Eω))
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     Eω .*= exp.(-1im .* grid.ω .* τ)
+    if length(d.ϕ) >= 1
+        λ0 = isnan(d.λ0) ? wlfreq(Maths.moment(d.ω, d.Iω)) : d.λ0
+        prop_taylor!(Eω, grid, d.ϕ, λ0)
+    end
+    Eω
 end
 
 """
