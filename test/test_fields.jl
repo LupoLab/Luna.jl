@@ -463,11 +463,74 @@ end
     @test ω0[1] < ω0[2]
 
     # Test sign of dispersion for chirped mirrors
-    Eωmirr = Fields.prop_mirror(Eω, grid, :PC70, 2) # one double-angle pair
-    Et = FT \ Eωmirr
-    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
-    ω0 = Maths.moment(grid.ω, abs2.(gab))
-    @test ω0[1] > ω0[2] # PC70 induce negative chirp, so frequency should go down with time
+    for mirror in (:PC70, :ThorlabsUMC)
+        Eωmirr = Fields.prop_mirror(Eω, grid, mirror, 2) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+    end
 end
 
+@testset "Compression" begin
+# Short pulse with 100 fs^2
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 100e-30], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0)
+Etcomp = FT \ Eωcomp
+@test ϕs[3] ≈ -100e-30
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Long pulse with 40000 fs^2 (stretches 220 fs to ~5 ps)
+λ0 = 1030e-9
+τfwhm = 220e-15
+grid = Grid.RealGrid(1, λ0, (980e-9, 1080e-9), 20e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 4e-25], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0)
+Etcomp = FT \ Eωcomp
+@test ϕs[3] ≈ -4e-25
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Short pulse with GDD and TOD
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 100e-30, 800e-45], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0; order=3)
+Etcomp = FT \ Eωcomp
+@test all(ϕs .≈ [0, 0, -100e-30, -800e-45])
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Material insertion
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+EωFS = Fields.prop_material(Eω, grid, :SiO2, 2e-3, λ0)
+d, Eωcomp = Fields.optcomp_material(EωFS, grid, :SiO2, λ0, -1e-2, 1e-2)
+Etcomp = FT \ Eωcomp
+@test d ≈ -2e-3
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+end
 

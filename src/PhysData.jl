@@ -683,15 +683,15 @@ end
 function lookup_mirror(type)
     if type == :PC70
         # λ (nm), R(5deg) (%), R(19deg) (%)
-        Rdat = CSV.read(joinpath(Utils.datadir(), "PC70_R.csv"))
+        Rdat = CSV.File(joinpath(Utils.datadir(), "PC70_R.csv"))
         # λ (nm), GDD(5deg) (fs^2), GDD(19deg) (fs^2)
-        GDDdat = CSV.read(joinpath(Utils.datadir(), "PC70_GDD.csv"))
+        GDDdat = CSV.File(joinpath(Utils.datadir(), "PC70_GDD.csv"))
         # Double sqrt creates average reflectivity per _reflection_ rather than per pair
-        rspl = Maths.BSpline(Rdat[:, 1]*1e-9, sqrt.(sqrt.(Rdat[:, 2]/100 .* Rdat[:, 3]/100)))
-        λGDD = GDDdat[:, 1]
+        rspl = Maths.BSpline(Rdat.Wlgth*1e-9, sqrt.(sqrt.(Rdat.Rp5deg/100 .* Rdat.Rp19deg/100)))
+        λGDD = GDDdat.Wlgth
         ω = wlfreq.(λGDD*1e-9)
         # average phase per _reflection_ rather than per pair
-        ϕ = 1e-30/2 * Maths.cumtrapz(Maths.cumtrapz(GDDdat[:, 2].+GDDdat[:, 3], ω), ω)
+        ϕ = 1e-30/2 * Maths.cumtrapz(Maths.cumtrapz(GDDdat.GDDrp5deg.+GDDdat.GDDrp19deg, ω), ω)
         # ϕ has a large linear component - remove that
         ωfs = ω*1e-15
         ωfs0 = wlfreq(800e-9)*1e-15
@@ -699,20 +699,20 @@ function lookup_mirror(type)
         p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 5)
         p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
         ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
-        ϕspl = Maths.BSpline(GDDdat[:, 1]*1e-9, ϕ)
+        ϕspl = Maths.BSpline(λGDD*1e-9, ϕ)
         return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
             λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
     elseif type == :ThorlabsUMC
         # λ (nm), R(p) (%), R(s) (%)
-        Rdat = CSV.read(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
+        Rdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
         # λ (nm), GD(p) (fs^2), GD(s) (fs^2)
-        GDdat = CSV.read(joinpath(Utils.datadir(), "UCxx-15FS_GD.csv"))
+        GDdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_GD.csv"))
         # Default to s-pol
-        rspl = Maths.BSpline(Rdat[:, 1]*1e-9, sqrt.(Rdat[:, 3]/100))
-        λGD = GDdat[:, 1]
+        rspl = Maths.BSpline(Rdat.wl*1e-9, sqrt.(Rdat.Rs/100))
+        λGD = GDdat.wl
         ω = wlfreq.(λGD*1e-9)
         # average phase per reflection, default to s-pol
-        ϕ = Maths.cumtrapz(1e-15*GDdat[:, 3], ω)
+        ϕ = Maths.cumtrapz(1e-15*GDdat.GDs, ω)
         # ϕ has a large linear component - remove that
         ωfs = ω*1e-15
         ωfs0 = wlfreq(800e-9)*1e-15
