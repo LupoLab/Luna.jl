@@ -1,7 +1,7 @@
 module Interface
 using Luna
 import Luna.PhysData: wlfreq
-import Luna: Grid, Modes
+import Luna: Grid, Modes, Output
 import Logging: @info
 
 """
@@ -100,6 +100,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         λ0, τfwhm=nothing, τ0=nothing, phases=Float64[],
                         peakpower=nothing, energy=nothing, peakintensity=nothing,
                         pulseshape=:gauss, polarisation=:linear,
+                        inputfield=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
@@ -114,7 +115,7 @@ function prop_capillary(radius, flength, gas, pressure;
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, τfwhm, τ0, phases,
-                        peakpower, energy, peakintensity, pulseshape, polarisation)
+                        peakpower, energy, peakintensity, pulseshape, inputfield, polarisation)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
@@ -257,14 +258,42 @@ end
 getAeff(mode::Modes.AbstractMode) = Modes.Aeff(mode)
 getAeff(modes) = Modes.Aeff(modes[1])
 
+# Select fundamental mode from multi-mode sim or take just the single mode
+modeslice(Eω::Array{ComplexF64, 2}) = Eω[:, end]
+modeslice(Eω::Array{ComplexF64, 3}) = Eω[:, 1, end]
+
+function _fieldargs(o::Output.AbstractOutput)
+    ω = o["grid"]["ω"]
+    t = o["grid"]["t"]
+    τ = length(t) * (t[2] - t[1])/2 # middle of old time window
+    Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
+    (ω, Eωm1 .* exp.(1im .* ω .* τ))
+end
+
+function _fieldargs(args::NamedTuple{(:ω, :Iω, :ϕω), NTuple{3, Vector{Float64}}})
+    Eω = @. sqrt(args.Iω) * exp(1im*args.ϕω)
+    (args.ω, Eω)
+end
+
+function _fieldargs(args::NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{ComplexF64}}})
+    (args.ω, args.Eω)
+end
+
+
 function makefield(mode_s, λ0::Number, τfwhm, τ0, phases,
-                   peakpower, energy, peakintensity, pulseshape, pfac)
+                   peakpower, energy, peakintensity, pulseshape, inputfield, pfac)
     !isnothing(peakpower) && (peakpower *= pfac)
     !isnothing(energy) && (energy *= pfac)
     if !isnothing(peakintensity)
         isnothing(peakpower) || error("Only one of peak intensity or power can be set.")
         peakpower = getAeff(mode_s) * peakintensity * pfac
     end
+    if !isnothing(inputfield)
+        isnothing(energy) && error("For input fields from data, energy must be set.")
+        ω, Eω = _fieldargs(inputfield)
+        return Fields.DataField(ω, Eω; energy, ϕ=phases, λ0)
+    end
+
     if pulseshape == :gauss
         isnothing(τ0) || error("τ0 pulse duration only applies to sech² pulses.")
         return Fields.GaussField(;λ0, τfwhm, energy, power=peakpower, ϕ=phases)
@@ -294,17 +323,21 @@ end
 function makeinputs(mode_s, λ0::Number, τfwhm::Union{Number, Nothing},
                     τ0::Union{Number, Nothing}, phases::AbstractVector,
                     peakpower::Union{Number, Nothing}, energy::Union{Number, Nothing}, 
-                    peakintensity::Union{Number, Nothing}, pulseshape::Symbol, polarisation)
+                    peakintensity::Union{Number, Nothing}, pulseshape::Symbol,
+                    inputfield::Union{
+                        Nothing, Array{Float64,2}, Output.AbstractOutput,
+                        NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{ComplexF64}}}},
+                        polarisation)
     if polarisation == :linear
         field = makefield(mode_s, λ0, τfwhm, τ0, phases,
-                          peakpower, energy, peakintensity, pulseshape, 1)
+                          peakpower, energy, peakintensity, pulseshape, inputfield, 1)
         return ((mode=1, fields=(field,)),)
     else
         py, px = ellfac(polarisation)
         f1 = makefield(mode_s, λ0, τfwhm, τ0, phases,
-                       peakpower, energy, peakintensity, pulseshape, py)
+                       peakpower, energy, peakintensity, pulseshape, inputfield, py)
         f2 = makefield(mode_s, λ0, τfwhm, τ0, ellphase(phases),
-                       peakpower, energy, peakintensity, pulseshape, px)
+                       peakpower, energy, peakintensity, pulseshape, inputfield, px)
         return ((mode=1, fields=(f1,)), (mode=2, fields=(f2,)))
     end
 end
@@ -319,7 +352,6 @@ arglength(arg) = 1
 function makeinputs(args...)
     N = maximum(arglength, args)
     argsT = [maketuple(arg, N) for arg in args]
-    polarisation = args[end]
     Tuple(collect(Iterators.flatten([makeinputs(aargs...) for aargs in zip(argsT...)])))
 end
 
