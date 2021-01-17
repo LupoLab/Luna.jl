@@ -111,11 +111,17 @@ Extract the arrival time of the pulse in the wavelength limits `λlims`.
 - `method::Symbol` : `:moment` to use 1st moment to extract arrival time, `:peak` to use
                     the time of peak power
 - `oversampling::Int` : If >1, oversample the time-domain field before extracting delay
+- `sumdims` : Single `Int` or `Tuple` of `Int`s. The time-domain power will be summed over
+            these dimensions (e.g. modes) before extracting the arrival time.
 """
 function arrivaltime(grid::AbstractGrid, Eω;
-                     bandpass=nothing, method=:moment, oversampling=1)
+                     bandpass=nothing, method=:moment, oversampling=1, sumdims=nothing)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
-    arrivaltime(to, abs2.(Eto); method=method)
+    Pt = abs2.(Eto)
+    if !isnothing(sumdims)
+        Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
+    end
+    arrivaltime(to, Pt; method=method)
 end
 
 function arrivaltime(t::AbstractVector, It::AbstractVector; method)
@@ -145,8 +151,8 @@ is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the T
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
-function time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
-    fwt = fwhm_t(grid, Eω; bandpass=bandpass, oversampling=oversampling)
+function time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
+    fwt = fwhm_t(grid, Eω; bandpass=bandpass, oversampling=oversampling, sumdims=nothing)
     fwf = fwhm_f(grid, Eω; bandpass=bandpass)
     fwt.*fwf
 end
@@ -155,23 +161,34 @@ end
 """
     fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the temporal FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
-If `oversampling` > 1, the  time-domain field is oversampled before extracting the FWHM.
+Extract the temporal FWHM. If `bandpass` is given, bandpass the fieldaccording to
+[`window_maybe`](@ref). If `oversampling` > 1, the  time-domain field is oversampled before
+extracting the FWHM. If `sumdims` is given, the time-domain power is summed over these
+dimensions (e.g. modes) before extracting the FWHM.
 """
-function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
-    fwhm(to, abs2.(Eto))
+    Pt = abs2.(Eto)
+    if !isnothing(sumdims)
+        Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
+    end
+    fwhm(to, Pt)
 end
 
 
 """
     fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)
 
-Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref). If `sumdims` is given, the energy density is summed over these
+dimensions (e.g. modes) before extracting the FWHM. 
 """
-function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
     Eω = window_maybe(grid.ω, Eω, bandpass)
     f, If = getIω(getEω(grid, Eω)..., :f)
+    if !isnothing(sumdims)
+        If = dropdims(sum(If; dims=sumdims); dims=sumdims)
+    end
     fwhm(f, If)
 end
 
@@ -190,7 +207,8 @@ fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 """
     peakpower(grid, Eω; bandpass=nothing, oversampling=1)
 
-Extract the peak power. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract the peak power. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref).
 """
 function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
@@ -201,12 +219,18 @@ end
 """
     energy(grid, Eω; bandpass=nothing)
 
-Extract energy. If `bandpass` is given, bandpass the field according to `window_maybe`.
+Extract energy. If `bandpass` is given, bandpass the field according to
+[`window_maybe`](@ref).
 """
 function energy(grid, Eω; bandpass=nothing)
     Eω = window_maybe(grid.ω, Eω, bandpass)
     _, energyω = Fields.energyfuncs(grid)
     _energy(Eω, energyω)
+end
+
+function energy(output::AbstractOutput; bandpass=nothing)
+    grid = makegrid(output)
+    energy(grid, output["Eω"]; bandpass=bandpass)
 end
 
 _energy(Eω::Vector, energyω) = energyω(Eω)
@@ -269,8 +293,8 @@ Returns the new specaxis grid and smoothed spectrum.
 """
 function specres(ω, Iω, specaxis, resolution, specrange; window=nothing, nsamples=10)
     if isnothing(window)
-        window = let ng=Maths.gaussnorm(fwhm=resolution), resolution=resolution
-            (x,x0) -> Maths.gauss(x,fwhm=resolution,x0=x0) / ng
+        window = let ng=Maths.gaussnorm(fwhm=resolution), σ=resolution/(2*(2*log(2))^(1/2))
+            (x,x0) -> exp(-0.5*((x - x0)/σ)^2)/ng
         end
     end
     if specaxis == :λ
@@ -312,9 +336,10 @@ function _specres(ω, Iω, resolution, xrange, window, nsamples, ωtox, xtoω)
     iend = Array{Int,1}(undef,nxg)
     δω = ω[2] - ω[1]
     i0 = argmin(abs.(ω))
+    ωs = ω[i0]
     for i in 1:nxg
-        i1 = i0 + round(Int, xtoω(xg[i] + resolution*nspan)/δω)
-        i2 = i0 + round(Int, xtoω(xg[i] - resolution*nspan)/δω)
+        i1 = i0 + round(Int, (xtoω(xg[i] + resolution*nspan) - ωs)/δω)
+        i2 = i0 + round(Int, (xtoω(xg[i] - resolution*nspan) - ωs)/δω)
         # we want increasing indices
         if i1 > i2
             i1,i2 = i2,i1
@@ -342,7 +367,7 @@ because the integral is still over a frequency grid (with appropriate frequency 
 integration bounds).
 """
 function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
-    for ii in cidcs
+    @inbounds @fastmath for ii in cidcs
         for j in 1:size(Ix, 1)
             for k in istart[j]:iend[j]
                 Ix[j,ii] += Iω[k,ii] * window(x[k], xg[j]) * δω
@@ -350,6 +375,22 @@ function _specres_kernel!(Ix, cidcs, istart, iend, Iω, window, x, xg, δω)
         end
     end
     Ix[Ix .<= 0.0] .= minimum(Ix[Ix .> 0.0])
+end
+
+function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
+    cidcs = CartesianIndices(size(Ix)[2:end])
+    if !isnothing(specrange)
+        specrange = extrema(specrange)
+        idcs = ((x .>= specrange[1]) .& (x .<= specrange[2]))
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    if sortx
+        idcs = sortperm(x)
+        x = x[idcs]
+        Ix = Ix[idcs, cidcs]
+    end
+    x, Ix
 end
 
 """
@@ -362,22 +403,6 @@ function ωwindow_λ(ω, λlims; winwidth=:auto)
     ωmin, ωmax = extrema(wlfreq.(λlims))
     winwidth == :auto && (winwidth = 64*abs(ω[2] - ω[1]))
     window = Maths.planck_taper(ω, ωmin-winwidth, ωmin, ωmax, ωmax+winwidth)
-end
-
-function _specrangeselect(x, Ix; specrange=nothing, sortx=false)
-    cidcs = CartesianIndices(size(Ix)[2:end])
-    if !isnothing(specrange)
-        specrange = extrema(specrange)
-        idcs = (x .>= specrange[1] .& (x .<= specrange[2]))
-        x = x[idcs]
-        Ix = Ix[idcs, cidcs]
-    end
-    if sortx
-        idcs = sortperm(x)
-        x = x[idcs]
-        Ix = Ix[idcs, cidcs]
-    end
-    x, Ix
 end
 
 """
@@ -491,37 +516,27 @@ getEt(output::AbstractOutput, args...; kwargs...) = getEt(
     makegrid(output), output, args...; kwargs...)
 
 """
-    getEt(grid, Eω; trange=nothing, oversampling=4, bandpass=nothing)
+    getEt(grid, Eω; trange=nothing, oversampling=4, bandpass=nothing, FTL=false)
 
 Get the envelope time-domain electric field (including the carrier wave) from the frequency-
 domain field `Eω`. The field can be cropped in time using `trange`, it is oversampled by
-a factor of `oversampling` (default 4) and can be bandpassed using a pre-defined window,
-or wavelength limits with `bandpass` (see [`window_maybe`](@ref)).
+a factor of `oversampling` (default 4) and can be bandpassed with `bandpass`
+(see [`window_maybe`](@ref)). If `FTL` is `true`, return the Fourier-transform limited pulse,
+i.e. remove any spectral phase.
+
 If `zslice` is given, returs only the slices of `Eω` closest to the given distances. `zslice`
 can be a single number or an array.
 """
 function getEt(grid::AbstractGrid, Eω::AbstractArray;
-               trange=nothing, oversampling=4, bandpass=nothing)
+               trange=nothing, oversampling=4, bandpass=nothing,
+               FTL=false, propagate=nothing)
     t = grid.t
     Eω = window_maybe(grid.ω, Eω, bandpass)
-    Etout = envelope(grid, Eω)
-    if isnothing(trange)
-        idcs = 1:length(t)
-    else
-        idcs = @. (t < max(trange...)) & (t > min(trange...))
+    if FTL
+        τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+        Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     end
-    cidcs = CartesianIndices(size(Etout)[2:end])
-    to, Eto = Maths.oversample(t[idcs], Etout[idcs, cidcs], factor=oversampling)
-    return to, Eto
-end
-
-getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
-
-function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
-               trange=nothing, oversampling=4, bandpass=nothing)
-    t = grid.t
-    zidx = nearest_z(output, zslice)
-    Eω = window_maybe(grid.ω, output["Eω", .., zidx], bandpass)
+    Eω = prop_maybe(grid, Eω, propagate)
     Etout = envelope(grid, Eω)
     if isnothing(trange)
         idcs = 1:length(t)
@@ -529,29 +544,91 @@ function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
         idcs = @. (t < max(trange...)) & (t > min(trange...))
     end
     to, Eto = Maths.oversample(t[idcs], Etout[idcs, ..], factor=oversampling)
+    return to, Eto
+end
+
+getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, output["Eω"]; kwargs...)
+
+function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
+               kwargs...)
+    t = grid.t
+    zidx = nearest_z(output, zslice)
+    to, Eto = getEt(grid, output["Eω", .., zidx]; kwargs...)
     return to, Eto, output["z"][zidx]
 end
 
-struct PeakWindow
+"""
+    AutoWindow(width, λmin, λmax, ω0fun; relative=false, ndims=1)
+
+Window function generator which automatically tracks the central frequency in the spectral
+region given by `λmin` and `λmax` and applies a window of a specific `width` around the peak.
+The central frequency is found using the function `ω0fun(ω, Iω::AbstractVector)`, where
+`ω` and `Iω` are already cropped to within the wavelength limits given.
+If `relative` is `true`, `width` is relative bandwidth instead of the wavelength width.
+`ndims` determines how many dimensions of the array to sum over. For a field array with size
+`(Nω, N1, N2, ...)`, the first dimension is always assumed to be frequency. `ndim=1` means
+each field to be analysed is 1-dimensional, so the window iterates over all of `(N1, N2, ...)`.
+`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be 
+summed over its second dimension before finding the central frequency. The window iterates
+over all other dimensions, `(N2, ...)`.
+
+A `AutoWindow` automatically stores the limits of the windows it applies in the field `lims`.
+"""
+mutable struct AutoWindow
     width::Float64
     λmin::Float64
     λmax::Float64
+    ω0fun
+    relative::Bool
+    ndims
+    lims
 end
 
-function (pw::PeakWindow)(ω, Eω)
-    cidcs = CartesianIndices(size(Eω)[3:end]) # dims are ω, modes, rest...
+function AutoWindow(width, λmin, λmax, ω0fun; relative=false, ndims=1)
+    AutoWindow(width, λmin, λmax, ω0fun, relative, ndims, nothing)
+end
+
+function (pw::AutoWindow)(ω, Eω)
+    cidcs = CartesianIndices(size(Eω)[(pw.ndims+1):end])
     out = similar(Eω)
     cropidcs = (ω .> wlfreq(pw.λmax)) .& (ω .< wlfreq(pw.λmin))
     cropω = ω[cropidcs]
     Iω = abs2.(Eω)
+    limsA = zeros((2, size(Eω)[(pw.ndims+1):end]...))
     for cidx in cidcs
-        λpeak = wlfreq(cropω[argmax(Iω[cropidcs, 1, cidx])])
-        window = ωwindow_λ(ω, (λpeak-pw.width/2, λpeak+pw.width/2))
-        for midx in 1:size(Eω, 2)
-            out[:, midx, cidx] .= Eω[:, midx, cidx] .* window
-        end
+        Iω_this = Iω[.., Tuple(cidx)...]
+        Iωsum = sum(Iω_this; dims=2:ndims(Iω_this))
+        λ0 = wlfreq(pw.ω0fun(cropω, Iωsum[cropidcs]))
+        lims = pw.relative ? λ0.*(1 .+ (-0.5, 0.5).*pw.width) : λ0 .+ (-0.5, 0.5).*pw.width
+        window = ωwindow_λ(ω, lims)
+        limsA[:, Tuple(cidx)...] .= lims
+        out[.., Tuple(cidx)...] .= Eω[.., Tuple(cidx)...] .* window
     end
+    pw.lims = limsA
     out
+end
+
+"""
+    PeakWindow(width, λmin, λmax; relative=false, ndims=1)
+
+An [`AutoWindow`](@ref) which uses the peak of the spectral energy density as the central
+frequency. 
+"""
+function PeakWindow(width, λmin, λmax; relative=false, ndims=1)
+    ω0fun = (ω, Iω) ->  ω[argmax(Iω)]
+    AutoWindow(width, λmin, λmax, ω0fun; relative=relative, ndims=ndims)
+end
+
+"""
+    CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
+
+An [`AutoWindow`](@ref) which uses the centroid (centre of mass or first moment) of the
+spectral energy density as the central frequency. Before calculating the centroid, the 
+SED is raised to the `power` given.
+"""
+function CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
+    ω0fun = (ω, Iω) -> Maths.moment(ω, Iω.^power)
+    AutoWindow(width, λmin, λmax, ω0fun; relative=relative, ndims=ndims)
 end
 
 """
@@ -565,14 +642,18 @@ Apply a frequency window to the field `Eω` if required. Possible values for `wi
 - 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
 - `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
 - `PeakWindow` : automatically track the peak in a given range and apply the window around it
+- `window(ω, Eω)` : an arbitrary user-supplied window function
 """
 window_maybe(ω, Eω, ::Nothing) = Eω
 window_maybe(ω, Eω, win::NTuple{4, Number}) = Eω.*Maths.planck_taper(
     ω, sort(wlfreq.(collect(win)))...)
 window_maybe(ω, Eω, win::NTuple{2, Number}) = Eω .* ωwindow_λ(ω, win)
 window_maybe(ω, Eω, win::NTuple{3, Number}) = Eω .* ωwindow_λ(ω, win[1:2]; winwidth=win[3])
-window_maybe(ω, Eω, win::PeakWindow) = win(ω, Eω)
-window_maybe(ω, Eω, window::Vector) = Eω.*window
+window_maybe(ω, Eω, window) = window(ω, Eω)
+window_maybe(ω, Eω, window::AbstractVector) = Eω.*window
+
+prop_maybe(grid, Eω, ::Nothing) = Eω
+prop_maybe(grid, Eω, propagator) = propagator(grid, Eω)
 
 
 """

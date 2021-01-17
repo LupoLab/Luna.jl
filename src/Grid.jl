@@ -59,7 +59,8 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
 
-    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
@@ -144,7 +145,8 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     t = @. (Nt - tsamples/2)*δt
     
     ω = v .+ ω0 # True frequency grid
-    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win) 
     
     # Make apodisation windows
     ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win)
@@ -214,6 +216,9 @@ function from_dict(gridtype, d)
     validate(grid)
     return grid
 end
+
+RealGrid(d::AbstractDict) = from_dict(RealGrid, d)
+EnvGrid(d::AbstractDict) = from_dict(EnvGrid, d)
 
 function validate(grid::TimeGrid)
     δt = grid.t[2] - grid.t[1]

@@ -1,7 +1,23 @@
 import Luna
-import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes
+import Luna: Grid, Maths, Capillary, PhysData, Nonlinear, Ionisation, NonlinearRHS, Output, Stats, LinearOps, Modes, Fields
 import Luna.PhysData: wlfreq
 import Test: @test, @testset
+
+@testset "multi-point" begin
+Z = [0, 0.25, 0.5, 1]
+P = [0, 1, 0.5, 0]
+coren, densityfun = Capillary.gradient(:He, Z, P)
+for ii = 1:3
+    λ = Z[ii+1] - Z[ii]
+    ζ = range(0, λ; length=10)
+    z = range(Z[ii], Z[ii+1]; length=10)
+    p0, p1 = P[ii], P[ii+1]
+    Pζ = @. sqrt(p0^2 + ζ/λ*(p1^2 - p0^2))
+    ρζ = PhysData.density.(:He, Pζ)
+    ρz = densityfun.(z)
+    @test all(isapprox.(ρζ, ρz, rtol=1e-10))
+end
+end
 
 @testset "field" begin
 a = 13e-6
@@ -59,8 +75,8 @@ statsfun = Stats.collect_stats(grid, Eω,
 output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
-@test all(output_grad.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
-@test all(output_grad_array.data["Eω"][2:end, :] .≈ output_const.data["Eω"][2:end, :])
+@test all(output_grad.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])
+@test all(output_grad_array.data["Eω"][grid.sidx, :] .≈ output_const.data["Eω"][grid.sidx, :])
 end
 
 @testset "envelope" begin
