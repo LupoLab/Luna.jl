@@ -173,7 +173,7 @@ function makemode_s(mode::Symbol, flength, radius, gas, pressure::Number, model,
     makemodes_pol(pol, radius, gas, pressure; model, loss, parse_mode(mode)...)
 end
 
-function makemode_s(mode::Symbol, flength, radius, gas, pressure::NTuple{2, <:Number},
+function makemode_s(mode::Symbol, flength, radius, gas, pressure::Tuple{<:Number, <:Number},
                     model, loss, pol)
     coren, _ = Capillary.gradient(gas, flength, pressure...)
     makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
@@ -202,7 +202,7 @@ function makedensity(flength, gas, pressure::Number)
     z -> ρ0
 end
 
-function makedensity(flength, gas, pressure::NTuple{2, <:Number})
+function makedensity(flength, gas, pressure::Tuple{<:Number, <:Number})
     _, density = Capillary.gradient(gas, flength, pressure...)
     density
 end
