@@ -352,6 +352,30 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
+"""
+    coupled_field(i, mode, E; energy, kwargs...)
+
+Create an element of an input field tuple (for use in `Luna.setup`) based on coupling
+field `E1 into a `mode`. The index `i` species the mode index. The temporal fields are 
+initialised using a `GaussField` with the same keyword arguments.
+"""
+function coupled_field(i, mode, E; energy, kwargs...)
+    ei = energy * Modes.overlap(mode, E)^2
+    (mode=i, fields=(GaussField(;energy=ei, kwargs...),))
+end
+
+"""
+    gauss_beam_init(modes, w0; energy, kwargs...)
+
+Create an input field tuple (for use in `Luna.setup`) based on coupling a focused
+Gaussian beam with focused spot size `w0` into `modes`. The temporal fields are 
+initialised using a `GaussField` with the same keyword arguments.
+"""
+function gauss_beam_init(modes, w0; energy, kwargs...)
+    gauss(r) = exp(-r^2/w0^2)
+    tuple(collect(coupled_field(i, mode, gauss; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
+end
+
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
 It(Et, grid::Grid.EnvGrid) = abs2.(Et)
 
