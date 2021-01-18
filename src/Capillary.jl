@@ -87,7 +87,7 @@ function MarcatilliMode(a, gas, P;
 end
 
 """
-    MarcatilliMode(a, gas, P cladn; kwargs...)
+    MarcatilliMode(a, gas, P, cladn; kwargs...)
 
 Create a MarcatilliMode for a capillary made of a cladding material defined by the refractive
 index `cladn(ω; z)` with a core radius `a` which is filled with `gas` to pressure `P`.
@@ -111,6 +111,14 @@ function MarcatilliMode(a, coren;
     cladn = (ω; z) -> rfs(wlfreq(ω))
     MarcatilliMode(a, n, m, kind, ϕ, coren, cladn, model=model, loss=loss)
 end
+
+
+"""
+    MarcatilliMode(a; kwargs...)
+
+Create a `MarcatilliMode` for a capillary with radius `a` and no gas fill.
+"""
+MarcatilliMode(a; kwargs...) = MarcatilliMode(a, (ω; z) -> 1; kwargs...)
 
 """
     neff(m::MarcatilliMode, ω; z=0)
@@ -223,10 +231,10 @@ end
 
 function get_unm(n, m, kind)
     if (kind == :TE) || (kind == :TM)
-        if (n != 0) || (m != 1)
-            error("n=0, m=1 for TE or TM modes")
+        if (n != 0)
+            error("n=0 for TE or TM modes")
         end
-        besselj_zero(1, 1)
+        besselj_zero(1, m)
     elseif kind == :HE
         besselj_zero(n-1, m)
     else
