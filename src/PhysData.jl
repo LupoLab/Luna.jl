@@ -323,7 +323,7 @@ end
 
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing)
+function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
     return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
@@ -357,6 +357,34 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
         throw(DomainError(material, "Unknown material $material"))
     end
 end
+
+"Get function which returns refractive index for gas mixture."
+function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
+    ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
+        function ngas(λ)
+            res = funs[1](λ)
+            for ii in 2:length(gases) 
+                res += funs[ii](λ)
+            end
+            return sqrt(1 + res)
+        end
+    end
+    return ngas
+end
+
+"Get function which returns ref index for mixture as function of wavelength and densities."
+function ref_index_fun(gases::NTuple{N, Symbol}, T=roomtemp) where N
+    let γs=[sellmeier_gas(gi) for gi in gases]
+        function ngas(λ, densities::Vector{<:Number})
+            χ1 = 0.0
+            for (γi, di) in zip(γs, densities)
+                χ1 += di * γi(λ*1e6)
+            end
+            sqrt(1 + χ1)
+        end
+    end
+end
+
 
 """
     dispersion_func(order, n)
