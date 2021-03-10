@@ -286,8 +286,9 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
                     kwargs...)
     pfigs = Figure[]
     Iω = Maths.normbymax(Iω)
+    id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
-        num = "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+        num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = plt.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
@@ -296,7 +297,7 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
         push!(pfigs, pfig)
     end
 
-    num = "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)

@@ -53,16 +53,30 @@ All inputs are placed in the first mode.
     the usual polynomial phases ϕ₀ (CEP), ϕ₁ (group delay), ϕ₂ (GDD), ϕ₃ (TOD), etc.
     Note that to apply different phases to different input pulses, you must supply
     a `Tuple` of `Vector`s.
+- `propagator`: A function `propagator(grid, Eω)` which returns a propagated field `Eω`. 
+        This can be used to apply arbitrary propagation to the input pulse before propagation.
 - `energy`: Pulse energy.
 - `peakpower`: Peak power **of the transform-limited pulse before phases are added**.
 - `peakintensity`: Peak intensity **of the transform-limited pulse**. Intensity is taken
     as the mode-averaged value, i.e. peak power divided by effective area.
 - `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
     or `:sech` for a sech² pulse.
+- `inputfield`: Can be one of:
+    - `::Luna.Output.AbstractOutput`: use the last slice of the propagation in the given
+        output as the input to this propagation. For multi-mode input simulations, only the
+        fundamental mode content is used.
+    - A `NamedTuple` with fields `ω` and `Eω`, containing angular frequency and the complex
+        frequency-domain field, respectively. The field is interpolated onto the new grid.
+    - A `NamedTuple` with fields `ω`, `Iω`, and `ϕω`, containing angular frequency, The
+        spectral energy density `Iω` and the spectral phase `ϕω` respectively. The energy
+        density and phase are interpolated onto the new grid.
+    Note that for the `NamedTuple` arguments, the spectral phase should not contain a strong
+    linear component to centre the pulse in the old time window.
 - `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
     or a `Number` between `0` and `1` which defines the ellipticity. The major axis for
     elliptical polarisation is always the y-axis.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
+
 
 # Modes options
 - `modes`: Defines which modes are included in the propagation. Can be any of:
@@ -100,7 +114,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         λ0, τfwhm=nothing, τ0=nothing, phases=Float64[],
                         peakpower=nothing, energy=nothing, peakintensity=nothing,
                         pulseshape=:gauss, polarisation=:linear,
-                        inputfield=nothing,
+                        inputfield=nothing, propagator=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
@@ -121,6 +135,10 @@ function prop_capillary(radius, flength, gas, pressure;
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
     output = makeoutput(grid, saveN, stats, filepath)
+
+    if !isnothing(propagator)
+        Eω = propagator(grid, Eω)
+    end
 
     Luna.run(Eω, grid, linop, transform, FT, output; status_period)
     output
@@ -325,8 +343,9 @@ function makeinputs(mode_s, λ0::Number, τfwhm::Union{Number, Nothing},
                     peakpower::Union{Number, Nothing}, energy::Union{Number, Nothing}, 
                     peakintensity::Union{Number, Nothing}, pulseshape::Symbol,
                     inputfield::Union{
-                        Nothing, Array{Float64,2}, Output.AbstractOutput,
-                        NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{ComplexF64}}}},
+                        Nothing, Output.AbstractOutput,
+                        NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{ComplexF64}}},
+                        NamedTuple{(:ω, :Iω, :ϕω), NTuple{3, Vector{Float64}}}},
                         polarisation)
     if polarisation == :linear
         field = makefield(mode_s, λ0, τfwhm, τ0, phases,
