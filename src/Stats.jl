@@ -216,16 +216,19 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
     δt = to[2] - to[1]
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     frac = similar(to)
     function addstat!(d, Eω, Et, z, dz)
         # note: oversampling returns its arguments without any work done if factor==1
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
-        ionfrac!(frac, real(Eto))
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        ratemax = ionfrac!(frac, real(Eto))
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
@@ -245,8 +248,10 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
     δt = to[2] - to[1]
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     tospace = Modes.ToSpace(modes, components=components)
     frac = similar(to)
@@ -257,11 +262,12 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         Modes.to_space!(Et0, Eto, (0, 0), tospace; z=z)
         if npol > 1
-            ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
+            ratemax = ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
         else
-            ionfrac!(frac, real(Et0[:, 1]))
+            ratemax = ionfrac!(frac, real(Et0[:, 1]))
         end
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
