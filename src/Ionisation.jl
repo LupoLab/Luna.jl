@@ -152,6 +152,14 @@ function keldysh(material, λ, E)
     ω0_au*sqrt(2Ip_au)/E_au
 end
 
+function ionfrac(rate, E, δt)
+    r = similar(E)
+    frac = similar(E)
+    rate(r, E)
+    Maths.cumtrapz!(frac, r, δt)
+    @. frac = 1 - exp(-frac)
+end
+
 function makePPTaccel(E, rate)
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
