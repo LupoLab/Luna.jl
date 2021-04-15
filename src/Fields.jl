@@ -353,15 +353,16 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
 end
 
 """
-    coupled_field(i, mode, E; energy, kwargs...)
+    coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
 
 Create an element of an input field tuple (for use in `Luna.setup`) based on coupling
-field `E1 into a `mode`. The index `i` species the mode index. The temporal fields are 
-initialised using a `GaussField` with the same keyword arguments.
+field `E` into a `mode`. The index `i` species the mode index. The temporal fields are 
+initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
+same keyword arguments.
 """
 function coupled_field(i, mode, E; energy, kwargs...)
     ei = energy * Modes.overlap(mode, E)^2
-    (mode=i, fields=(GaussField(;energy=ei, kwargs...),))
+    (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
 end
 
 """
@@ -369,7 +370,8 @@ end
 
 Create an input field tuple (for use in `Luna.setup`) based on coupling a focused
 Gaussian beam with focused spot size `w0` into `modes`. The temporal fields are 
-initialised using a `GaussField` with the same keyword arguments.
+initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
+same keyword arguments.
 """
 function gauss_beam_init(modes, w0; energy, kwargs...)
     gauss(r) = exp(-r^2/w0^2)
