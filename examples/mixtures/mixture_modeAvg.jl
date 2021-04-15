@@ -11,21 +11,23 @@ energy = 1e-6
 
 grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 1e-12)
 
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatilliMode(a, (gas, gas), (pres/2, pres/2), loss=false)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
 
-densityfun = let dens0=PhysData.density(gas, pres)
-    z -> dens0
+densityfun = let dens0=PhysData.density(gas, pres/2)
+    z -> [dens0, dens0]
 end
 
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
-             plasma)
+responses = ((Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)),
+             (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+             Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)))
+
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -35,8 +37,8 @@ Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aef
 
 ppwin = Stats.peakpower(grid, Eω, (150e-9, 300e-9)) # peak power of dispersive wave
 statsfun = Stats.default(grid, Eω, m, linop, transform;
-                         gas=gas, windows=((150e-9, 300e-9),), userfuns=(ppwin,))
-output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
+                         gas=(gas, gas), windows=((150e-9, 300e-9),), userfuns=(ppwin,))
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun) # statsfun
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
