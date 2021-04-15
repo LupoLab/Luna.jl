@@ -360,22 +360,32 @@ field `E` into a `mode`. The index `i` species the mode index. The temporal fiel
 initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
 same keyword arguments.
 """
-function coupled_field(i, mode, E; energy, kwargs...)
+function coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
     ei = energy * Modes.overlap(mode, E)^2
     (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
 end
 
 """
-    gauss_beam_init(modes, w0; energy, kwargs...)
+    gauss_beam_init(modes, w0, fieldfunc; energy, kwargs...)
 
 Create an input field tuple (for use in `Luna.setup`) based on coupling a focused
 Gaussian beam with focused spot size `w0` into `modes`. The temporal fields are 
 initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
 same keyword arguments.
+
+```jldoctest
+julia> a = 125e-6;
+julia> energy = 1e-3;
+julia> modes = (Capillary.MarcatilliMode(a, :He, 1.0, m=1), Capillary.MarcatilliMode(a, :He, 1.0, m=2));
+julia> fields = Fields.gauss_beam_init(modes, a*0.64, Fields.GaussField; λ0=800e-9, τfwhm=30e-15, energy=energy);
+julia> fields[1].fields[1].energy/energy ≈ 0.9881994
+true
+julia> fields[1].fields[1].energy/energy ≈ 0.0062298168
+true
 """
-function gauss_beam_init(modes, w0; energy, kwargs...)
+function gauss_beam_init(modes, w0, fieldfunc; energy, kwargs...)
     gauss(r) = exp(-r^2/w0^2)
-    tuple(collect(coupled_field(i, mode, gauss; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
+    tuple(collect(coupled_field(i, mode, gauss, fieldfunc; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
 end
 
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))

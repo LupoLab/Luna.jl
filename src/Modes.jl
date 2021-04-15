@@ -227,7 +227,8 @@ end
 """
     overlap(m::AbstractMode, E)
 
-Calculate mode overlap between radially symmetric field and radially symmetric mode.
+Calculate mode overlap between radially symmetric (analytic) field and radially
+symmetric mode.
 
 # Examples
 ```jldoctest
