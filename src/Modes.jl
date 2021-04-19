@@ -8,7 +8,6 @@ import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
 import LinearAlgebra: mul!
 import DSP: unwrap
-import QuadGK: quadgk
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
@@ -227,28 +226,19 @@ end
 """
     overlap(m::AbstractMode, E)
 
-Calculate mode overlap between radially symmetric (analytic) field and radially
-symmetric mode.
-
-# Examples
-```jldoctest
-julia> a = 100e-6;
-julia> m = Capillary.MarcatilliMode(a, :He, 1.0);
-julia> unm = besselj_zero(0, 1);
-julia> Er(r) = besselj(0, unm*r/a);
-
-julia> η = Modes.overlap(m, Er);
-julia> abs2(η[1]) ≈ 1
-true
+Calculate mode overlap between (analytic) 2D field `E` and mode `m`.
+The field function `E(xs)` should return the normalised cartesian vector
+components of the field `(Ex, Ey)` as an `SVector` as a function of polar
+coordinates `xs = (r,θ)`.
 ```
 """
 function overlap(m::AbstractMode, E)
-    dl = dimlimits(m) # integration limits
-    R = dl[3][1]
-    top = quadgk(r -> r*E(r)*Exy(m, (r, 0))[2], 0.0, R, atol=1e-10)[1]
-    n1 = sqrt(quadgk(r -> r*abs2(E(r)), 0.0, R)[1])
-    n2 = sqrt(quadgk(r -> r*abs2(Exy(m, (r, 0))[2]), 0.0, R)[1])
-    top/(n1*n2)
+    dl = dimlimits(m)
+    function f(xs)
+        0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1]
+    end
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
+    abs(val)
 end
 
 """
