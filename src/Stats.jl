@@ -434,19 +434,27 @@ function collect_stats(grid, Eω, funcs...)
 end
 
 function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
-                 windows=nothing, gas=nothing, userfuns=Any[])
+                 windows=nothing, gas=nothing, onaxis=false, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
-            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop),
+            fwhm_t(grid), zdw_linop(mode, linop),
             density(transform.densityfun)]
     if !isnothing(gas)
         push!(funs, pressure(transform.densityfun, gas))
     end
+    if onaxis
+        push!(funs, peakintensity(grid, (m,)))
+    else
+        push!(funs, peakintensity(grid, transform.aeff))
+    end
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc
-            ed = electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff)
-            push!(funs, ed)
+            if onaxis
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, (m,)))
+            else
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff))
+            end
         end
     end
     if !isnothing(windows)
