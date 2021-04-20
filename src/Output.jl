@@ -61,21 +61,23 @@ show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))"
 """
 function (o::MemoryOutput)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
-    append_stats!(o, o.statsfun(y, t, dt))
     !haskey(o.data, o.yname) && initialise(o, y)
     while save
+        ys = yfun(ts)
+        append_stats!(o, o.statsfun(ys, ts, dt))
         s = size(o.data[o.yname])
         if s[end] < o.saved+1
-            o.data[o.yname] = fastcat(o.data[o.yname], yfun(ts))
+            o.data[o.yname] = fastcat(o.data[o.yname], ys)
             push!(o.data[o.tname], ts)
         else
             idcs = fill(:, ndims(y))
-            o.data[o.yname][idcs..., o.saved+1] = yfun(ts)
+            o.data[o.yname][idcs..., o.saved+1] = ys
             o.data[o.tname][o.saved+1] = ts
         end
         o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
     end
+    append_stats!(o, o.statsfun(y, t, dt))
 end
 
 function append_stats!(o::MemoryOutput, d)
