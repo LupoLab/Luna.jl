@@ -99,9 +99,23 @@ point of y.
 The default `level=0.5` requests the full width at half maximum. Setting `level` to something
 different computes the corresponding width. E.g. `level=0.1` for the 10% width.
 """
-function fwhm(x, y; kwargs...)
+function fwhm(x, y::AbstractVector; kwargs...)
     left, right = level_xings(x, y; kwargs...)
     return abs(right-left)
+end
+
+function fwhm(x, y::AbstractArray; dim=1, kwargs...)
+    idxlo = CartesianIndices(size(y)[1:dim-1])
+    idxhi = CartesianIndices(size(y)[dim+1:end])
+    outshape = collect(size(y))
+    outshape[dim] = 1
+    out = zeros(eltype(y), Tuple(outshape))
+    for hi in idxhi
+        for lo in idxlo
+            out[lo, 1, hi] = fwhm(x, y[lo, :, hi]; kwargs...)
+        end
+    end
+    out
 end
 
 """
@@ -109,8 +123,9 @@ end
 
 Find crossings of the curve `y` on the axis `x` with the value `level * maximum(y)`.
 
-`method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
-`:nearest` finds the closest values either side of the crossing point and interpolates linearly.
+`method` can be `:spline`, `:linear` or `:nearest`. `:spline` uses a [`CSpline`](@ref).
+`:linear` finds the closest values either side of the crossing point and interpolates linearly. 
+`:nearest` just uses the closest values either side of the crossing point.
 
 If `baseline` is true, the width is not taken at
 `level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
