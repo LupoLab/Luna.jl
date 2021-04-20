@@ -306,7 +306,6 @@ end
 function (o::HDF5Output)(y, t, dt, yfun)
     o.readonly && error("Cannot add data to read-only output!")
     save, ts = o.save_cond(y, t, dt, o.saved)
-    push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
             !HDF5.exists(file, o.yname) && initialise(o, y)
@@ -321,7 +320,9 @@ function (o::HDF5Output)(y, t, dt, yfun)
                     s[end] += 1
                     HDF5.set_dims!(file[o.yname], Tuple(s))
                 end
-                file[o.yname][idcs..., o.saved+1] = yfun(ts)
+                ys = yfun(ts)
+                push!(o.stats_tmp, o.statsfun(ys, ts, dt))
+                file[o.yname][idcs..., o.saved+1] = ys
                 s = collect(size(file[o.tname]))
                 if s[end] < o.saved+1
                     s[end] += 1
@@ -341,6 +342,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
             end
         end
     end
+    push!(o.stats_tmp, o.statsfun(y, t, dt))
 end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
