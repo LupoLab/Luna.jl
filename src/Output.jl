@@ -211,7 +211,7 @@ function HDF5Output(fpath::AbstractString)
     HDF5Output(fpath, 0, 0, 1; readonly=true)
 end
 
-function initialise(o::HDF5Output, y)
+function initialise(o::HDF5Output, y, statsnames)
     ydims = size(y)
     idims = init_dims(ydims, o.save_cond)
     cdims = collect(idims)
@@ -230,7 +230,6 @@ function initialise(o::HDF5Output, y)
         end
         HDF5.d_create(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
                       "chunk", (1,))
-        statsnames = sort(collect(keys(o.stats_tmp[end])))
         o.cachehash = hash((statsnames, size(y)))
         file["meta"]["cachehash"] = o.cachehash
         if o.cache
@@ -311,13 +310,13 @@ function (o::HDF5Output)(y, t, dt, yfun)
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
             if !HDF5.exists(file, o.yname)
-                push!(o.stats_tmp, o.statsfun(y, t, dt))
-                initialise(o, y)
-                statsnames = sort(collect(keys(o.stats_tmp[end])))
+                statsnames = sort(collect(keys(o.statsfun(y, t, dt))))
+                initialise(o, y, statsnames)
+            else
+                statsnames = sort(collect(keys(o.stats_tmp[end])))    
                 cachehash = hash((statsnames, size(y)))
                 cachehash == o.cachehash || error(
                     "the hash for this propagation does not agree with cache in file")
-                o.stats_tmp = Vector{Dict{String, Any}}()
             end
             while save
                 s = collect(size(file[o.yname]))
