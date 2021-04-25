@@ -553,12 +553,12 @@ end
     )
     inputs = Fields.gauss_beam_init(modes, 2π/λ0, a*0.64, Fields.GaussField, λ0=λ0, τfwhm=τfwhm, energy=energy)
     inputs = (inputs..., ((mode=i, fields=(Fields.ShotNoise(),)) for i=1:length(modes))...)
-    @test inputs[1].fields[1].energy/energy ≈ 0.9885180822290369
-    @test inputs[2].fields[1].energy/energy ≈ 0.006231825793855696
-    @test inputs[3].fields[1].energy/energy ≈ 0.0013675792624757062
-    @test inputs[4].fields[1].energy/energy ≈ 0.0008514463042090379
-    @test inputs[5].fields[1].energy/energy < 1e-10
-    @test inputs[6].fields[1].energy/energy < 1e-10
-    @test inputs[7].fields[1].energy/energy < 1e-10
-    @test inputs[8].fields[1].energy/energy < 1e-10
+    @test inputs[1].fields[1].energy/energy ≈ 0.9807131210817726
+    @test inputs[2].fields[1].energy/energy ≈ 0.006182621678046407
+    @test inputs[3].fields[1].energy/energy ≈ 0.0013567813790567626
+    @test inputs[4].fields[1].energy/energy ≈ 0.0008447236094573648
+    @test inputs[5].fields[1].energy/energy < 1e-20
+    @test inputs[6].fields[1].energy/energy < 2e-20
+    @test inputs[7].fields[1].energy/energy < 1e-20
+    @test inputs[8].fields[1].energy/energy < 1e-20
 end

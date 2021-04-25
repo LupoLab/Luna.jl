@@ -381,7 +381,7 @@ end
 
 function int2D(field1, field2, lowerlim, upperlim)
     Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
-    abs(hcubature(Ifunc, lowerlim, upperlim, abstol=1e-10)[1])
+    abs(hcubature(Ifunc, lowerlim, upperlim)[1])
 end
     
 function normalised_field(fieldfunc, rmax)
@@ -391,7 +391,7 @@ function normalised_field(fieldfunc, rmax)
     end
 end
 
-normalised_gauss_beam(k, ω0, rmax; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), rmax)
+normalised_gauss_beam(k, ω0; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), 6*ω0)
 
 """
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
@@ -427,7 +427,7 @@ true
 """
 function gauss_beam_init(modes, k, ω0, fieldfunc; energy, kwargs...)
     rmax = Modes.dimlimits(modes[1])[3][1]
-    gauss = normalised_gauss_beam(k, ω0, rmax)
+    gauss = normalised_gauss_beam(k, ω0)
     tuple(collect(coupled_field(i, mode, gauss, fieldfunc; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
 end
 
