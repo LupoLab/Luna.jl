@@ -534,3 +534,31 @@ Etcomp = FT \ Eωcomp
 @test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
 end
 
+@testset "Gaussian beam initialisation" begin
+    a = 16e-6
+    gas = :Kr
+    pres = 17.2
+    τfwhm = 230e-15
+    λ0 = 1030e-9
+    energy = 5.2e-6
+    modes = (
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=3, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=3, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0, loss=false)
+    )
+    inputs = Fields.gauss_beam_init(modes, 2π/λ0, a*0.64, Fields.GaussField, λ0=λ0, τfwhm=τfwhm, energy=energy)
+    inputs = (inputs..., ((mode=i, fields=(Fields.ShotNoise(),)) for i=1:length(modes))...)
+    @test inputs[1].fields[1].energy/energy ≈ 0.9807131210817726
+    @test inputs[2].fields[1].energy/energy ≈ 0.006182621678046407
+    @test inputs[3].fields[1].energy/energy ≈ 0.0013567813790567626
+    @test inputs[4].fields[1].energy/energy ≈ 0.0008447236094573648
+    @test inputs[5].fields[1].energy/energy < 1e-20
+    @test inputs[6].fields[1].energy/energy < 2e-20
+    @test inputs[7].fields[1].energy/energy < 1e-20
+    @test inputs[8].fields[1].energy/energy < 1e-20
+end
