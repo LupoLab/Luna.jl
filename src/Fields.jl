@@ -1,5 +1,5 @@
 module Fields
-import Luna: Grid, Maths, PhysData, Modes, GaussianBeamModal
+import Luna: Grid, Maths, PhysData, Modes
 import Luna.PhysData: wlfreq, ε_0, μ_0
 import StaticArrays: SVector
 import Cubature: hcubature
@@ -426,7 +426,6 @@ julia> fields[1].fields[1].energy/energy ≈ 0.0062298168
 true
 """
 function gauss_beam_init(modes, k, ω0, fieldfunc; energy, kwargs...)
-    rmax = Modes.dimlimits(modes[1])[3][1]
     gauss = normalised_gauss_beam(k, ω0)
     tuple(collect(coupled_field(i, mode, gauss, fieldfunc; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
 end
