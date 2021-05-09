@@ -142,7 +142,7 @@ Calculate the zero-dispersion wavelength (ZDW) of mode `m` with an initial guess
 
 This method is faster than the bounded version if the ZDW is known to be close to `λ0`.
 """
-function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-6)
     ωguess = 2π*c/λ0 * 1e-15 # convert everything find_zero sees to units close to 1.0
     dfun = dispersion_func(m, 2, z=z)
     β2(ω) = 1e30 * dfun(ω*1e15)
