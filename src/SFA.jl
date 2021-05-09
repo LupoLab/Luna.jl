@@ -7,7 +7,9 @@ import PyPlot: plt
 
 
 """
-    Approximate transition dipole moment for hydrogen 1s as a function of momentum p.
+    approx_dipole(gas)
+
+Approximate transition dipole moment for hydrogen 1s as a function of momentum p.
 
 Z. Chang. Fundamentals of attosecond optics. CRC Press, 2011. ISBN 9781420089370
 """
@@ -17,6 +19,28 @@ function approx_dipole(gas)
     p -> 2^(3/2)/π * (2*Ip)^(5/4)*p/(p^2 + 2*Ip)^3
 end
 
+"""
+    sfa_dipole(t, Et, gas, λ0; apod, depletion, dipole, irf!)
+
+Calculate the time-dependent dipole moment of an atom driven by a laser field using the
+strong-field approximation (SFA).
+
+# Arguments
+- `t::Vector{<:Real}` : The time axis
+- `Et::Vector{<:Real}` : The driving electric field in SI units (V/m)
+- `gas::Symbol` : The gas species of the atom
+- `λ0::Real` : The central wavelength of the driving field
+
+# Keyword arguments
+- `apod::Bool` : Whether to remove long trajectories by apodising excursion times longer
+                 than one half-cycle. Defaults to `true`.
+- `depletion::Bool` : Whether to include ground-state depletion. Defaults to `true`.
+- `irf!::Function` : The ionisation-rate function to be used for ground-state depletion.
+                     Defaults to the PPT ionisation rate for `gas` and `λ0`.
+- `dipole::Function` : Function `d(p)` which returns the transition dipole moment for the
+                       momentum `p`.
+
+"""
 function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
                     dipole=approx_dipole(gas),
                     irf! = Ionisation.ionrate_fun!_PPTcached(gas, λ0))
@@ -87,10 +111,8 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
         
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
     end
-        
 
     2*real(D)
-
 end
 
 function sfa_spectrum(t, args...; kwargs...)
