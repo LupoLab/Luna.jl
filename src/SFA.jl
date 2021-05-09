@@ -3,6 +3,7 @@ import NumericalIntegration: integrate, SimpsonEven
 import FFTW
 import Luna: Maths, PhysData, Ionisation
 import Luna.PhysData: wlfreq, c
+import PyPlot: plt
 
 
 """
@@ -35,10 +36,9 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
 
     A = -Maths.cumtrapz(Et, t) # Vector potential A(t)
     intA = Maths.cumtrapz(A, t) # Antiderivative of A(t)
-    intAsq = Maths.cumtrapz(A.^2, t) # Antiderivative of A(t)²
+    intAsq = Maths.cumtrapz(A.^2, t) # Antiderivative of A(t)
 
     D = zeros(ComplexF64, size(Et))
-
 
     for (tidx, t_r) in enumerate(t)
         # t_r is the recombination time
@@ -50,7 +50,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
         τ = t_r .- t_b # excursion time -- time between birth and recombination
 
         if apod
-            apod_crop = τ .<= 0.6apodT
+            apod_crop = τ .<= 0.55apodT
             t_b = t_b[apod_crop]
             t_b_idcs = t_b_idcs[apod_crop]
             τ = τ[apod_crop]
@@ -73,10 +73,8 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
             gstate_pop_birth = gstate_pop_recomb = 1.0
         end
 
-        ε = 0.1 # prevent singularity
-
         # main SFA integral
-        integrand = @. ((2*π/(1im*τ + ε))^(3/2)
+        integrand = @. ((2*π/(1im*τ))^(3/2)
                      * d_birth*conj(d_recomb)
                      * gstate_pop_birth*gstate_pop_recomb
                      * Et[t_b_idcs]
@@ -84,7 +82,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
 
         # filter out long trajectories
         if apod
-            integrand .*= Maths.planck_taper.(τ, minimum(τ), minimum(τ), 0.5apodT, 0.55apodT)
+            integrand .*= Maths.planck_taper.(τ, 0, 0, 0.5apodT, 0.55apodT)
         end
         
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
