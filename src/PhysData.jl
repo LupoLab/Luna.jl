@@ -567,6 +567,8 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5726
     elseif material == :H2
         Ip = 0.5669
+    elseif material == :O2
+        Ip = 0.443553
     else
         throw(DomainError(material, "Unknown material $material"))
     end
