@@ -29,8 +29,6 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
 - `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
     By default, envelope simulations ignore third-harmonic generation.
     Plasma has not yet been implemented for envelope fields.
-- `thg::Bool`: Whether to include third-harmonic generation for envelope fields.
-    Defaults to `false`. This option has no effect for full-field simulations
 - `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
     this is determined by the wavelength grid. If `δt` is given **and smaller** than the
     required value, it is used instead.
@@ -101,6 +99,8 @@ All inputs are placed in the first mode.
     - `true` (default) -- same as `:PPT`.
     - `false` -- ignore plasma.
     Note that plasma is only available for full-field simulations.
+- `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
+    full-field simulations and to `false` for envelope simulations.
 
 # Output options
 - `saveN::Integer`: Number of points along z at which to save the field.
@@ -123,6 +123,7 @@ function prop_capillary(radius, flength, gas, pressure;
 
     pol = needpol(polarisation)
     plasma = isnothing(plasma) ? !envelope : plasma
+    thg = isnothing(thg) ? !envelope : thg
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
@@ -232,7 +233,13 @@ end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
     out = Any[]
-    kerr && push!(out, Nonlinear.Kerr_field(PhysData.γ3_gas(gas)))
+    if kerr
+        if thg
+            push!(out, Nonlinear.Kerr_field(PhysData.γ3_gas(gas)))
+        else
+            push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
+        end
+    end
     makeplasma!(out, grid, gas, plasma, pol)
     raman && push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
     Tuple(out)
