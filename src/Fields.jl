@@ -1,11 +1,13 @@
 module Fields
 import Luna: Grid, Maths, PhysData, Modes
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, ε_0, μ_0
+import StaticArrays: SVector
+import Cubature: hcubature
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
 import Hankel
-import LinearAlgebra: norm
+import LinearAlgebra: dot, norm
 import FFTW
 import BlackBoxOptim
 import Optim
@@ -360,6 +362,82 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     kzsq[kzsq .< 0] .= 0
     kz = sqrt.(kzsq)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
+end
+
+"""
+    gauss_beam(k, ω0; z=0.0, pol=:y)
+
+Gaussian beam field distribution with waist radius `ω0` and wavenumber `k`,
+at position `z` from focus. `pol` describes the polarisation direction,
+one of `:x` or `:y`.
+"""
+function gauss_beam(k, ω0; z=0.0, pol=:y)
+    let k=k, ω0=ω0, z=z, pol=pol
+        function fieldfunc(xs)
+            zr = k*ω0^2/2
+            ω = ω0*sqrt(1 + (z/zr)^2)
+            R1 = z/(z^2 + zr^2)
+            ψ = atan(z/zr)
+            phase = exp(-1im * (k*z + k*xs[1]^2*R1/2 - ψ))
+            E = ω0/ω * exp(-xs[1]^2/ω^2) * phase
+            if pol==:x
+                return SVector(E, 0.0)
+            else
+                return SVector(0.0, E)
+            end
+        end
+    end
+end
+
+function int2D(field1, field2, lowerlim, upperlim)
+    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
+    abs(hcubature(Ifunc, lowerlim, upperlim)[1])
+end
+    
+function normalised_field(fieldfunc, rmax)
+    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0,0.0), (rmax, 2π)))
+    return let scale=scale, fieldfunc=fieldfunc
+        (xs) -> fieldfunc(xs) .* scale
+    end
+end
+
+normalised_gauss_beam(k, ω0; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), 6*ω0)
+
+"""
+    coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
+
+Create an element of an input field tuple (for use in `Luna.setup`) based on coupling
+field `E` into a `mode`. The index `i` species the mode index. The temporal fields are 
+initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
+same keyword arguments.
+"""
+function coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
+    ei = energy * Modes.overlap(mode, E)^2
+    (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
+end
+
+"""
+    gauss_beam_init(modes, k, ω0, fieldfunc; energy, kwargs...)
+
+Create an input field tuple (for use in `Luna.setup`) based on coupling a focused
+Gaussian beam with focused spot size `ω0` and wavenumber `k` into `modes`.
+The temporal fields are initialised using `fieldfunc` (e.g. one of `GaussField`,
+`SechField` etc.) with the same keyword arguments.
+
+```jldoctest
+julia> a = 125e-6;
+julia> energy = 1e-3;
+julia> λ0 = 800e-9;
+julia> modes = (Capillary.MarcatilliMode(a, :He, 1.0, m=1), Capillary.MarcatilliMode(a, :He, 1.0, m=2));
+julia> fields = Fields.gauss_beam_init(modes, 2*pi/λ0, a*0.64, Fields.GaussField; λ0=λ0, τfwhm=30e-15, energy=energy);
+julia> fields[1].fields[1].energy/energy ≈ 0.98071312
+true
+julia> fields[2].fields[1].energy/energy ≈ 0.0061826217
+true
+"""
+function gauss_beam_init(modes, k, ω0, fieldfunc; energy, kwargs...)
+    gauss = normalised_gauss_beam(k, ω0)
+    tuple(collect(coupled_field(i, mode, gauss, fieldfunc; energy=energy, kwargs...) for (i,mode) in enumerate(modes))...)
 end
 
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))

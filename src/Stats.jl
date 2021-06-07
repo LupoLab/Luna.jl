@@ -288,6 +288,15 @@ function pressure(dfun, gas)
     end
 end
 
+function pressure(dfun, gases::Tuple)
+    function addstat!(d, Eω, Et, z, dz)
+        dens = dfun(z)
+        for (di, gi) in zip(dens, gases)
+            d["pressure_$gi"] = PhysData.pressure(gi, di)
+        end
+    end
+end
+
 """
     core_radius(a)
 
