@@ -224,6 +224,24 @@ function overlap(m::AbstractMode, r, E; dim, norm=true)
 end
 
 """
+    overlap(m::AbstractMode, E)
+
+Calculate mode overlap between (analytic) 2D field `E` and mode `m`.
+The field function `E(xs)` should return the normalised cartesian vector
+components of the field `(Ex, Ey)` as an `SVector` as a function of polar
+coordinates `xs = (r,θ)`.
+```
+"""
+function overlap(m::AbstractMode, E)
+    dl = dimlimits(m)
+    function f(xs)
+        0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1]
+    end
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
+    abs(val)
+end
+
+"""
     overlap(modes::ModeCollection, newgrid, oldgrid, r, Eωr)
 
 Decompose the spatio-spectral field `Eωr`, sampled on radial coordinate `r` and time-grid

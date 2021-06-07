@@ -42,7 +42,7 @@ const N_A = ustrip(CODATA2014.N_A)
 "Amagat (Loschmidt constant)"
 const amg = atm/(k_B*273.15)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -52,7 +52,8 @@ const gas_str = Dict(
     :Xe => "Xenon",
     :Air => "Air",
     :N2 => "Nitrogen",
-    :H2 => "Hydrogen"
+    :H2 => "Hydrogen",
+    :O2 => "Oxygen"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
@@ -87,6 +88,12 @@ J. Opt. Soc. Am. 67, 1550 (1977)
 "
 function γ_Peck(B1, C1, B2, C2, dens)
     return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
+end
+
+"Sellmeier expansion for Oxygen from
+Applied Optics 50, 35, 6484 (2011)"
+function γ_Zhang(A, B, C, dens)
+    return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
 end
 
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
@@ -149,6 +156,12 @@ function sellmeier_gas(material::Symbol)
         B2 = 4903.7e-6
         C2 = 92.0
         return γ_Peck(B1, C1, B2, C2, density(material, atm/bar, 273.15))
+    elseif material == :O2
+        # Applied Optics 50, 35, 6484 (2011)
+        A = 1.181494e-4
+        B = 9.708931e-3
+        C = 75.4
+        return γ_Zhang(A, B, C, density(material, atm/bar, roomtemp))
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -451,6 +464,7 @@ References:
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
+[5] Optics Letters Vol. 40, No. 24 (2015))
 
 TODO: More Bishop/Shelton; Wahlstrand updated values.
 
@@ -461,6 +475,8 @@ function γ3_gas(material::Symbol; source=nothing)
             source = :Lehmeier
         elseif material in (:H2,)
             source = :Shelton
+        elseif material in (:O2,)
+            source = :Zahedpour
         else
             error("no default γ3 source for material: $material")
         end
@@ -490,6 +506,15 @@ function γ3_gas(material::Symbol; source=nothing)
             return 2.2060999099841444e-26 / dens # TODO: check this carefully
         else
             throw(DomainError(material, "Shelton model does not include $material"))
+        end
+    elseif source == :Zahedpour
+        if material == :O2
+            n0 = ref_index(:O2, 800e-9, atm/bar, roomtemp)
+            ρ = density(:O2, atm/bar, roomtemp)
+            n2 = 8.1e-24 # Table 1 in [5]
+            return 4/3*ε_0*c*n0^2/ρ * n2
+        else
+            throw(DomainError(material, "Zahedpour model does not include $material"))
         end
     else
         throw(DomainError(source, "Unkown γ3 model $source"))
@@ -542,6 +567,8 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5726
     elseif material == :H2
         Ip = 0.5669
+    elseif material == :O2
+        Ip = 0.443553
     else
         throw(DomainError(material, "Unknown material $material"))
     end
