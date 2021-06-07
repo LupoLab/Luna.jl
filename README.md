@@ -7,7 +7,7 @@ Growing documentation can be found at http://luna.lupo-lab.com/
 You need the usual LUPO password to access the documentation.
 
 ## Installation
-Use a recent version of Julia (e.g. 1.4.1).
+Use a recent version of Julia (e.g. 1.5.4).
 
 First install CoolProp, then Luna:
 
@@ -35,7 +35,7 @@ ENV["PYTHON"] = ""
 Then
 ```julia
 using Luna
-include(joinpath(pkgdir(Luna), "test/test_main.jl"))
+include(joinpath(pkgdir(Luna), "\\examples\\basic_modeAvg.jl"))
 ```
 
 This should run a simple propagation and plot the result. Note that the first time this is run it may take a while to precompile `Luna`. On subsequent runs it should be much faster.
