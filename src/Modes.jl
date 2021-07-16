@@ -1,6 +1,6 @@
 module Modes
 import Roots: find_zero, Order2
-import Cubature: hcubature
+import Cubature: hcubature, hquadrature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths, Grid
@@ -103,7 +103,11 @@ Calculate the power transmission after propagation through length `L` in the mod
 radiation at the frequency `ω`.
 """
 function transmission(m::AbstractMode, ω, L; z=0.0)
-    return exp(-α(m, ω)*L)
+    # return exp(-α(m, ω)*L)
+    αint, err = hquadrature(0, L) do z
+        -α(m, ω; z)
+    end
+    return exp(αint)
 end
 
 function dB_per_m(m::AbstractMode, ω; z=0.0)
