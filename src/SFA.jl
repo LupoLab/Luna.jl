@@ -132,7 +132,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
 end
 
 """
-    sfa_dipole(t, Et, gas, λ0; gate, nflat, nramp, depletion, irf!, dipole)
+    sfa_spectrum(t, Et, gas, λ0; gate, nflat, nramp, depletion, irf!, dipole)
 
 Calculate the HHG emission spectrum of an atom driven by a laser field using the
 strong-field approximation (SFA). For arguments see [`sfa_dipole`](@ref)
