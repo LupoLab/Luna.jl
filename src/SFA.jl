@@ -11,16 +11,17 @@ import PyPlot: plt
 
 Approximate transition dipole moment for hydrogen 1s as a function of momentum p.
 
-Z. Chang. Fundamentals of attosecond optics. CRC Press, 2011. ISBN 9781420089370
+B. Podolsky & L. Pauling. Phys. Rev.34 no. 1, 109 (1929
 """
+
 function approx_dipole(gas)
     Ip = PhysData.ionisation_potential(gas; unit=:atomic)
-
-    p -> 2^(3/2)/π * (2*Ip)^(5/4)*p/(p^2 + 2*Ip)^3
+    κ = sqrt(2Ip)
+    p -> 8*1im/π*sqrt(2*κ^5)*p/(p^2 + κ^2)^3
 end
 
 """
-    sfa_dipole(t, Et, gas, λ0; apod, depletion, dipole, irf!)
+    sfa_dipole(t, Et, gas, λ0; gate, nflat, nramp, depletion, irf!, dipole)
 
 Calculate the time-dependent dipole moment of an atom driven by a laser field using the
 strong-field approximation (SFA).
@@ -32,29 +33,44 @@ strong-field approximation (SFA).
 - `λ0::Real` : The central wavelength of the driving field
 
 # Keyword arguments
-- `apod::Bool` : Whether to remove long trajectories by apodising excursion times longer
+- `gate::Bool` : Whether to remove long trajectories by apodising excursion times longer
                  than one half-cycle. Defaults to `true`.
+- `nflat::Number` : Number of field cycles for which the gate function is "fully open".
+                    Defaults to 1/2.
+- `nramp::Number` : Number of field cycles over which the gate function ramps down to 0.
+                    Defaults to 1/4.
 - `depletion::Bool` : Whether to include ground-state depletion. Defaults to `true`.
 - `irf!::Function` : The ionisation-rate function to be used for ground-state depletion.
-                     Defaults to the PPT ionisation rate for `gas` and `λ0`.
+                     Defaults to the PPT ionisation rate for `gas` and `λ0` if `depletion`
+                     is `true`.
 - `dipole::Function` : Function `d(p)` which returns the transition dipole moment for the
-                       momentum `p`.
-
+                       momentum `p`. Defaults to `approx_dipole(gas)`.
 """
-function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
-                    dipole=approx_dipole(gas),
-                    irf! = Ionisation.ionrate_fun!_PPTcached(gas, λ0))
-    irate = similar(Et)
-    irf!(irate, Et)
-    Maths.cumtrapz!(irate, t)
-    gstate_pop = exp.(-irate)
+function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
+                    gate=true, nflat=1/2, nramp=1/4,
+                    depletion=true,
+                    irf! = depletion ? Ionisation.ionrate_fun!_PPTcached(gas, λ0) : nothing,
+                    dipole=approx_dipole(gas))
+    if depletion
+        irate = similar(Et)
+        irf!(irate, Et)
+        Maths.cumtrapz!(irate, t)
+        gstate_pop = exp.(-irate)
+    else
+        gstate_pop = ones(size(Et))
+    end
 
-    # from here on, everythying is in atomic units
+    #==
+    --------------------------------------------
+    from here on, everythying is in atomic units
+    --------------------------------------------
+    ==#
 
     t = copy(t) ./ PhysData.au_time
     Et = copy(Et) ./ PhysData.au_Efield
 
-    apodT = λ0/c / PhysData.au_time
+    T0 = λ0/c / PhysData.au_time # period of the field (for gate function)
+    ω0 = wlfreq(λ0)*PhysData.au_time # frequency of the field (for gate function)
 
     Ip = PhysData.ionisation_potential(gas; unit=:atomic)
 
@@ -73,11 +89,11 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
 
         τ = t_r .- t_b # excursion time -- time between birth and recombination
 
-        if apod
-            apod_crop = τ .<= 0.55apodT
-            t_b = t_b[apod_crop]
-            t_b_idcs = t_b_idcs[apod_crop]
-            τ = τ[apod_crop]
+        if gate
+            crop = τ .<= T0*(nflat+nramp+1/2)
+            t_b = t_b[crop]
+            t_b_idcs = t_b_idcs[crop]
+            τ = τ[crop]
         end
         
         intA_this = intA[tidx] .- intA[t_b_idcs] # definite integral between t_b and t_r
@@ -105,8 +121,8 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
                      * exp(-1im*S))
 
         # filter out long trajectories
-        if apod
-            integrand .*= Maths.planck_taper.(τ, 0, 0, 0.5apodT, 0.55apodT)
+        if gate
+            integrand .*= sine_squared_gate.(τ, ω0, nflat, nramp)
         end
         
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
@@ -115,10 +131,33 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
     2*real(D)
 end
 
+"""
+    sfa_dipole(t, Et, gas, λ0; gate, nflat, nramp, depletion, irf!, dipole)
+
+Calculate the HHG emission spectrum of an atom driven by a laser field using the
+strong-field approximation (SFA). For arguments see [`sfa_dipole`](@ref)
+"""
 function sfa_spectrum(t, args...; kwargs...)
     D = sfa_dipole(t, args...; kwargs...)
     ω = Maths.rfftfreq(t)
     eV = PhysData.ħ * ω./PhysData.electron
     return eV, FFTW.rfft(D)
+end
+
+"""
+    sine_squared_gate(t, ω, nflat, nramp)
+
+Calculate the sin²-shaped gate function at time `t` for a field oscillating with angular
+frequency `ω`. The gate is flat at 1.0 for `nflat` cycles of the field and ramps down to 0
+over `nramp` cycles.
+"""
+function sine_squared_gate(t, ω, nflat, nramp)
+    if ω*t/2π ≤ nflat
+        return 1.0
+    elseif ω*t/2π ≤ (nflat+nramp)
+        return sin((2π*(nflat-nramp)-ω*t)/4nramp)^2
+    else
+        return 0.0
+    end
 end
 end
