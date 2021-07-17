@@ -60,7 +60,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0; apod=true, depletion=true,
 
     A = -Maths.cumtrapz(Et, t) # Vector potential A(t)
     intA = Maths.cumtrapz(A, t) # Antiderivative of A(t)
-    intAsq = Maths.cumtrapz(A.^2, t) # Antiderivative of A(t)
+    intAsq = Maths.cumtrapz(A.^2, t) # Antiderivative of A^2(t)
 
     D = zeros(ComplexF64, size(Et))
 
