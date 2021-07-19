@@ -1,5 +1,5 @@
 module SFA
-import NumericalIntegration: integrate, SimpsonEven
+import NumericalIntegration: integrate, SimpsonEvenFast, TrapezoidalEven
 import FFTW
 import DataStructures: CircularBuffer
 import Luna: Maths, PhysData, Ionisation
@@ -168,29 +168,42 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
     D = zeros(ComplexF64, size(Et))
 
     δt = t[2] - t[1] # time sample spacing
-    Tgate = T0*(nflat+nramp+1/2) # total length of time of the gate function
+    Tgate = T0*(nflat+nramp+1/8) # total length of time of the gate function
     Ngate = floor(Int, Tgate/δt)
-    gate = sine_squared_gate.(τ, ω0, nflat, nramp)
     τ = collect(Ngate:-1:1)*δt # excursion time
-    t_b = CircularBuffer{Float64}(Ngate)
-    A_birth = CircularBuffer{Float64}(Ngate)
-    intA_birth = CircularBuffer{Float64}(Ngate)
-    intAsq_birth = CircularBuffer{Float64}(Ngate)
-    gstate_pop_birth = CircularBuffer{Float64}(Ngate)
+    gate = sine_squared_gate.(τ, ω0, nflat, nramp) # gate function to remove long trajectories
+
+    #= Gating reduces the integration region to a fixed range over which the gate function
+        goes to zero. Since it's fixed, we can use circular buffers of fixed size to move
+        along the time axis instead of allocating a new array each time.
+    =#
+    t_b = CircularBuffer{Float64}(Ngate) # birth times
+    A_birth = CircularBuffer{Float64}(Ngate) # vector potential at birth times
+    intA_birth = CircularBuffer{Float64}(Ngate) # integral of A from -∞ to birth times
+    intAsq_birth = CircularBuffer{Float64}(Ngate) # integral of A² from -∞ to birth times
+    gstate_pop_birth = CircularBuffer{Float64}(Ngate) # ground-state population at birth times
+    Et_this = CircularBuffer{Float64}(Ngate) # electric field at birth times
 
     if ~depletion
         fill!(gstate_pop_birth, 1)
     end
 
-    intA_this = Vector{Float64}(undef, Ngate)
-    intAsq_this = Vector{Float64}(undef, Ngate)
-    p_st = Vector{Float64}(undef, Ngate)
-    S = Vector{Float64}(undef, Ngate)
-    d_birth = Vector{Float64}(undef, Ngate)
-    d_recomb = Vector{Float64}(undef, Ngate)
+    #= These quantities depend on the recombination time and thus need to be re-calculated
+        for every step.
+    =#
+    intA_this = Vector{Float64}(undef, Ngate) # integral of A from birth times to recomb. time
+    intAsq_this = Vector{Float64}(undef, Ngate) # integral of A² from birth times to recomb. time
+    p_st = Vector{Float64}(undef, Ngate) # stationary momentum
+    S = Vector{Float64}(undef, Ngate) # action
+    d_birth = Vector{ComplexF64}(undef, Ngate) # dipole moment at birth times
+    d_recomb = Vector{ComplexF64}(undef, Ngate) # dipole moment at recomb. time
+    integrand = Vector{ComplexF64}(undef, Ngate) # integrand of the SFA integral
 
-    for (tidx, t_r) in enumerate(t)
-        # t_r is the recombination time
+    prefac = @. (2*π/(1im*τ))^(3/2) * gate
+
+
+    for tidx in eachindex(t)
+        (tidx >= 2) || continue
 
         tm1 = tidx-1
 
@@ -199,14 +212,16 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
         push!(intA_birth, intA[tm1])
         push!(intAsq_birth, intAsq[tm1])
         push!(A_birth, A[tm1])
+        push!(Et_this, Et[tm1])
         if depletion
             push!(gstate_pop_birth, gstate_pop[tm1])
         end
 
-        intA_this .= intA[tidx] .- intA_birth
-        intA_this .= intA[tidx] .- intAsq_birth
-
         (length(t_b) < Ngate) && continue
+
+        intA_this .= intA[tidx] .- intA_birth
+        intAsq_this .= intAsq[tidx] .- intAsq_birth
+
         p_st .= intA_this./τ
         @. S = Ip*τ + τ/2*p_st^2 - p_st*intA_this + intAsq_this/2 # Action
 
@@ -215,12 +230,11 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
 
         gstate_pop_recomb = depletion ? gstate_pop[tidx] : 1.0
 
-        integrand = @. ((2*π/(1im*τ))^(3/2)
+        @. integrand = (prefac
                      * d_birth*conj(d_recomb)
                      * gstate_pop_birth*gstate_pop_recomb
-                     * Et[t_b_idcs]
-                     * exp(-1im*S)
-                     * gate)
+                     * Et_this
+                     * exp(-1im*S))
 
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
     end
