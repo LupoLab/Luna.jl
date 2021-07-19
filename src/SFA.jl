@@ -1,6 +1,7 @@
 module SFA
 import NumericalIntegration: integrate, SimpsonEven
 import FFTW
+import DataStructures: CircularBuffer
 import Luna: Maths, PhysData, Ionisation
 import Luna.PhysData: wlfreq, c
 import PyPlot: plt
@@ -11,7 +12,7 @@ import PyPlot: plt
 
 Approximate transition dipole moment for hydrogen 1s as a function of momentum p.
 
-B. Podolsky & L. Pauling. Phys. Rev.34 no. 1, 109 (1929
+B. Podolsky & L. Pauling. Phys. Rev.34 no. 1, 109 (1929)
 """
 
 function approx_dipole(gas)
@@ -125,6 +126,102 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
             integrand .*= sine_squared_gate.(τ, ω0, nflat, nramp)
         end
         
+        D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
+    end
+
+    2*real(D)
+end
+
+function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
+                         nflat=1/2, nramp=1/4,
+                         depletion=true,
+                         irf! = depletion ? Ionisation.ionrate_fun!_PPTcached(gas, λ0) : nothing,
+                         dipole=approx_dipole(gas))
+
+    if depletion
+        irate = similar(Et)
+        irf!(irate, Et)
+        Maths.cumtrapz!(irate, t)
+        gstate_pop = exp.(-irate)
+    else
+        gstate_pop = ones(size(Et))
+    end
+
+    #==
+    --------------------------------------------
+    from here on, everythying is in atomic units
+    --------------------------------------------
+    ==#
+
+    t = copy(t) ./ PhysData.au_time
+    Et = copy(Et) ./ PhysData.au_Efield
+
+    T0 = λ0/c / PhysData.au_time # period of the field (for gate function)
+    ω0 = wlfreq(λ0)*PhysData.au_time # frequency of the field (for gate function)
+
+    Ip = PhysData.ionisation_potential(gas; unit=:atomic)
+
+    A = -Maths.cumtrapz(Et, t) # Vector potential A(t)
+    intA = Maths.cumtrapz(A, t) # Antiderivative of A(t)
+    intAsq = Maths.cumtrapz(A.^2, t) # Antiderivative of A^2(t)
+
+    D = zeros(ComplexF64, size(Et))
+
+    δt = t[2] - t[1] # time sample spacing
+    Tgate = T0*(nflat+nramp+1/2) # total length of time of the gate function
+    Ngate = floor(Int, Tgate/δt)
+    gate = sine_squared_gate.(τ, ω0, nflat, nramp)
+    τ = collect(Ngate:-1:1)*δt # excursion time
+    t_b = CircularBuffer{Float64}(Ngate)
+    A_birth = CircularBuffer{Float64}(Ngate)
+    intA_birth = CircularBuffer{Float64}(Ngate)
+    intAsq_birth = CircularBuffer{Float64}(Ngate)
+    gstate_pop_birth = CircularBuffer{Float64}(Ngate)
+
+    if ~depletion
+        fill!(gstate_pop_birth, 1)
+    end
+
+    intA_this = Vector{Float64}(undef, Ngate)
+    intAsq_this = Vector{Float64}(undef, Ngate)
+    p_st = Vector{Float64}(undef, Ngate)
+    S = Vector{Float64}(undef, Ngate)
+    d_birth = Vector{Float64}(undef, Ngate)
+    d_recomb = Vector{Float64}(undef, Ngate)
+
+    for (tidx, t_r) in enumerate(t)
+        # t_r is the recombination time
+
+        tm1 = tidx-1
+
+        push!(t_b, t[tm1])
+
+        push!(intA_birth, intA[tm1])
+        push!(intAsq_birth, intAsq[tm1])
+        push!(A_birth, A[tm1])
+        if depletion
+            push!(gstate_pop_birth, gstate_pop[tm1])
+        end
+
+        intA_this .= intA[tidx] .- intA_birth
+        intA_this .= intA[tidx] .- intAsq_birth
+
+        (length(t_b) < Ngate) && continue
+        p_st .= intA_this./τ
+        @. S = Ip*τ + τ/2*p_st^2 - p_st*intA_this + intAsq_this/2 # Action
+
+        d_birth .= dipole.(p_st .- A_birth)
+        d_recomb .= dipole.(p_st .- A[tidx])
+
+        gstate_pop_recomb = depletion ? gstate_pop[tidx] : 1.0
+
+        integrand = @. ((2*π/(1im*τ))^(3/2)
+                     * d_birth*conj(d_recomb)
+                     * gstate_pop_birth*gstate_pop_recomb
+                     * Et[t_b_idcs]
+                     * exp(-1im*S)
+                     * gate)
+
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
     end
 
