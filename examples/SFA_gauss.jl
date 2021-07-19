@@ -16,7 +16,7 @@ Et = Tools.intensity_to_field.(It) .* cos.(grid.t .* wlfreq(λ0))
 
 irf! = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
 
-D = SFA.sfa_dipole(grid.t, Et, gas, λ0; apod=true, depletion=true, irf!)
+D = SFA.sfa_dipole(grid.t, Et, gas, λ0; gate=true, depletion=true, irf!)
 eV = PhysData.ħ .* grid.ω ./ PhysData.electron
 Dω = FFTW.rfft(D)
 tg = collect(range(extrema(grid.t)...; length=2048))
