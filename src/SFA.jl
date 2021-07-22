@@ -225,8 +225,10 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
         p_st .= intA_this./τ
         @. S = Ip*τ + τ/2*p_st^2 - p_st*intA_this + intAsq_this/2 # Action
 
-        d_birth .= dipole.(p_st .- A_birth)
-        d_recomb .= dipole.(p_st .- A[tidx])
+        for i in eachindex(d_birth)
+            d_birth[i] = dipole(p_st[i] - A_birth[i])
+            d_recomb[i] = dipole(p_st[i] - A[tidx])
+        end
 
         gstate_pop_recomb = depletion ? gstate_pop[tidx] : 1.0
 
