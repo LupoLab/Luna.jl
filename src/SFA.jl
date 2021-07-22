@@ -1,5 +1,5 @@
 module SFA
-import NumericalIntegration: integrate, SimpsonEvenFast, TrapezoidalEven
+import NumericalIntegration: integrate, SimpsonEven
 import FFTW
 import DataStructures: CircularBuffer
 import Luna: Maths, PhysData, Ionisation
@@ -36,6 +36,7 @@ strong-field approximation (SFA).
 # Keyword arguments
 - `gate::Bool` : Whether to remove long trajectories by apodising excursion times longer
                  than one half-cycle. Defaults to `true`.
+                 If `gate` is `true`, this function uses `sfa_dipole_fast`
 - `nflat::Number` : Number of field cycles for which the gate function is "fully open".
                     Defaults to 1/2.
 - `nramp::Number` : Number of field cycles over which the gate function ramps down to 0.
@@ -52,6 +53,10 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
                     depletion=true,
                     irf! = depletion ? Ionisation.ionrate_fun!_PPTcached(gas, λ0) : nothing,
                     dipole=approx_dipole(gas))
+    if gate
+        return sfa_dipole_fast(t, Et, gas, λ0; nflat, nramp, depletion, irf!, dipole)
+    end
+
     if depletion
         irate = similar(Et)
         irf!(irate, Et)
@@ -178,26 +183,32 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
         along the time axis instead of allocating a new array each time.
     =#
     t_b = CircularBuffer{Float64}(Ngate) # birth times
-    A_birth = CircularBuffer{Float64}(Ngate) # vector potential at birth times
-    intA_birth = CircularBuffer{Float64}(Ngate) # integral of A from -∞ to birth times
-    intAsq_birth = CircularBuffer{Float64}(Ngate) # integral of A² from -∞ to birth times
+    A_birth = fill!(CircularBuffer{Float64}(Ngate), 0) # vector potential at birth times
+    intA_birth = fill!(CircularBuffer{Float64}(Ngate), 0) # integral of A from -∞ to birth times
+    intAsq_birth = fill!(CircularBuffer{Float64}(Ngate), 0) # integral of A² from -∞ to birth times
     gstate_pop_birth = CircularBuffer{Float64}(Ngate) # ground-state population at birth times
-    Et_this = CircularBuffer{Float64}(Ngate) # electric field at birth times
+    Et_this = fill!(CircularBuffer{Float64}(Ngate), 0) # electric field at birth times
 
-    if ~depletion
+    for i = Ngate:-1:1
+        push!(t_b, t[1] - i*δt)
+    end
+
+    if depletion
+        fill!(gstate_pop_birth, 0)
+    else
         fill!(gstate_pop_birth, 1)
     end
 
     #= These quantities depend on the recombination time and thus need to be re-calculated
         for every step.
     =#
-    intA_this = Vector{Float64}(undef, Ngate) # integral of A from birth times to recomb. time
-    intAsq_this = Vector{Float64}(undef, Ngate) # integral of A² from birth times to recomb. time
-    p_st = Vector{Float64}(undef, Ngate) # stationary momentum
-    S = Vector{Float64}(undef, Ngate) # action
-    d_birth = Vector{ComplexF64}(undef, Ngate) # dipole moment at birth times
-    d_recomb = Vector{ComplexF64}(undef, Ngate) # dipole moment at recomb. time
-    integrand = Vector{ComplexF64}(undef, Ngate) # integrand of the SFA integral
+    intA_this = zeros(Float64, Ngate) # integral of A from birth times to recomb. time
+    intAsq_this = zeros(Float64, Ngate) # integral of A² from birth times to recomb. time
+    p_st = zeros(Float64, Ngate) # stationary momentum
+    S = zeros(Float64, Ngate) # action
+    d_birth = zeros(ComplexF64, Ngate) # dipole moment at birth times
+    d_recomb = zeros(ComplexF64, Ngate) # dipole moment at recomb. time
+    integrand = zeros(ComplexF64, Ngate) # integrand of the SFA integral
 
     prefac = @. (2*π/(1im*τ))^(3/2) * gate
 
@@ -216,8 +227,6 @@ function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
         if depletion
             push!(gstate_pop_birth, gstate_pop[tm1])
         end
-
-        (length(t_b) < Ngate) && continue
 
         intA_this .= intA[tidx] .- intA_birth
         intAsq_this .= intAsq[tidx] .- intAsq_birth
