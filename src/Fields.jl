@@ -33,6 +33,7 @@ Represents a temporal pulse with shape defined by `Itshape`.
 struct PulseField{iT} <: TimeField
     λ0::Float64
     energy::Float64
+    power::Float64
     ϕ::Vector{Float64}
     Itshape::iT
 end
@@ -48,13 +49,11 @@ function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=Float64[], m
     if !isnothing(power)
         if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
-        else
-            energy = power*τfwhm*sqrt(pi/log(16))
         end
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
+    PulseField(λ0, energy, power, ϕ, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
 end
 
 """
@@ -79,13 +78,11 @@ function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=noth
     if !isnothing(power)
         if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
-        else
-            energy = 2*power*τw
         end
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, t -> sech(t/τw)^2)
+    PulseField(λ0, energy, power, ϕ, t -> sech(t/τw)^2)
 end
 
 """

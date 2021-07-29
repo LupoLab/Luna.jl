@@ -111,17 +111,17 @@ All inputs are placed in the first mode.
 """
 function prop_capillary(radius, flength, gas, pressure;
                         λlims=(90e-9, 4e-6), trange=1e-12, envelope=false, thg=nothing, δt=1,
-                        λ0, τfwhm=nothing, τ0=nothing, phases=Float64[],
-                        peakpower=nothing, energy=nothing, peakintensity=nothing,
+                        λ0, τfwhm=nothing, τw=nothing, phases=Float64[],
+                        peakpower=nothing, energy=nothing,
                         pulseshape=:gauss, polarisation=:linear,
-                        inputfield=nothing, propagator=nothing,
+                        pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
                         saveN=201, filepath=nothing,
                         status_period=5)
 
-    pol = needpol(polarisation)
+    pol = needpol(polarisation, pulses)
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
@@ -129,17 +129,13 @@ function prop_capillary(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
-    inputs = makeinputs(mode_s, λ0, τfwhm, τ0, phases,
-                        peakpower, energy, peakintensity, pulseshape, inputfield, polarisation)
+    inputs = makeinputs(mode_s, λ0, τfwhm, τw, phases,
+                        peakpower, energy, peakintensity, pulseshape, polarisation, pulses)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
     output = makeoutput(grid, saveN, stats, filepath)
-
-    if !isnothing(propagator)
-        Eω = propagator(grid, Eω)
-    end
 
     Luna.run(Eω, grid, linop, transform, FT, output; status_period)
     output
@@ -177,6 +173,9 @@ function parse_mode(mode)
     ms = String(mode)
     Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4]))
 end
+
+is_mode(d, mode) = (mode.kind == d[:kind]) && (mode.n == d[:n]) && (mode.m == d[:m])
+
 
 function makemodes_pol(pol, args...; kwargs...)
     # TODO: This is not type stable
@@ -304,81 +303,78 @@ function _fieldargs(args::NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{
     (args.ω, args.Eω)
 end
 
-
-function makefield(mode_s, λ0::Number, τfwhm, τ0, phases,
-                   peakpower, energy, peakintensity, pulseshape, inputfield, pfac)
-    !isnothing(peakpower) && (peakpower *= pfac)
-    !isnothing(energy) && (energy *= pfac)
-    if !isnothing(peakintensity)
-        isnothing(peakpower) || error("Only one of peak intensity or power can be set.")
-        peakpower = getAeff(mode_s) * peakintensity * pfac
-    end
-    if !isnothing(inputfield)
-        isnothing(energy) && error("For input fields from data, energy must be set.")
-        ω, Eω = _fieldargs(inputfield)
-        return Fields.DataField(ω, Eω; energy, ϕ=phases, λ0)
-    end
-
+function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, phases, peakpower, energy,
+                    pulseshape, polarisation)
     if pulseshape == :gauss
-        isnothing(τ0) || error("τ0 pulse duration only applies to sech² pulses.")
-        return Fields.GaussField(;λ0, τfwhm, energy, power=peakpower, ϕ=phases)
+        return makeinputs(mode_s, λ0, GaussPulse(;λ0, τfwhm, power=peakpower, energy=energy,
+                          polarisation, ϕ=phases))
     elseif pulseshape == :sech
-        return Fields.SechField(;λ0, energy, power=peakpower, τw=τ0, τfwhm, ϕ=phases)
+        return makeinputs(mode_s, λ0, SechPulse(;λ0, τfwhm, τw, power=peakpower, energy=energy,
+                          polarisation, ϕ=phases))
+    else
+        error("Valid pulse shapes are :gauss and :sech")
+end
+
+function makeinputs(mode_s, λ0, pulses, args...)
+    if ~all(isnothing, args)
+        error("When using Pulses to specify input, only λ0 must be used as a numeric argument.")
+    end
+    makeinputs(mode_s, λ0, pulses)
+end
+
+function makeinputs(mode_s, λ0, pulse::AbstractPulse)
+    idcs = findall(is_mode(parse_mode(pulse.mode), mode_s))
+    (length(idcs) > 0) && error("Mode $(pulse.mode) not found in mode list: $mode_s")
+    if pulse.polarisation == :linear
+        ((mode=idcs[1], fields=(pulse.field,)),)
+    else
+        (length(idcs) == 2) && error("Circ./ell. polarisation requested but only linear modes present")
+        py, px = ellfac(pulse.polarisation)
+        f1, f2 = ellfields(pulse)
+        ((mode=idcs[1], fields=(f1,)), (mode=idcs[2], fields=(f2,)))
     end
 end
 
-function ellphase(phases)
+
+ellphase(phases, pol::Symbol) = ellphase(phases, 1.0)
+
+function ellphase(phases, pol)
+    shift = π/2 * sign(pol)
     if length(phases) == 0
-        return [π/2]
+        return [shift]
     else
         out = copy(phases)
-        out[1] += π/2
+        out[1] += shift
         return out
     end
 end
 
 ellfac(pol::Symbol) = (1/2, 1/2) # circular
 function ellfac(ε::Number)
-    (0 <= ε <= 1) || throw(DomainError(ε, "Ellipticity must be between 0 and 1."))
+    (-1 <= ε <= 1) || throw(DomainError(ε, "Ellipticity must be between -1 and 1."))
     (1-ε^2/(1+ε^2), ε^2/(1+ε^2))
 end
 # sqrt(px/py) = ε => px = ε^2*py; px+py = 1 => px = ε^2*(1-px) => px = ε^2/(1+ε^2)
 
+nmult(x::Nothing, fac) = x
+nmult(x, fac) = x*fac
 
-function makeinputs(mode_s, λ0::Number, τfwhm::Union{Number, Nothing},
-                    τ0::Union{Number, Nothing}, phases::AbstractVector,
-                    peakpower::Union{Number, Nothing}, energy::Union{Number, Nothing}, 
-                    peakintensity::Union{Number, Nothing}, pulseshape::Symbol,
-                    inputfield::Union{
-                        Nothing, Output.AbstractOutput,
-                        NamedTuple{(:ω, :Eω), Tuple{Vector{Float64}, Vector{ComplexF64}}},
-                        NamedTuple{(:ω, :Iω, :ϕω), NTuple{3, Vector{Float64}}}},
-                        polarisation)
-    if polarisation == :linear
-        field = makefield(mode_s, λ0, τfwhm, τ0, phases,
-                          peakpower, energy, peakintensity, pulseshape, inputfield, 1)
-        return ((mode=1, fields=(field,)),)
-    else
-        py, px = ellfac(polarisation)
-        f1 = makefield(mode_s, λ0, τfwhm, τ0, phases,
-                       peakpower, energy, peakintensity, pulseshape, inputfield, py)
-        f2 = makefield(mode_s, λ0, τfwhm, τ0, ellphase(phases),
-                       peakpower, energy, peakintensity, pulseshape, inputfield, px)
-        return ((mode=1, fields=(f1,)), (mode=2, fields=(f2,)))
-    end
+function ellfields(pulse::Union{CustomPulse, GaussPulse, SechPulse})
+    f = pulse.field
+    py, px = ellfac(pulse.polarisation)
+    f1 = Fields.PulseField(f.λ0, nmult(f.energy, py), nmult(f.power, py), f.ϕ, f.Itshape)
+    f2 = Fields.PulseField(f.λ0, nmult(f.energy, px), nmult(f.power, px),
+                           ellphase(f.ϕ, pulse.polarisation), f.Itshape)
+    f1, f2
 end
 
-# "manual" broadcasting of arguments
-maketuple(arg::Tuple, N) = arg
-maketuple(arg, N) = Tuple([arg for _ = 1:N])
-
-arglength(arg::Tuple) = length(arg)
-arglength(arg) = 1
-
-function makeinputs(args...)
-    N = maximum(arglength, args)
-    argsT = [maketuple(arg, N) for arg in args]
-    Tuple(collect(Iterators.flatten([makeinputs(aargs...) for aargs in zip(argsT...)])))
+function ellfields(pulse::DataPulse)
+    f = pulse.field
+    py, px = ellfac(pulse.polarisation)
+    f1 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, py), f.ϕ, f.λ0)
+    f2 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, px),
+                          ellphase(f.ϕ, pulse.polarisation), f.λ0)
+    f1, f2
 end
 
 function shotnoise_maybe(inputs, mode::Modes.AbstractMode, shotnoise::Bool)
@@ -438,5 +434,58 @@ end
 function makeoutput(grid, saveN, stats, filepath)
     Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
 end
+
+abstract type AbstractPulse end
+
+struct CustomPulse <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::Fields.PulseField
+end
+
+function CustomPulse(;mode=:lowest, polarisation=:linear, kwargs...)
+    CustomPulse(mode, polarisation, Fields.PulseField(;kwargs...))
+end
+
+struct GaussPulse <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::Fields.PulseField
+end
+
+function GaussPulse(;mode=:lowest, polarisation=:linear, kwargs...)
+    GaussPulse(mode, polarisation, Fields.GaussField(;kwargs...))
+end
+
+struct SechPulse <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::Fields.PulseField
+end
+
+function SechPulse(;mode=:lowest, polarisation=:linear, kwargs...)
+    SechPulse(mode, polarisation, Fields.SechField(;kwargs...))
+end
+
+struct DataPulse <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::Fields.DataField
+end
+
+#TODO add peak power to DataPulses
+function DataPulse(;mode=:lowest, polarisation=:linear, ω, Iω, ϕω, kwargs...)
+    DataPulse(mode, polarisation, Fields.DataField(ω, Iω, ϕω; kwargs...))
+end
+
+function DataPulse(;mode=:lowest, polarisation=:linear, ω, Eω, kwargs...)
+    DataPulse(mode, polarisation, Fields.DataField(ω, Eω; kwargs...))
+end
+
+function DataPulse(;mode=:lowest, polarisation=:linear, fpath, kwargs...)
+    DataPulse(mode, polarisation, Fields.DataField(fpath; kwargs...))
+end
+
+
 
 end
