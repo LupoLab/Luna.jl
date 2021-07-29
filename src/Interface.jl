@@ -313,6 +313,7 @@ function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, phases, peakpower
                           polarisation, ϕ=phases))
     else
         error("Valid pulse shapes are :gauss and :sech")
+    end
 end
 
 function makeinputs(mode_s, λ0, pulses, args...)
