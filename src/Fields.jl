@@ -30,10 +30,10 @@ Represents a temporal pulse with shape defined by `Itshape`.
 - `ϕ::Vector{Float64}`: spectral phases (CEP, group delay, GDD, TOD, ...)
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
-struct PulseField{iT} <: TimeField
+struct PulseField{eT, pT, iT} <: TimeField
     λ0::Float64
-    energy::Float64
-    power::Float64
+    energy::eT
+    power::pT
     ϕ::Vector{Float64}
     Itshape::iT
 end
@@ -110,10 +110,18 @@ Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier 
 """
 function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
-    energy_t = Fields.energyfuncs(grid)[1]
-    Eω = FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
-    (length(p.ϕ) >= 1) && prop_taylor!(Eω, grid, p.ϕ, p.λ0)
-    Eω
+    if length(p.ϕ) >= 1
+        Et = FT \ prop_taylor!(FT * Et, grid, p.ϕ, p.λ0)
+    end
+    if !isnothing(p.energy)
+        energy_t = Fields.energyfuncs(grid)[1]
+        Et .*= sqrt(p.energy)/sqrt(energy_t(Et))
+    else
+        Pt = It(Et, grid)
+        Et .*= sqrt(p.power)/sqrt(maximum(Pt))
+    end
+        
+    FT * Et
 end
 
 """
