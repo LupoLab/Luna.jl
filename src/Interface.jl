@@ -239,9 +239,6 @@ function parse_mode(mode)
     Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4]))
 end
 
-is_mode(d, mode) = (mode.kind == d[:kind]) && (mode.n == d[:n]) && (mode.m == d[:m])
-
-
 function makemodes_pol(pol, args...; kwargs...)
     # TODO: This is not type stable
     if pol
@@ -375,9 +372,19 @@ function findmode(mode_s, pulse)
             return [1, 2]
         end
     else
-        return findall(is_mode(parse_mode(pulse.mode), mode_s))
+        md = parse_mode(pulse.mode)
+        return _findmode(mode_s, md)
     end
 end
+
+function _findmode(mode_s::AbstractArray, md)
+    return findall(mode_s) do m
+        (m.kind == md[:kind]) && (m.n == md[:n]) && (m.m == md[:m])
+    end
+end
+
+_findmode(mode_s, md) = _findmode([mode_s], md)
+
 
 function makeinputs(mode_s, λ0, pulse::AbstractPulse)
     idcs = findmode(mode_s, pulse)
