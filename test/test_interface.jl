@@ -123,6 +123,8 @@ end
 
 ##
 @testset "propagators" begin
+    # passing ϕ keyword argument and an equivalent propagator function should yield 
+    # the same result.
     args = (100e-6, 0.1, :He, 1)
     kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
     p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
