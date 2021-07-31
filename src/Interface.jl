@@ -307,13 +307,14 @@ function needpol(pol)
     elseif pol == :circular
         return true
     else
-        error("Polarisation must be :linear, :circular, or an ellipticity")
+        error("Polarisation must be :linear, :circular, or an ellipticity, not $pol")
     end
 end
 needpol(pol::Number) = true
+needpol(pulse::AbstractPulse) = needpol(pulse.polarisation)
 
 needpol(pol, pulses::Nothing) = needpol(pol)
-needpol(pol, pulse::AbstractPulse) = needpol(pulse.polarisation)
+needpol(pol, pulse::AbstractPulse) = needpol(pulse)
 needpol(pol, pulses) = any(needpol, pulses)
 
 const_linop(radius::Number, pressure::Number) = Val(true)
@@ -454,9 +455,6 @@ function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, ϕ, power, energy
 end
 
 function makeinputs(mode_s, λ0, pulses, args...)
-    # if ~(all(isnothing, args) || (length(args) == 0))
-    #     error("When using Pulses to specify input, only λ0 must be used as a numeric argument.")
-    # end
     makeinputs(mode_s, λ0, pulses)
 end
 
@@ -492,6 +490,10 @@ function makeinputs(mode_s, λ0, pulse::AbstractPulse)
         f1, f2 = ellfields(pulse)
         ((mode=idcs[1], fields=(f1,)), (mode=idcs[2], fields=(f2,)))
     end
+end
+
+function makeinputs(mode_s, λ0, pulses::Vector{<:AbstractPulse})
+    Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
 end
 
 ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
