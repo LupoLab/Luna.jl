@@ -257,6 +257,25 @@ function (d::DataField)(grid::Grid.AbstractGrid, FT)
 end
 
 """
+    PropagatedField(propagator!, field)
+
+A wrapper around a previously defined `TimeField` which applies the mutating propagation
+function `propagator!(Eω, grid)` to the field `Eω`.
+"""
+struct PropagatedField{pT, fT<:TimeField} <: TimeField
+    propagator!::pT
+    field::fT
+end
+
+PropagatedField(::Nothing, field::fT) where fT <:TimeField = field
+
+function (pf::PropagatedField)(grid::Grid.AbstractGrid, FT)
+    Eω = pf.field(grid, FT)
+    pf.propagator!(Eω, grid)
+    Eω
+end
+
+"""
     ShotNoise(rng=GLOBAL_RNG)
 
 Creates one photon per mode quantum noise (shot noise) to add to an input field.

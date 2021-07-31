@@ -121,4 +121,29 @@ end
     end
 end
 
+##
+@testset "propagators" begin
+    args = (100e-6, 0.1, :He, 1)
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
+    p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
+    ϕ = [0, 0, 10e-30, 100e-45]
+    function prop!(Eω, grid)
+        Fields.prop_taylor!(Eω, grid, ϕ, 800e-9)
+    end
+    pp = Interface.GaussPulse(;p..., propagator=prop!)
+    pt = Interface.GaussPulse(;p..., ϕ)
+    op = prop_capillary(args...; pulses=pp, kwargs...)
+    ot = prop_capillary(args...; pulses=pt, kwargs...)
+    @test isapprox(Processing.fwhm_t(op)[1], Processing.fwhm_t(ot)[1], rtol=1e-3)
+    @test Processing.energy(op)[1] ≈ p.energy
+    @test Processing.energy(ot)[1] ≈ p.energy
+
+    op = prop_capillary(args...; p..., propagator=prop!, kwargs...)
+    ot = prop_capillary(args...; p..., ϕ, kwargs...)
+    @test isapprox(Processing.fwhm_t(op)[1], Processing.fwhm_t(ot)[1], rtol=1e-3)
+    @test Processing.energy(op)[1] ≈ p.energy
+    @test Processing.energy(ot)[1] ≈ p.energy
+end
+
+##
 Logging.global_logger(old_logger)

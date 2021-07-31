@@ -6,10 +6,10 @@ import Logging: @info
 
 abstract type AbstractPulse end
 
-struct CustomPulse <: AbstractPulse
+struct CustomPulse{fT<:Fields.TimeField} <: AbstractPulse
     mode::Symbol
     polarisation
-    field::Fields.PulseField
+    field::fT
 end
 
 """
@@ -33,15 +33,18 @@ peak power specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 """
-function CustomPulse(;mode=:lowest, polarisation=:linear, kwargs...)
-    CustomPulse(mode, polarisation, Fields.PulseField(;kwargs...))
+function CustomPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    CustomPulse(mode, polarisation,
+                Fields.PropagatedField(propagator, Fields.PulseField(;kwargs...)))
 end
 
-struct GaussPulse <: AbstractPulse
+struct GaussPulse{fT<:Fields.TimeField} <: AbstractPulse
     mode::Symbol
     polarisation
-    field::Fields.PulseField
+    field::fT
 end
 
 """
@@ -65,15 +68,18 @@ specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 """
-function GaussPulse(;mode=:lowest, polarisation=:linear, kwargs...)
-    GaussPulse(mode, polarisation, Fields.GaussField(;kwargs...))
+function GaussPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    GaussPulse(mode, polarisation,
+               Fields.PropagatedField(propagator, Fields.GaussField(;kwargs...)))
 end
 
-struct SechPulse <: AbstractPulse
+struct SechPulse{fT<:Fields.TimeField} <: AbstractPulse
     mode::Symbol
     polarisation
-    field::Fields.PulseField
+    field::fT
 end
 
 """
@@ -96,15 +102,18 @@ specified, and duration given either as `τfwhm` or `τw`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 """
-function SechPulse(;mode=:lowest, polarisation=:linear, kwargs...)
-    SechPulse(mode, polarisation, Fields.SechField(;kwargs...))
+function SechPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    SechPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.SechField(;kwargs...)))
 end
 
-struct DataPulse <: AbstractPulse
+struct DataPulse{fT<:Fields.TimeField} <: AbstractPulse
     mode::Symbol
     polarisation
-    field::Fields.DataField
+    field::fT
 end
 
 #TODO add peak power to DataPulses
@@ -137,17 +146,25 @@ A custom pulse defined by tabulated data to be used with `prop_capillary`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 """
-function DataPulse(ω::AbstractVector, Iω, ϕω; mode=:lowest, polarisation=:linear, kwargs...)
-    DataPulse(mode, polarisation, Fields.DataField(ω, Iω, ϕω; kwargs...))
+function DataPulse(ω::AbstractVector, Iω, ϕω;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.DataField(ω, Iω, ϕω; kwargs...)))
 end
 
-function DataPulse(ω, Eω; mode=:lowest, polarisation=:linear, kwargs...)
-    DataPulse(mode, polarisation, Fields.DataField(ω, Eω; kwargs...))
+function DataPulse(ω, Eω;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(Fields.DataField(ω, Eω; kwargs...)))
 end
 
-function DataPulse(fpath; mode=:lowest, polarisation=:linear, kwargs...)
-    DataPulse(mode, polarisation, Fields.DataField(fpath; kwargs...))
+function DataPulse(fpath;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.DataField(fpath; kwargs...)))
 end
 
 # Select fundamental mode from multi-mode sim or take just the single mode
@@ -177,6 +194,8 @@ For multi-mode simulations, only the lowest-order modes is transferred.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function LunaPulse(o::Output.AbstractOutput; kwargs...)
     ω = o["grid"]["ω"]
@@ -231,6 +250,8 @@ A single pulse in the lowest-order mode can be specified by the following argume
     or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
     ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
 More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
@@ -273,7 +294,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         λlims=(90e-9, 4e-6), trange=1e-12, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
-                        pulseshape=:gauss, polarisation=:linear,
+                        pulseshape=:gauss, polarisation=:linear, propagator=nothing,
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
@@ -290,7 +311,7 @@ function prop_capillary(radius, flength, gas, pressure;
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
-                        power, energy, pulseshape, polarisation)
+                        power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
@@ -442,13 +463,13 @@ getAeff(mode::Modes.AbstractMode) = Modes.Aeff(mode)
 getAeff(modes) = Modes.Aeff(modes[1])
 
 function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, ϕ, power, energy,
-                    pulseshape, polarisation)
+                    pulseshape, polarisation, propagator)
     if pulseshape == :gauss
         return makeinputs(mode_s, λ0, GaussPulse(;λ0, τfwhm, power=power, energy=energy,
-                          polarisation, ϕ))
+                          polarisation, ϕ, propagator))
     elseif pulseshape == :sech
         return makeinputs(mode_s, λ0, SechPulse(;λ0, τfwhm, τw, power=power, energy=energy,
-                          polarisation, ϕ))
+                          polarisation, ϕ, propagator))
     else
         error("Valid pulse shapes are :gauss and :sech")
     end
