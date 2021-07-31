@@ -188,7 +188,7 @@ end
 
 
 """
-    prop_capillary(radius, flength, gas, pressure; kwargs...)
+    prop_capillary(radius, flength, gas, pressure; λ0, kwargs...)
 
 Simulate pulse propagation in a hollow fibre using the capillary model.
 
@@ -200,9 +200,8 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
 - `pressure`: Gas pressure. Can be a `Number` for constant pressure, a 2-`Tuple` of `Number`s
     for a simple pressure gradient, or a `Tuple` of `(Z, P)` where `Z` and `P`
     contain `z` positions and the pressures at those positions.
-- `λ0`: Keyword argument. Can be a `Number` for input pulse(s) at the same wavelength or a
-    `Tuple` of several wavelengths. In the latter case, the first element of `λ0`
-    is taken as the global reference wavelength for the moving frame and ionisation.
+- `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
+        single-pulse inputs, this is also the central wavelength of the input pulse.
 
 # Grid options
 - `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
@@ -217,47 +216,25 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
     required value, it is used instead.
 
 # Input pulse options
-All of these arguments can be given either as a single value or a `Tuple` of values. If
-all are scalar, a single input pulse is created. If any value is a `Tuple`, multiple input
-pulses are created. Scalar values are applied to all pulses.
-If more than one value is a `Tuple`, all must be the same length.
-
-`τfwhm` and `τ0` are mutually exclusive for each input (i.e. the other must be `nothing`).
-`power`, `energy`, and `peakintensity` are also mutually exclusive.
-
-All inputs are placed in the first mode.
+A single pulse in the lowest-order mode can be specified by the following arguments:
 
 - `λ0`: Central wavelength
 - `τfwhm`: The pulse duration as defined by the full width at half maximum.
-- `τ0`: The "natural" pulse duration. Only available if pulseshape is `sech`.
-- `phases`: Spectral phases to be applied to the transform-limited pulse. Elements are
+- `τw`: The "natural" pulse duration. Only available if pulseshape is `sech`.
+- `ϕ`: Spectral phases to be applied to the transform-limited pulse. Elements are
     the usual polynomial phases ϕ₀ (CEP), ϕ₁ (group delay), ϕ₂ (GDD), ϕ₃ (TOD), etc.
-    Note that to apply different phases to different input pulses, you must supply
-    a `Tuple` of `Vector`s.
-- `propagator`: A function `propagator(grid, Eω)` which returns a propagated field `Eω`. 
-        This can be used to apply arbitrary propagation to the input pulse before propagation.
 - `energy`: Pulse energy.
-- `power`: Peak power **of the transform-limited pulse before phases are added**.
-- `peakintensity`: Peak intensity **of the transform-limited pulse**. Intensity is taken
-    as the mode-averaged value, i.e. peak power divided by effective area.
+- `power`: Peak power **after any spectral phases are added**.
 - `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
     or `:sech` for a sech² pulse.
-- `inputfield`: Can be one of:
-    - `::Luna.Output.AbstractOutput`: use the last slice of the propagation in the given
-        output as the input to this propagation. For multi-mode input simulations, only the
-        fundamental mode content is used.
-    - A `NamedTuple` with fields `ω` and `Eω`, containing angular frequency and the complex
-        frequency-domain field, respectively. The field is interpolated onto the new grid.
-    - A `NamedTuple` with fields `ω`, `Iω`, and `ϕω`, containing angular frequency, The
-        spectral energy density `Iω` and the spectral phase `ϕω` respectively. The energy
-        density and phase are interpolated onto the new grid.
-    Note that for the `NamedTuple` arguments, the spectral phase should not contain a strong
-    linear component to centre the pulse in the old time window.
 - `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
-    or a `Number` between `0` and `1` which defines the ellipticity. The major axis for
+    or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
+    ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
+More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
+In this case, all keyword arguments except for `λ0` are ignored.
 
 # Modes options
 - `modes`: Defines which modes are included in the propagation. Can be any of:
@@ -294,7 +271,7 @@ All inputs are placed in the first mode.
 """
 function prop_capillary(radius, flength, gas, pressure;
                         λlims=(90e-9, 4e-6), trange=1e-12, envelope=false, thg=nothing, δt=1,
-                        λ0, τfwhm=nothing, τw=nothing, phases=Float64[],
+                        λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
                         pulseshape=:gauss, polarisation=:linear,
                         pulses=nothing,
@@ -312,7 +289,7 @@ function prop_capillary(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
-    inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, phases,
+    inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
@@ -463,14 +440,14 @@ end
 getAeff(mode::Modes.AbstractMode) = Modes.Aeff(mode)
 getAeff(modes) = Modes.Aeff(modes[1])
 
-function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, phases, power, energy,
+function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, ϕ, power, energy,
                     pulseshape, polarisation)
     if pulseshape == :gauss
         return makeinputs(mode_s, λ0, GaussPulse(;λ0, τfwhm, power=power, energy=energy,
-                          polarisation, ϕ=phases))
+                          polarisation, ϕ))
     elseif pulseshape == :sech
         return makeinputs(mode_s, λ0, SechPulse(;λ0, τfwhm, τw, power=power, energy=energy,
-                          polarisation, ϕ=phases))
+                          polarisation, ϕ))
     else
         error("Valid pulse shapes are :gauss and :sech")
     end
@@ -517,14 +494,14 @@ function makeinputs(mode_s, λ0, pulse::AbstractPulse)
     end
 end
 
-ellphase(phases, pol::Symbol) = ellphase(phases, 1.0)
+ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
 
-function ellphase(phases, ε)
+function ellphase(ϕ, ε)
     shift = π/2 * sign(ε)
-    if length(phases) == 0
+    if length(ϕ) == 0
         return [shift]
     else
-        out = copy(phases)
+        out = copy(ϕ)
         out[1] += shift
         return out
     end
