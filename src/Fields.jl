@@ -27,6 +27,7 @@ Represents a temporal pulse with shape defined by `Itshape`.
 # Fields
 - `λ0::Float64`: the central field wavelength
 - `energy::Float64`: the pulse energy
+- `power::Float64`: the pulse peak power (**after** applying any spectral phases)
 - `ϕ::Vector{Float64}`: spectral phases (CEP, group delay, GDD, TOD, ...)
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
@@ -36,6 +37,17 @@ struct PulseField{eT, pT, iT} <: TimeField
     power::pT
     ϕ::Vector{Float64}
     Itshape::iT
+end
+
+function PulseField(;λ0, Itshape, energy=nothing, power=nothing, ϕ=Float64[])
+    if !isnothing(power)
+        if !isnothing(energy)
+            error("only one of `energy` or `power` can be specified")
+        end
+    elseif isnothing(energy)
+        error("one of `energy` or `power` must be specified")
+    end
+    PulseField(λ0, energy, power, ϕ, Itshape)
 end
 
 """
