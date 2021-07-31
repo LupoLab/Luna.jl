@@ -24,12 +24,12 @@ peak power specified.
 - `Itshape::function`: a function `I(t)`` which defines the intensity/power envelope of the
                        pulse as a function of time `t`. Note that the normalisation of this
                        envelope is irrelevant as it will be re-scaled by `energy` or `power`.
-- `energy::Number`: the pulse energy
-- `power::Number`: the pulse peak power (**after** applying any spectral phases)
-- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...)
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...).
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
-                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
@@ -52,16 +52,16 @@ A (super)Gaussian pulse for use with `prop_capillary`, with either energy or pea
 specified.
 
 # Keyword arguments
-- `λ0::Number`: the central wavelength
-- `τfwhm::Number`: the pulse duration (power/intensity FWHM)
-- `energy::Number`: the pulse energy
-- `power::Number`: the pulse peak power (**after** applying any spectral phases)
-- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...)
+- `λ0::Number`: the central wavelength.
+- `τfwhm::Number`: the pulse duration (power/intensity FWHM).
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...).
 - `m::Int`: super-Gaussian parameter (the power in the Gaussian exponent is 2m).
             Defaults to 1.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
-                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
@@ -84,15 +84,15 @@ A sech²(τ/τw) pulse for use with `prop_capillary`, with either `energy` or pe
 specified, and duration given either as `τfwhm` or `τw`.
 
 # Keyword arguments
-- `λ0::Number`: the central wavelength
-- `τfwhm::Number`: the pulse duration (power/intensity FWHM)
-- `τw::Number`: "natural" pulse duration of a sech²(τ/τw) pulse
-- `energy::Number`: the pulse energy
-- `power::Number`: the pulse peak power (**after** applying any spectral phases)
+- `λ0::Number`: the central wavelength.
+- `τfwhm::Number`: the pulse duration (power/intensity FWHM).
+- `τw::Number`: "natural" pulse duration of a sech²(τ/τw) pulse.
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
 - `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...)
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
-                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
@@ -108,6 +108,36 @@ struct DataPulse <: AbstractPulse
 end
 
 #TODO add peak power to DataPulses
+"""
+    DataPulse(ω, Iω, ϕω; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
+    DataPulse(ω, Eω; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
+    DataPulse(fpath; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
+
+A custom pulse defined by tabulated data to be used with `prop_capillary`.
+
+# Data input options
+- `ω, Iω, ϕω`: arrays of angular frequency `ω` (units rad/s), spectral energy density `Iω`
+               and spectral phase `ϕω`. `ϕω` should be unwrapped.
+- `ω, Eω`: arrays of angular frequency `ω` (units rad/s) and the complex frequency-domain
+           field `Eω`.
+- `fpath`: a string containing the path to a file which contains 3 columns:
+    Column 1: frequency (units of Hertz)
+    Column 2: spectral energy density
+    Column 3: spectral phase (unwrapped)
+
+# Keyword arguments
+- `energy::Number`: the pulse energy
+- `λ0::Number`: the central wavelength (optional; defaults to the centre of mass of the
+                given spectral energy density).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...) to be applied to the
+                       pulse (in addition to any phase already present in the data).
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+"""
 function DataPulse(ω::AbstractVector, Iω, ϕω; mode=:lowest, polarisation=:linear, kwargs...)
     DataPulse(mode, polarisation, Fields.DataField(ω, Iω, ϕω; kwargs...))
 end
