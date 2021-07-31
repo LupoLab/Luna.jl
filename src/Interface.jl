@@ -109,9 +109,9 @@ end
 
 #TODO add peak power to DataPulses
 """
-    DataPulse(ω, Iω, ϕω; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
-    DataPulse(ω, Eω; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
-    DataPulse(fpath; energy, λ0=Nan, mode=:lowest, polarisation=:linear)
+    DataPulse(ω, Iω, ϕω; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
+    DataPulse(ω, Eω; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
+    DataPulse(fpath; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
 
 A custom pulse defined by tabulated data to be used with `prop_capillary`.
 
@@ -154,6 +154,30 @@ end
 modeslice(Eω::Array{ComplexF64, 2}) = Eω[:, end]
 modeslice(Eω::Array{ComplexF64, 3}) = Eω[:, 1, end]
 
+"""
+    LunaPulse(output; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
+
+A pulse defined to be used with `prop_capillary` which comes from a previous `Luna`
+propagation simulation.
+
+For multi-mode simulations, only the lowest-order modes is transferred.
+
+# Arguments
+- `output::AbstractOutput`: output from a previous `Luna` simulation.
+
+# Keyword arguments
+- `energy::Number`: the pulse energy
+- `λ0::Number`: the central wavelength (optional; defaults to the centre of mass of the
+                given spectral energy density).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...) to be applied to the
+                       pulse (in addition to any phase already present in the data).
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+"""
 function LunaPulse(o::Output.AbstractOutput; kwargs...)
     ω = o["grid"]["ω"]
     t = o["grid"]["t"]
