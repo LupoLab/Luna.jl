@@ -14,7 +14,7 @@ end
 
 """
     CustomPulse(;λ0, energy=nothing, power=nothing, ϕ=Float64[],
-                mode=:lowest, polarisation=:linear)
+                mode=:lowest, polarisation=:linear, propagator=nothing)
 
 A custom pulse defined by a function for use with `prop_capillary`, with either energy or
 peak power specified.
@@ -49,7 +49,7 @@ end
 
 """
     GaussPulse(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=Float64[], m=1,
-               mode=:lowest, polarisation=:linear)
+               mode=:lowest, polarisation=:linear, propagator=nothing)
 
 A (super)Gaussian pulse for use with `prop_capillary`, with either energy or peak power
 specified.
@@ -84,7 +84,7 @@ end
 
 """
     SechPulse(;λ0, τfwhm=nothing, τw=nothing, energy=nothing, power=nothing, ϕ=Float64[],
-               mode=:lowest, polarisation=:linear)
+               mode=:lowest, polarisation=:linear, propagator=nothing)
 
 A sech²(τ/τw) pulse for use with `prop_capillary`, with either `energy` or peak `power`
 specified, and duration given either as `τfwhm` or `τw`.
@@ -118,9 +118,9 @@ end
 
 #TODO add peak power to DataPulses
 """
-    DataPulse(ω, Iω, ϕω; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
-    DataPulse(ω, Eω; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
-    DataPulse(fpath; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
+    DataPulse(ω, Iω, ϕω; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+    DataPulse(ω, Eω; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+    DataPulse(fpath; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
 
 A custom pulse defined by tabulated data to be used with `prop_capillary`.
 
@@ -172,7 +172,7 @@ modeslice(Eω::Array{ComplexF64, 2}) = Eω[:, end]
 modeslice(Eω::Array{ComplexF64, 3}) = Eω[:, 1, end]
 
 """
-    LunaPulse(output; energy, λ0=NaN, mode=:lowest, polarisation=:linear)
+    LunaPulse(output; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
 
 A pulse defined to be used with `prop_capillary` which comes from a previous `Luna`
 propagation simulation.
