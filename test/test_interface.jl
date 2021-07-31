@@ -6,7 +6,7 @@ logger = Logging.SimpleLogger(stdout, Logging.Warn)
 old_logger = Logging.global_logger(logger)
 
 @testset "Polarisation" begin
-    args = (10e-6, 0.1, :He, 1)
+    args = (100e-6, 0.1, :He, 1)
     kwargs = Dict(:λ0 => 800e-9, :τfwhm => 10e-15, :energy => 1e-12, :shotnoise => false)
     lin = prop_capillary(args...; polarisation=:linear, kwargs...)
     @testset "linear, single mode" begin
@@ -37,7 +37,7 @@ end
 
 ##
 @testset "Peak power vs energy" begin
-    args = (10e-6, 0.1, :He, 1)
+    args = (100e-6, 0.1, :He, 1)
     kwargs = Dict(:λ0 => 800e-9, :τfwhm => 10e-15, :shotnoise => false, :trange => 500e-15,
                     :saveN => 51, :plasma => false)
     shape_fac = ((:gauss, τfwhm*sqrt(pi/log(16))),
@@ -69,8 +69,8 @@ end
 
 ##
 @testset "Input into higher-order modes" begin
-    args = (10e-6, 0.1, :He, 1)
-    kwargs = Dict(:λ0 => 800e-9, :shotnoise => false, :trange => 500e-15,
+    args = (100e-6, 0.1, :He, 1)
+    kwargs = Dict(:λ0 => 800e-9, :shotnoise => false, :trange => 250e-15,
                     :saveN => 51, :plasma => false)
     pkwargs = (τfwhm=10e-15, energy=1e-12, λ0=800e-9)
     @testset "input into $m, mode average" for m in (:HE11, :HE12, :TE01, :TE02, :TM01)
@@ -81,6 +81,18 @@ end
     @testset "input into $m, modal" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
         ip = Interface.GaussPulse(;mode=m, pkwargs...)
         o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
+        @test Processing.energy(o)[midx, 1] ≈ pkwargs[:energy]
+    end
+    @testset "input into $m, modal circular" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
+        ip = Interface.GaussPulse(;mode=m, polarisation=:circular, pkwargs...)
+        o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
+        @test Processing.energy(o)[2midx-1, 1] ≈ pkwargs[:energy]/2
+        @test Processing.energy(o)[2midx, 1] ≈ pkwargs[:energy]/2
+    end
+    modes = (:TE01, :TE02, :TE03, :TE04, :TM01, :TM02, :TM03, :TM04)
+    @testset "input into $m, modal" for (midx, m) in enumerate((modes))
+        ip = Interface.GaussPulse(;mode=m, pkwargs...)
+        o = prop_capillary(args...; pulses=ip, modes=modes, kwargs...)
         @test Processing.energy(o)[midx, 1] ≈ pkwargs[:energy]
     end
 end
