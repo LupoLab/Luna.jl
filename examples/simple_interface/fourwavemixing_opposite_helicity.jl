@@ -1,0 +1,53 @@
+using Luna
+import PyPlot: plt
+
+#= In this example we simulate degenerate four-wave mixing between a circularly polarised
+pump pulse at 400 nm and a seed pulse at 800 nm to generate a circularly polarised idler
+at 266 nm. By switching the helicity of the seed relative to the pump, we can suppress
+the idler generation. =#
+
+λp = 400e-9 # central wavelength of pump pulse
+ep = 100e-6 # energy in pump pulse
+
+λs = 800e-9 # central wavelength of seed pulse
+es = 27e-6 # energy in seed pulse
+
+τfwhm = 30e-15 # pulse duration of both pulses
+
+radius = 75e-6 # HCF core radius
+flength = 1.3 # HCF length
+gas = :He
+pressure = 1.8 # helium pressure in bar
+
+pump = Interface.GaussPulse(;λ0=λp, energy=ep, τfwhm, polarisation=:circular)
+seed_equal = Interface.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=1.0)
+seed_opposite = Interface.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=-1.0)
+
+# Here we are not specifiying a mode, so Luna will automatically choose to propagate in 
+# the fundamental mode only--but because the pulses are circularly polarised, two modes
+# with perpendicular linear polarisation are used.
+equal = prop_capillary(radius, flength, gas, pressure; λ0=λp, pulses=[pump, seed_equal],
+                       trange=500e-15, λlims=(200e-9, 1500e-9))
+
+opposite = prop_capillary(radius, flength, gas, pressure; λ0=λp, pulses=[pump, seed_opposite],
+                          trange=500e-15, λlims=(200e-9, 1500e-9))
+
+
+# retrieve the spectral energy density at the output
+λ, Iλequal = Processing.getIω(equal, :λ, flength)
+_, Iλopposite = Processing.getIω(opposite, :λ, flength)
+
+# sum over the two modes
+Iλequal = dropdims(sum(Iλequal; dims=2); dims=(2, 3))
+Iλopposite = dropdims(sum(Iλopposite; dims=2); dims=(2, 3))
+
+# plot the result
+plt.figure()
+plt.plot(λ*1e9, Iλequal*1e-3, label="Equal helicity")
+plt.plot(λ*1e9, Iλopposite*1e-3, label="Opposite helicity")
+plt.xlim(200, 950)
+plt.xlabel("Wavelength (nm)")
+plt.ylabel("Spectral energy density (μJ/nm)")
+plt.ylim(ymin=0)
+plt.legend()
+
