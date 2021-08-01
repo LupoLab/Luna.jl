@@ -4,7 +4,13 @@ import PyPlot: plt
 #= In this example we simulate degenerate four-wave mixing between a circularly polarised
 pump pulse at 400 nm and a seed pulse at 800 nm to generate a circularly polarised idler
 at 266 nm. By switching the helicity of the seed relative to the pump, we can suppress
-the idler generation. =#
+the idler generation.
+The parameters are chosen to correspond to those in:
+A. Lekosiotis, et al.,
+Generation of broadband circularly polarized deep-ultraviolet pulses in hollow capillary fibers,
+Opt. Lett., 45, 5648, (2020),
+DOI: 10.1364/OL.400362.
+=#
 
 λp = 400e-9 # central wavelength of pump pulse
 ep = 100e-6 # energy in pump pulse
