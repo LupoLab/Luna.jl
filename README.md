@@ -49,17 +49,18 @@ julia> output["Eω"]
 [...]
 ```
 The shape of this array is `(Nω x Nz)` where `Nω` is the number of frequency samples and `Nz` is the number of steps that were saved during the propagation. By default, `prop_capillary` will solve the full-field (carrier-resolved) UPPE. In this case, the numerical Fourier transforms are done using `rfft`, so the number of frequency samples is `(Nt/2 + 1)` with `Nt` the number of samples in the time domain. 
+
 ### Multi-mode propagation
 `prop_capillary` accepts many keyword arguments (LINK TO DOCS HERE) to customise the simulation parameters and input pulse. One of the most important is `modes`, which defines whether mode-averaged or multi-mode propagation is used, and which modes are included. By default, `prop_capillary` considers mode-averaged propagation in the fundamental (HE₁₁) mode of the capillary, which is fast and simple but less accurate, especially at high intensity when self-focusing and photoionisation play important roles in the propagation dynamics.
 
-Mode-averaged propagation is activated using `modes=:HE11` (the default) or replacing the `:HE11` with a different mode designation (for mode-averaged propagation in a different mode). To run the same simulation as above with the first four modes (HE₁₁ to HE₁₄) of the capillary, set `modes` to `4`:
+Mode-averaged propagation is activated using `modes=:HE11` (the default) or replacing the `:HE11` with a different mode designation (for mode-averaged propagation in a different mode). To run the same simulation as above with the first four modes (HE₁₁ to HE₁₄) of the capillary, set `modes` to `4` (this example also uses smaller time and frequency windows to make the simulation run a little faster):
 ```julia
-julia> output_multimode = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, energy=120e-6, τfwhm=10e-15, modes=4)
+julia> prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, modes=4, energy=120e-6, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6))
 ```
 The propagation will take much longer, and the output field `Eω` now has shape `(Nω x Nm x Nz)` with `Nm` the number of modes:
 ```julia
 julia> output_multimode["Eω"]
-8193×4×201 Array{Complex{Float64},3}:
+2049×4×201 Array{Complex{Float64},3}:
 [...]
 ```
 > **NOTE:** Setting `modes=:HE11` and `modes=1` is **not** equivalent. The former uses mode-averaged propagation (treating all spatial dependence of the nonlinear polarisation the same as the Kerr effect) whereas the latter projects the spatially dependent nonlinear polarisation onto a single mode. This difference is especially important when photoionisation plays a major role.
@@ -85,6 +86,14 @@ PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
 ```
 ![Propagation example 3](assets/readme_modeAvgTime.png)
 
+For multi-mode simulations, the plotting functions will display all modes individually by default. You can display the sum over modes instead using `modes=:sum`:
+```julia
+julia> Plotting.spec_1D(output_multimode; log10=true, modes=:sum)
+PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
+```
+![Propagation example 4](assets/readme_multimodeSpec.png)
+(Compare this to the mode-averaged case above and note the important differences, e.g. the appearance of additional ultraviolet dispersive waves in higher-order modes.)
+
 More plotting functions are available in the `Plotting` module (INSERT DOCS LINK HERE), including for propagation statistics (`Plotting.stats(output)`) and spectrograms (`Plotting.spectrogram()`)
 
 ### Output processing
@@ -94,6 +103,11 @@ The `Processing` module contains many useful functions for more detailed process
 - Energy (`Processing.energy`) and peak power (`Processing.peakpower`) including after frequency bandpass
 - FWHM widths in frequency (`Processing.fwhm_f`) and time (`Processing.fwhm_t`) as well as time-bandwidth product (`Processing.time_bandwidth`)
 - g₁₂ coherence between multiple fields (`Processing.coherence`)
+
+## Examples
+The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the low-level interface. Some of these require the `PyPlot` package to be present--you can install this by simply typing `] add PyPlot` at the Julia REPL.
+
+## The low-level interface
 
 ## New to Julia?
 
