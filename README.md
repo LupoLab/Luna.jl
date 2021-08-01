@@ -62,7 +62,7 @@ julia> output_multimode["Eω"]
 8193×4×201 Array{Complex{Float64},3}:
 [...]
 ```
-> **NOTE:** Setting `modes=:HE11` and `modes=1` is **not** equivalent. The first uses mode-averaged propagation (treating all spatial dependence of the nonlinear polarisation as being the same as the Kerr effect) whereas the second projects the spatially dependent nonlinear polarisation onto a single mode. This difference is especially important when photionisation plays a major role.
+> **NOTE:** Setting `modes=:HE11` and `modes=1` is **not** equivalent. The former uses mode-averaged propagation (treating all spatial dependence of the nonlinear polarisation the same as the Kerr effect) whereas the latter projects the spatially dependent nonlinear polarisation onto a single mode. This difference is especially important when photoionisation plays a major role.
 ### Plotting results
 More usefully, you can directly plot the propagation results using `Plotting.prop_2D()` (`Plotting` is imported at the same time as `prop_capillary` by the `using Luna` statement):
 ```julia
