@@ -164,7 +164,7 @@ end
 function DataPulse(ω, Eω;
                    mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
     DataPulse(mode, polarisation,
-              Fields.PropagatedField(Fields.DataField(ω, Eω; kwargs...)))
+              Fields.PropagatedField(propagator, Fields.DataField(ω, Eω; kwargs...)))
 end
 
 function DataPulse(fpath;
