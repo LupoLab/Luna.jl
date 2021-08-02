@@ -112,7 +112,7 @@ The [examples folder](examples/) contains complete simulation examples for a var
 ## New to Julia?
 
 ## Getting help & contributing
-If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!
+If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](https://github.com/LupoLab/Luna/issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!
 
 Luna is being actively developed on this GitHub repository. To contribute a bugfix or a new feature, please create a pull request here. If you are new to GitHub, follow any one of the [many](https://github.com/firstcontributions/first-contributions) [useful](https://akrabat.com/the-beginners-guide-to-contributing-to-a-github-project/) [guides](https://codeburst.io/a-step-by-step-guide-to-making-your-first-github-contribution-5302260a2940) around to learn the (very simple!) GitHub workflow. You can also ask John Travers ([@jtravs](https://github.com/jtravs)) or Chris Brahms ([@chrisbrahms](https://github.com/chrisbrahms)) for further help and information.
 
