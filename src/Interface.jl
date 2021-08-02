@@ -484,10 +484,10 @@ getAeff(modes) = Modes.Aeff(modes[1])
 function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, ϕ, power, energy,
                     pulseshape, polarisation, propagator)
     if pulseshape == :gauss
-        return makeinputs(mode_s, λ0, GaussPulse(;λ0, τfwhm, power=power, energy=energy,
+        return makeinputs(mode_s, λ0, Pulses.GaussPulse(;λ0, τfwhm, power=power, energy=energy,
                           polarisation, ϕ, propagator))
     elseif pulseshape == :sech
-        return makeinputs(mode_s, λ0, SechPulse(;λ0, τfwhm, τw, power=power, energy=energy,
+        return makeinputs(mode_s, λ0, Pulses.SechPulse(;λ0, τfwhm, τw, power=power, energy=energy,
                           polarisation, ϕ, propagator))
     else
         error("Valid pulse shapes are :gauss and :sech")
