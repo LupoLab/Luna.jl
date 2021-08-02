@@ -4,6 +4,12 @@ import Luna.PhysData: wlfreq
 import Luna: Grid, Modes, Output, Fields
 import Logging: @info
 
+module Pulses
+
+import Luna: Fields, Output
+
+export AbstractPulse, CustomPulse, GaussPulse, SechPulse, DataPulse, LunaPulse
+
 abstract type AbstractPulse end
 
 struct CustomPulse{fT<:Fields.TimeField} <: AbstractPulse
@@ -204,6 +210,7 @@ function LunaPulse(o::Output.AbstractOutput; kwargs...)
     Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
     DataPulse(ω, Eωm1 .* exp.(1im .* ω .* τ); kwargs...)
 end
+end
 
 
 """
@@ -344,10 +351,10 @@ function needpol(pol)
     end
 end
 needpol(pol::Number) = true
-needpol(pulse::AbstractPulse) = needpol(pulse.polarisation)
+needpol(pulse::Pulses.AbstractPulse) = needpol(pulse.polarisation)
 
 needpol(pol, pulses::Nothing) = needpol(pol)
-needpol(pol, pulse::AbstractPulse) = needpol(pulse)
+needpol(pol, pulse::Pulses.AbstractPulse) = needpol(pulse)
 needpol(pol, pulses) = any(needpol, pulses)
 
 const_linop(radius::Number, pressure::Number) = Val(true)
@@ -513,7 +520,7 @@ end
 _findmode(mode_s, md) = _findmode([mode_s], md)
 
 
-function makeinputs(mode_s, λ0, pulse::AbstractPulse)
+function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     idcs = findmode(mode_s, pulse)
     (length(idcs) > 0) || error("Mode $(pulse.mode) not found in mode list: $mode_s")
     if pulse.polarisation == :linear
@@ -525,7 +532,7 @@ function makeinputs(mode_s, λ0, pulse::AbstractPulse)
     end
 end
 
-function makeinputs(mode_s, λ0, pulses::Vector{<:AbstractPulse})
+function makeinputs(mode_s, λ0, pulses::Vector{<:Pulses.AbstractPulse})
     Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
 end
 
@@ -552,7 +559,7 @@ end
 nmult(x::Nothing, fac) = x
 nmult(x, fac) = x*fac
 
-function ellfields(pulse::Union{CustomPulse, GaussPulse, SechPulse})
+function ellfields(pulse::Union{Pulses.CustomPulse, Pulses.GaussPulse, Pulses.SechPulse})
     f = pulse.field
     py, px = ellfac(pulse.polarisation)
     f1 = Fields.PulseField(f.λ0, nmult(f.energy, py), nmult(f.power, py), f.ϕ, f.Itshape)
@@ -561,7 +568,7 @@ function ellfields(pulse::Union{CustomPulse, GaussPulse, SechPulse})
     f1, f2
 end
 
-function ellfields(pulse::DataPulse)
+function ellfields(pulse::Pulses.DataPulse)
     f = pulse.field
     py, px = ellfac(pulse.polarisation)
     f1 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, py), f.ϕ, f.λ0)

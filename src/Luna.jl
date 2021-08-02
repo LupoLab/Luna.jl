@@ -99,11 +99,12 @@ include("Raman.jl")
 include("Interface.jl")
 
 prop_capillary = Interface.prop_capillary
+Pulses = Interface.Pulses
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
        Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface,
-       prop_capillary
+       prop_capillary, Pulses
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
