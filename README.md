@@ -91,7 +91,7 @@ For multi-mode simulations, the plotting functions will display all modes indivi
 julia> Plotting.spec_1D(output_multimode; log10=true, modes=:sum)
 PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
 ```
-![Propagation example 4](assets/readme_multimodeSpec.png)
+![Propagation example 4](assets/readme_multiModeSpec.png)
 (Compare this to the mode-averaged case above and note the important differences, e.g. the appearance of additional ultraviolet dispersive waves in higher-order modes.)
 
 More plotting functions are available in the `Plotting` module (INSERT DOCS LINK HERE), including for propagation statistics (`Plotting.stats(output)`) and spectrograms (`Plotting.spectrogram()`)
