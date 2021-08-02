@@ -318,8 +318,20 @@ function prop_capillary(radius, flength, gas, pressure;
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
     output = makeoutput(grid, saveN, stats, filepath)
 
+    saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
+        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath)
+
     Luna.run(Eω, grid, linop, transform, FT, output; status_period)
     output
+end
+
+function saveargs(output; kwargs...)
+    d = Dict{String, String}()
+    for (k, v) in kwargs
+        d[string(k)] = string(v)
+    end
+    output(d; group="prop_capillary_args")
 end
 
 function needpol(pol)
