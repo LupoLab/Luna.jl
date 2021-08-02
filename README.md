@@ -112,5 +112,21 @@ The [examples folder](examples/) contains complete simulation examples for a var
 ## New to Julia?
 
 ## Getting help & contributing
+If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!
+
+Luna is being actively developed on this GitHub repository. To contribute a bugfix or a new feature, please create a pull request here. If you are new to GitHub, follow any one of the [many](https://github.com/firstcontributions/first-contributions) [useful](https://akrabat.com/the-beginners-guide-to-contributing-to-a-github-project/) [guides](https://codeburst.io/a-step-by-step-guide-to-making-your-first-github-contribution-5302260a2940) around to learn the (very simple!) GitHub workflow. You can also ask John Travers ([@jtravs](https://github.com/jtravs)) or Chris Brahms ([@chrisbrahms](https://github.com/chrisbrahms)) for further help and information.
 
 ## Credits
+Luna is developed by Chris Brahms ([@chrisbrahms](https://github.com/chrisbrahms)) and John Travers ([@jtravs](https://github.com/jtravs)). Chris wrote the main framework, the numerical solver, and much of the interface, as well as the free-space propagation code. The heavy lifting on multi-mode guided propagation and vector fields was developed by John, and much of Luna is based on his earlier propagation code.
+
+## References
+1. Kolesik, M., Moloney, J.V., 2004. Nonlinear optical pulse propagation simulation: From Maxwell’s to unidirectional equations. Physical Review E - Statistical, Nonlinear, and Soft Matter Physics 70. https://doi.org/10.1103/PhysRevE.70.036604
+2. Dormand, J.R., Prince, P.J., 1986. Runge-Kutta triples. Computers & Mathematics with Applications 12, 1007–1017. https://doi.org/10.1016/0898-1221(86)90025-8
+3. Dormand, J.R., Prince, P.J., 1980. A family of embedded Runge-Kutta formulae. Journal of Computational and Applied Mathematics 6, 19–26. https://doi.org/10.1016/0771-050X(80)90013-3
+4. Hult, J., 2007. A Fourth-Order Runge–Kutta in the Interaction Picture Method for Simulating Supercontinuum Generation in Optical Fibers. Journal of Lightwave Technology 25, 3770–3775. https://doi.org/10.1109/JLT.2007.909373
+5. Geissler, M., Tempea, G., Scrinzi, A., Schnürer, M., Krausz, F., Brabec, T., 1999. Light Propagation in Field-Ionizing Media: Extreme Nonlinear Optics. Physical Review Letters 83, 2930–2933. https://doi.org/10.1103/PhysRevLett.83.2930
+6. Perelomov, A.M., Popov, V.S., Terent ’ev, M.V., 1966. Ionization of atoms in an alternating electric field. Soviet Physics JETP 23, 1393–1409.
+7. Ammosov, M.V., Delone, N.B., Krainov, V.P., 1986. Tunnel Ionization Of Complex Atoms And Atomic Ions In Electromagnetic Field. Soviet Physics JETP 64, 1191–1194. https://doi.org/10.1117/12.938695
+8. Börzsönyi, A., Heiner, Z., Kalashnikov, M.P., Kovács, A.P., Osvay, K., 2008. Dispersion measurement of inert gases and gas mixtures at 800 nm. Applied Optics 47, 4856. https://doi.org/10.1364/AO.47.004856
+9. Ermolov, A., Mak, K.F., Frosz, M.H., Travers, J.C., Russell, P.S.J., 2015. Supercontinuum generation in the vacuum ultraviolet through dispersive-wave and soliton-plasma interaction in a noble-gas-filled hollow-core photonic crystal fiber. Physical Review A 92, 033821. https://doi.org/10.1103/PhysRevA.92.033821
+10. Lehmeier, H.J., Leupacher, W., Penzkofer, A., 1985. Nonresonant third order hyperpolarizability of rare gases and N2 determined by third harmonic generation. Optics Communications 56, 67–72. https://doi.org/10.1016/0030-4018(85)90069-0
