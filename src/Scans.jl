@@ -81,7 +81,6 @@ function exec(args::Vector{String})
     for k in keys(args)
         isnothing(args[k]) && delete!(args, k)
     end
-    println(args)
     args["local"] && return LocalExec()
     haskey(args, "range") && return RangeExec(args["range"])
     haskey(args, "batch") && return BatchExec(args["batch"]...)
@@ -91,7 +90,7 @@ end
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
 parse_item(::Type{UnitRange{Int}}, x::AbstractString) = eval(Meta.parse(x))
 
-# Enable parsing of command-line arguments of the form"1,5" to a Tuple of integers
+# Enable parsing of command-line arguments of the form "1,5" to a Tuple of integers
 parse_item(::Type{Tuple{Int, Int}}, x::AbstractString) = Tuple(parse(Int, xi) for xi in split(x, ","))
 
 function logiter(scan, scanidx, args)
@@ -158,9 +157,12 @@ function runscan(f, scan::Scan{BatchExec})
 end
 
 function runscan(f, scan::Scan{QueueExec})
-    qfile = isempty(scan.exec.queuefile) ?
-                joinpath(Utils.cachedir(), "qfile.h5") :
-                scan.exec.queuefile
+    if isempty(scan.exec.queuefile)
+        h = string(hash(scan.name); base=16)
+        qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
+    else
+        qfile = scan.exec.queuefile
+    end
     lockpath = joinpath(Utils.cachedir(), basename(qfile)*"_lock")
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
@@ -172,10 +174,7 @@ function runscan(f, scan::Scan{QueueExec})
                     file["qdata"] = zeros(Int, length(scan))
                 end
             end
-            # now read the queue data
-            qdata = @hlock HDF5.h5open(qfile) do file
-                read(file["qdata"])
-            end
+            # read the queue data
             global qdata = @hlock HDF5.h5open(qfile) do file
                 read(file["qdata"])
             end
