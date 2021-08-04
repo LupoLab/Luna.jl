@@ -288,6 +288,15 @@ function pressure(dfun, gas)
     end
 end
 
+function pressure(dfun, gases::Tuple)
+    function addstat!(d, Eω, Et, z, dz)
+        dens = dfun(z)
+        for (di, gi) in zip(dens, gases)
+            d["pressure_$gi"] = PhysData.pressure(gi, di)
+        end
+    end
+end
+
 """
     core_radius(a)
 
@@ -436,9 +445,12 @@ end
 function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
                  windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
-    pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
-            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop), pd]
+            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop),
+            density(transform.densityfun)]
+    if !isnothing(gas)
+        push!(funs, pressure(transform.densityfun, gas))
+    end
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc
@@ -464,11 +476,13 @@ end
 function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
                  windows=nothing, gas=nothing, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
-    pd = isnothing(gas) ? density(transform.densityfun) : pressure(transform.densityfun, gas)
     pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
             peakintensity(grid, modes, components=pol), fwhm_t(grid),
-            zdw_linop(modes, linop), pd]
+            zdw_linop(modes, linop), density(transform.densityfun)]
+    if !isnothing(gas)
+        push!(funs, pressure(transform.densityfun, gas))
+    end
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc

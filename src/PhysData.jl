@@ -3,6 +3,8 @@ module PhysData
 import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
+import CSV
+import Polynomials
 import Luna: Maths, Utils
 
 include("data/lookup_tables.jl")
@@ -40,7 +42,7 @@ const N_A = ustrip(CODATA2014.N_A)
 "Amagat (Loschmidt constant)"
 const amg = atm/(k_B*273.15)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -50,9 +52,10 @@ const gas_str = Dict(
     :Xe => "Xenon",
     :Air => "Air",
     :N2 => "Nitrogen",
-    :H2 => "Hydrogen"
+    :H2 => "Hydrogen",
+    :O2 => "Oxygen"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
 
 "Change from ω to λ and vice versa"
@@ -85,6 +88,12 @@ J. Opt. Soc. Am. 67, 1550 (1977)
 "
 function γ_Peck(B1, C1, B2, C2, dens)
     return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
+end
+
+"Sellmeier expansion for Oxygen from
+Applied Optics 50, 35, 6484 (2011)"
+function γ_Zhang(A, B, C, dens)
+    return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
 end
 
 "Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
@@ -147,6 +156,12 @@ function sellmeier_gas(material::Symbol)
         B2 = 4903.7e-6
         C2 = 92.0
         return γ_Peck(B1, C1, B2, C2, density(material, atm/bar, 273.15))
+    elseif material == :O2
+        # Applied Optics 50, 35, 6484 (2011)
+        A = 1.181494e-4
+        B = 9.708931e-3
+        C = 75.4
+        return γ_Zhang(A, B, C, density(material, atm/bar, roomtemp))
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -203,6 +218,37 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
+    elseif material == :MgF2
+        return μm -> @. sqrt(complex(1
+            + 0.27620
+            + 0.60967/(1-(0.08636/μm)^2)
+            + 0.0080/(1-(18.0/μm)^2)
+            + 2.14973/(1-(25.0/μm)^2)
+            ))
+    elseif material == :ADPo
+        return μm -> @. sqrt(complex(
+            2.302842
+            + 15.102464*μm^2/(μm^2-400)
+            + 0.011125165/(μm^2-0.01325366)
+        ))
+    elseif material == :ADPe
+        return μm -> @. sqrt(complex(
+            2.163510
+            + 5.919896*μm^2/(μm^2-400)
+            + 0.009616676/(μm^2-0.01298912)
+        ))
+    elseif material == :KDPo
+        return μm -> @. sqrt(complex(
+            2.259276
+            + 13.00522*μm^2/(μm^2-400)
+            + 0.01008956/(μm^2-0.0129426)
+        ))
+    elseif material == :KDPe
+        return μm -> @. sqrt(complex(
+            2.132668
+            + 3.2279924*μm^2/(μm^2-400)
+            + 0.008637494/(μm^2-0.0122810)
+        ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -290,7 +336,7 @@ end
 
 
 "Get refractive index for any material at wavelength given in SI units"
-function ref_index(material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing)
+function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
     return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
@@ -324,6 +370,34 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
         throw(DomainError(material, "Unknown material $material"))
     end
 end
+
+"Get function which returns refractive index for gas mixture."
+function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
+    ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
+        function ngas(λ)
+            res = funs[1](λ)
+            for ii in 2:length(gases) 
+                res += funs[ii](λ)
+            end
+            return sqrt(1 + res)
+        end
+    end
+    return ngas
+end
+
+"Get function which returns ref index for mixture as function of wavelength and densities."
+function ref_index_fun(gases::NTuple{N, Symbol}, T=roomtemp) where N
+    let γs=[sellmeier_gas(gi) for gi in gases]
+        function ngas(λ, densities::Vector{<:Number})
+            χ1 = 0.0
+            for (γi, di) in zip(γs, densities)
+                χ1 += di * γi(λ*1e6)
+            end
+            sqrt(1 + χ1)
+        end
+    end
+end
+
 
 """
     dispersion_func(order, n)
@@ -390,6 +464,7 @@ References:
 [2] Chemical Reviews, 94, 3-29 (1994)
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
+[5] Optics Letters Vol. 40, No. 24 (2015))
 
 TODO: More Bishop/Shelton; Wahlstrand updated values.
 
@@ -400,6 +475,8 @@ function γ3_gas(material::Symbol; source=nothing)
             source = :Lehmeier
         elseif material in (:H2,)
             source = :Shelton
+        elseif material in (:O2,)
+            source = :Zahedpour
         else
             error("no default γ3 source for material: $material")
         end
@@ -429,6 +506,15 @@ function γ3_gas(material::Symbol; source=nothing)
             return 2.2060999099841444e-26 / dens # TODO: check this carefully
         else
             throw(DomainError(material, "Shelton model does not include $material"))
+        end
+    elseif source == :Zahedpour
+        if material == :O2
+            n0 = ref_index(:O2, 800e-9, atm/bar, roomtemp)
+            ρ = density(:O2, atm/bar, roomtemp)
+            n2 = 8.1e-24 # Table 1 in [5]
+            return 4/3*ε_0*c*n0^2/ρ * n2
+        else
+            throw(DomainError(material, "Zahedpour model does not include $material"))
         end
     else
         throw(DomainError(source, "Unkown γ3 model $source"))
@@ -481,6 +567,8 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5726
     elseif material == :H2
         Ip = 0.5669
+    elseif material == :O2
+        Ip = 0.443553
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -504,8 +592,14 @@ function quantum_numbers(material)
         return 2, 1, 1;
     elseif material == :Kr
         return 4, 1, 1
+    elseif material == :Xe
+        return 5, 1, 1
     elseif material in (:He, :HeJ)
         return 1, 0, 1
+    elseif material == :O2
+        return 2, 0, 0.53 # https://doi.org/10.1016/S0030-4018(99)00113-3
+    elseif material == :N2
+        return 2, 0, 0.9 # https://doi.org/10.1016/S0030-4018(99)00113-3
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -643,6 +737,54 @@ function raman_parameters(material)
         throw(DomainError(material, "Unknown material $material"))
     end
     rp
+end
+
+function lookup_mirror(type)
+    if type == :PC70
+        # λ (nm), R(5deg) (%), R(19deg) (%)
+        Rdat = CSV.File(joinpath(Utils.datadir(), "PC70_R.csv"))
+        # λ (nm), GDD(5deg) (fs^2), GDD(19deg) (fs^2)
+        GDDdat = CSV.File(joinpath(Utils.datadir(), "PC70_GDD.csv"))
+        # Double sqrt creates average reflectivity per _reflection_ rather than per pair
+        rspl = Maths.BSpline(Rdat.Wlgth*1e-9, sqrt.(sqrt.(Rdat.Rp5deg/100 .* Rdat.Rp19deg/100)))
+        λGDD = GDDdat.Wlgth
+        ω = wlfreq.(λGDD*1e-9)
+        # average phase per _reflection_ rather than per pair
+        ϕ = 1e-30/2 * Maths.cumtrapz(Maths.cumtrapz(GDDdat.GDDrp5deg.+GDDdat.GDDrp19deg, ω), ω)
+        # ϕ has a large linear component - remove that
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(800e-9)*1e-15
+        idcs =  2 .< ωfs .< 4 # large kinks at edge of frequency window confuse the fit
+        p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD*1e-9, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
+    elseif type == :ThorlabsUMC
+        # λ (nm), R(p) (%), R(s) (%)
+        Rdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
+        # λ (nm), GD(p) (fs^2), GD(s) (fs^2)
+        GDdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_GD.csv"))
+        # Default to s-pol
+        rspl = Maths.BSpline(Rdat.wl*1e-9, sqrt.(Rdat.Rs/100))
+        λGD = GDdat.wl
+        ω = wlfreq.(λGD*1e-9)
+        # average phase per reflection, default to s-pol
+        ϕ = Maths.cumtrapz(1e-15*GDdat.GDs, ω)
+        # ϕ has a large linear component - remove that
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(800e-9)*1e-15
+        idcs =  2 .< ωfs .< 4 # large kinks at edge of frequency window confuse the fit
+        p = Polynomials.fit(ωfs[idcs] .- ωfs0, ϕ[idcs], 3)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGD*1e-9, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 640e-9, 650e-9, 1050e-9, 1100e-9)
+    else
+        throw(DomainError("Unknown mirror type $type"))
+    end
 end
 
 end

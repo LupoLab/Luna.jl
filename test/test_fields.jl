@@ -1,5 +1,5 @@
 import Test: @test, @testset
-import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing
+import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing, Modes, Tools, Maths
 import Statistics: mean, std
 import Random: MersenneTwister
 
@@ -403,3 +403,162 @@ end
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
 
+@testset "Propagation" begin
+    λ0 = 800e-9
+    τfwhm = 2.5e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    Eωβ1 = Fields.prop_taylor(Eω, grid, [0, 10e-15], λ0)
+    Et = FT \ Eωβ1
+    @test isapprox(Maths.moment(grid.t, abs2.(Maths.hilbert(Et))), 10e-15, rtol=1e-6)
+
+    # Test sign of dispersion
+    Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 15e-30], λ0) # positive chirp
+    Et = FT \ Eωβ2
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15) # spectrogram
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2] # mean frequency at earlier time should be lower (upchirp)
+
+    # Test pulse stretching for Gaussian pulse
+    τfwhm = 30e-15
+    τ0 = Tools.τfw_to_τ0(τfwhm, :gauss)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    Eω = input(grid, FT)
+    Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, τ0^2], λ0) # should lead to √2 increase
+    Et = FT \ Eωβ2
+    τfwβ2 = Maths.fwhm(grid.t, abs2.(Maths.hilbert(Et)); method=:spline)
+    τ0β2 = Tools.τfw_to_τ0(τfwβ2, :gauss)
+    @test τ0β2 ≈ √2 * τ0
+
+    # Test pulse stretching and sign of the dispersion for modal propagation
+    ω0 = PhysData.wlfreq(λ0)
+    # Artificial mode with τ0^2 2nd order dispersion over 2 m and α=0.1
+    β(ω; z=0) = ω0/PhysData.c + 1/(0.999*PhysData.c)*(ω-ω0) + τ0^2/4*(ω-ω0)^2
+    α(ω; z=0) = 0.1
+    m = Modes.arbitrary(neff=Modes.neff_from_αβ(α, β))
+    Eωm = copy(Eω)
+    Fields.prop_mode!(Eωm, grid.ω, m, 2, λ0)
+    Et = FT \ Eωm
+    τfwm = Maths.fwhm(grid.t, abs2.(Maths.hilbert(Et)); method=:spline)
+    τ0m = Tools.τfw_to_τ0(τfwm, :gauss)
+    @test τ0m ≈ √2 * τ0
+    # Check signs are correct:
+    # α = 0.1 should give loss
+    et, eω = Fields.energyfuncs(grid)
+    @test eω(Eω)*exp(-0.2) ≈ eω(Eωm)
+    # β2 > 0 should give positive chirp:
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2]
+
+
+    # Test sign of dispersion for glass
+    Eωglass = Fields.prop_material(Eω, grid, :SiO2, 0.5e-3, λ0)
+    Et = FT \ Eωglass
+    gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+    ω0 = Maths.moment(grid.ω, abs2.(gab))
+    @test ω0[1] < ω0[2]
+
+    # Test sign of dispersion for chirped mirrors
+    for mirror in (:PC70, :ThorlabsUMC)
+        Eωmirr = Fields.prop_mirror(Eω, grid, mirror, 2) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+    end
+end
+
+@testset "Compression" begin
+# Short pulse with 100 fs^2
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 100e-30], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0)
+Etcomp = FT \ Eωcomp
+@test ϕs[3] ≈ -100e-30
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Long pulse with 40000 fs^2 (stretches 220 fs to ~5 ps)
+λ0 = 1030e-9
+τfwhm = 220e-15
+grid = Grid.RealGrid(1, λ0, (980e-9, 1080e-9), 20e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 4e-25], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0)
+Etcomp = FT \ Eωcomp
+@test ϕs[3] ≈ -4e-25
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Short pulse with GDD and TOD
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+Eωβ2 = Fields.prop_taylor(Eω, grid, [0, 0, 100e-30, 800e-45], λ0)
+ϕs, Eωcomp = Fields.optcomp_taylor(Eωβ2, grid, λ0; order=3)
+Etcomp = FT \ Eωcomp
+@test all(ϕs .≈ [0, 0, -100e-30, -800e-45])
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+
+# Material insertion
+λ0 = 800e-9
+τfwhm = 10e-15
+grid = Grid.RealGrid(1, λ0, (400e-9, 1200e-9), 500e-15)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+Et = FT \ Eω
+EωFS = Fields.prop_material(Eω, grid, :SiO2, 2e-3, λ0)
+d, Eωcomp = Fields.optcomp_material(EωFS, grid, :SiO2, λ0, -1e-2, 1e-2)
+Etcomp = FT \ Eωcomp
+@test d ≈ -2e-3
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
+end
+
+@testset "Gaussian beam initialisation" begin
+    a = 16e-6
+    gas = :Kr
+    pres = 17.2
+    τfwhm = 230e-15
+    λ0 = 1030e-9
+    energy = 5.2e-6
+    modes = (
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=3, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=3, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0, loss=false)
+    )
+    inputs = Fields.gauss_beam_init(modes, 2π/λ0, a*0.64, Fields.GaussField, λ0=λ0, τfwhm=τfwhm, energy=energy)
+    inputs = (inputs..., ((mode=i, fields=(Fields.ShotNoise(),)) for i=1:length(modes))...)
+    @test inputs[1].fields[1].energy/energy ≈ 0.9807131210817726
+    @test inputs[2].fields[1].energy/energy ≈ 0.006182621678046407
+    @test inputs[3].fields[1].energy/energy ≈ 0.0013567813790567626
+    @test inputs[4].fields[1].energy/energy ≈ 0.0008447236094573648
+    @test inputs[5].fields[1].energy/energy < 1e-20
+    @test inputs[6].fields[1].energy/energy < 2e-20
+    @test inputs[7].fields[1].energy/energy < 1e-20
+    @test inputs[8].fields[1].energy/energy < 1e-20
+end
