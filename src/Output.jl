@@ -596,20 +596,19 @@ for op in (:MemoryOutput, :HDF5Output)
 end
 
 """
-    scansave(scan, scanidx, Eω, stats; kwargs...)
+    scansave(scan, scanidx; grid, stats, fpath, script, kwargs...)
 
-Save the field `Eω` and statistics dictionary `stats` in the "collected" scan output file, 
-placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`. Additional
-keyword arguments are also saved in this manner, in a field given by the keyword.
+While running the given `scan`, save the variables given as keyword arguments into the scan grid as determined from the variables of the `scan`. Special keyword arguments are:
 
-E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` dataset in the 
-file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
-in this manner.
+- `grid::AbstractGrid`: Save the simulation grid in a dictionary (but only once)
+- `stats`: The statistics dictionary from a simulation is saved in scan grid and `NaN`-padded to account for variable lengths in the output arrays
+- `fpath`: Path to the file. Defaults to the scan name plus "_collected"
+- `script`: Path to the Julia scrpt file running the scan. Can be grabbed automatically using the macro [`@scansave`](@ref).
 """
 function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                                  grid=nothing, script=nothing, kwargs...)
     fpath = isnothing(fpath) ? "$(scan.name)_collected.h5" : fpath
-    lockpath = joinpath(Utils.cachedir(), "scanlock")
+    lockpath = joinpath(Utils.cachedir(), "$(basename(fpath)).scanlock")
     isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
     pidlock = mkpidlock(lockpath)
     if !isfile(fpath)
@@ -619,8 +618,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             order = String[]
             shape = Int[] # scan shape
             # create grid of scan points
-            for (k, var) in pairs(scan.vars)
-                # scan.vars is an OrderedDict so this iteration is deterministic
+            for (k, var) in zip(scan.variables, scan.arrays)
                 group[string(k)] = var
                 push!(order, string(k))
                 push!(shape, length(var))
@@ -709,14 +707,13 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
 end
 
 """
-    @scansave(Eω, stats; kwargs...)
+    @scansave(scan, scanidx; kwargs...)
 
-Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
-surrounding scope and also saves the script being run.
+Like [`scansave`](@ref) but also saves the script being run automatically.
 """
-macro scansave(kwargs...)
+macro scansave(scan, scanidx, kwargs...)
     global script = string(__source__.file)
-    ex = :(scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)),
+    ex = :(scansave($(esc(scan)), $(esc(scanidx)),
                     script=script))
     for arg in kwargs
         if isa(arg, Expr) && arg.head == :(=)
@@ -724,7 +721,7 @@ macro scansave(kwargs...)
             push!(ex.args, esc(arg))
         else
             # To a macro, arguments and keyword arguments look the same, so check manually
-            error("@scansave only accepts")
+            error("@scansave only accepts keyword arguments")
         end
     end
     ex

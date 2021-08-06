@@ -52,21 +52,20 @@ for _ in eachindex(ARGS)
     pop!(ARGS)
 end
 push!(ARGS, "--local")
-@scaninit "scantest"
-@test __SCAN__.mode == :local
-@test __SCAN__.name == "scantest"
+scan = Scan("scantest")
+x = collect(1:8)
+y = collect(1:6)
+addvariable!(scan, :x, x)
+addvariable!(scan, :y, y)
 
-@scanvar x = collect(1:8)
-@scanvar y = collect(1:6)
-
-@scan begin
-    out = [$x * $y, ($x)^2, ($y)^2]
-    slength = $x * $y
+runscan(scan) do scanidx, xi, yi
+    out = [xi * yi, (xi)^2, (yi)^2]
+    slength = xi * yi
     e = fill(1.0*slength, slength)
     em = fill(1.0*slength, (2, slength))
     stats = Dict("energy" => e, "energym" => em)
-    xx, yy = $x, $y
-    Output.@scansave(Eω=out, stats=stats, keyword=[xx, yy])
+    xx, yy = xi, yi
+    Output.@scansave(scan, scanidx, Eω=out, stats=stats, keyword=[xx, yy])
 end
 HDF5.h5open("scantest_collected.h5", "r") do file
     @test read(file["scanvariables"]["x"]) == x
