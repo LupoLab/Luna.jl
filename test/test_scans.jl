@@ -107,16 +107,16 @@ for _ in eachindex(ARGS)
     pop!(ARGS)
 end
 push!(ARGS, "--local")
-@scaninit "scantest"
-@scanvar var1 = collect(range(1, length=5))
-@scanvar var2 = collect(1:3)
+var1 = collect(range(1, length=5))
+var2 = collect(1:3)
+scan = Scan("scantest"; var1=var1, var2=var2)
 files = String[]
-@scan begin
-    out = Output.@ScanHDF5Output(0, 1, 10)
+runscan(scan) do scanidx, vi1, vi2
+    out = Output.@ScanHDF5Output(scan, scanidx, 0, 1, 10)
     @test out["meta"]["scanarrays"]["var1"] == var1
     @test out["meta"]["scanarrays"]["var2"] == var2
-    @test out["meta"]["scanvars"]["var1"] == $var1
-    @test out["meta"]["scanvars"]["var2"] == $var2
+    @test out["meta"]["scanvars"]["var1"] == vi1
+    @test out["meta"]["scanvars"]["var2"] == vi2
     @test out["meta"]["scanshape"] == [length(var1), length(var2)]
     @test out["meta"]["scanorder"] == ["var1", "var2"]
     for z = range(0, 1; length=10)

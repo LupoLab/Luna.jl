@@ -518,7 +518,7 @@ function nostats(args...)
     return Dict{String, Any}()
 end
 
-macro ScanHDF5Output(args...)
+macro ScanHDF5Output(scan, scanidx, args...)
     code = ""
     try
         script = string(__source__.file)
@@ -533,7 +533,7 @@ macro ScanHDF5Output(args...)
         end
     end
     fname = quote
-        $(esc(:__SCAN__)).name*"_"*@sprintf("%05d", $(esc(:__SCANIDX__)))*".h5"
+        $(esc(scan)).name*"_"*@sprintf("%05d", $(esc(scanidx)))*".h5"
     end
     ex = Expr(:call, HDF5Output, fname)
     for arg in args
@@ -543,18 +543,17 @@ macro ScanHDF5Output(args...)
     quote 
         begin
             out = $ex
-            out("scanidx", $(esc(:__SCANIDX__)),  meta=true)
+            out("scanidx", $(esc(scanidx)),  meta=true)
             vars = Dict{String, Any}()
             arrays = Dict{String, Any}()
-            order = String[] # scan order
+            order = String[]
             shape = Int[] # scan shape
-            for var in keys($(esc(:__SCAN__)).vars)
-                val = Scans.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
-                arr = $(esc(:__SCAN__)).vars[var]
-                vars[string(var)] = val
+            # create grid of scan points
+            for (var, arr) in zip($(esc(scan)).variables, $(esc(scan)).arrays)
                 push!(order, string(var))
                 push!(shape, length(arr))
                 arrays[string(var)] = arr
+                vars[string(var)] = Scans.getvalue($(esc(scan)), var, $(esc(scanidx)))
             end
             out(vars; meta=true, group="scanvars")
             out(arrays; meta=true, group="scanarrays")

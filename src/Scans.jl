@@ -105,6 +105,13 @@ function logiter(scan, scanidx, args)
     @info logmsg
 end
 
+function getvalue(scan, variable, scanidx)
+    values = vec(collect(Iterators.product(scan.arrays...)))[scanidx]
+    idx = findfirst(scan.variables .== variable)
+    values[idx]
+end
+
+
 function runscan(f, scan::Scan{LocalExec})
     for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
         logiter(scan, scanidx, args)
