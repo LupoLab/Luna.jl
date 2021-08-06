@@ -37,9 +37,17 @@ struct Scan{eT}
     exec::eT
 end
 
+"""
+    Scan(name; kwargs...)
+    Scan(name, ex::AbstractExec; kwargs...)
+
+Create a new `Scan` with name `name` and variables given as keyword arguments. If the execution
+mode `ex` is not given, it is taken from command-line arguments to the script. If no
+command-line arguments are given either, `ex` defaults to `LocalExec`, i.e. running the whole
+scan locally in the current Julia process.
+"""
 function Scan(name, cmdlineargs::Vector{String}=ARGS; kwargs...)
-    println("name $name exec $(exec(cmdlineargs))")
-    Scan(name, exec(cmdlineargs); kwargs...)
+    Scan(name, makeexec(cmdlineargs); kwargs...)
 end
 
 function Scan(name, ex::AbstractExec; kwargs...)
@@ -54,14 +62,42 @@ end
 
 length(s::Scan) = (length(s.arrays) == 0) ? 0 : prod(length, s.arrays)
 
+"""
+    addvariable!(scan, variable::Symbol, array)
+    addvariable!(scan; kwargs...)
+
+Add scan variable(s) to the `scan`, either as a single pair of `Symbol` and array, or as a 
+sequence of keyword arguments.
+"""
 function addvariable!(scan, variable::Symbol, array)
     push!(scan.variables, variable)
     push!(scan.arrays, array)
 end
 
+function addvariable!(scan; kwargs...)
+    for (var, arr) in kwargs
+        push!(scan.variables, var)
+        push!(scan.arrays, arr)
+    end
+end
+
+"""
+    makefilename(scan, scanidx)
+
+Make an appropriate file name for an `HDF5Output` or `prop_capillary` output for the
+`scan` at the current `scanidx`.
+
+# Examples
+```
+scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
+runscan(scan) do scanidx, energyi
+    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi
+                   filepath=makefilename(scan, scanidx))
+end
+"""
 makefilename(scan, scanidx) = @sprintf("%s_%05d.h5", scan.name, scanidx)
 
-function exec(args::Vector{String})
+function makeexec(args::Vector{String})
     isempty(args) && return LocalExec()
     s = ArgParseSettings()
     @add_arg_table! s begin
@@ -111,7 +147,24 @@ function getvalue(scan, variable, scanidx)
     values[idx]
 end
 
+"""
+    runscan(f, scan)
 
+Run the function `f` in a scan with arguments defined by the `scan::Scan`.
+The function `f` must have the signature `f(scanidx, args...)` where the length of `args`
+is the number of variables to be scanned over. Can be used with the `do` block syntax.
+
+The exact subset and order of scan points which is run depends on `scan.exec`, see
+[`Scan`](@ref).
+
+# Examples
+```
+scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
+runscan(scan) do scanidx, energyi
+    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi)
+end
+````
+"""
 function runscan(f, scan::Scan{LocalExec})
     for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
         logiter(scan, scanidx, args)
