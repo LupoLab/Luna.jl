@@ -518,6 +518,13 @@ function nostats(args...)
     return Dict{String, Any}()
 end
 
+"""
+    @ScanHDF5Output(scan, scanidx, args...)
+
+Create an [`HDF5Output`](@ref) for the given `scan` at the current `scanidx` and automatically
+save the running script, scan arrays, and current values of the scan variables in the file.
+All arguments, including keyword arguments, after `scanidx` are identical to `HDF5Output`.
+"""
 macro ScanHDF5Output(scan, scanidx, args...)
     code = ""
     try
