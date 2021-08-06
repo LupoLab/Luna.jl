@@ -1,6 +1,5 @@
 import Test: @test, @testset, @test_throws
-import Luna: Scans, Utils, Output, Processing
-import Luna.Scans: @scanvar, @scan, @scaninit
+using Luna
 import HDF5
 
 @testset "Chunking" begin
@@ -23,51 +22,30 @@ import HDF5
     @test all(pass)
 end
 
-@testset "Scanning" begin
+##
+args_execs = Dict(["-l"] => Scans.LocalExec,
+                  ["-r", "1:6"] => Scans.RangeExec,
+                  ["-b", "2,1"] => Scans.BatchExec,
+                  ["-q"] =>  Scans.QueueExec)
+@testset "Scanning $arg" for (arg, exec) in pairs(args_execs)
 for _ in eachindex(ARGS)
     pop!(ARGS)
 end
-push!(ARGS, "--range", "1:4")
-@scaninit "scantest"
-@scanvar dummy = collect(1:5)
-@test __SCAN__.vars[:dummy] == dummy
-@scanvar dummy2 = collect(1:10)
-@test __SCAN__.vars[:dummy] == dummy
-@test __SCAN__.vars[:dummy2] == dummy2
+push!(ARGS, arg...)
 
-for _ in eachindex(ARGS)
-    pop!(ARGS)
-end
-push!(ARGS, "--range", "1:4")
-@scaninit "scantest"
-@test __SCAN__.mode == :range
-@test __SCAN__.name == "scantest"
-@test !__SCAN__.parallel
-
-@scanvar dummy = collect(range(1, length=10))
-@test __SCAN__.vars[:dummy] == dummy
-@test __SCAN__.values[dummy] == dummy
-
-@scan begin
-    x = $dummy
-    @test x == dummy[__SCANIDX__]
-end
-
-for _ in eachindex(ARGS)
-    pop!(ARGS)
-end
-push!(ARGS, "--batch", "1,3")
-@scaninit "scantest"
-@test __SCAN__.mode == :batch
-@scanvar dummy = collect(range(1, length=10))
-@test __SCAN__.batch == (1, 3)
-@test __SCAN__.idcs == [1, 4, 7, 10]
-@scan begin
-    x = $dummy
-    @test x == dummy[__SCANIDX__]
+v = collect(1:6)
+vp = v[end:-1:1]
+scan = Scan("test"; var=v)
+@test scan.exec isa exec
+runscan(scan) do scanidx, vi
+    @test vi == v[scanidx]
+    if ~(scan.exec isa Scans.BatchExec)
+        @test vi == pop!(vp)
+    end
 end
 end
 
+##
 try
 @testset "scansave" begin
 for _ in eachindex(ARGS)

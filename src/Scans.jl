@@ -38,6 +38,7 @@ struct Scan{eT}
 end
 
 function Scan(name, cmdlineargs::Vector{String}=ARGS; kwargs...)
+    println("name $name exec $(exec(cmdlineargs))")
     Scan(name, exec(cmdlineargs); kwargs...)
 end
 
@@ -83,7 +84,9 @@ function exec(args::Vector{String})
     end
     args["local"] && return LocalExec()
     haskey(args, "range") && return RangeExec(args["range"])
+    haskey(args, "r") && return RangeExec(args["r"])
     haskey(args, "batch") && return BatchExec(args["batch"]...)
+    haskey(args, "b") && return BatchExec(args["b"]...)
     args["queue"] && return QueueExec()    
 end
 
@@ -146,7 +149,7 @@ end
 function runscan(f, scan::Scan{BatchExec})
     combos = vec(collect(Iterators.product(scan.arrays...)))
     linidx = collect(1:length(scan))
-    chs = chunks(linidx, scan.exec.NBatches)
+    chs = chunks(linidx, scan.exec.Nbatches)
     idcs = chs[scan.exec.batch]
     scanidcs_this = linidx[idcs]
     combos_this = combos[idcs]
