@@ -113,8 +113,15 @@ function makeexec(args::Vector{String})
             help = "Number of batches and batch index to execute"
             arg_type = Tuple{Int, Int}
         "--queue", "-q"
-            help = "Use a file-based queue to execute the scan."
+            help = """Use a file-based queue to execute the scan. Can be run in parallel
+                      using the --procs/-p option."""
             action = :store_true
+        "--procs", "-p"
+            help = """Number of processes to use with queued execution. If 0, use only the
+                      main Julia instance. If -1, use as many processes as the machine
+                      has logical cores."""
+            arg_type = Int
+            default = 0
     end
     args = parse_args(s)
     for k in keys(args)
@@ -125,7 +132,7 @@ function makeexec(args::Vector{String})
     haskey(args, "r") && return RangeExec(args["r"])
     haskey(args, "batch") && return BatchExec(args["batch"]...)
     haskey(args, "b") && return BatchExec(args["b"]...)
-    args["queue"] && return QueueExec()
+    args["queue"] && return QueueExec(args["procs"])
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
@@ -243,7 +250,8 @@ function runscan(f, scan::Scan{QueueExec})
     if scan.exec.nproc == 0
         _runscan(f, scan)
     else
-        procs = addprocs(scan.exec.nproc)
+        nproc = (scan.exec.nproc == -1) ? Base.Sys.CPU_THREADS : scan.exec.nproc
+        procs = addprocs(nproc)
         @everywhere eval(:(using Luna))
         futures = Future[]
         for p in procs

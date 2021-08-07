@@ -27,22 +27,19 @@ end
 args_execs = Dict(["-l"] => Scans.LocalExec,
                   ["-r", "1:6"] => Scans.RangeExec,
                   ["-b", "2,1"] => Scans.BatchExec,
-                  ["-q"] =>  Scans.QueueExec)
+                  ["-q"] =>  Scans.QueueExec,
+                  ["-q", "-p", "4"] =>  Scans.QueueExec)
 @testset "Scanning $arg" for (arg, exec) in pairs(args_execs)
 for _ in eachindex(ARGS)
     pop!(ARGS)
 end
 push!(ARGS, arg...)
 
-v = collect(1:6)
-vp = v[end:-1:1]
+v = collect(1:10)
 scan = Scan("test"; var=v)
 @test scan.exec isa exec
 runscan(scan) do scanidx, vi
     @test vi == v[scanidx]
-    if ~(scan.exec isa Scans.BatchExec)
-        @test vi == pop!(vp)
-    end
 end
 end
 
