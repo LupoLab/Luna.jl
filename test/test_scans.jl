@@ -136,10 +136,7 @@ end
 
 ##
 @testset "multi-process queue scan" begin
-    Nw0 = nworkers()
-    if Nw0 < 2
-        addprocs(2-Nw0)
-    end
+    ps = addprocs(2)
     @everywhere using Luna
     function worker()
         energies = collect(range(5e-6, 20e-6; length=16))
@@ -152,12 +149,26 @@ end
         end
         idcs_run
     end
-    r2 = @spawnat 2 worker()
-    r3 = @spawnat 3 worker()
+    r2 = @spawnat ps[1] worker()
+    r3 = @spawnat ps[2] worker()
     i2 = fetch(r2)
     i3 = fetch(r3)
     push!(i2, i3...)
     for scanidx in 1:16
         @test !isnothing(findfirst(i2 .== scanidx))
     end
+    rmprocs(ps)
+end
+
+##
+@testset "multi-process queue scan via exec" begin
+    energies = collect(range(5e-6, 20e-6; length=16))
+    scan = Scan("scantest", Scans.QueueExec(4); energy=energies)
+    td = joinpath(tempdir(), tempname())
+    runscan(scan) do scanidx, energy
+        println("running on $(myid())")
+        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                       trange=400e-15, filepath=joinpath(td, makefilename(scan, scanidx)))
+    end
+    @test length(readdir(td)) == length(energies)
 end

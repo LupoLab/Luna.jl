@@ -6,6 +6,7 @@ import Base: length
 import Luna: @hlock, Utils
 import Pidfile: mkpidlock
 import HDF5
+import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere, remotecall, RemoteChannel
 
 abstract type AbstractExec end
 
@@ -25,10 +26,11 @@ end
 
 # execution type to use a file-based queue
 struct QueueExec <: AbstractExec
+    nproc::Int
     queuefile::String
 end
 
-QueueExec() = QueueExec("")
+QueueExec(nproc=0) = QueueExec(nproc, "")
 
 struct Scan{eT}
     name::String
@@ -111,8 +113,11 @@ function makeexec(args::Vector{String})
             help = "Number of batches and batch index to execute"
             arg_type = Tuple{Int, Int}
         "--queue", "-q"
-            help = "Use a file-based queue to execute the scan"
-            action = :store_true
+            help = """Use a file-based queue to execute the scan. The optional integer
+                      argument can specify the number of worker processes to use. """
+            arg_type = Int
+            default = 0
+            required = false
     end
     args = parse_args(s)
     for k in keys(args)
@@ -123,7 +128,8 @@ function makeexec(args::Vector{String})
     haskey(args, "r") && return RangeExec(args["r"])
     haskey(args, "batch") && return BatchExec(args["batch"]...)
     haskey(args, "b") && return BatchExec(args["b"]...)
-    args["queue"] && return QueueExec()    
+    haskey(args, "q") && return QueueExec(args["q"])    
+    haskey(args, "queue") && return QueueExec(args["queue"])    
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
@@ -220,6 +226,24 @@ function runscan(f, scan::Scan{BatchExec})
 end
 
 function runscan(f, scan::Scan{QueueExec})
+    if scan.exec.nproc == 0
+        _runscan(f, scan)
+    else
+        procs = addprocs(scan.exec.nproc)
+        @everywhere eval(:(using Luna))
+        futures = Future[]
+        for p in procs
+            fut = @spawnat p _runscan(f, scan)
+            push!(futures, fut)
+        end
+        for fut in futures
+            fetch(fut)
+        end
+        rmprocs(procs)
+    end
+end
+
+function _runscan(f, scan::Scan{QueueExec})
     if isempty(scan.exec.queuefile)
         h = string(hash(scan.name); base=16)
         qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
@@ -259,6 +283,7 @@ function runscan(f, scan::Scan{QueueExec})
             break # break out of the loop
         end
         logiter(scan, scanidx, combos[scanidx])
+        #TODO ADD TRY/CATCH and ERROR CODE -1
         f(scanidx, combos[scanidx]...) # run scan function
         mkpidlock(lockpath) do # acquire lock on qfile again
             @hlock HDF5.h5open(qfile, "r+") do file
