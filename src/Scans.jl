@@ -1,12 +1,12 @@
 module Scans
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
-import Logging: @info
+import Logging: @info, @warn
 import Printf: @sprintf
 import Base: length
 import Luna: @hlock, Utils
 import Pidfile: mkpidlock
 import HDF5
-import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere, remotecall, RemoteChannel
+import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
 
 abstract type AbstractExec end
 
@@ -113,11 +113,8 @@ function makeexec(args::Vector{String})
             help = "Number of batches and batch index to execute"
             arg_type = Tuple{Int, Int}
         "--queue", "-q"
-            help = """Use a file-based queue to execute the scan. The optional integer
-                      argument can specify the number of worker processes to use. """
-            arg_type = Int
-            default = 0
-            required = false
+            help = "Use a file-based queue to execute the scan."
+            action = :store_true
     end
     args = parse_args(s)
     for k in keys(args)
@@ -128,8 +125,7 @@ function makeexec(args::Vector{String})
     haskey(args, "r") && return RangeExec(args["r"])
     haskey(args, "batch") && return BatchExec(args["batch"]...)
     haskey(args, "b") && return BatchExec(args["b"]...)
-    haskey(args, "q") && return QueueExec(args["q"])    
-    haskey(args, "queue") && return QueueExec(args["queue"])    
+    args["queue"] && return QueueExec()
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
@@ -174,7 +170,13 @@ end
 function runscan(f, scan::Scan{LocalExec})
     for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
         logiter(scan, scanidx, args)
-        f(scanidx, args...)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
     end
 end
 
@@ -182,7 +184,13 @@ function runscan(f, scan::Scan{RangeExec})
     combos = vec(collect(Iterators.product(scan.arrays...)))
     for (scanidx, args) in enumerate(combos[scan.exec.r])
         logiter(scan, scanidx, args)
-        f(scanidx, args...)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
     end
 end
 
@@ -221,7 +229,13 @@ function runscan(f, scan::Scan{BatchExec})
     combos_this = combos[idcs]
     for (scanidx, args) in zip(scanidcs_this, combos_this)
         logiter(scan, scanidx, args)
-        f(scanidx, args...)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
     end
 end
 
@@ -277,17 +291,24 @@ function _runscan(f, scan::Scan{QueueExec})
             end
         end # release pidlock
         if isnothing(scanidx) # no scan points left to do
-            if all(qdata .== 2) # completely done
+            if all(qdata .> 1) # completely done--either all done or failed
                 rm(qfile) # remove the queue file
             end
             break # break out of the loop
         end
         logiter(scan, scanidx, combos[scanidx])
-        #TODO ADD TRY/CATCH and ERROR CODE -1
-        f(scanidx, combos[scanidx]...) # run scan function
+        code = 2 # code for finished successfully
+        try
+            f(scanidx, combos[scanidx]...) # run scan function
+        catch e
+            code = 3 # code for failed
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
         mkpidlock(lockpath) do # acquire lock on qfile again
             @hlock HDF5.h5open(qfile, "r+") do file
-                file["qdata"][scanidx] = 2 # mark as done
+                file["qdata"][scanidx] = code # mark as done/failed
             end
         end
     end
