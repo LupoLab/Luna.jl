@@ -109,6 +109,9 @@ The [examples folder](examples/) contains complete simulation examples for a var
 
 ## The low-level interface
 
+## Running parameter scans
+Luna comes with a built-in interface which allows for the running of single- and multi-dimensional parameter scans with very little additional code. An example can be found in the [examples folder](examples/simple_interface/scan.jl) and more information is available in the documentation (INSERT DOCS LINK).
+
 ## New to Julia?
 
 ## Getting help & contributing
