@@ -179,7 +179,8 @@ end
     @test (length(i2) > 0) && (length(i3) > 0) # check that both processes ran something
     push!(i2, i3...)
     for scanidx in 1:15
-        @test !isnothing(findfirst(i2 .== scanidx)) # check that all indices have been run
+        # check that all indices have been run, except for the one with an error
+        @test !isnothing(findfirst(i2 .== scanidx))
     end
     h = string(hash(scanname); base=16)
     qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
@@ -196,6 +197,20 @@ end
         println("running on $(myid())")
         prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                        trange=400e-15, filepath=joinpath(td, makefilename(scan, scanidx)))
+    end
+    @test length(readdir(td)) == length(energies)
+    rm(td; recursive=true)
+end
+
+##
+@testset "automatic ScanHDF5Output in prop_capillary scan" begin
+    energies = collect(range(5e-6, 10e-6; length=4))
+    scan = Scan("scantest", Scans.LocalExec(); energy=energies)
+    td = joinpath(tempdir(), tempname())
+    mkpath(td)
+    runscan(scan) do scanidx, energy
+        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                       trange=400e-15, filedir=td, scan, scanidx)
     end
     @test length(readdir(td)) == length(energies)
     rm(td; recursive=true)

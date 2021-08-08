@@ -307,6 +307,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
                         saveN=201, filepath=nothing,
+                        scan=nothing, scanidx=nothing, filedir=nothing,
                         status_period=5)
 
     pol = needpol(polarisation, pulses)
@@ -323,7 +324,7 @@ function prop_capillary(radius, flength, gas, pressure;
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
-    output = makeoutput(grid, saveN, stats, filepath)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filedir)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
@@ -627,12 +628,16 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
     linop, Eω, transform, FT
 end
 
-function makeoutput(grid, saveN, stats, filepath::Nothing)
+function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx, filedir)
     Output.MemoryOutput(0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath)
+function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx, filedir)
     Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
+end
+
+function makeoutput(grid, saveN, stats, filepath, scan, scanidx, filedir)
+    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats; fdir=filedir)
 end
 
 end

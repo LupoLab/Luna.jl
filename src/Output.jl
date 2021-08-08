@@ -518,6 +518,42 @@ function nostats(args...)
     return Dict{String, Any}()
 end
 
+function ScanHDF5Output(scan, scanidx, args...;
+                        fdir=nothing, kwargs...)
+    fpath = Scans.makefilename(scan, scanidx)
+    if !isnothing(fdir)
+        fpath = joinpath(fdir, fpath)
+        if !isdir(fdir)
+            mkpath(fdir)
+        end
+    end
+    savescan(HDF5Output(fpath, args...; kwargs...), scan, scanidx)
+end
+
+function ScanMemoryOutput(scan, scanidx, args...; kwargs...)
+    savescan(MemoryOutput(args...; kwargs...), scan, scanidx)
+end
+
+function savescan(out, scan, scanidx)
+    out("scanidx", scanidx, meta=true)
+    vars = Dict{String, Any}()
+    arrays = Dict{String, Any}()
+    order = String[]
+    shape = Int[] # scan shape
+    # create grid of scan points
+    for (var, arr) in zip(scan.variables, scan.arrays)
+        push!(order, string(var))
+        push!(shape, length(arr))
+        arrays[string(var)] = arr
+        vars[string(var)] = Scans.getvalue(scan, var, scanidx)
+    end
+    out(vars; meta=true, group="scanvars")
+    out(arrays; meta=true, group="scanarrays")
+    out("scanorder", order; meta=true)
+    out("scanshape", shape; meta=true)
+    out
+end
+
 """
     @ScanHDF5Output(scan, scanidx, args...)
 
@@ -539,36 +575,12 @@ macro ScanHDF5Output(scan, scanidx, args...)
             arg.head = :kw
         end
     end
-    fname = quote
-        $(esc(scan)).name*"_"*@sprintf("%05d", $(esc(scanidx)))*".h5"
-    end
-    ex = Expr(:call, HDF5Output, fname)
+    ex = Expr(:call, :ScanHDF5Output, esc(scan), esc(scanidx))
     for arg in args
         push!(ex.args, esc(arg))
     end
     push!(ex.args, Expr(:kw, :script, code))
-    quote 
-        begin
-            out = $ex
-            out("scanidx", $(esc(scanidx)),  meta=true)
-            vars = Dict{String, Any}()
-            arrays = Dict{String, Any}()
-            order = String[]
-            shape = Int[] # scan shape
-            # create grid of scan points
-            for (var, arr) in zip($(esc(scan)).variables, $(esc(scan)).arrays)
-                push!(order, string(var))
-                push!(shape, length(arr))
-                arrays[string(var)] = arr
-                vars[string(var)] = Scans.getvalue($(esc(scan)), var, $(esc(scanidx)))
-            end
-            out(vars; meta=true, group="scanvars")
-            out(arrays; meta=true, group="scanarrays")
-            out("scanorder", order; meta=true)
-            out("scanshape", shape; meta=true)
-            out
-        end
-    end
+    ex
 end
 
 # Auto-generate @MemoryOutput and @HDF5Output macros
