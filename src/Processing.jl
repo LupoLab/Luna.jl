@@ -7,6 +7,14 @@ import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
 
+struct Common{dT}
+    data::dT
+end
+
+struct VarLength{dT}
+    data::dT
+end
+
 """
     scanproc(f, scanfiles)
     scanproc(f, directory)
@@ -20,19 +28,23 @@ The files can be given as:
 
 - a `Vector` of `AbstractString`s containing file paths
 - a directory to search for files according to the naming pattern of
-    [`Output.@ScanHDF5Output`](@ref)
+    [`Output.ScanHDF5Output`](@ref)
 - a directory and a `glob` pattern
 
 If nothing is specified, `scanproc` uses the current working directory.
 
-`f` can return a single value, an array, or a tuple/array of arrays/numbers.
+`f` can return a single value, an array, or a tuple/array of arrays/numbers. Arrays returned
+by `f` must either be of the same size for each processed file, or wrapped in a `VarLength`.
+Values returned by `f` which are guaranteed to be identical for each processed file can be
+wrapped in a `Common`, and `scanproc` only returns these once.
 
 # Example
 ```julia
 Et, Eω = scanproc("path/to/scandir") do output
     t, Et = getEt(output)
     ω, Eω = getEω(output)
-    Et, Eω
+    energyout = energyout = Processing.VarLength(output["stats"]["energy"])
+    Common(t), Et, Common(ω), Eω, energyout
 end
 ```
 """
@@ -48,8 +60,13 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
             arrays = _arrays(ret, shape)
         end
         for (ridx, ri) in enumerate(ret)
-            idcs = CartesianIndices(ri)
-            arrays[ridx][idcs, scanidcs[idx]] .= ri
+            ri isa Common && continue
+            if ri isa VarLength
+                arrays[ridx][scanidcs[idx]] = ri.data
+            else
+                idcs = CartesianIndices(ri)
+                arrays[ridx][idcs, scanidcs[idx]] .= ri
+            end
         end
     end
     arrays
@@ -68,6 +85,8 @@ end
 _arrays(ret::Number, shape) = zeros(typeof(ret), shape)
 _arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
 _arrays(ret::Tuple, shape) = [_arrays(ri, shape) for ri in ret]
+_arrays(com::Common, shape) = com.data
+_arrays(vl::VarLength, shape) = Array{typeof(vl.data), length(shape)}(undef, shape)
 
 """
     coherence(Eω; ndim=1)
