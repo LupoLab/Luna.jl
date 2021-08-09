@@ -33,12 +33,12 @@ end
 
 QueueExec(nproc=0) = QueueExec(nproc, "")
 
-struct CondorExec
+struct CondorExec <: AbstractExec
     scriptfile::String
     ncores::Int
 end
 
-struct SSHExec{eT}
+struct SSHExec{eT} <: AbstractExec
     localexec::eT
     script::String
     hostname::String
@@ -354,6 +354,8 @@ function runscan(f, scan::Scan{CondorExec})
     script = scan.scriptfile
     cores = scan.ncores
     @info "Submitting Condor job for $script running on $cores cores."
+    # Adding the --queue command-line argument below means the CondorExec
+    # is ignored even if explicitly defined inside the script.
     lines = [
         "executable = $julia",
         """arguments = "$(basename(script)) --queue" """,
