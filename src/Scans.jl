@@ -379,7 +379,7 @@ function runscan(f, scan::Scan{CondorExec})
     @info "Condor submission output:\n$out"
 end
 
-function runscan(f, scan::Scan{SSHExec})
+function runscan(f, scan::Scan{<:SSHExec})
     if gethostname() == scan.exec.hostname
         runscan(f, scan.exec.localexec)
     else
