@@ -32,6 +32,11 @@ end
 
 QueueExec(nproc=0) = QueueExec(nproc, "")
 
+struct CondorExec
+    scriptfile::String
+    ncores::Int
+end
+
 struct Scan{eT}
     name::String
     variables::Vector{Symbol}
@@ -318,6 +323,31 @@ function _runscan(f, scan::Scan{QueueExec})
             @hlock HDF5.h5open(qfile, "r+") do file
                 file["qdata"][scanidx] = code # mark as done/failed
             end
+        end
+    end
+end
+
+function runscan(f, scan::Scan{CondorExec})
+    cmd = split(string(Base.julia_cmd()))[1]
+    julia = strip(cmd, ['`', '\''])
+    script = scan.scriptfile
+    cores = scan.ncores
+    lines = [
+        "executable = $julia",
+        """arguments = "$(basename(script)) --queue""",
+        "log = $name.log.\$(Process)",
+        "output = $name.out.\$(Process)",
+        "error = $name.err.\$(Process)",
+        "stream_error = True",
+        "initialdir = $(dirname(script))",
+        "request_cpus = 1",
+        "queue $cores"
+    ]
+    fpath = joinpath(dirname(script), "doit.sub")
+    println(fpath)
+    open(fpath, "w") do file
+        for l in lines
+            write(file, l*"\n")
         end
     end
 end
