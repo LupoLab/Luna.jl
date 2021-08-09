@@ -403,8 +403,7 @@ function runscan(f, scan::Scan{<:SSHExec})
         @info "Transferring file..."
         read(`scp $script $host:\$HOME/$subdir/$folder`)
         @info "Running Luna script on remote host $host"
-        out = read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
-        @info "Luna script output:\n$out"
+        read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
     end
 end
 
