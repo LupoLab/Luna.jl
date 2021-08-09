@@ -103,7 +103,6 @@ Calculate the power transmission after propagation through length `L` in the mod
 radiation at the frequency `ω`.
 """
 function transmission(m::AbstractMode, ω, L; z=0.0)
-    # return exp(-α(m, ω)*L)
     αint, err = hquadrature(0, L) do z
         -α(m, ω; z)
     end
