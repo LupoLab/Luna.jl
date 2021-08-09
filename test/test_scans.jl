@@ -44,13 +44,26 @@ end
 end
 
 ##
+@testset "command-line args overwrite" begin
+    for _ in eachindex(ARGS)
+        pop!(ARGS)
+    end
+    push!(ARGS, "--range", "1:4")
+    v = collect(1:10)
+    scan = Scan("test", Scans.LocalExec(); var=v)
+    runscan(scan) do scanidx, vi
+        # command line ARGS above should overwrite Scans.LocalExec passed in above
+        @test scan.exec isa Scans.RangeExec
+    end
+    for _ in eachindex(ARGS)
+        pop!(ARGS)
+    end
+end
+
+##
 try
 @testset "scansave" begin
-for _ in eachindex(ARGS)
-    pop!(ARGS)
-end
-push!(ARGS, "--local")
-scan = Scan("scantest")
+scan = Scan("scantest", Scans.LocalExec())
 x = collect(1:8)
 y = collect(1:6)
 addvariable!(scan, :x, x)
@@ -101,13 +114,9 @@ end
 
 ##
 @testset "ScanHDF5Output" begin
-for _ in eachindex(ARGS)
-    pop!(ARGS)
-end
-push!(ARGS, "--local")
 var1 = collect(range(1, length=5))
 var2 = collect(1:3)
-scan = Scan("scantest"; var1=var1, var2=var2)
+scan = Scan("scantest", Scans.LocalExec(); var1=var1, var2=var2)
 files = String[]
 runscan(scan) do scanidx, vi1, vi2
     out = Output.@ScanHDF5Output(scan, scanidx, 0, 1, 10)

@@ -38,11 +38,15 @@ struct CondorExec
     ncores::Int
 end
 
-struct SSHExec
-    localexec::AbstractExec
+struct SSHExec{eT}
+    localexec::eT
     script::String
     hostname::String
     subdir::String
+end
+
+function SSHExec(le::CondorExec, hostname, subdir)
+    SSHExec(le, le.scriptfile, hostname, subdir)
 end
 
 struct Scan{eT}
@@ -69,7 +73,10 @@ end
 
 function Scan(name, ex::AbstractExec; kwargs...)
     if !isempty(ARGS)
-        return Scan(name, ARGS; kwargs...)
+        cmdlineargs = copy(ARGS)
+        # remove command-line arguments to avoid infinite recursion:
+        [pop!(ARGS) for _ in eachindex(ARGS)]
+        return Scan(name, cmdlineargs; kwargs...)
     end
     variables = Symbol[]
     arrays = Vector[]
@@ -124,7 +131,7 @@ function makeexec(args::Vector{String})
         "--local", "-l"
             help = "Execute the whole scan locally."
             action = :store_true
-        "--range" "-r"
+        "--range", "-r"
             help = "Linear range of scan indices to execute."
             arg_type = UnitRange{Int}
         "--batch", "-b"
@@ -141,7 +148,7 @@ function makeexec(args::Vector{String})
             arg_type = Int
             default = 0
     end
-    args = parse_args(s)
+    args = parse_args(args, s)
     for k in keys(args)
         isnothing(args[k]) && delete!(args, k)
     end
@@ -151,6 +158,7 @@ function makeexec(args::Vector{String})
     haskey(args, "batch") && return BatchExec(args["batch"]...)
     haskey(args, "b") && return BatchExec(args["b"]...)
     args["queue"] && return QueueExec(args["procs"])
+    error("Command-line arguments do not define a valid execution mode.")
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
@@ -379,12 +387,13 @@ function runscan(f, scan::Scan{SSHExec})
         scriptfile = basename(script)
         folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
         @info "Making directory \$HOME/$subdir/$folder"
-        read(`ssh $host "mkdir -p ~/$subdir/$folder"`)
+        read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
         @info "Transferring file..."
         read(`scp $script $host:\$HOME/$subdir/$folder`)
         @info "Running Luna script on remote host $host"
-        out = read(`ssh $host julia ~/$subdir/$folder/$scriptfile`, String)
+        out = read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
         @info "Luna script output:\n$out"
+    end
 end
 
 end
