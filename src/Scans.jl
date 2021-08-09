@@ -379,14 +379,22 @@ function runscan(f, scan::Scan{CondorExec})
     @info "Condor submission output:\n$out"
 end
 
+function changexec(scan, newexec)
+    newscan = Scan(scan.name, newexec)
+    for (var, arr) in zip(scan.variables, scan.arrays)
+        addvariable!(scan, var, arr)
+    end
+end
+
 function runscan(f, scan::Scan{<:SSHExec})
     if gethostname() == scan.exec.hostname
-        runscan(f, scan.exec.localexec)
+        runscan(f, changexec(scan, scan.exec.localexec))
     else
         host = scan.exec.hostname
         subdir = scan.exec.subdir
         script = scan.exec.script
         scriptfile = basename(script)
+        name = scan.name
         folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
         @info "Making directory \$HOME/$subdir/$folder"
         read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
