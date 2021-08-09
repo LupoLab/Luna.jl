@@ -97,12 +97,12 @@ function losslength(m::AbstractMode, ω; z=0.0)
 end
 
 """
-    transmission(m::AbstractMode, ω, L; z=0.0)
+    transmission(m::AbstractMode, ω, L)
 
 Calculate the power transmission after propagation through length `L` in the mode `m` for
 radiation at the frequency `ω`.
 """
-function transmission(m::AbstractMode, ω, L; z=0.0)
+function transmission(m::AbstractMode, ω, L)
     αint, err = hquadrature(0, L) do z
         -α(m, ω; z)
     end
