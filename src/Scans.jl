@@ -382,8 +382,9 @@ end
 function changexec(scan, newexec)
     newscan = Scan(scan.name, newexec)
     for (var, arr) in zip(scan.variables, scan.arrays)
-        addvariable!(scan, var, arr)
+        addvariable!(newscan, var, arr)
     end
+    newscan
 end
 
 function runscan(f, scan::Scan{<:SSHExec})
