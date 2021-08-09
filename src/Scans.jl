@@ -351,8 +351,8 @@ end
 function runscan(f, scan::Scan{CondorExec})
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
-    script = scan.scriptfile
-    cores = scan.ncores
+    script = scan.exec.scriptfile
+    cores = scan.exec.ncores
     @info "Submitting Condor job for $script running on $cores cores."
     # Adding the --queue command-line argument below means the CondorExec
     # is ignored even if explicitly defined inside the script.
