@@ -596,6 +596,10 @@ function quantum_numbers(material)
         return 5, 1, 1
     elseif material in (:He, :HeJ)
         return 1, 0, 1
+    elseif material == :O2
+        return 2, 0, 0.53 # https://doi.org/10.1016/S0030-4018(99)00113-3
+    elseif material == :N2
+        return 2, 0, 0.9 # https://doi.org/10.1016/S0030-4018(99)00113-3
     else
         throw(DomainError(material, "Unknown material $material"))
     end
