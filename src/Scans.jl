@@ -7,6 +7,7 @@ import Luna: @hlock, Utils
 import Pidfile: mkpidlock
 import HDF5
 import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
+import Dates
 
 abstract type AbstractExec end
 
@@ -37,6 +38,13 @@ struct CondorExec
     ncores::Int
 end
 
+struct SSHExec
+    localexec::AbstractExec
+    script::String
+    hostname::String
+    subdir::String
+end
+
 struct Scan{eT}
     name::String
     variables::Vector{Symbol}
@@ -48,16 +56,21 @@ end
     Scan(name; kwargs...)
     Scan(name, ex::AbstractExec; kwargs...)
 
-Create a new `Scan` with name `name` and variables given as keyword arguments. If the execution
-mode `ex` is not given, it is taken from command-line arguments to the script. If no
-command-line arguments are given either, `ex` defaults to `LocalExec`, i.e. running the whole
-scan locally in the current Julia process.
+Create a new `Scan` with name `name` and variables given as keyword arguments. The execution
+mode `ex` can be given directly or via command-line arguments to the script. **If given,
+command-line arguments overwrite any explicitly passed execution mode.**
+
+If neither an explicit execution mode nor command-line arguments are given,
+`ex` defaults to `LocalExec`, i.e. running the whole scan locally in the current Julia process.
 """
 function Scan(name, cmdlineargs::Vector{String}=ARGS; kwargs...)
     Scan(name, makeexec(cmdlineargs); kwargs...)
 end
 
 function Scan(name, ex::AbstractExec; kwargs...)
+    if !isempty(ARGS)
+        return Scan(name, ARGS; kwargs...)
+    end
     variables = Symbol[]
     arrays = Vector[]
     for (var, arr) in kwargs
@@ -332,9 +345,10 @@ function runscan(f, scan::Scan{CondorExec})
     julia = strip(cmd, ['`', '\''])
     script = scan.scriptfile
     cores = scan.ncores
+    @info "Submitting Condor job for $script running on $cores cores."
     lines = [
         "executable = $julia",
-        """arguments = "$(basename(script)) --queue""",
+        """arguments = "$(basename(script)) --queue" """,
         "log = $name.log.\$(Process)",
         "output = $name.out.\$(Process)",
         "error = $name.err.\$(Process)",
@@ -343,13 +357,34 @@ function runscan(f, scan::Scan{CondorExec})
         "request_cpus = 1",
         "queue $cores"
     ]
-    fpath = joinpath(dirname(script), "doit.sub")
-    println(fpath)
-    open(fpath, "w") do file
+    subfile = joinpath(dirname(script), "doit.sub")
+    @info "Writing job file to $subfile..."
+    open(subfile, "w") do file
         for l in lines
             write(file, l*"\n")
         end
     end
+    @info "Submitting job..."
+    out = read(`condor_submit $subfile`, String)
+    @info "Condor submission output:\n$out"
+end
+
+function runscan(f, scan::Scan{SSHExec})
+    if gethostname() == scan.exec.hostname
+        runscan(f, scan.exec.localexec)
+    else
+        host = scan.exec.hostname
+        subdir = scan.exec.subdir
+        script = scan.exec.script
+        scriptfile = basename(script)
+        folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
+        @info "Making directory \$HOME/$subdir/$folder"
+        read(`ssh $host "mkdir -p ~/$subdir/$folder"`)
+        @info "Transferring file..."
+        read(`scp $script $host:\$HOME/$subdir/$folder`)
+        @info "Running Luna script on remote host $host"
+        out = read(`ssh $host julia ~/$subdir/$folder/$scriptfile`, String)
+        @info "Luna script output:\n$out"
 end
 
 end
