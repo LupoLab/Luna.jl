@@ -2,7 +2,7 @@ module Interface
 using Luna
 import Luna.PhysData: wlfreq
 import Luna: Grid, Modes, Output, Fields
-import Logging: @info
+import Logging: @info, @debug
 
 module Pulses
 
@@ -210,6 +210,17 @@ function LunaPulse(o::Output.AbstractOutput; kwargs...)
     Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
     DataPulse(ω, Eωm1 .* exp.(1im .* ω .* τ); kwargs...)
 end
+
+struct GaussBeamPulse{pT} <: AbstractPulse
+    waist::Float64
+    timepulse::pT
+    polarisation
+end
+
+function GaussBeamPulse(waist, timepulse)
+    GaussBeamPulse(waist, timepulse, timepulse.polarisation)
+end
+
 end
 
 
@@ -517,8 +528,38 @@ function _findmode(mode_s::AbstractArray, md)
     end
 end
 
-_findmode(mode_s, md) = _findmode([mode_s], md)
 
+function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
+    k = 2π/λ0
+    gauss = Fields.normalised_gauss_beam(k, pulse.waist)
+    facs = [abs2(Modes.overlap(mi, gauss)) for mi in mode_s]
+    fields = Any[]
+    if pulse.polarisation == :linear
+        for (modeidx, fac) in enumerate(facs)
+            sf = scalefield(pulse.timepulse.field, fac)
+            push!(fields, (mode=modeidx, fields=(sf,)))
+        end
+    else
+        fy, fx = ellfields(pulse.timepulse)
+        for (idx, fac) in enumerate(facs[1:2:end])
+            sfy = scalefield(fy, fac)
+            sfx = scalefield(fx, fac)
+            push!(fields, (mode=2idx-1, fields=(sfy,)))
+            push!(fields, (mode=2idx, fields=(sfx,)))
+        end
+    end
+    Tuple(fields)
+end
+
+function scalefield(f::Fields.PulseField, fac)
+    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), f.ϕ, f.Itshape)
+end
+
+function scalefield(f::Fields.DataField, fac)
+    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
+end
+
+_findmode(mode_s, md) = _findmode([mode_s], md)
 
 function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     idcs = findmode(mode_s, pulse)
@@ -533,7 +574,9 @@ function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
 end
 
 function makeinputs(mode_s, λ0, pulses::Vector{<:Pulses.AbstractPulse})
-    Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
+    i = Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
+    @debug join(string.(i), "\n")
+    return i
 end
 
 ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
