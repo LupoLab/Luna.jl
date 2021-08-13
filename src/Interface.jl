@@ -320,7 +320,8 @@ function prop_capillary(radius, flength, gas, pressure;
                         saveN=201, filepath=nothing,
                         status_period=5)
 
-    pol = needpol(polarisation, pulses)
+    pol = needpol(polarisation, pulses) || needpol_modes(modes)
+    @info "X+Y polarisation "* (pol ? "required." : "not required.")
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
@@ -330,7 +331,7 @@ function prop_capillary(radius, flength, gas, pressure;
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
-    inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
@@ -368,6 +369,17 @@ needpol(pol, pulses::Nothing) = needpol(pol)
 needpol(pol, pulse::Pulses.AbstractPulse) = needpol(pulse)
 needpol(pol, pulses) = any(needpol, pulses)
 
+needpol_modes(mode::Symbol) = false # mode average
+needpol_modes(modes::Number) = false # only HE1m modes
+
+function needpol_modes(modes::NTuple{N, Symbol}) where N
+    any(modes) do mode
+        md = parse_mode(mode)
+        md[:kind] ≠ :HE || md[:n] > 1
+    end
+end
+
+
 const_linop(radius::Number, pressure::Number) = Val(true)
 const_linop(radius, pressure) = Val(false)
 
@@ -388,10 +400,13 @@ function parse_mode(mode)
 end
 
 function makemodes_pol(pol, args...; kwargs...)
-    # TODO: This is not type stable
     if pol
-        [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
-         Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+        if kwargs[:kind] == :HE
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
+                    Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+        else
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...)]
+        end
     else
         Capillary.MarcatilliMode(args...; kwargs...)
     end
@@ -657,7 +672,7 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-    pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf)
     linop, Eω, transform, FT
 end
 
