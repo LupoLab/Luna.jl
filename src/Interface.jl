@@ -2,7 +2,7 @@ module Interface
 using Luna
 import Luna.PhysData: wlfreq
 import Luna: Grid, Modes, Output, Fields
-import Logging: @info
+import Logging: @info, @debug
 
 module Pulses
 
@@ -210,6 +210,17 @@ function LunaPulse(o::Output.AbstractOutput; kwargs...)
     Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
     DataPulse(ω, Eωm1 .* exp.(1im .* ω .* τ); kwargs...)
 end
+
+struct GaussBeamPulse{pT} <: AbstractPulse
+    waist::Float64
+    timepulse::pT
+    polarisation
+end
+
+function GaussBeamPulse(waist, timepulse)
+    GaussBeamPulse(waist, timepulse, timepulse.polarisation)
+end
+
 end
 
 
@@ -310,7 +321,8 @@ function prop_capillary(radius, flength, gas, pressure;
                         scan=nothing, scanidx=nothing, filedir=nothing,
                         status_period=5)
 
-    pol = needpol(polarisation, pulses)
+    pol = needpol(polarisation, pulses) || needpol_modes(modes)
+    @info "X+Y polarisation "* (pol ? "required." : "not required.")
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
@@ -320,7 +332,7 @@ function prop_capillary(radius, flength, gas, pressure;
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
-    inputs = shotnoise_maybe(inputs, mode_s, shotnoise) 
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
@@ -358,6 +370,17 @@ needpol(pol, pulses::Nothing) = needpol(pol)
 needpol(pol, pulse::Pulses.AbstractPulse) = needpol(pulse)
 needpol(pol, pulses) = any(needpol, pulses)
 
+needpol_modes(mode::Symbol) = false # mode average
+needpol_modes(modes::Number) = false # only HE1m modes
+
+function needpol_modes(modes::NTuple{N, Symbol}) where N
+    any(modes) do mode
+        md = parse_mode(mode)
+        md[:kind] ≠ :HE || md[:n] > 1
+    end
+end
+
+
 const_linop(radius::Number, pressure::Number) = Val(true)
 const_linop(radius, pressure) = Val(false)
 
@@ -378,10 +401,13 @@ function parse_mode(mode)
 end
 
 function makemodes_pol(pol, args...; kwargs...)
-    # TODO: This is not type stable
     if pol
-        [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
-         Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+        if kwargs[:kind] == :HE
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
+                    Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+        else
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...)]
+        end
     else
         Capillary.MarcatilliMode(args...; kwargs...)
     end
@@ -518,8 +544,38 @@ function _findmode(mode_s::AbstractArray, md)
     end
 end
 
-_findmode(mode_s, md) = _findmode([mode_s], md)
 
+function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
+    k = 2π/λ0
+    gauss = Fields.normalised_gauss_beam(k, pulse.waist)
+    facs = [abs2(Modes.overlap(mi, gauss)) for mi in mode_s]
+    fields = Any[]
+    if pulse.polarisation == :linear
+        for (modeidx, fac) in enumerate(facs)
+            sf = scalefield(pulse.timepulse.field, fac)
+            push!(fields, (mode=modeidx, fields=(sf,)))
+        end
+    else
+        fy, fx = ellfields(pulse.timepulse)
+        for (idx, fac) in enumerate(facs[1:2:end])
+            sfy = scalefield(fy, fac)
+            sfx = scalefield(fx, fac)
+            push!(fields, (mode=2idx-1, fields=(sfy,)))
+            push!(fields, (mode=2idx, fields=(sfx,)))
+        end
+    end
+    Tuple(fields)
+end
+
+function scalefield(f::Fields.PulseField, fac)
+    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), f.ϕ, f.Itshape)
+end
+
+function scalefield(f::Fields.DataField, fac)
+    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
+end
+
+_findmode(mode_s, md) = _findmode([mode_s], md)
 
 function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     idcs = findmode(mode_s, pulse)
@@ -534,7 +590,9 @@ function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
 end
 
 function makeinputs(mode_s, λ0, pulses::Vector{<:Pulses.AbstractPulse})
-    Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
+    i = Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
+    @debug join(string.(i), "\n")
+    return i
 end
 
 ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
@@ -615,7 +673,7 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-    pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf)
     linop, Eω, transform, FT
 end
 

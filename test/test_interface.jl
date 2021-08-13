@@ -148,4 +148,41 @@ end
 end
 
 ##
+@testset "GaussBeamPulse" begin
+    a = 100e-6
+    args = (a, 0.1, :He, 1)
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
+    p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
+    gpl = Pulses.GaussPulse(;p...)
+    gpc = Pulses.GaussPulse(;polarisation=:circular, p...)
+    pulse = Pulses.GaussBeamPulse(0.64*a, gpl)
+    o = prop_capillary(args...; pulses=pulse, modes=4, kwargs...)
+    @test Processing.energy(o)[1, 1] ≈ p.energy * 0.9807131210817726
+    @test Processing.energy(o)[2, 1] ≈ p.energy * 0.006182621678046407
+    @test Processing.energy(o)[3, 1] ≈ p.energy * 0.0013567813790567626
+    @test Processing.energy(o)[4, 1] ≈ p.energy * 0.0008447236094573648
+
+    pulse = Pulses.GaussBeamPulse(0.64*a, gpc)
+    o = prop_capillary(args...; pulses=pulse, modes=4, kwargs...)
+    @test Processing.energy(o)[1, 1] ≈ p.energy * 0.9807131210817726/2
+    @test Processing.energy(o)[2, 1] ≈ p.energy * 0.9807131210817726/2
+    @test Processing.energy(o)[3, 1] ≈ p.energy * 0.006182621678046407/2
+    @test Processing.energy(o)[4, 1] ≈ p.energy * 0.006182621678046407/2
+    @test Processing.energy(o)[5, 1] ≈ p.energy * 0.0013567813790567626/2
+    @test Processing.energy(o)[6, 1] ≈ p.energy * 0.0013567813790567626/2
+    @test Processing.energy(o)[7, 1] ≈ p.energy * 0.0008447236094573648/2
+    @test Processing.energy(o)[8, 1] ≈ p.energy * 0.0008447236094573648/2
+
+    # two GaussBeamPulses
+    pulse1 = Pulses.GaussBeamPulse(0.64*a, gpl)
+    gpl2 = Pulses.GaussPulse(;ϕ=[0, 100e-15], p...)
+    pulse2 = Pulses.GaussBeamPulse(0.64*a, gpl2)
+    o = prop_capillary(args...; pulses=[pulse1, pulse2], modes=4, kwargs...)
+    @test Processing.energy(o)[1, 1] ≈ 2p.energy * 0.9807131210817726
+    @test Processing.energy(o)[2, 1] ≈ 2p.energy * 0.006182621678046407
+    @test Processing.energy(o)[3, 1] ≈ 2p.energy * 0.0013567813790567626
+    @test Processing.energy(o)[4, 1] ≈ 2p.energy * 0.0008447236094573648
+end
+
+##
 Logging.global_logger(old_logger)
