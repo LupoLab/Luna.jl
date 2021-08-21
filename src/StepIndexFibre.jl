@@ -2,7 +2,7 @@ module StepIndexFibre
 import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
-import Luna.PhysData: c, ε_0, μ_0, ref_index_fun
+import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, wlfreq
 import Luna.Modes: AbstractMode, dimlimits, neff, field
 export StepIndexMode, dimlimits, neff, field
 import SpecialFunctions: besselj, besselk
@@ -161,7 +161,7 @@ end
 @memoize function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
     char = make_char(radius, k0, ncore, nclad, n, mode)
     roots = find_zeros(char, nclad, ncore, no_pts=pts)
-    roots[end - m]
+    roots[end - (m - 1)]
 end
 
 radius(m::StepIndexMode{<:Number, Tco, Tcl}, z) where {Tcl, Tco} = m.a
@@ -176,7 +176,7 @@ Calculate the effective index of a StepIndexMode.
 
 """
 function neff(m::StepIndexMode, ω; z=0)
-    findneff(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), m.n, m.m, m.kind, m.pts=100)
+    findneff(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), m.n, m.m, m.kind, m.pts)
 end
 
 function f1f2(radius, k0, ncore, nclad, neff, n)
@@ -211,9 +211,9 @@ end
 # we use polar coords, so xs = (r, θ)
 # TODO: how do we handle wavelength dependence?
 # TODO: how do we handle non-negligible z component?
-function field(m::StepIndexMode, xs; z=0, ω=PhysData.wlfreq(1030e-9))
+function field(m::StepIndexMode, xs; z=0, ω=wlfreq(1030e-9))
     # From Snyder & Love, 1983, Table 12-3, Page 250
-    r, θ = x[1], xs[2]
+    r, θ = xs[1], xs[2]
     f1, f2, u, w, v = f1f2(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), neff(m, ω; z=z), m.n)
     a1 = (f2 - 1)/2
     a2 = (f2 + 1)/2
