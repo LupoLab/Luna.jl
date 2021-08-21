@@ -199,7 +199,7 @@ function corefields(n, u, R, a1, a2, fv, gv)
     Er, Et
 end
 
-function cladfields(n, w, R, a1, a2, fv, gv)
+function cladfields(n, u, w, R, a1, a2, fv, gv)
     km1_wr = besselk(n - 1, w*R)
     kp1_wr = besselk(n + 1, w*R)
     k_w = besselk(n, w)
@@ -217,10 +217,10 @@ function field(m::StepIndexMode, xs; z=0, ω=wlfreq(1030e-9))
     f1, f2, u, w, v = f1f2(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), neff(m, ω; z=z), m.n)
     a1 = (f2 - 1)/2
     a2 = (f2 + 1)/2
-    fv = m.parity == :even ? cos(n*θ) : sin(n*theta)
-    gv = m.parity == :even ? -sin(n*θ) : cos(n*θ)
+    fv = m.parity == :even ? cos(m.n*θ) : sin(m.n*theta)
+    gv = m.parity == :even ? -sin(m.n*θ) : cos(m.n*θ)
     R = r/radius(m, z)
-    Er, Et = abs(R) <= 1.0 ? corefields(n, u, R, a1, a2, fv, gv) : cladfields(n, w, R, a1, a2, fv, gv)
+    Er, Et = abs(R) <= 1.0 ? corefields(m.n, u, R, a1, a2, fv, gv) : cladfields(m.n, u, w, R, a1, a2, fv, gv)
     SVector(Er*cos(θ) - Et*sin(θ), Er*sin(θ) + Et*cos(θ))
 end
 
