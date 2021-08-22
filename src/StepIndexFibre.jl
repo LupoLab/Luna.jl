@@ -23,8 +23,8 @@ Create a StepIndexMode.
                    `:HE` or `:EH`, following Snyder and Love convention.
 - `coren` : Callable `coren(ω; z)` which returns the refractive index of the core
 - `cladn` : Callable `cladn(ω; z)` which returns the refractive index of the cladding
-- `parity::Symbol=:even` : `:even` or `:odd`, following Snyder and Love convention.
-- `pts::Int=100` : number of grid points to use in zero search.
+- `parity::Symbol` : `:even` or `:odd`, following Snyder and Love convention.
+- `pts::Int` : number of grid points to use in zero search.
 
 """
 struct StepIndexMode{Ta, Tcore, Tclad} <: AbstractMode
@@ -39,7 +39,7 @@ struct StepIndexMode{Ta, Tcore, Tclad} <: AbstractMode
 end
 
 """
-    StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, kwargs...)
+    StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even, pts=100)
 
 Create a StepIndexMode. Defaults to a silica strand in air.
 
@@ -55,16 +55,16 @@ Create a StepIndexMode. Defaults to a silica strand in air.
 - `pts::Int=100` : number of grid points to use in zero search.
 
 """
-function StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, kwargs...)
+function StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even, pts=100)
     rfco = ref_index_fun(core)
     rfcl = ref_index_fun(clad)
-    coren = (ω; z) -> rfco(wlfreq(ω))
-    cladn = (ω; z) -> rfcl(wlfreq(ω))
-    StepIndexMode(a, n, m, kind, coren, cladn; kwargs...)
+    coren = (ω; z) -> real(rfco(wlfreq(ω)))
+    cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
+    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts)
 end
 
 """
-    StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2, kwargs...)
+    StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2, parity=:even, pts=100)
 
 Create a StepIndexMode based on the NA and specified cladding material.
 
@@ -78,15 +78,15 @@ Create a StepIndexMode based on the NA and specified cladding material.
 - `clad=:SiO2` : The clad material.
 
 """
-function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2, kwargs...)
+function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts=100)
     rfcl = ref_index_fun(clad)
     function rfco(λ)
-        ncl = rfcl(λ)
+        ncl = real(rfcl(λ))
         ncl + NA^2/(2*ncl)
     end
     coren = (ω; z) -> rfco(wlfreq(ω))
-    cladn = (ω; z) -> rfcl(wlfreq(ω))
-    StepIndexMode(a, n, m, kind, coren, cladn; kwargs...)
+    cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
+    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts)
 end
 
 besseljp(n, z) = 0.5*(besselj(n - 1, z) - besselj(n + 1, z))
