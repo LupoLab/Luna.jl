@@ -10,6 +10,7 @@ import Roots: find_zeros
 import Memoize: @memoize
 import Luna.Utils: subscript
 import Base: show
+import Luna.Maths: CSpline
 
 """
     StepIndexMode(a, n, m, kind, coren, cladn; parity=:even, pts=100)
@@ -28,7 +29,7 @@ Create a StepIndexMode.
 - `pts::Int` : number of grid points to use in zero search.
 
 """
-struct StepIndexMode{Ta, Tcore, Tclad} <: AbstractMode
+struct StepIndexMode{Ta, Tcore, Tclad, AT, NT} <: AbstractMode
     a::Ta # core radius callable as function of z only, or fixed core radius if a Number
     n::Int # azimuthal mode index
     m::Int # radial mode index
@@ -37,10 +38,25 @@ struct StepIndexMode{Ta, Tcore, Tclad} <: AbstractMode
     coren::Tcore # callable, returns (possibly complex) core ref index as function of ω
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
     pts::Int # number of grid points to use in zero search
+    accel::AT # Val{true}() or Val{false}() - whether to accelerate neff search
+    neff::NT # neff accelerator (a spline)
+end
+
+function StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims=nothing)
+    if isnothing(accellims)
+        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(false), nothing)
+    else
+        λmin, λmax, npts = accellims
+        ωs = collect(range(wlfreq(λmax), wlfreq(λmin), length=npts))
+        neffs = findneff.(a, ωs ./ c, coren.(ωs, z=0), cladn.(ωs, z=0), n, m, kind, pts)
+        neff = CSpline(ωs, neffs)
+        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(true), neff)
+    end
 end
 
 """
-    StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even, pts=100)
+    StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even,
+                  pts=100, accellims=nothing)
 
 Create a StepIndexMode. Defaults to a silica strand in air.
 
@@ -54,18 +70,22 @@ Create a StepIndexMode. Defaults to a silica strand in air.
 - `clad=:SiO2` : The clad material.
 - `parity::Symbol=:even` : `:even` or `:odd`, following Snyder and Love convention.
 - `pts::Int=100` : number of grid points to use in zero search.
+- `accellims::Tuple=nothing` : can be set to (λmin, λmax, npts) to build a spline to
+   accelerate neff lookup.
 
 """
-function StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even, pts=100)
+function StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even,
+                       pts=100, accellims=nothing)
     rfco = ref_index_fun(core)
     rfcl = ref_index_fun(clad)
     coren = (ω; z) -> real(rfco(wlfreq(ω)))
     cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
-    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts)
+    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims)
 end
 
 """
-    StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2, parity=:even, pts=100)
+    StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2, parity=:even,
+                  pts=100, accellims=nothing)
 
 Create a StepIndexMode based on the NA and specified cladding material.
 
@@ -77,9 +97,14 @@ Create a StepIndexMode based on the NA and specified cladding material.
 - `kind::Symbol=:HE` : `:TE` for transverse electric, `:TM` for transverse magnetic,
                    `:HE` or `:EH`, following Snyder and Love convention.
 - `clad=:SiO2` : The clad material.
+- `parity::Symbol=:even` : `:even` or `:odd`, following Snyder and Love convention.
+- `pts::Int=100` : number of grid points to use in zero search.
+- `accellims::Tuple=nothing` : can be set to (λmin, λmax, npts) to build a spline to
+   accelerate neff lookup.
 
 """
-function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts=100)
+function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts=100,
+                       accellims=nothing)
     rfcl = ref_index_fun(clad)
     function rfco(λ)
         ncl = real(rfcl(λ))
@@ -87,7 +112,7 @@ function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts
     end
     coren = (ω; z) -> rfco(wlfreq(ω))
     cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
-    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts)
+    StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims)
 end
 
 function show(io::IO, m::StepIndexMode)
@@ -97,7 +122,7 @@ function show(io::IO, m::StepIndexMode)
 end
 
 mode_string(m::StepIndexMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
-radius_string(m::StepIndexMode{<:Number, Tco, Tcl}) where {Tco, Tcl} = "a=$(m.a)"
+radius_string(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT}) where {Tco, Tcl, AT, NT} = "a=$(m.a)"
 radius_string(m::StepIndexMode) = "a(z=0)=$(radius(m, 0))"
 
 besseljp(n, z) = 0.5*(besselj(n - 1, z) - besselj(n + 1, z))
@@ -175,7 +200,7 @@ end
     roots[end - (m - 1)]
 end
 
-radius(m::StepIndexMode{<:Number, Tco, Tcl}, z) where {Tcl, Tco} = m.a
+radius(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT}, z) where {Tcl, Tco, AT, NT} = m.a
 radius(m::StepIndexMode, z) = m.a(z)
 
 dimlimits(m::StepIndexMode; z=0) = (:polar, (0.0, 0.0), (10*radius(m, z), 2π))
@@ -188,6 +213,10 @@ Calculate the effective index of a StepIndexMode.
 """
 function neff(m::StepIndexMode, ω; z=0)
     findneff(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), m.n, m.m, m.kind, m.pts)
+end
+
+function neff(m::StepIndexMode{<:Number, Tco, Tcl, Val{true}, NT}, ω; z=0) where {Tcl, Tco, NT}
+    m.neff(ω)
 end
 
 function f1f2(radius, k0, ncore, nclad, neff, n)
