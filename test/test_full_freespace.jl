@@ -30,7 +30,7 @@ energyfun, energyfunω = Fields.energyfuncs(grid, xygrid)
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 
 linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
 normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas, pres))

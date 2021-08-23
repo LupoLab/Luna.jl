@@ -469,7 +469,7 @@ References:
 TODO: More Bishop/Shelton; Wahlstrand updated values.
 
 "
-function γ3_gas(material::Symbol; source=nothing)
+function γ3(material::Symbol; source=nothing)
     if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
@@ -522,7 +522,7 @@ function γ3_gas(material::Symbol; source=nothing)
 end
 
 function χ3_gas(material::Symbol, P, T=roomtemp; source=nothing)
-    return γ3_gas(material, source=source) .* density.(material, P, T)
+    return γ3(material, source=source) .* density.(material, P, T)
 end
 
 function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)

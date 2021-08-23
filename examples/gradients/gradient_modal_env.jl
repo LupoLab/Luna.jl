@@ -21,7 +21,7 @@ grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 1e-12)
 
 energyfun = Fields.energyfuncs(grid)[1]
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 

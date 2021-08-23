@@ -27,7 +27,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
     z -> dens0
 end
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
 
 linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
 normfun = NonlinearRHS.const_norm_free(grid, xygrid, PhysData.ref_index_fun(gas, pres))

@@ -23,7 +23,7 @@ end
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0, thg=true)
 
 
-responses = (Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), 2π*PhysData.c/λ0, grid.to),)
+responses = (Nonlinear.Kerr_env_thg(PhysData.γ3(gas), 2π*PhysData.c/λ0, grid.to),)
 
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 

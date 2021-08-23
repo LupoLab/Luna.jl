@@ -30,7 +30,7 @@ L = 5e-2
 # Common setup
 grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 0.5e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 
 # Constant
 dens0 = PhysData.density(gas, pres)
@@ -90,7 +90,7 @@ L = 5e-2
 # Common setup
 grid = Grid.EnvGrid(L, λ0, (160e-9, 3000e-9), 0.5e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
-responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
 
 # Constant
 dens0 = PhysData.density(gas, pres)

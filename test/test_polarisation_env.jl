@@ -16,7 +16,7 @@ import Luna: Output
     grid = Grid.EnvGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
     modes = (

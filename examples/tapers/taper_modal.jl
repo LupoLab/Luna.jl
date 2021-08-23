@@ -31,7 +31,7 @@ end
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
             #  Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 linop = LinearOps.make_linop(grid, modes, λ0);

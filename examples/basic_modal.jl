@@ -25,7 +25,7 @@ end
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
 
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
+responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)

@@ -45,7 +45,7 @@ aeff(z) = Modes.Aeff(m; z=z)
 densityfun = let dens0=PhysData.density(gas, pres)
     z -> dens0
 end
-responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
@@ -60,8 +60,8 @@ densityfun = let dens0=PhysData.density(gas, halfpres)
     z -> [dens0, dens0]
 end
 responses = (
-    (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),),
-    (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+    (Nonlinear.Kerr_field(PhysData.γ3(gas)),),
+    (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 )
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
