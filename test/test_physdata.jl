@@ -50,12 +50,12 @@ end
 @testset "Nonlinear coefficients" begin
     @test PhysData.χ3(:He, 1) ≈ 1.2617371645226101e-27
     @test PhysData.χ3(:Ar, 1) ≈ 2.964158749949189e-26
-    @test PhysData.n2_gas(:He, 1) ≈ 3.5647819877255427e-25
-    @test PhysData.n2_gas(:He, 2) ≈ 7.125642138007481e-25
-    @test PhysData.n2_gas.(:He, [1, 2]) ≈ [3.5647819877255427e-25, 7.125642138007481e-25]
-    @test PhysData.n2_gas.([:He, :Ne], 1) ≈ [3.5647819877255427e-25, 6.416061508801999e-25]
+    @test PhysData.n2(:He, 1) ≈ 3.5647819877255427e-25
+    @test PhysData.n2(:He, 2) ≈ 7.125642138007481e-25
+    @test PhysData.n2.(:He, [1, 2]) ≈ [3.5647819877255427e-25, 7.125642138007481e-25]
+    @test PhysData.n2.([:He, :Ne], 1) ≈ [3.5647819877255427e-25, 6.416061508801999e-25]
     for gas in PhysData.gas[2:end] # Don't have γ3 for Air
-        @test isreal(PhysData.n2_gas(gas, 1))
+        @test isreal(PhysData.n2(gas, 1))
     end
 end
 
