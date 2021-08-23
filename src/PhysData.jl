@@ -470,6 +470,9 @@ TODO: More Bishop/Shelton; Wahlstrand updated values.
 
 "
 function γ3(material::Symbol; source=nothing)
+    if material in glass
+        return χ3(material)
+    end
     if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
@@ -522,21 +525,38 @@ function γ3(material::Symbol; source=nothing)
 end
 
 function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
+    if material in glass
+        n2 = n2_glass(material, λ=1030e-9)
+        n0 = real(ref_index(material, 1030e-9))
+        return 4/3 * n2 * (ε_0*c*n0^2)
+    end
     return γ3(material, source=source) .* density.(material, P, T)
 end
 
-function n2(material::Symbol, P=1.0, T=roomtemp, λ=800e-9; source=nothing)
+function n2(material::Symbol, P=1.0, T=roomtemp; λ=nothing, source=nothing)
+    material in glass && return n2_glass(material::Symbol, λ=λ)
+    λ = isnothing(λ) ? 800e-9 : λ
     n0 = ref_index(material, λ, P, T)
     return @. 3/4 * χ3(material, P, T, source=source) / (ε_0*c*n0^2)
 end
 
-"""
-    density(gas::Symbol, P, T=roomtemp)
+function n2_glass(material::Symbol; λ=nothing)
+    if material == :SiO2
+        return 2.7e-20
+    else
+        throw(DomainError(source, "Unkown glass $material"))
+    end
+end
 
-Number density of `gas` [m^-3] at pressure `P` [bar] and temperature `T` [K].
 """
-function density(gas::Symbol, P, T=roomtemp)
-    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
+    density(material::Symbol, P=1.0, T=roomtemp)
+
+For a gas `material`, return the number density [m^-3] at pressure `P` [bar] and temperature `T` [K].
+For a glass, this simply returns 1.0.
+"""
+function density(material::Symbol, P=1.0, T=roomtemp)
+    material in glass && return 1.0
+    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[material])*N_A
 end
 
 function pressure(gas, density, T=roomtemp)

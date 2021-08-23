@@ -47,7 +47,7 @@ end
 function getN0n0n2(ω, material; P=1.0, T=PhysData.roomtemp)
     N0 = PhysData.density(material, P, T)
     χ3 = PhysData.γ3(material)*N0
-    n0 = PhysData.ref_index(material, 2π*PhysData.c/ω, P, T)
+    n0 = real(PhysData.ref_index(material, 2π*PhysData.c/ω, P, T))
     N0, n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
 end
 
