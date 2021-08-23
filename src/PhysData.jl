@@ -521,11 +521,11 @@ function γ3(material::Symbol; source=nothing)
     end
 end
 
-function χ3(material::Symbol, P, T=roomtemp; source=nothing)
+function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
     return γ3(material, source=source) .* density.(material, P, T)
 end
 
-function n2(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)
+function n2(material::Symbol, P=1.0, T=roomtemp, λ=800e-9; source=nothing)
     n0 = ref_index(material, λ, P, T)
     return @. 3/4 * χ3(material, P, T, source=source) / (ε_0*c*n0^2)
 end
