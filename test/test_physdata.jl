@@ -48,8 +48,8 @@ end
 end
 
 @testset "Nonlinear coefficients" begin
-    @test PhysData.χ3_gas(:He, 1) ≈ 1.2617371645226101e-27
-    @test PhysData.χ3_gas(:Ar, 1) ≈ 2.964158749949189e-26
+    @test PhysData.χ3(:He, 1) ≈ 1.2617371645226101e-27
+    @test PhysData.χ3(:Ar, 1) ≈ 2.964158749949189e-26
     @test PhysData.n2_gas(:He, 1) ≈ 3.5647819877255427e-25
     @test PhysData.n2_gas(:He, 2) ≈ 7.125642138007481e-25
     @test PhysData.n2_gas.(:He, [1, 2]) ≈ [3.5647819877255427e-25, 7.125642138007481e-25]

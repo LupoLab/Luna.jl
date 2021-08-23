@@ -129,7 +129,7 @@ function rectangular_params(E, τfw, λ, a, b, material;
 end
 
 function gas_ratio(gas1, gas2, λ)
-    χ3r = PhysData.χ3_gas(gas1, 1) / PhysData.χ3_gas(gas2, 1)
+    χ3r = PhysData.χ3(gas1, 1) / PhysData.χ3(gas2, 1)
     β2r = PhysData.dispersion(2, gas1, λ) / PhysData.dispersion(2, gas2, λ)
     β2r, χ3r
 end
