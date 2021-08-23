@@ -470,7 +470,7 @@ TODO: More Bishop/Shelton; Wahlstrand updated values.
 
 "
 function γ3_gas(material::Symbol; source=nothing)
-    if source == nothing
+    if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2,)
