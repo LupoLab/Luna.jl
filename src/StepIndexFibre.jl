@@ -8,7 +8,8 @@ export StepIndexMode, dimlimits, neff, field
 import SpecialFunctions: besselj, besselk
 import Roots: find_zeros
 import Memoize: @memoize
-
+import Luna.Utils: subscript
+import Base: show
 
 """
     StepIndexMode(a, n, m, kind, coren, cladn; parity=:even, pts=100)
@@ -88,6 +89,16 @@ function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts
     cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
     StepIndexMode(a, n, m, kind, parity, coren, cladn, pts)
 end
+
+function show(io::IO, m::StepIndexMode)
+    a = radius_string(m)
+    out = "StepIndexMode{"*join([mode_string(m), a], ", ")*"}"
+    print(io, out)
+end
+
+mode_string(m::StepIndexMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
+radius_string(m::StepIndexMode{<:Number, Tco, Tcl}) where {Tco, Tcl} = "a=$(m.a)"
+radius_string(m::StepIndexMode) = "a(z=0)=$(radius(m, 0))"
 
 besseljp(n, z) = 0.5*(besselj(n - 1, z) - besselj(n + 1, z))
 
