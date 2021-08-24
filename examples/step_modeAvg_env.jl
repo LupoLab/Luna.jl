@@ -9,7 +9,7 @@ flength = 5.0
 
 τfwhm = 2e-12
 λ0 = 1030e-9
-energy = 1e-9
+energy = 10e-9
 
 grid = Grid.EnvGrid(flength, λ0, (980e-9, 1080e-9), 10e-12)
 
@@ -34,5 +34,5 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 Plotting.pygui(true)
 #Plotting.stats(output)
 #Plotting.prop_2D(output)
-Plotting.time_1D(output, [0.0, 2.5, 5.0])
-Plotting.spec_1D(output, [0.0, 2.5, 5.0])
+#Plotting.time_1D(output, [0.0, 2.5, 5.0], trange=(-5e-12, 5e-12))
+Plotting.spec_1D(output, [0.0, 2.5, 5.0], λrange=(980e-9, 1080e-9))

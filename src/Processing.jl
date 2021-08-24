@@ -551,7 +551,6 @@ getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, outpu
 
 function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
                kwargs...)
-    t = grid.t
     zidx = nearest_z(output, zslice)
     to, Eto = getEt(grid, output["Eω", .., zidx]; kwargs...)
     return to, Eto, output["z"][zidx]
