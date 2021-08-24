@@ -280,7 +280,7 @@ function _overlap(mode1::AbstractMode, mode2::AbstractMode)
         ret = 1/2*sqrt(ε_0/μ_0)*dot(conj(Exy(mode1, xs)), Exy(mode2, xs))
         dl[1] == :polar ? xs[1]*ret : ret
     end
-    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=5000)
 end
 
 """
@@ -300,7 +300,7 @@ Test whether the `AbstractMode`s `mode1` and `mode2` are orthogonal to each othe
 """
 function orthogonal(mode1::AbstractMode, mode2::AbstractMode)
     val, err = _overlap(mode1, mode2)
-    isapprox(val, 0; atol=err)
+    isapprox(val, 0; atol=max(err, eps(typeof(val))))
 end
 
 """
@@ -312,7 +312,8 @@ function orthonormal(modes)
     out = true
     for (ii1, ii2) in Iterators.product(eachindex(modes), eachindex(modes))
         val, err = _overlap(modes[ii1], modes[ii2])
-        this = ii1 == ii2 ? isapprox(val, 1; atol=err) : isapprox(val, 0; atol=err)
+        atol = max(err, eps(typeof(val)))
+        this = ii1 == ii2 ? isapprox(val, 1; atol) : isapprox(val, 0; atol)
         out = out && this
     end
     out
