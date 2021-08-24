@@ -327,6 +327,12 @@ function prop_capillary(radius, flength, gas, pressure;
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
+    if length(mode_s) > 1
+        if !Modes.orthonormal(mode_s)
+            ms = join(mode_s, "\n")
+            error("The selected modes do not form an orthonormal set:\n$ms")
+        end
+    end
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
@@ -401,7 +407,7 @@ end
 
 function makemodes_pol(pol, args...; kwargs...)
     if pol
-        if kwargs[:kind] == :HE
+        if kwargs[:kind] == :HE && kwargs[:n] == 1
             return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
                     Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
         else
