@@ -1,6 +1,7 @@
 module Raman
 import Luna.PhysData: c, ε_0, ħ, k_B, roomtemp
 import Luna.PhysData: raman_parameters
+import Cubature: hquadrature
 
 struct RamanRespSingleDampedOscillator
     K::Float64 # overall scale factor
@@ -30,6 +31,44 @@ function (R::RamanRespSingleDampedOscillator)(t)
     end
     return h
 end
+
+"""
+    RamanRespIntermediateBroadening(ωi, Ai, Γi, γi)
+
+Construct an intermediate broadened model with component positions `ωi` [rad/s], amplitudes `Ai`,
+Gaussian widths `Γi` [rad/s] and Lorentzian widths `γi` [rad/s]. Based on Hollenbeck and Cantrell,
+"Multiple-vibrational-mode model for fiber-optic Raman gain spectrum and response function",
+J. Opt. Soc. Am. B/Vol. 19, No. 12/December 2002.
+
+"""
+struct RamanRespIntermediateBroadening
+    ωi::Vector{Float64} # central angular freqency
+    Ai::Vector{Float64} # component amplitudes
+    Γi::Vector{Float64} # Gaussian widths
+    γi::Vector{Float64} # Lorentzian widths
+    scale::Float64
+    function RamanRespIntermediateBroadening(ωi::AbstractVector, Ai::AbstractVector, Γi::AbstractVector, γi::AbstractVector, scale)
+        n = length(ωi)
+        if (length(Ai) != n) || (length(Γi) != n) || (length(γi) != n)
+            error("all compoenent vectors must have smae length")
+        end
+        hrtemp = new(ωi, Ai, Γi, γi, 1.0)
+        scale *= 1.0/hquadrature(x->hrtemp(x), 0.0, 1e-9)[1]
+        new(ωi, Ai, Γi, γi, scale)
+    end
+end
+
+"Get the response function at time `t`."
+function (R::RamanRespIntermediateBroadening)(t)
+    h = 0.0
+    if t > 0.0
+        for i = eachindex(R.ωi)
+            h += R.scale*R.Ai[i]*exp(-R.γi[i]*t)*exp(-R.Γi[i]^2*t^2/4)*sin(R.ωi[i]*t)
+        end
+    end
+    return h
+end
+
 
 """
     RamanRespVibrational(Ωv, dαdQ, μ, τ2)
@@ -179,12 +218,14 @@ Get the Raman response function for `material`.
 
 For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(material; kwargs...)
+function raman_response(material, scale=1.0; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
         return molecular_raman_response(rp, ; kwargs...)
     elseif rp.kind == :normedsdo
         return RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)
+    elseif rp.kind == :intermediate
+        return RamanRespIntermediateBroadening(rp.ωi, rp.Ai, rp.Γi, rp.γi, scale)
     else
         throw(DomainError(rp.kind, "Unknown Raman model $(rp.kind)"))
     end

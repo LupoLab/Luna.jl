@@ -648,7 +648,7 @@ Get the Raman parameters for `material`.
 
 # Fields
 Fields in the returned named tuple must include:
-- `kind::Symbol`: one of `:molecular` or ...
+- `kind::Symbol`: one of `:molecular` or `:intermediate` or `:normedsdo`
 
 If `kind == :molecular` then the following must also be specified:
 - `rotation::Symbol`: only `:nonrigid` or `:none` supported at present.
@@ -668,6 +668,12 @@ If `vibration == :sdo` then the following must also be specified:
 - `μ::Real`: reduced molecular mass [kg]
 - `τ2v::Real`: coherence time [s]
 
+If `kind == :intermediate` then the following must be specified
+- `ωi::Vector{Real}` [rad/s], central angular freqencies
+- `Ai::Vector{Real}`, amplitudes
+- `Γi::Vector{Real}` [rad/s], Gaussian widths
+- `γi::Vector{Real}` [rad/s], Lorentzian widths
+
 # References
 [1] Phys. Rev. A, 94, 023816 (2016)
 [2] Phys. Rev. A, 85, 043820 (2012)
@@ -676,6 +682,8 @@ If `vibration == :sdo` then the following must also be specified:
 [5] J. Phys. Chem., 91, 41 (1987)
 [6] Applied Spectroscopy 23, 211 (1969)
 [7] Phys. Rev. A, 34, 3, 1944 (1986)
+[8] Hollenbeck and Cantrell, "Multiple-vibrational-mode model for fiber-optic Raman gain
+spectrum and response function", J. Opt. Soc. Am. B/Vol. 19, No. 12/December 2002.
 """
 function raman_parameters(material)
     if material == :N2
@@ -752,7 +760,14 @@ function raman_parameters(material)
               # TODO Ωv =  
               # TODO μ = 
               # TODO τ2v = 
-             )           
+             )
+    elseif material == :SiO2
+        rp = (kind = :intermediate,
+              ωi = 200 .*π.*c.*[56.25, 100.0, 231.25, 362.50, 463.00, 497.00, 611.50, 691.67, 793.67, 835.50, 930.0, 1080.00, 1215.00],
+              Ai = [1.0, 11.40, 36.67, 67.67, 74.00, 4.50, 6.80, 4.60, 4.20, 4.50, 2.70, 3.10, 3.00],
+              Γi = 100 .*π.*c.*[52.10, 110.42, 175.00, 162.50, 135.33, 24.50, 41.50, 155.0, 59.50, 64.30, 150.00, 91.00, 160.00],
+              γi = 100 .*π.*c.*[17.37, 38.81, 58.33, 54.17, 45.11, 8.17, 13.83, 51.67, 19.83, 21.43, 50.00, 30.33, 53.33],
+             )
     else
         throw(DomainError(material, "Unknown material $material"))
     end
