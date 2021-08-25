@@ -44,7 +44,7 @@ end
 
 function StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims=nothing)
     if isnothing(accellims)
-        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(false), nothing)
+        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(false), nothing, nothing)
     else
         λmin, λmax, npts = accellims
         ωs = collect(range(wlfreq(λmax), wlfreq(λmin), length=npts))
@@ -123,15 +123,11 @@ function show(io::IO, m::StepIndexMode)
 end
 
 mode_string(m::StepIndexMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
-radius_string(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT}) where {Tco, Tcl, AT, NT} = "a=$(m.a)"
+radius_string(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT, BT}) where {Tco, Tcl, AT, NT, BT} = "a=$(m.a)"
 radius_string(m::StepIndexMode) = "a(z=0)=$(radius(m, 0))"
 
-function dispersion_func(m::StepIndexMode, order; z=0.0)
+function dispersion_func(m::StepIndexMode{<:Number, Tco, Tcl, Val{true}, NT, BT}, order; z=0.0) where {Tcl, Tco, NT, BT}
     differentiate_spline(m.β, order)
-end
-
-function dispersion(m::StepIndexMode, order, ω; z=0.0)
-    return dispersion_func(m, order, z=z).(ω)
 end
 
 besseljp(n, z) = 0.5*(besselj(n - 1, z) - besselj(n + 1, z))

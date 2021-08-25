@@ -1,18 +1,18 @@
-# propagation in step index fibre
+# supercontinuum in strand of silica in air
 
 using Luna
 
 # single mode fibre at 1030 nm
 a = 1.25e-6
-flength = 0.15
+flength = 2.5e-2
 fr = 0.18
 τfwhm = 50e-15
 λ0 = 835e-9
 energy = 568e-12
 
-grid = Grid.EnvGrid(flength, λ0, (400e-9, 1300e-9), 10e-12)
+grid = Grid.EnvGrid(flength, λ0, (400e-9, 1400e-9), 10e-12)
 
-m = StepIndexFibre.StepIndexMode(a, accellims=(400e-9, 1300e-9, 100))
+m = StepIndexFibre.StepIndexMode(a, accellims=(400e-9, 1400e-9, 100))
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
@@ -35,4 +35,4 @@ Plotting.pygui(true)
 #Plotting.stats(output)
 #Plotting.prop_2D(output)
 #Plotting.time_1D(output, [0.0, 2.5, 5.0], trange=(-5e-12, 5e-12))
-Plotting.spec_1D(output, [0.0, 2.5, 5.0], λrange=(980e-9, 1080e-9))
+Plotting.spec_1D(output, [0.0, 0.5, 1.0, 1.5, 2.0, 2.5].*1e-2, λrange=(400e-9, 1300e-9))
