@@ -25,7 +25,7 @@ n2 = γ/k0*aeff(0.0)
 responses = (Nonlinear.Kerr_env((1 - fr)*χ3),
              Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(:SiO2, fr*χ3*PhysData.ε_0)))
 
-inputs = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy)
+inputs = (Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy), Fields.ShotNoise())
 norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff)
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff, norm! = norm!)
 
@@ -35,6 +35,6 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 ##
 Plotting.pygui(true)
 #Plotting.stats(output)
-#Plotting.prop_2D(output)
+Plotting.prop_2D(output, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
 #Plotting.time_1D(output, [0.0, 2.5, 5.0], trange=(-5e-12, 5e-12))
 Plotting.spec_1D(output, range(0.0, 1.0, length=5).*flength, λrange=(400e-9, 1300e-9))
