@@ -3,14 +3,13 @@ import StaticArrays: SVector
 using Reexport
 @reexport using Luna.Modes
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, wlfreq
-import Luna.Modes: AbstractMode, dimlimits, neff, field
+import Luna.Modes: AbstractMode, dimlimits, neff, field, dispersion, dispersion_func
 export StepIndexMode, dimlimits, neff, field
 import SpecialFunctions: besselj, besselk
 import Roots: find_zeros
-import Memoize: @memoize
 import Luna.Utils: subscript
 import Base: show
-import Luna.Maths: CSpline
+import Luna.Maths: BSpline, differentiate_spline
 
 """
     StepIndexMode(a, n, m, kind, coren, cladn; parity=:even, pts=100)
@@ -29,7 +28,7 @@ Create a StepIndexMode.
 - `pts::Int` : number of grid points to use in zero search.
 
 """
-struct StepIndexMode{Ta, Tcore, Tclad, AT, NT} <: AbstractMode
+struct StepIndexMode{Ta, Tcore, Tclad, AT, NT, BT} <: AbstractMode
     a::Ta # core radius callable as function of z only, or fixed core radius if a Number
     n::Int # azimuthal mode index
     m::Int # radial mode index
@@ -40,6 +39,7 @@ struct StepIndexMode{Ta, Tcore, Tclad, AT, NT} <: AbstractMode
     pts::Int # number of grid points to use in zero search
     accel::AT # Val{true}() or Val{false}() - whether to accelerate neff search
     neff::NT # neff accelerator (a spline)
+    β::BT # neff accelerator (a spline)
 end
 
 function StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims=nothing)
@@ -49,8 +49,9 @@ function StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims=nothi
         λmin, λmax, npts = accellims
         ωs = collect(range(wlfreq(λmax), wlfreq(λmin), length=npts))
         neffs = findneff.(a, ωs ./ c, coren.(ωs, z=0), cladn.(ωs, z=0), n, m, kind, pts)
-        neff = CSpline(ωs, neffs)
-        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(true), neff)
+        neff = BSpline(ωs, neffs, order=5)
+        β = BSpline(ωs, ωs./c.*neffs, order=5)
+        return StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, Val(true), neff, β)
     end
 end
 
@@ -76,8 +77,8 @@ Create a StepIndexMode. Defaults to a silica strand in air.
 """
 function StepIndexMode(a; n=1, m=1, kind=:HE, core=:SiO2, clad=:Air, parity=:even,
                        pts=100, accellims=nothing)
-    rfco = ref_index_fun(core)
-    rfcl = ref_index_fun(clad)
+    rfco = ref_index_fun(core, lookup=false)
+    rfcl = ref_index_fun(clad, lookup=false)
     coren = (ω; z) -> real(rfco(wlfreq(ω)))
     cladn = (ω; z) -> real(rfcl(wlfreq(ω)))
     StepIndexMode(a, n, m, kind, parity, coren, cladn, pts, accellims)
@@ -105,7 +106,7 @@ Create a StepIndexMode based on the NA and specified cladding material.
 """
 function StepIndexMode(a, NA; n=1, m=1, kind=:HE, clad=:SiO2,  parity=:even, pts=100,
                        accellims=nothing)
-    rfcl = ref_index_fun(clad)
+    rfcl = ref_index_fun(clad, lookup=false)
     function rfco(λ)
         ncl = real(rfcl(λ))
         ncl + NA^2/(2*ncl)
@@ -124,6 +125,14 @@ end
 mode_string(m::StepIndexMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
 radius_string(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT}) where {Tco, Tcl, AT, NT} = "a=$(m.a)"
 radius_string(m::StepIndexMode) = "a(z=0)=$(radius(m, 0))"
+
+function dispersion_func(m::StepIndexMode, order; z=0.0)
+    differentiate_spline(m.β, order)
+end
+
+function dispersion(m::StepIndexMode, order, ω; z=0.0)
+    return dispersion_func(m, order, z=z).(ω)
+end
 
 besseljp(n, z) = 0.5*(besselj(n - 1, z) - besselj(n + 1, z))
 
@@ -194,13 +203,13 @@ function make_char(radius, k0, ncore, nclad, n, mode)
     end
 end
 
-@memoize function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
+function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
     char = make_char(radius, k0, ncore, nclad, n, mode)
     roots = find_zeros(char, nclad, ncore, no_pts=pts)
     roots[end - (m - 1)]
 end
 
-radius(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT}, z) where {Tcl, Tco, AT, NT} = m.a
+radius(m::StepIndexMode{<:Number, Tco, Tcl, AT, NT, BT}, z) where {Tcl, Tco, AT, NT, BT} = m.a
 radius(m::StepIndexMode, z) = m.a(z)
 
 dimlimits(m::StepIndexMode; z=0) = (:polar, (0.0, 0.0), (10*radius(m, z), 2π))
@@ -215,7 +224,7 @@ function neff(m::StepIndexMode, ω; z=0)
     findneff(radius(m, z), ω/c, m.coren(ω, z=z), m.cladn(ω, z=z), m.n, m.m, m.kind, m.pts)
 end
 
-function neff(m::StepIndexMode{<:Number, Tco, Tcl, Val{true}, NT}, ω; z=0) where {Tcl, Tco, NT}
+function neff(m::StepIndexMode{<:Number, Tco, Tcl, Val{true}, NT, BT}, ω; z=0) where {Tcl, Tco, NT, BT}
     m.neff(ω)
 end
 

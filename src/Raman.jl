@@ -223,7 +223,7 @@ function raman_response(material, scale=1.0; kwargs...)
     if rp.kind == :molecular
         return molecular_raman_response(rp, ; kwargs...)
     elseif rp.kind == :normedsdo
-        return RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)
+        return RamanRespNormedSingleDampedOscillator(rp.K*scale, rp.Ω, rp.τ2)
     elseif rp.kind == :intermediate
         return RamanRespIntermediateBroadening(rp.ωi, rp.Ai, rp.Γi, rp.γi, scale)
     else

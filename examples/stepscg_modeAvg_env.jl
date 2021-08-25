@@ -3,17 +3,16 @@
 using Luna
 
 # single mode fibre at 1030 nm
-a = 5e-6
-NA = 0.08
-flength = 2.0
+a = 1.25e-6
+flength = 0.15
 fr = 0.18
-τfwhm = 1e-12
-λ0 = 1030e-9
-energy = 10e-9
+τfwhm = 50e-15
+λ0 = 835e-9
+energy = 568e-12
 
-grid = Grid.EnvGrid(flength, λ0, (980e-9, 1200e-9), 10e-12)
+grid = Grid.EnvGrid(flength, λ0, (400e-9, 1300e-9), 10e-12)
 
-m = StepIndexFibre.StepIndexMode(a, NA, accellims=(900e-9, 1200e-9, 100))
+m = StepIndexFibre.StepIndexMode(a, accellims=(400e-9, 1300e-9, 100))
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
