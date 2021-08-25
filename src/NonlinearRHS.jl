@@ -339,6 +339,18 @@ function norm_mode_average(grid, βfun!, aeff; shock=true)
     end
 end
 
+function norm_mode_average_gnlse(grid, aeff; shock=true)
+    shockterm = shock ? grid.ω.^2 : grid.ω .* PhysData.wlfreq(grid.referenceλ)
+    pre = @. -im*shockterm/(2*PhysData.c^(3/2)*sqrt(2*PhysData.ε_0))/(grid.ω/PhysData.c)
+    function norm!(nl, z)
+        sqrtaeff = sqrt(aeff(z))
+        for i in eachindex(nl)
+            !grid.sidx[i] && continue
+            nl[i] *= pre[i]*sqrtaeff
+        end
+    end
+end
+
 """
     TransRadial
 
