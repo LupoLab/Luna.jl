@@ -14,8 +14,8 @@ energy = 10e-9
 grid = Grid.EnvGrid(flength, λ0, (980e-9, 1200e-9), 10e-12)
 
 m = StepIndexFibre.StepIndexMode(a, NA, accellims=(900e-9, 1200e-9, 100))
-aeff = let m=m
-    z -> Modes.Aeff(m, z=z)
+aeff = let aeffc=Modes.Aeff(m, z=0.0)
+    z -> aeffc
 end
 densityfun = z -> 1.0
 
