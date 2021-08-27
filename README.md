@@ -8,7 +8,7 @@ There are two ways of using Luna:
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
 ## Installation
-Luna currently on runs with Julia 1.5. More recent versions of Julia trigger an unresolved bug.
+Luna currently on runs with Julia 1.5. More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
 
 First install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
 
