@@ -486,7 +486,7 @@ end
 """
 Oversample (smooth) an array by 0-padding in the frequency domain
 """
-function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Real where N
+function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
@@ -506,7 +506,8 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: R
 
     shape = collect(size(xf))
     shape[dim] = newlen_ω
-    xfo = zeros(eltype(xf), Tuple(shape))
+    xfo = Array{eltype(xf), N}(undef, Tuple(shape))
+    fill!(xfo, 0.0)
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, 1:len, idxhi] .= factor .* xf
@@ -516,7 +517,7 @@ end
 """
 Oversampling for complex-valued arryas (e.g. envelope fields)
 """
-function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Complex where N
+function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
@@ -537,13 +538,13 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: C
 
     shape = collect(size(xf))
     shape[dim] = newlen
-    xfo = zeros(eltype(xf), Tuple(shape))
+    xfo = Array{eltype(xf), N}(undef, Tuple(shape))
+    fill!(xfo, 0.0)
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, startidx:endidx, idxhi] .= factor .* xf
     return to, FFTW.ifft(FFTW.ifftshift(xfo, dim), dim)
 end
-
 
 """
 Find limit of a series by Aitken acceleration
