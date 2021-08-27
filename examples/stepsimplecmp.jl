@@ -36,7 +36,7 @@ linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, s, λ0)
 k0 = 2π/λ0
 n2 = γ/k0*aeff(0.0)
 n0 = real(PhysData.ref_index(:SiO2, 1030e-9))
-χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c) * n0
+χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c) * n0 * n0 / Modes.neff(m, ω0)
 responses = (Nonlinear.Kerr_env((1 - fr)*χ3),
              Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(:SiO2, fr*χ3*PhysData.ε_0)))
 norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff)
@@ -44,8 +44,10 @@ Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aef
 outputs = Output.MemoryOutput(0, grid.zmax, 201)
 Luna.run(Eω, grid, linop, transform, FT, outputs)
 
-#isapprox(Processing.getIω(outputm, :λ, flength, specrange=(530e-9, 1140e-9))[2], Processing.getIω(outputs, :λ, flength, specrange=(530e-9, 1140e-9))[2], rtol=2.2e-1)
+#isapprox(Processing.getIω(outputm, :λ, flength)[2], Processing.getIω(outputs, :λ, flength)[2], rtol=1.1e-1)
 
 using PyPlot
 plot(Processing.getIω(outputm, :λ, flength)...)
 plot(Processing.getIω(outputs, :λ, flength)...)
+
+# close but not exact. This is because we cannot fully cancel the frequency dependence of neff.
