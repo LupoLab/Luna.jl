@@ -25,9 +25,9 @@ flength = 1.3 # HCF length
 gas = :He
 pressure = 1.8 # helium pressure in bar
 
-pump = Interface.GaussPulse(;λ0=λp, energy=ep, τfwhm, polarisation=:circular)
-seed_equal = Interface.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=1.0)
-seed_opposite = Interface.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=-1.0)
+pump = Pulses.GaussPulse(;λ0=λp, energy=ep, τfwhm, polarisation=:circular)
+seed_equal = Pulses.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=1.0)
+seed_opposite = Pulses.GaussPulse(;λ0=λs, energy=es, τfwhm, polarisation=-1.0)
 
 # Here we are not specifiying a mode, so Luna will automatically choose to propagate in 
 # the fundamental mode only--but because the pulses are circularly polarised, two modes

@@ -158,6 +158,8 @@ end
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
     ϕ = [0.0, τ0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
@@ -181,6 +183,8 @@ end
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
     ϕ = [0.0, τ0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
@@ -207,6 +211,8 @@ end
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
     ϕ = [0.0, τ0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
@@ -230,6 +236,8 @@ end
     λ0 = 800e-9
     energy = 1e-6
     τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
     ϕ = [0.0, τ0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
