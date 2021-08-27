@@ -44,6 +44,8 @@ Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aef
 outputs = Output.MemoryOutput(0, grid.zmax, 201)
 Luna.run(Eω, grid, linop, transform, FT, outputs)
 
+#isapprox(Processing.getIω(outputm, :λ, flength, specrange=(530e-9, 1140e-9))[2], Processing.getIω(outputs, :λ, flength, specrange=(530e-9, 1140e-9))[2], rtol=2.2e-1)
+
 using PyPlot
 plot(Processing.getIω(outputm, :λ, flength)...)
 plot(Processing.getIω(outputs, :λ, flength)...)
