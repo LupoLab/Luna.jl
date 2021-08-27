@@ -680,7 +680,7 @@ Evaluate the `CSpline` at coordinate `x0`
 function (c::CSpline)(x0)
     if c.bounds_error
         x0 < c.x[1] && throw(DomainError("CSpline evaulated out of bounds, $x0 < $(c.x[1])"))
-        x0 > c.x[end] && throw(DomainError("CSpline evaulated out of bounds, $x0 < $(c.x[end])"))
+        x0 > c.x[end] && throw(DomainError("CSpline evaulated out of bounds, $x0 > $(c.x[end])"))
     end
     i = c.ifun(x0)
     x0 == c.x[i] && return c.y[i]

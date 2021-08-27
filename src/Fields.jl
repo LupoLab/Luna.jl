@@ -754,4 +754,22 @@ function optcomp_material(Eω, args...; kwargs...)
     dout, out
 end
 
+function optfield_cep(Eω::AbstractVector, grid)
+    res = Optim.optimize(-π, π) do ϕ
+        Et = real(iFT(Eω*exp(1im*ϕ), grid))
+        1/maximum(Et)
+    end
+
+    res.minimizer, Eω*exp(1im*ϕ)
+end
+
+function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
+    res = Optim.optimize(-π, π) do ϕ
+        Et = real(iFT(Eω[:, mode]*exp(1im*ϕ), grid))
+        1/maximum(Et)
+    end
+
+    res.minimizer, Eω*exp(1im*res.minimizer)
+end
+
 end
