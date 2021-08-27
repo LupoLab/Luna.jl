@@ -356,6 +356,16 @@ function prop_capillary(radius, flength, gas, pressure;
     output
 end
 
+check_orth(mode::Modes.AbstractMode) = nothing
+function check_orth(modes)
+    if length(modes) > 1
+        if !Modes.orthonormal(modes)
+            ms = join(modes, "\n")
+            error("The selected modes do not form an orthonormal set:\n$ms")
+        end
+    end
+end
+
 function saveargs(output; kwargs...)
     d = Dict{String, String}()
     for (k, v) in kwargs
