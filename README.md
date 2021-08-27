@@ -10,7 +10,7 @@ There are two ways of using Luna:
 ## Installation
 Luna currently on runs with Julia 1.5. More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
 
-First install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
+Julia can be obtained from the [Julia website](https://julialang.org/). Download the latest version of Julia 1.5 and install it. Then open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
 
 ```julia
 ]
@@ -110,6 +110,7 @@ The [examples folder](examples/) contains complete simulation examples for a var
 ## The low-level interface
 
 ## New to Julia?
+There are many resources to help you learn Julia. I good place to start is [Julia Academy](https://juliaacademy.com/) which has several courses for learning Julia depending on your current experience. There are additional resources linked from the [Julia website](https://julialang.org/learning/).
 
 ## Getting help & contributing
 If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](https://github.com/LupoLab/Luna/issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!
