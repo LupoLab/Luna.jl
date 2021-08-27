@@ -3,7 +3,7 @@ using Luna
 radius = 125e-6 # HCF core radius
 flength = 1.5 # HCF length
 
-gas = :HeJ # HeJ is helium with the dispersion as defined in DOI 10.1103/PhysRevA.92.033821
+gas = :He
 pressure = 0.8 # gas pressure at the start of the HCF in bar
 
 λ0 = 800e-9 # central wavelength of the pump pulse
