@@ -7,7 +7,8 @@ old_logger = Logging.global_logger(logger)
 
 @testset "Polarisation" begin
     args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, τfwhm=10e-15, energy=1e-12, shotnoise=false)
+    kwargs = (λ0=800e-9, τfwhm=10e-15, energy=1e-12, trange=400e-15,
+              λlims=(200e-9, 4e-6), shotnoise=false)
     lin = prop_capillary(args...; polarisation=:linear, kwargs...)
     @testset "linear, single mode" begin
         o1 = prop_capillary(args...; polarisation=0.0, kwargs...)
@@ -38,7 +39,8 @@ end
 ##
 @testset "Peak power vs energy" begin
     args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, τfwhm=10e-15, shotnoise=false, trange=500e-15,
+    kwargs = (λ0=800e-9, τfwhm=10e-15, shotnoise=false,
+              trange=500e-15, λlims=(200e-9, 4e-6),
               saveN=51, plasma=false)
     shape_fac = ((:gauss, kwargs.τfwhm*sqrt(pi/log(16))),
                  (:sech, 2*kwargs.τfwhm/(2*log(1 + sqrt(2)))))
@@ -70,7 +72,7 @@ end
 ##
 @testset "Input into higher-order modes" begin
     args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15,
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
                saveN=51, plasma=false)
     pkwargs = (τfwhm=10e-15, energy=1e-12, λ0=800e-9)
     @testset "input into $m, mode average" for m in (:HE11, :HE12, :TE01, :TE02, :TM01)
@@ -100,7 +102,8 @@ end
 ##
 @testset "multiple inputs" begin
     args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
+              saveN=51, plasma=false)
     p1 = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
     p2 = (λ0=400e-9, energy=2e-12, τfwhm=30e-15)
     modes = (:HE11, :HE12, :HE13, :HE14)
@@ -126,7 +129,8 @@ end
     # passing ϕ keyword argument and an equivalent propagator function should yield 
     # the same result.
     args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
+              saveN=51, plasma=false)
     p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
     ϕ = [0, 0, 10e-30, 100e-45]
     function prop!(Eω, grid)
@@ -151,7 +155,8 @@ end
 @testset "GaussBeamPulse" begin
     a = 100e-6
     args = (a, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, saveN=51, plasma=false)
+    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15,
+              λlims=(200e-9, 4e-6), saveN=51, plasma=false)
     p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
     gpl = Pulses.GaussPulse(;p...)
     gpc = Pulses.GaussPulse(;polarisation=:circular, p...)

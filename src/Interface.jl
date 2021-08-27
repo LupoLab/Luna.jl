@@ -244,12 +244,11 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
     contain `z` positions and the pressures at those positions.
 - `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
         single-pulse inputs, this is also the central wavelength of the input pulse.
+- `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
+- `trange::Number`: The total width of the time grid. To make the number of samples a
+        power of 2, the actual grid used is usually bigger.
 
 # Grid options
-- `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
-    Defaults to a grid from 90 nm to 4 μm.
-- `trange::Number`: The total width of the time grid. Defaults to 1 ps.
-    To make the number of samples a power of 2, the actual grid used is usually bigger.
 - `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
     By default, envelope simulations ignore third-harmonic generation.
     Plasma has not yet been implemented for envelope fields.
@@ -258,7 +257,9 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
     required value, it is used instead.
 
 # Input pulse options
-A single pulse in the lowest-order mode can be specified by the following arguments:
+A single pulse in the lowest-order mode can be specified by the keyword arguments below.
+More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
+In this case, all keyword arguments except for `λ0` are ignored.
 
 - `λ0`: Central wavelength
 - `τfwhm`: The pulse duration as defined by the full width at half maximum.
@@ -276,9 +277,6 @@ A single pulse in the lowest-order mode can be specified by the following argume
 - `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
-
-More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
-In this case, all keyword arguments except for `λ0` are ignored.
 
 # Modes options
 - `modes`: Defines which modes are included in the propagation. Can be any of:
@@ -314,7 +312,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
 function prop_capillary(radius, flength, gas, pressure;
-                        λlims=(90e-9, 4e-6), trange=1e-12, envelope=false, thg=nothing, δt=1,
+                        λlims, trange, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
                         pulseshape=:gauss, polarisation=:linear, propagator=nothing,
@@ -332,12 +330,7 @@ function prop_capillary(radius, flength, gas, pressure;
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
-    if length(mode_s) > 1
-        if !Modes.orthonormal(mode_s)
-            ms = join(mode_s, "\n")
-            error("The selected modes do not form an orthonormal set:\n$ms")
-        end
-    end
+    check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,

@@ -22,9 +22,10 @@ glassprop! = Fields.propagator_material(:SiO2)
 
 thicknesses = [-2e-3, -1e-3, 0, 1e-3]
 
-outputs = [prop_capillary(a, flength, gas, pressure; λ0, τfwhm, energy,
+outputs = [prop_capillary(a, flength, gas, pressure; trange=1e-12, λlims=(150e-9, 4e-6),
+                          λ0, τfwhm, energy,
                           ϕ=[0, 0, 0, -350e-45],
-                          propagator=(Eω, grid) -> glassprop!(Eω, grid.ω, di))
+                          propagator=(Eω, grid) -> glassprop!(Eω, grid.ω, di, λ0))
             for di in thicknesses]
 ##
 λ, _ = Processing.getIω(outputs[1], :λ)
