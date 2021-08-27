@@ -472,8 +472,6 @@ end
 Oversample (smooth) an array by 0-padding in the frequency domain
 """
 function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
-    dim = 1
-    factor = 4
     if factor == 1
         return t, x
     end
