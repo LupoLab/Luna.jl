@@ -471,7 +471,7 @@ end
 """
 Oversample (smooth) an array by 0-padding in the frequency domain
 """
-function oversample(t, x::Array{<:Real, N}) where N
+function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     dim = 1
     factor = 4
     if factor == 1
@@ -504,9 +504,7 @@ end
 """
 Oversampling for complex-valued arryas (e.g. envelope fields)
 """
-function oversample(t, x::Array{<:Complex,N}) where N
-    factor = 4
-    dim = 1
+function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
