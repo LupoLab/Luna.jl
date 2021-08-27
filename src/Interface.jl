@@ -217,6 +217,11 @@ struct GaussBeamPulse{pT} <: AbstractPulse
     polarisation
 end
 
+"""
+    GaussBeamPulse(waist, timepulse)
+
+A pulse whose shape in time is defined by the `timepulse::AbstractPulse`, and whose modal content is calculated by considering the overlap of an ideal Gaussian laser beam with 1/e² radius `waist` with the modes of the waveguide.
+"""
 function GaussBeamPulse(waist, timepulse)
     GaussBeamPulse(waist, timepulse, timepulse.polarisation)
 end
