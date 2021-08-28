@@ -171,14 +171,18 @@ Create stats function to calculate the temporal FWHM (pulse duration) for mode a
 """
 function fwhm_t(grid)
     function addstat!(d, Eω, Et, z, dz)
+        Pt = abs2.(Et)
         if ndims(Et) > 1
-            d["fwhm_t_min"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear)
+            Ptsum = dropdims(sum(Pt; dims=2); dims=2)
+            d["fwhm_t_min"] = [Maths.fwhm(grid.t, Pt[:, i], method=:linear)
                               for i=1:size(Et, 2)]
-            d["fwhm_t_max"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear, minmax=:max)
+            d["fwhm_t_max"] = [Maths.fwhm(grid.t, Pt[:, i], method=:linear, minmax=:max)
                               for i=1:size(Et, 2)]
+            d["fwhm_t_min_allmodes"] = Maths.fwhm(grid.t, Ptsum, method=:linear)
+            d["fwhm_t_max_allmodes"] = Maths.fwhm(grid.t, Ptsum, method=:linear, minmax=:max)
         else
-            d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:min)
-            d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:max)
+            d["fwhm_t_min"] = Maths.fwhm(grid.t, Pt, method=:linear, minmax=:min)
+            d["fwhm_t_max"] = Maths.fwhm(grid.t, Pt, method=:linear, minmax=:max)
         end
     end
 end
