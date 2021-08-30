@@ -23,16 +23,13 @@ end
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),
              Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
 
-linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
-
-normfun = NonlinearRHS.norm_mode_average(grid.ω, βfun!, aeff)
-
+linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
+             
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
-statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
+statsfun = Stats.default(grid, Eω, m, linop, transform; gas=gas)
 output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
-
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 ##

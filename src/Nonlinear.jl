@@ -229,9 +229,9 @@ function gethω!(h, t, ht, FT)
     scale = dt
     # starting from positive t, fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
-    start = findfirst(t .>= 0.0)
-    for i = start:length(t)
-        h[i] = ht(t[i])*scale
+    #start = findfirst(t .>= 0.0)
+    for i = 1:length(t)
+        h[i] = ht((i - 1) * dt)*scale
     end
     hω = FT * h
     Eω2 = similar(hω)
