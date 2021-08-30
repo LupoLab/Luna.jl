@@ -227,9 +227,8 @@ function gethω!(h, t, ht, FT)
     # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
     scale = dt
-    # starting from positive t, fill only up to the first half of h
+    # fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
-    #start = findfirst(t .>= 0.0)
     for i = 1:length(t)
         h[i] = ht((i - 1) * dt)*scale
     end
