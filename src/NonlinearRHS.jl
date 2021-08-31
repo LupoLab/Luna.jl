@@ -104,7 +104,7 @@ end
 function Et_to_Pt!(Pt, Ptbuf, Et, responses, density::Number)
     fill!(Pt, 0)
     for resp! in responses
-        resp!(Ptbuf, Et)
+        resp!(Ptbuf, Et, density)
         Pt .+= density .* Ptbuf
     end
 end
@@ -113,7 +113,7 @@ function Et_to_Pt!(Pt, Ptbuf, Et, responses, density::AbstractVector)
     fill!(Pt, 0)
     for ii in eachindex(density)
         for resp! in responses[ii]
-            resp!(Ptbuf, Et)
+            resp!(Ptbuf, Et, density[ii])
             Pt .+= density[ii] .* Ptbuf
         end
     end
