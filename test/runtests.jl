@@ -137,4 +137,10 @@ end
     include(joinpath(testdir, "test_mixtures.jl"))
 end
 
+@testset "Interface" begin
+    @info("================= test_interface.jl")
+    include(joinpath(testdir, "test_interface.jl"))
+end
+
+
 end

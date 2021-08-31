@@ -27,36 +27,45 @@ Represents a temporal pulse with shape defined by `Itshape`.
 # Fields
 - `λ0::Float64`: the central field wavelength
 - `energy::Float64`: the pulse energy
-- `ϕ::Float64`: the CEO phase
-- `τ0::Float64`: the temproal shift from grid time 0
+- `power::Float64`: the pulse peak power (**after** applying any spectral phases)
+- `ϕ::Vector{Float64}`: spectral phases (CEP, group delay, GDD, TOD, ...)
 - `Itshape`: a callable `f(t)` to get the shape of the intensity/power in the time domain
 """
-struct PulseField{iT} <: TimeField
+struct PulseField{eT, pT, iT} <: TimeField
     λ0::Float64
-    energy::Float64
-    ϕ::Float64
-    τ0::Float64
+    energy::eT
+    power::pT
+    ϕ::Vector{Float64}
     Itshape::iT
 end
 
+function PulseField(;λ0, Itshape, energy=nothing, power=nothing, ϕ=Float64[])
+    if !isnothing(power)
+        if !isnothing(energy)
+            error("only one of `energy` or `power` can be specified")
+        end
+    elseif isnothing(energy)
+        error("one of `energy` or `power` must be specified")
+    end
+    PulseField(λ0, energy, power, ϕ, Itshape)
+end
+
 """
-    GaussField(;λ0, τfwhm, energy, ϕ=0.0, τ0=0.0, m=1)
+    GaussField(;λ0, τfwhm, energy, ϕ, m=1)
 
 Construct a (super)Gaussian shaped pulse with intensity/power FWHM `τfwhm`, either
 `energy` or peak `power` specified, superGaussian parameter `m=1` and other parameters
 as defined for [`PulseField`](@ref).
 """
-function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=0.0, τ0=0.0, m=1)
+function GaussField(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=Float64[], m=1)
     if !isnothing(power)
         if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
-        else
-            energy = power*τfwhm*sqrt(pi/log(16))
         end
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, τ0, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
+    PulseField(λ0, energy, power, ϕ, t -> Maths.gauss(t, fwhm=τfwhm, power=2*m))
 end
 
 """
@@ -68,7 +77,7 @@ natural width `τw`, or the intensity/power FWHM `τfwhm`, and either
 Other parameters are as defined for [`PulseField`](@ref).
 """
 function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=nothing,
-                    ϕ=0.0, τ0=0.0)
+                    ϕ=Float64[])
     if !isnothing(τfwhm)
         if !isnothing(τw)
             error("only one of `τw` or `τfwhm` can be specified")
@@ -81,13 +90,11 @@ function SechField(;λ0, energy=nothing, power=nothing, τw=nothing, τfwhm=noth
     if !isnothing(power)
         if !isnothing(energy)
             error("only one of `energy` or `power` can be specified")
-        else
-            energy = 2*power*τw
         end
     elseif isnothing(energy)
         error("one of `energy` or `power` must be specified")
     end
-    PulseField(λ0, energy, ϕ, τ0, t -> sech(t/τw)^2)
+    PulseField(λ0, energy, power, ϕ, t -> sech(t/τw)^2)
 end
 
 """
@@ -97,15 +104,15 @@ Create electric field for `PulseField`, either the field (for `RealGrid`) or
 the envelope (for `EnvGrid`)
 """
 function make_Et(p::PulseField, grid::Grid.RealGrid)
-    t = grid.t .- p.τ0
+    t = grid.t
     ω0 = PhysData.wlfreq(p.λ0)
-    @. sqrt(p.Itshape(t))*cos(ω0*t + p.ϕ)
+    @. sqrt(p.Itshape(t))*cos(ω0*t)
 end
 
 function make_Et(p::PulseField, grid::Grid.EnvGrid)
-    t = grid.t .- p.τ0
+    t = grid.t
     Δω = PhysData.wlfreq(p.λ0) - grid.ω0
-    @. sqrt(p.Itshape(t))*exp(im*(p.ϕ + Δω*t))
+    @. sqrt(p.Itshape(t))*exp(im*(Δω*t))
 end
 
 """
@@ -115,8 +122,18 @@ Add the field to `Eω` for the provided `grid`, `energy_t` function and Fourier 
 """
 function (p::PulseField)(grid, FT)
     Et = make_Et(p, grid)
-    energy_t = Fields.energyfuncs(grid)[1]
-    FT * (sqrt(p.energy)/sqrt(energy_t(Et)) .* Et)
+    if length(p.ϕ) >= 1
+        Et = FT \ prop_taylor!(FT * Et, grid, p.ϕ, p.λ0)
+    end
+    if !isnothing(p.energy)
+        energy_t = Fields.energyfuncs(grid)[1]
+        Et .*= sqrt(p.energy)/sqrt(energy_t(Et))
+    else
+        Pt = It(Et, grid)
+        Et .*= sqrt(p.power)/sqrt(maximum(Pt))
+    end
+        
+    FT * Et
 end
 
 """
@@ -172,29 +189,34 @@ function (c::CWField)(grid::Grid.EnvGrid, FT)
     Eω
 end
 
-"""
-    DataField(ω, Iω, ϕω, energy)
-
-Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
-radial frequency axis `ω`.
-"""
 struct DataField <: TimeField
     ω::Vector{Float64}
     Iω::Vector{Float64}
     ϕω::Vector{Float64}
     energy::Float64
+    ϕ::Vector{Float64}
+    λ0::Float64
 end
 
 """
-    DataField(ω, Eω, energy)
+    DataField(ω, Iω, ϕω; energy, ϕ=Float64[], λ0=NaN)
+
+Represents a field with spectral power density `Iω` and spectral phase `ϕω`, sampled on
+radial frequency axis `ω`.
+"""
+DataField(ω, Iω, ϕω; energy, ϕ=Float64[], λ0=NaN) = DataField(ω, Iω, ϕω, energy, ϕ, λ0)
+
+"""
+    DataField(ω, Eω; energy, ϕ=Float64[], λ0=NaN)
 
 Create a `DataField` from the complex frequency-domain field `Eω` sampled on radial
 frequency grid `ω`.
 """
-DataField(ω, Eω, energy) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)), energy)
+DataField(ω, Eω; energy, ϕ=Float64[], λ0=NaN) = DataField(ω, abs2.(Eω), unwrap(angle.(Eω)),
+                                                          energy, ϕ, λ0)
 
 """
-    DataField(fpath, energy)
+    DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
 
 Create a `DataField` by loading `ω`, `Iω`, and `ϕω` from the file at `fpath`. The file must
 contain 3 columns:
@@ -203,9 +225,9 @@ contain 3 columns:
 - spectral power density (arbitrary units)
 - unwrapped spectral phase
 """
-function DataField(fpath, energy)
+function DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
     dat = CSV.read(fpath)
-    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3], energy)
+    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3]; energy, ϕ)
 end
 
 """
@@ -227,6 +249,30 @@ function (d::DataField)(grid::Grid.AbstractGrid, FT)
     Eω .*= sqrt(d.energy/energy_ω(Eω))
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     Eω .*= exp.(-1im .* grid.ω .* τ)
+    if length(d.ϕ) >= 1
+        λ0 = isnan(d.λ0) ? wlfreq(Maths.moment(d.ω, d.Iω)) : d.λ0
+        prop_taylor!(Eω, grid, d.ϕ, λ0)
+    end
+    Eω
+end
+
+"""
+    PropagatedField(propagator!, field)
+
+A wrapper around a previously defined `TimeField` which applies the mutating propagation
+function `propagator!(Eω, grid)` to the field `Eω`.
+"""
+struct PropagatedField{pT, fT<:TimeField} <: TimeField
+    propagator!::pT
+    field::fT
+end
+
+PropagatedField(::Nothing, field::fT) where fT <:TimeField = field
+
+function (pf::PropagatedField)(grid::Grid.AbstractGrid, FT)
+    Eω = pf.field(grid, FT)
+    pf.propagator!(Eω, grid)
+    Eω
 end
 
 """
@@ -752,6 +798,24 @@ function optcomp_material(Eω, args...; kwargs...)
         dout[ci] = di
     end
     dout, out
+end
+
+function optfield_cep(Eω::AbstractVector, grid)
+    res = Optim.optimize(-π, π) do ϕ
+        Et = real(iFT(Eω*exp(1im*ϕ), grid))
+        1/maximum(Et)
+    end
+
+    res.minimizer, Eω*exp(1im*ϕ)
+end
+
+function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
+    res = Optim.optimize(-π, π) do ϕ
+        Et = real(iFT(Eω[:, mode]*exp(1im*ϕ), grid))
+        1/maximum(Et)
+    end
+
+    res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
 end

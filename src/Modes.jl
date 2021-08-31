@@ -161,13 +161,16 @@ function dB_per_m(m::AbstractMode, ω; z=0.0)
 end
 
 """
-    transmission(m::AbstractMode, ω, L; z=0.0)
+    transmission(m::AbstractMode, ω, L)
 
 Calculate the power transmission after propagation through length `L` in the mode `m` for
 radiation at the frequency `ω`.
 """
-function transmission(m::AbstractMode, ω, L; z=0.0)
-    return exp(-α(m, ω)*L)
+function transmission(m::AbstractMode, ω, L)
+    αint, err = hquadrature(0, L) do z
+        -α(m, ω; z)
+    end
+    return exp(αint)
 end
 
 """
@@ -212,7 +215,7 @@ Calculate the zero-dispersion wavelength (ZDW) of mode `m` with an initial guess
 
 This method is faster than the bounded version if the ZDW is known to be close to `λ0`.
 """
-function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-6)
     ωguess = 2π*c/λ0 * 1e-15 # convert everything find_zero sees to units close to 1.0
     dfun = dispersion_func(m, 2, z=z)
     β2(ω) = 1e30 * dfun(ω*1e15)
@@ -359,7 +362,7 @@ function _overlap(mode1::AbstractMode, mode2::AbstractMode)
         ret = 1/2*sqrt(ε_0/μ_0)*dot(conj(Exy(mode1, xs)), Exy(mode2, xs))
         dl[1] == :polar ? xs[1]*ret : ret
     end
-    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=5000)
 end
 
 """
@@ -379,7 +382,7 @@ Test whether the `AbstractMode`s `mode1` and `mode2` are orthogonal to each othe
 """
 function orthogonal(mode1::AbstractMode, mode2::AbstractMode)
     val, err = _overlap(mode1, mode2)
-    isapprox(val, 0; atol=err)
+    isapprox(val, 0; atol=max(err, eps(typeof(val))))
 end
 
 """
@@ -391,7 +394,8 @@ function orthonormal(modes)
     out = true
     for (ii1, ii2) in Iterators.product(eachindex(modes), eachindex(modes))
         val, err = _overlap(modes[ii1], modes[ii2])
-        this = ii1 == ii2 ? isapprox(val, 1; atol=err) : isapprox(val, 0; atol=err)
+        atol = max(err, eps(typeof(val)))
+        this = ii1 == ii2 ? isapprox(val, 1; atol) : isapprox(val, 0; atol)
         out = out && this
     end
     out

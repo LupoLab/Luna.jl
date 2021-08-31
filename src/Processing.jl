@@ -175,6 +175,11 @@ function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdi
     fwhm(to, Pt)
 end
 
+function fwhm_t(output::AbstractOutput; kwargs...)
+    grid = makegrid(output)
+    fwhm_t(grid, output["Eω"]; kwargs...)
+end
+
 
 """
     fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)

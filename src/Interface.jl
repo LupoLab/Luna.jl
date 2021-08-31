@@ -1,0 +1,712 @@
+module Interface
+using Luna
+import Luna.PhysData: wlfreq
+import Luna: Grid, Modes, Output, Fields
+import Logging: @info, @debug
+
+module Pulses
+
+import Luna: Fields, Output
+
+export AbstractPulse, CustomPulse, GaussPulse, SechPulse, DataPulse, LunaPulse
+
+abstract type AbstractPulse end
+
+struct CustomPulse{fT<:Fields.TimeField} <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::fT
+end
+
+"""
+    CustomPulse(;λ0, energy=nothing, power=nothing, ϕ=Float64[],
+                mode=:lowest, polarisation=:linear, propagator=nothing)
+
+A custom pulse defined by a function for use with `prop_capillary`, with either energy or
+peak power specified.
+
+# Keyword arguments
+- `λ0::Number`: the central wavelength
+- `Itshape::function`: a function `I(t)`` which defines the intensity/power envelope of the
+                       pulse as a function of time `t`. Note that the normalisation of this
+                       envelope is irrelevant as it will be re-scaled by `energy` or `power`.
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...).
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+"""
+function CustomPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    CustomPulse(mode, polarisation,
+                Fields.PropagatedField(propagator, Fields.PulseField(;kwargs...)))
+end
+
+struct GaussPulse{fT<:Fields.TimeField} <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::fT
+end
+
+"""
+    GaussPulse(;λ0, τfwhm, energy=nothing, power=nothing, ϕ=Float64[], m=1,
+               mode=:lowest, polarisation=:linear, propagator=nothing)
+
+A (super)Gaussian pulse for use with `prop_capillary`, with either energy or peak power
+specified.
+
+# Keyword arguments
+- `λ0::Number`: the central wavelength.
+- `τfwhm::Number`: the pulse duration (power/intensity FWHM).
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...).
+- `m::Int`: super-Gaussian parameter (the power in the Gaussian exponent is 2m).
+            Defaults to 1.
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+"""
+function GaussPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    GaussPulse(mode, polarisation,
+               Fields.PropagatedField(propagator, Fields.GaussField(;kwargs...)))
+end
+
+struct SechPulse{fT<:Fields.TimeField} <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::fT
+end
+
+"""
+    SechPulse(;λ0, τfwhm=nothing, τw=nothing, energy=nothing, power=nothing, ϕ=Float64[],
+               mode=:lowest, polarisation=:linear, propagator=nothing)
+
+A sech²(τ/τw) pulse for use with `prop_capillary`, with either `energy` or peak `power`
+specified, and duration given either as `τfwhm` or `τw`.
+
+# Keyword arguments
+- `λ0::Number`: the central wavelength.
+- `τfwhm::Number`: the pulse duration (power/intensity FWHM).
+- `τw::Number`: "natural" pulse duration of a sech²(τ/τw) pulse.
+- `energy::Number`: the pulse energy.
+- `power::Number`: the pulse peak power (**after** applying any spectral phases).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...)
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+"""
+function SechPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    SechPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.SechField(;kwargs...)))
+end
+
+struct DataPulse{fT<:Fields.TimeField} <: AbstractPulse
+    mode::Symbol
+    polarisation
+    field::fT
+end
+
+#TODO add peak power to DataPulses
+"""
+    DataPulse(ω, Iω, ϕω; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+    DataPulse(ω, Eω; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+    DataPulse(fpath; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+
+A custom pulse defined by tabulated data to be used with `prop_capillary`.
+
+# Data input options
+- `ω, Iω, ϕω`: arrays of angular frequency `ω` (units rad/s), spectral energy density `Iω`
+               and spectral phase `ϕω`. `ϕω` should be unwrapped.
+- `ω, Eω`: arrays of angular frequency `ω` (units rad/s) and the complex frequency-domain
+           field `Eω`.
+- `fpath`: a string containing the path to a file which contains 3 columns:
+    Column 1: frequency (units of Hertz)
+    Column 2: spectral energy density
+    Column 3: spectral phase (unwrapped)
+
+# Keyword arguments
+- `energy::Number`: the pulse energy
+- `λ0::Number`: the central wavelength (optional; defaults to the centre of mass of the
+                given spectral energy density).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...) to be applied to the
+                       pulse (in addition to any phase already present in the data).
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+"""
+function DataPulse(ω::AbstractVector, Iω, ϕω;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.DataField(ω, Iω, ϕω; kwargs...)))
+end
+
+function DataPulse(ω, Eω;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.DataField(ω, Eω; kwargs...)))
+end
+
+function DataPulse(fpath;
+                   mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
+    DataPulse(mode, polarisation,
+              Fields.PropagatedField(propagator, Fields.DataField(fpath; kwargs...)))
+end
+
+# Select fundamental mode from multi-mode sim or take just the single mode
+modeslice(Eω::Array{ComplexF64, 2}) = Eω[:, end]
+modeslice(Eω::Array{ComplexF64, 3}) = Eω[:, 1, end]
+
+"""
+    LunaPulse(output; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
+
+A pulse defined to be used with `prop_capillary` which comes from a previous `Luna`
+propagation simulation.
+
+For multi-mode simulations, only the lowest-order modes is transferred.
+
+# Arguments
+- `output::AbstractOutput`: output from a previous `Luna` simulation.
+
+# Keyword arguments
+- `energy::Number`: the pulse energy
+- `λ0::Number`: the central wavelength (optional; defaults to the centre of mass of the
+                given spectral energy density).
+- `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...) to be applied to the
+                       pulse (in addition to any phase already present in the data).
+- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
+                  lowest-order mode in the simulation, or a mode designation
+                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
+- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
+                  and ε=0 to linear polarisation.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+"""
+function LunaPulse(o::Output.AbstractOutput; kwargs...)
+    ω = o["grid"]["ω"]
+    t = o["grid"]["t"]
+    τ = length(t) * (t[2] - t[1])/2 # middle of old time window
+    Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
+    DataPulse(ω, Eωm1 .* exp.(1im .* ω .* τ); kwargs...)
+end
+
+struct GaussBeamPulse{pT} <: AbstractPulse
+    waist::Float64
+    timepulse::pT
+    polarisation
+end
+
+"""
+    GaussBeamPulse(waist, timepulse)
+
+A pulse whose shape in time is defined by the `timepulse::AbstractPulse`, and whose modal content is calculated by considering the overlap of an ideal Gaussian laser beam with 1/e² radius `waist` with the modes of the waveguide.
+"""
+function GaussBeamPulse(waist, timepulse)
+    GaussBeamPulse(waist, timepulse, timepulse.polarisation)
+end
+
+end
+
+
+"""
+    prop_capillary(radius, flength, gas, pressure; λ0, kwargs...)
+
+Simulate pulse propagation in a hollow fibre using the capillary model.
+
+# Mandatory arguments
+- `radius`: Core radius of the fibre. Can be a `Number` for constant radius, or a function
+    `a(z)` which returns the `z`-dependent radius.
+- `flength::Number`: Length of the fibre.
+- `gas::Symbol`: Filling gas species.
+- `pressure`: Gas pressure. Can be a `Number` for constant pressure, a 2-`Tuple` of `Number`s
+    for a simple pressure gradient, or a `Tuple` of `(Z, P)` where `Z` and `P`
+    contain `z` positions and the pressures at those positions.
+- `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
+        single-pulse inputs, this is also the central wavelength of the input pulse.
+- `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
+- `trange::Number`: The total width of the time grid. To make the number of samples a
+        power of 2, the actual grid used is usually bigger.
+
+# Grid options
+- `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
+    By default, envelope simulations ignore third-harmonic generation.
+    Plasma has not yet been implemented for envelope fields.
+- `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
+    this is determined by the wavelength grid. If `δt` is given **and smaller** than the
+    required value, it is used instead.
+
+# Input pulse options
+A single pulse in the lowest-order mode can be specified by the keyword arguments below.
+More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
+In this case, all keyword arguments except for `λ0` are ignored.
+
+- `λ0`: Central wavelength
+- `τfwhm`: The pulse duration as defined by the full width at half maximum.
+- `τw`: The "natural" pulse duration. Only available if pulseshape is `sech`.
+- `ϕ`: Spectral phases to be applied to the transform-limited pulse. Elements are
+    the usual polynomial phases ϕ₀ (CEP), ϕ₁ (group delay), ϕ₂ (GDD), ϕ₃ (TOD), etc.
+- `energy`: Pulse energy.
+- `power`: Peak power **after any spectral phases are added**.
+- `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
+    or `:sech` for a sech² pulse.
+- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
+    or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
+    ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
+    elliptical polarisation is always the y-axis.
+- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+- `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
+
+# Modes options
+- `modes`: Defines which modes are included in the propagation. Can be any of:
+    - a single mode signifier (default: :HE11), which leads to mode-averaged propagation
+        (as long as all inputs are linearly polarised).
+    - a list of mode signifiers, which leads to multi-mode propagation in those modes.
+    - a `Number` `N` of modes, which simply creates the first `N` `HE` modes.
+    Note that when elliptical or circular polarisation is included, each mode is present
+    twice in the output, once for `x` and once for `y` polarisation.
+- `model::Symbol`: Can be `:full`, which includes the full complex refractive index of the cladding
+    in the effective index of the mode, or `:reduced`, which uses the simpler model more
+    commonly seen in the literature. See `Luna.Capillary` for more details.
+    Defaults to `:full`.
+- `loss::Bool`: Whether to include propagation loss. Defaults to `true`.
+
+# Nonlinear interaction options
+- `kerr`: Whether to include the Kerr effect. Defaults to `true`.
+- `raman`: Whether to include the Raman effect. Defaults to `false`.
+- `plasma`: Can be one of
+    - `:ADK` -- include plasma using the ADK ionisation rate.
+    - `:PPT` -- include plasma using the PPT ionisation rate.
+    - `true` (default) -- same as `:PPT`.
+    - `false` -- ignore plasma.
+    Note that plasma is only available for full-field simulations.
+- `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
+    full-field simulations and to `false` for envelope simulations.
+
+# Output options
+- `saveN::Integer`: Number of points along z at which to save the field.
+- `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
+    only in the working memory. If not `nothing`, should be a file path as a `String`,
+    and the results are saved in a file at this location.
+- `status_period::Number`: Interval (in seconds) between printed status updates.
+"""
+function prop_capillary(radius, flength, gas, pressure;
+                        λlims, trange, envelope=false, thg=nothing, δt=1,
+                        λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
+                        power=nothing, energy=nothing,
+                        pulseshape=:gauss, polarisation=:linear, propagator=nothing,
+                        pulses=nothing,
+                        shotnoise=true,
+                        modes=:HE11, model=:full, loss=true,
+                        raman=false, kerr=true, plasma=nothing,
+                        saveN=201, filepath=nothing,
+                        status_period=5)
+
+    pol = needpol(polarisation, pulses) || needpol_modes(modes)
+    @info "X+Y polarisation "* (pol ? "required." : "not required.")
+    plasma = isnothing(plasma) ? !envelope : plasma
+    thg = isnothing(thg) ? !envelope : thg
+
+    gas = (gas == :He) ? :HeJ : gas
+
+    grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
+    mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
+    check_orth(mode_s)
+    density = makedensity(flength, gas, pressure)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
+    inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
+                        power, energy, pulseshape, polarisation, propagator)
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
+    linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
+                                     const_linop(radius, pressure))
+    stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
+    output = makeoutput(grid, saveN, stats, filepath)
+
+    saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
+        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath)
+
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
+end
+
+check_orth(mode::Modes.AbstractMode) = nothing
+function check_orth(modes)
+    if length(modes) > 1
+        if !Modes.orthonormal(modes)
+            ms = join(modes, "\n")
+            error("The selected modes do not form an orthonormal set:\n$ms")
+        end
+    end
+end
+
+function saveargs(output; kwargs...)
+    d = Dict{String, String}()
+    for (k, v) in kwargs
+        d[string(k)] = string(v)
+    end
+    output(d; group="prop_capillary_args")
+end
+
+function needpol(pol)
+    if pol == :linear
+        return false
+    elseif pol == :circular
+        return true
+    else
+        error("Polarisation must be :linear, :circular, or an ellipticity, not $pol")
+    end
+end
+needpol(pol::Number) = true
+needpol(pulse::Pulses.AbstractPulse) = needpol(pulse.polarisation)
+
+needpol(pol, pulses::Nothing) = needpol(pol)
+needpol(pol, pulse::Pulses.AbstractPulse) = needpol(pulse)
+needpol(pol, pulses) = any(needpol, pulses)
+
+needpol_modes(mode::Symbol) = false # mode average
+needpol_modes(modes::Number) = false # only HE1m modes
+
+function needpol_modes(modes::NTuple{N, Symbol}) where N
+    any(modes) do mode
+        md = parse_mode(mode)
+        md[:kind] ≠ :HE || md[:n] > 1
+    end
+end
+
+
+const_linop(radius::Number, pressure::Number) = Val(true)
+const_linop(radius, pressure) = Val(false)
+
+function makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
+    if envelope
+        isnothing(thg) && (thg = false)
+        Grid.EnvGrid(flength, λ0, λlims, trange; δt, thg)
+    else
+        Grid.RealGrid(flength, λ0, λlims, trange, δt)
+    end
+end
+
+makegrid(flength, λ0::Tuple, args...) = makegrid(flength, λ0[1], args...)
+
+function parse_mode(mode)
+    ms = String(mode)
+    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4]))
+end
+
+function makemodes_pol(pol, args...; kwargs...)
+    if pol
+        if kwargs[:kind] == :HE && kwargs[:n] == 1
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
+                    Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+        else
+            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...)]
+        end
+    else
+        Capillary.MarcatilliMode(args...; kwargs...)
+    end
+end
+
+function makemode_s(mode::Symbol, flength, radius, gas, pressure::Number, model, loss, pol)
+    makemodes_pol(pol, radius, gas, pressure; model, loss, parse_mode(mode)...)
+end
+
+function makemode_s(mode::Symbol, flength, radius, gas, pressure::Tuple{<:Number, <:Number},
+                    model, loss, pol)
+    coren, _ = Capillary.gradient(gas, flength, pressure...)
+    makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
+end
+
+function makemode_s(mode::Symbol, flength, radius, gas, pressure, model, loss, pol)
+    Z, P = pressure
+    coren, _ = Capillary.gradient(gas, Z, P)
+    makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
+end
+
+function makemode_s(modes::Int, args...)
+    _flatten([makemode_s(Symbol("HE1$n"), args...) for n=1:modes])
+end
+
+function makemode_s(modes::NTuple{N, Symbol}, args...) where N 
+    _flatten([makemode_s(m, args...) for m in modes])
+end
+
+# Iterators.flatten recursively flattens arrays of arrays, but can't handle scalars
+_flatten(modes::Vector{<:AbstractArray}) = collect(Iterators.flatten(modes))
+_flatten(mode) = mode
+
+function makedensity(flength, gas, pressure::Number)
+    ρ0 = PhysData.density(gas, pressure)
+    z -> ρ0
+end
+
+function makedensity(flength, gas, pressure::Tuple{<:Number, <:Number})
+    _, density = Capillary.gradient(gas, flength, pressure...)
+    density
+end
+
+function makedensity(flength, gas, pressure)
+    _, density = Capillary.gradient(gas, pressure...)
+    density
+end
+
+function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
+    out = Any[]
+    if kerr
+        if thg
+            push!(out, Nonlinear.Kerr_field(PhysData.γ3_gas(gas)))
+        else
+            push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
+        end
+    end
+    makeplasma!(out, grid, gas, plasma, pol)
+    raman && push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
+    Tuple(out)
+end
+
+function makeplasma!(out, grid, gas, plasma::Bool, pol)
+    # simple true/false => default to PPT
+    plasma && makeplasma!(out, grid, gas, :PPT, pol)
+end
+
+function makeplasma!(out, grid, gas, plasma::Symbol, pol)
+    ionpot = PhysData.ionisation_potential(gas)
+    if plasma == :ADK
+        ionrate = Ionisation.ionrate_fun!_ADK(gas)
+    elseif plasma == :PPT
+        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ)
+    else
+        throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
+    end
+    Et = pol ? Array{Float64}(undef, length(grid.to), 2) : grid.to
+    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
+end
+
+function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
+    plasma && error("Plasma response for envelope fields has not been implemented yet.")
+    isnothing(thg) && (thg = false) 
+    out = Any[]
+    if kerr
+        if thg
+            ω0 = wlfreq(grid.referenceλ)
+            r = Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), ω0, grid.to)
+            push!(out, r)
+        else
+            push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
+        end
+    end
+    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
+    Tuple(out)
+end
+
+getAeff(mode::Modes.AbstractMode) = Modes.Aeff(mode)
+getAeff(modes) = Modes.Aeff(modes[1])
+
+function makeinputs(mode_s, λ0, pulses::Nothing, τfwhm, τw, ϕ, power, energy,
+                    pulseshape, polarisation, propagator)
+    if pulseshape == :gauss
+        return makeinputs(mode_s, λ0, Pulses.GaussPulse(;λ0, τfwhm, power=power, energy=energy,
+                          polarisation, ϕ, propagator))
+    elseif pulseshape == :sech
+        return makeinputs(mode_s, λ0, Pulses.SechPulse(;λ0, τfwhm, τw, power=power, energy=energy,
+                          polarisation, ϕ, propagator))
+    else
+        error("Valid pulse shapes are :gauss and :sech")
+    end
+end
+
+function makeinputs(mode_s, λ0, pulses, args...)
+    makeinputs(mode_s, λ0, pulses)
+end
+
+function findmode(mode_s, pulse)
+    if pulse.mode == :lowest
+        if pulse.polarisation == :linear
+            return [1]
+        else
+            return [1, 2]
+        end
+    else
+        md = parse_mode(pulse.mode)
+        return _findmode(mode_s, md)
+    end
+end
+
+function _findmode(mode_s::AbstractArray, md)
+    return findall(mode_s) do m
+        (m.kind == md[:kind]) && (m.n == md[:n]) && (m.m == md[:m])
+    end
+end
+
+
+function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
+    k = 2π/λ0
+    gauss = Fields.normalised_gauss_beam(k, pulse.waist)
+    facs = [abs2(Modes.overlap(mi, gauss)) for mi in mode_s]
+    fields = Any[]
+    if pulse.polarisation == :linear
+        for (modeidx, fac) in enumerate(facs)
+            sf = scalefield(pulse.timepulse.field, fac)
+            push!(fields, (mode=modeidx, fields=(sf,)))
+        end
+    else
+        fy, fx = ellfields(pulse.timepulse)
+        for (idx, fac) in enumerate(facs[1:2:end])
+            sfy = scalefield(fy, fac)
+            sfx = scalefield(fx, fac)
+            push!(fields, (mode=2idx-1, fields=(sfy,)))
+            push!(fields, (mode=2idx, fields=(sfx,)))
+        end
+    end
+    Tuple(fields)
+end
+
+function scalefield(f::Fields.PulseField, fac)
+    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), f.ϕ, f.Itshape)
+end
+
+function scalefield(f::Fields.DataField, fac)
+    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
+end
+
+_findmode(mode_s, md) = _findmode([mode_s], md)
+
+function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
+    idcs = findmode(mode_s, pulse)
+    (length(idcs) > 0) || error("Mode $(pulse.mode) not found in mode list: $mode_s")
+    if pulse.polarisation == :linear
+        ((mode=idcs[1], fields=(pulse.field,)),)
+    else
+        (length(idcs) == 2) || error("Modes not set up for circular/elliptical polarisation")
+        f1, f2 = ellfields(pulse)
+        ((mode=idcs[1], fields=(f1,)), (mode=idcs[2], fields=(f2,)))
+    end
+end
+
+function makeinputs(mode_s, λ0, pulses::Vector{<:Pulses.AbstractPulse})
+    i = Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
+    @debug join(string.(i), "\n")
+    return i
+end
+
+ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
+
+function ellphase(ϕ, ε)
+    shift = π/2 * sign(ε)
+    if length(ϕ) == 0
+        return [shift]
+    else
+        out = copy(ϕ)
+        out[1] += shift
+        return out
+    end
+end
+
+ellfac(pol::Symbol) = (1/2, 1/2) # circular
+function ellfac(ε::Number)
+    (-1 <= ε <= 1) || throw(DomainError(ε, "Ellipticity must be between -1 and 1."))
+    (1-ε^2/(1+ε^2), ε^2/(1+ε^2))
+end
+# sqrt(px/py) = ε => px = ε^2*py; px+py = 1 => px = ε^2*(1-px) => px = ε^2/(1+ε^2)
+
+nmult(x::Nothing, fac) = x
+nmult(x, fac) = x*fac
+
+function ellfields(pulse::Union{Pulses.CustomPulse, Pulses.GaussPulse, Pulses.SechPulse})
+    f = pulse.field
+    py, px = ellfac(pulse.polarisation)
+    f1 = Fields.PulseField(f.λ0, nmult(f.energy, py), nmult(f.power, py), f.ϕ, f.Itshape)
+    f2 = Fields.PulseField(f.λ0, nmult(f.energy, px), nmult(f.power, px),
+                           ellphase(f.ϕ, pulse.polarisation), f.Itshape)
+    f1, f2
+end
+
+function ellfields(pulse::Pulses.DataPulse)
+    f = pulse.field
+    py, px = ellfac(pulse.polarisation)
+    f1 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, py), f.ϕ, f.λ0)
+    f2 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, px),
+                          ellphase(f.ϕ, pulse.polarisation), f.λ0)
+    f1, f2
+end
+
+function shotnoise_maybe(inputs, mode::Modes.AbstractMode, shotnoise::Bool)
+    shotnoise || return inputs
+    (inputs..., (mode=1, fields=(Fields.ShotNoise(),)))
+end
+
+function shotnoise_maybe(inputs, modes, shotnoise::Bool)
+    shotnoise || return inputs
+    (inputs..., [(mode=ii, fields=(Fields.ShotNoise(),)) for ii in eachindex(modes)]...)
+end
+
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{true})
+    @info("Using mode-averaged propagation.")
+    linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
+    
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
+    βfun!, z -> Modes.Aeff(mode, z=z))
+    linop, Eω, transform, FT
+end
+
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{false})
+    @info("Using mode-averaged propagation.")
+    linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
+
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
+                                   βfun!, z -> Modes.Aeff(mode, z=z))
+    linop, Eω, transform, FT
+end
+
+needfull(modes) = !all(modes) do mode
+    (mode.kind == :HE) && (mode.n == 1)
+end
+
+function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
+    nf = needfull(modes)
+    @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
+    linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
+                                   pol ? :xy : :y; full=nf)
+    linop, Eω, transform, FT
+end
+
+function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
+    nf = needfull(modes)
+    @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
+    linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
+    Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
+                                   pol ? :xy : :y; full=nf)
+    linop, Eω, transform, FT
+end
+
+function makeoutput(grid, saveN, stats, filepath::Nothing)
+    Output.MemoryOutput(0, grid.zmax, saveN, stats)
+end
+
+function makeoutput(grid, saveN, stats, filepath)
+    Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
+end
+
+end
