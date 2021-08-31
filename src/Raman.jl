@@ -173,6 +173,23 @@ hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre.(R.Rs, t))
 
 hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
 
+struct CombinedRamanResponse{TR,Tt}
+    Rs::TR # list of Raman responses
+    t::Vector{Float64} # time grid
+    hpres::Array{Float64,2} # pre Raman responses for each R in Rs
+end
+
+function CombinedRamanResponse(t, Rs)
+    hpres = [hpre.(R, t) for R in Rs]
+    RamanResponse(Rs, t, hpres)
+end
+
+function (R::CombinedRamanResponse)(ht, ρ)
+    fill!(ht, 0.0)
+    for i=1:length(R.Rs)
+        ht .+= R.hpres[i] .* exp.(-R.t ./ hrdamp.(R.Rs[i], ρ))
+    end
+end
 
 
 """
@@ -187,36 +204,29 @@ Get the Raman response function for the Raman parameters in named tuple `rp`.
 - `maxJ::Integer = 50`: the maximum rotational quantum number to include
 - `temp::Real = roomtemp`: the temperature
 """
-function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
+function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
+    Rs = []
     if rotation
         if rp.rotation != :nonrigid
             throw(DomainError(rp.rotation, "Unknown Rotational Raman model $(rp.rotation)"))
         end
+        if haskey(rp, :Bρr)
+            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, Bρ=rp.Bρr,
+                                            D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
+        else
+            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, τ2=rp.τ2r,
+                                            D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
+        end
+        push!(Rs, hr)
     end
     if vibration
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end
+        hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
+        push!(Rs, hv)
     end 
-    if rotation && vibration
-        h = let hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.τ2r, rp.qJodd, rp.qJeven,
-                                                  D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp),
-                hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
-            (t) -> hr(t) + hv(t)
-        end 
-    elseif rotation
-        h = let hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.τ2r, rp.qJodd, rp.qJeven,
-                                                 D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
-            (t) -> hr(t)
-        end 
-    elseif vibration
-        h = let hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
-            (t) -> hv(t)
-        end 
-    else
-        h = (t) -> 0.0
-    end
-    h
+    CombinedRamanResponse(t, Rs) 
 end
 
 """
@@ -226,12 +236,12 @@ Get the Raman response function for `material`.
 
 For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(material; kwargs...)
+function raman_response(material, t; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
-        return molecular_raman_response(rp; kwargs...)
+        return molecular_raman_response(t, rp; kwargs...)
     elseif rp.kind == :normedsdo
-        return RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)
+        return CombinedRamanResponse(t, [RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)])
     else
         throw(DomainError(rp.kind, "Unknown Raman model $(rp.kind)"))
     end
