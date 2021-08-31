@@ -313,11 +313,12 @@ function (R::RamanPolar)(out, Et, ρ)
     # this ensures that causality is maintained, and no artificial delay between the field and
     # the start of the response function occurs, at each convolution point.  
     fill!(R.ht, 0.0)
-    R(R.ht, ρ)
+    R.r(R.ht, ρ)
     # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
     R.ht .*= R.dt
-    mul!(R.hω, R.FT, R.h)
+    #mul!(R.hω, R.FT, R.h)
+    R.hω .= R.FT * R.h
 
     # convolution by multiplication in frequency domain
     # The double grid gives us accurate full convolution between the full field grid

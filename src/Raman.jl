@@ -98,7 +98,7 @@ end
 # TODO: we assume here that all rotational levels have same linewidth
 struct RamanRespRotationalNonRigid{TR, Tτ2} <: AbstractRamanResponse
     Rs::TR # List of Raman responses
-    τ2::Tτ2 # coherence dephasing time function density to τ2: ρ -> τ2
+    τ2ρ::Tτ2 # coherence dephasing time function density to τ2: ρ -> τ2
 end
 
 """
@@ -165,24 +165,24 @@ function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
           end
     Rs = [RamanRespSingleDampedOscillator((K*(J[i] + 1)*(J[i] + 2)/(2*J[i] + 3)
                                             *(ρ[i+2]/(2*J[i] + 5) - ρ[i]/(2*J[i] + 1))),
-                                          Ω[i], τ2̢ρ) for i=1:length(J)]
-    RamanRespRotationalNonRigid(Rs, τ2̢ρ)
+                                          Ω[i], τ2ρ) for i=1:length(J)]
+    RamanRespRotationalNonRigid(Rs, τ2ρ)
 end
 
 hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre.(R.Rs, t))
 
 hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
 
-struct CombinedRamanResponse{TR,Tt}
-    Rs::TR # list of Raman responses
+struct CombinedRamanResponse
+    Rs::Vector{Any} # list of Raman responses
     t::Vector{Float64} # time grid
-    hpres::Array{Float64,2} # pre Raman responses for each R in Rs
+    hpres::Vector{Vector{Float64}} # pre Raman responses for each R in Rs
 end
 
 function CombinedRamanResponse(t, Rs)
-    hpres = [hpre.(R, t) for R in Rs]
-    tt = (0:(length(t) - 1)) .* (t[2] - t[1])
-    RamanResponse(Rs, tt, hpres)
+    hpres = [hrpre.(R, t) for R in Rs]
+    tt = collect(0:(length(t) - 1)) .* (t[2] - t[1])
+    CombinedRamanResponse(Rs, tt, hpres)
 end
 
 function (R::CombinedRamanResponse)(ht, ρ)
@@ -236,7 +236,7 @@ Get the Raman response function for `material`.
 
 For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(material, t; kwargs...)
+function raman_response(t, material; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
         return molecular_raman_response(t, rp; kwargs...)
