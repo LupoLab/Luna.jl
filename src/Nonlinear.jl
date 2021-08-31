@@ -230,7 +230,7 @@ function gethω!(h, t, ht, FT)
     # fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
     # note that the response function time 0 is put into the first element of the response array
-    # this ensures that causality is maintained, and no artifical delay between the field and
+    # this ensures that causality is maintained, and no artificial delay between the field and
     # the start of the response function occurs, at each convolution point.  
     for i = 1:length(t)
         h[i] = ht((i - 1) * dt)*scale
@@ -321,7 +321,7 @@ function (R::RamanPolar)(out, Et)
 
     # convolution by multiplication in frequency domain
     # The double grid gives us accurate full convolution between the full field grid
-    # and full response function. It is unecessary for highly damped responses, like
+    # and full response function. It is unnecessary for highly damped responses, like
     # in glass. But for gases with very long decay times it prevents artefacts due to
     # truncation of the response function. There is likely a more efficient way. But
     # this is safe, until we come up with one.
