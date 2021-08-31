@@ -637,10 +637,13 @@ If `kind == :molecular` then the following must also be specified:
 If `rotation == :nonrigid` then the following must also be specified:
 - `B::Real`: the rotational constant [1/m]
 - `Δα::Real`: molecular polarizability anisotropy [m^3]
-- `τ2r::Real`: coherence time [s]
 - `qJodd::Integer`: nuclear spin parameter for odd `J`
 - `qJeven::Integer`: nuclear spin parameter for even `J`
 - `D::Real=0.0`: centrifugal constant [1/m]
+Along with one of:
+- `τ2r::Real`: coherence time [s]
+- `B̢ρr::Real` : density dependent broadening coefficient [Hz/amagat]
+If both the above are specified, then `Bρ` takes precedence.
 
 If `vibration == :sdo` then the following must also be specified:
 - `Ωv::Real`: vibrational frequency [rad/s]
@@ -656,6 +659,8 @@ If `vibration == :sdo` then the following must also be specified:
 [5] J. Phys. Chem., 91, 41 (1987)
 [6] Applied Spectroscopy 23, 211 (1969)
 [7] Phys. Rev. A, 34, 3, 1944 (1986)
+[8] Can. J. Phys., 44, 4, 797 (1966)
+[9] G. V. MIKHAtLOV, SOVIET PHYSICS JETP, vol. 36, no. 9, (1959).
 """
 function raman_parameters(material)
     if material == :N2
@@ -667,11 +672,22 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 2,
               Δα = 6.7e-31, # [2]
-              τ2r = 2e-12, # [7] TODO pressure dependence
+              # B̢ρr has a moderate dependence on J, which we ignore for now, taking J=8
+              # [8] measured B̢ρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
+              # which is translated to Hz/amg via
+              # 80e-3*29979245800.0/(density(:N2, atm/bar)/amg)
+              # giving ~2.6e9 Hz/amagat.
+              # [7] gives ~3.3e9 Hz/amagat (measured at lower pressures), but they claim
+              # their results are more accurate (of course!)
+              B̢ρr = 3.3e9, # [7]
               dαdQ = 1.75e-20, # [6]
               Ωv = 2*π*2330.0*100.0*c, # [4]
               μ = 1.16e-26,
-              τ2v = 8.8e-12, # [5] TODO pressure dependence
+              # For τ2v, [9] suggests pressure dependence is extremely week up to 120 bar
+              # [9] gives ~ 1.8 cm^-1, whereas Fig. 1 in [5] suggests something similar.
+              # 1.8 cm^-1 = 0.054 THz
+              # This gives a τ2v = 1/πΔν ~ 6 ps
+              τ2v = 6e-12, # Fig. 1 in [5] suggests ~ 2 cm^-1;  pressure dependence is extremely week up to 120 bar [9]
               )
     elseif material == :H2
         rp = (kind = :molecular,
