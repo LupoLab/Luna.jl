@@ -38,7 +38,7 @@ end
 "Kerr response for real field"
 function Kerr_field(γ3)
     Kerr = let γ3 = γ3
-        function Kerr(out, E)
+        function Kerr(out, E, ρ)
             if size(E,2) == 1
                 KerrScalar(out, E, ε_0*γ3)
             else
@@ -53,7 +53,7 @@ function Kerr_field_nothg(γ3, n)
     E = Array{Float64}(undef, n)
     hilbert = Maths.plan_hilbert(E)
     Kerr = let γ3 = γ3, hilbert = hilbert
-        function Kerr(out, E)
+        function Kerr(out, E, ρ)
             out .= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
         end
     end
@@ -77,7 +77,7 @@ end
 "Kerr response for envelope"
 function Kerr_env(γ3)
     Kerr = let γ3 = γ3
-        function Kerr(out, E)
+        function Kerr(out, E, ρ)
             if size(E,2) == 1
                 KerrScalarEnv(out, E, ε_0*γ3)
             else
@@ -92,7 +92,7 @@ end
 function Kerr_env_thg(γ3, ω0, t)
     C = exp.(2im*ω0.*t)
     Kerr = let γ3 = γ3, C = C
-        function Kerr(out, E)
+        function Kerr(out, E, ρ)
             @. out = ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
@@ -169,7 +169,7 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
-function (Plas::PlasmaCumtrapz)(out, Et)
+function (Plas::PlasmaCumtrapz)(out, Et, ρ)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
             PlasmaScalar!(out, Plas, reshape(Et, size(Et, 1)))
@@ -185,7 +185,10 @@ end
 abstract type RamanPolar end
 
 "Raman polarisation response type for a carrier resolved field"
-struct RamanPolarField{Tω, Tt, Tv, FTt, HTt} <: RamanPolar
+struct RamanPolarField{TR, Tt, Thv, Tω, Tv, FTt, HTt} <: RamanPolar
+    r::TR # Raman response
+    h::Tt # doubled buffer to hold response + padding 
+    ht::Thv # buffer to hold time domain response
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
     Pω::Tω # buffer to hold the frequency domain polarisation
@@ -196,10 +199,14 @@ struct RamanPolarField{Tω, Tt, Tv, FTt, HTt} <: RamanPolar
     FT::FTt # Fourier transform plan
     HT::HTt # Hilbert transform
     thg::Bool # do we include third harmonic generation
+    dt::Float64 # time step for scaling
 end
 
 "Raman polarisation response type for an envelope"
-struct RamanPolarEnv{Tω, Tv, FTt} <: RamanPolar
+struct RamanPolarEnv{TR, Tt, Thv, Tω, Tv, FTt} <: RamanPolar
+    r::TR # Raman response
+    h::Tt # doubled buffer to hold response + padding 
+    ht::Thv # buffer to hold time domain response
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
     Pω::Tω # buffer to hold the frequency domain polarisation
@@ -208,81 +215,57 @@ struct RamanPolarEnv{Tω, Tv, FTt} <: RamanPolar
     P::Tω # buffer to hold the time domain polarisation
     Pout::Tω # buffer to hold the output portion of the time domain polarisation
     FT::FTt # Fourier transform plan
-end
-
-"""
-    gethω!(h, t, ht, FT)
-
-Get `hω` for time grid `t` using response function `ht`
-and Fourier transform `FT`
-"""
-function gethω!(h, t, ht, FT)
-    # possible improvements to this code:
-    # TODO: use a smaller factor than 2 to expand the convolution grid (for higher performance)
-    #       to do this needs careful checking
-    # TODO: use a temporal window function to smooth frequency response for response functions
-    #       which do not decay (common in gases, e.g. H2, which never decays on our usual grids)
-    dt = t[2] - t[1]
-    fill!(h, 0.0)
-    # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
-    # the ifft already scales by 1/n = dt*df, so we need an additional dt
-    scale = dt
-    # fill only up to the first half of h
-    # i.e. only the part corresponding to the original time grid
-    # note that the response function time 0 is put into the first element of the response array
-    # this ensures that causality is maintained, and no artificial delay between the field and
-    # the start of the response function occurs, at each convolution point.  
-    for i = 1:length(t)
-        h[i] = ht((i - 1) * dt)*scale
-    end
-    hω = FT * h
-    Eω2 = similar(hω)
-    Pω = similar(hω)
-    hω, Eω2, Pω
+    dt::Float64 # time step for scaling
 end
 
 """
     RamanPolarField(t, ht; thg=true)
 
 Construct Raman polarisation response for a field on time grid `t`
-using response function `ht`. If `thg=false` then exclude the third
+using response function `r`. If `thg=false` then exclude the third
 harmonic generation component of the response.
 """
-function RamanPolarField(t, ht; thg=true)
+function RamanPolarField(t, r; thg=true)
     h = zeros(length(t)*2) # note double grid size, see explanation below
+    ht = view(h, 1:length(t))
     Utils.loadFFTwisdom()
     FT = FFTW.plan_rfft(h, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
     Utils.saveFFTwisdom()
-    hω, Eω2, Pω = gethω!(h, t, ht, FT)
+    hω = FT * h
+    Eω2 = similar(hω)
+    Pω = similar(hω)
     E2 = similar(h)
     E2v = view(E2, 1:length(t))
     P = similar(h)
     Pout = similar(t)
     HT = Maths.plan_hilbert(Pout)
     fill!(E2, 0.0)
-    RamanPolarField(hω, Eω2, Pω, E2, E2v, P, Pout, FT, HT, thg)
+    RamanPolarField(r, h, ht, hω, Eω2, Pω, E2, E2v, P, Pout, FT, HT, thg, t[2] - t[1])
 end
 
 """
     RamanPolarEnv(t, ht)
 
 Construct Raman polarisation response for an envelope on time grid `t`
-using response function `ht`.
+using response function `r`.
 """
-function RamanPolarEnv(t, ht)
+function RamanPolarEnv(t, r)
     h = zeros(length(t)*2) # note double grid size, see explanation below
+    ht = view(h, 1:length(t))
     Utils.loadFFTwisdom()
     FT = FFTW.plan_fft(h, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
     Utils.saveFFTwisdom()
-    hω, Eω2, Pω = gethω!(h, t, ht, FT)
+    hω = FT * h
+    Eω2 = similar(hω)
+    Pω = similar(hω)
     E2 = similar(hω)
     P = similar(hω)
     Pout = Array{ComplexF64,}(undef,size(t))
     E2v = view(E2, 1:length(t))
     fill!(E2, 0.0)
-    RamanPolarEnv(hω, Eω2, Pω, E2, E2v, P, Pout, FT)
+    RamanPolarEnv(r, h, ht, hω, Eω2, Pω, E2, E2v, P, Pout, FT, t[2] - t[1])
 end
 
 "Square the field or envelope"
@@ -301,7 +284,11 @@ function sqr!(R::RamanPolarEnv, E)
 end
 
 "Calculate Raman polarisation for field/envelope Et"
-function (R::RamanPolar)(out, Et)
+function (R::RamanPolar)(out, Et, ρ)
+    # possible improvements to this code:
+    # TODO: use a temporal window function to smooth frequency response for response functions
+    #       which do not decay (common in gases, e.g. H2, which never decays on our usual grids)
+
     # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
@@ -318,6 +305,19 @@ function (R::RamanPolar)(out, Et)
     # square the field or envelope in first half
     # corresponding to the field/envelope grid size
     sqr!(R, E)
+
+    # update frequency domain response function `hω`.
+    # we fill only up to the first half of h (using the view ht)
+    # i.e. only the part corresponding to the original time grid
+    # note that the response function time 0 is put into the first element of the response array
+    # this ensures that causality is maintained, and no artificial delay between the field and
+    # the start of the response function occurs, at each convolution point.  
+    fill!(R.ht, 0.0)
+    R(R.ht, ρ)
+    # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
+    # the ifft already scales by 1/n = dt*df, so we need an additional dt
+    R.ht .*= R.dt
+    mul!(R.hω, R.FT, R.h)
 
     # convolution by multiplication in frequency domain
     # The double grid gives us accurate full convolution between the full field grid
