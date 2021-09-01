@@ -642,7 +642,7 @@ If `rotation == :nonrigid` then the following must also be specified:
 - `D::Real=0.0`: centrifugal constant [1/m]
 Along with one of:
 - `τ2r::Real`: coherence time [s]
-- `B̢ρr::Real` : density dependent broadening coefficient [Hz/amagat]
+- `Bρr::Real` : density dependent broadening coefficient [Hz/amagat]
 If both the above are specified, then `Bρ` takes precedence.
 
 If `vibration == :sdo` then the following must also be specified:
@@ -672,8 +672,8 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 2,
               Δα = 6.7e-31, # [2]
-              # B̢ρr has a moderate dependence on J, which we ignore for now, taking J=8
-              # [8] measured B̢ρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
+              # Bρr has a moderate dependence on J, which we ignore for now, taking J=8
+              # [8] measured Bρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
               # which is translated to Hz/amg via
               # 80e-3*29979245800.0/(density(:N2, atm/bar)/amg)
               # giving ~2.6e9 Hz/amagat.
