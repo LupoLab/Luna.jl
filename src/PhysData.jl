@@ -697,7 +697,7 @@ function raman_parameters(material)
               # [9] gives ~ 1.8 cm^-1, whereas Fig. 1 in [5] suggests something similar.
               # 1.8 cm^-1 = 0.054 THz
               # This gives a τ2v = 1/πΔν ~ 6 ps
-              τ2v = 6e-12, # Fig. 1 in [5] suggests ~ 2 cm^-1;  pressure dependence is extremely week up to 120 bar [9]
+              τ2v = 6e-12, # Fig. 1 in [5] suggests ~ 2 cm^-1;  pressure dependence is extremely weak up to 120 bar [9]
               )
     elseif material == :H2
         rp = (kind = :molecular,
