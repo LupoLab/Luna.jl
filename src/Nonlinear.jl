@@ -318,7 +318,7 @@ function (R::RamanPolar)(out, Et, ρ)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
     R.ht .*= R.dt
     #mul!(R.hω, R.FT, R.h)
-    R.hω .= R.FT * R.h
+    R.hω .= R.FT * R.h # inplace version needs complex R.h ?
 
     # convolution by multiplication in frequency domain
     # The double grid gives us accurate full convolution between the full field grid

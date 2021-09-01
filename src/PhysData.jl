@@ -679,7 +679,7 @@ function raman_parameters(material)
               # giving ~2.6e9 Hz/amagat.
               # [7] gives ~3.3e9 Hz/amagat (measured at lower pressures), but they claim
               # their results are more accurate (of course!)
-              B̢ρr = 3.3e9, # [7]
+              Bρr = 3.3e9, # [7]
               dαdQ = 1.75e-20, # [6]
               Ωv = 2*π*2330.0*100.0*c, # [4]
               μ = 1.16e-26,

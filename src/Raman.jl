@@ -159,8 +159,8 @@ function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
               end
           else
               !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
-              let Bρ=B̢ρ
-                  ρ -> pi/(B̢ρ*ρ/amg)
+              let Bρ=Bρ
+                  ρ -> pi/(Bρ*ρ/amg)
               end
           end
     Rs = [RamanRespSingleDampedOscillator((K*(J[i] + 1)*(J[i] + 2)/(2*J[i] + 3)
