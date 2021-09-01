@@ -13,9 +13,7 @@ Broadcast.broadcastable(R::AbstractRamanResponse) = Ref(R)
 Get the pre (without damping) response function at time `t`.
 
 """
-function hrpre(R::AbstractRamanResponse, t)
-    error("abstract method called")
-end
+function hrpre end
 
 """
     hrdamp(R::AbstractRamanResponse, ρ)
@@ -23,9 +21,7 @@ end
 Get the damping constant `τ2` for density `̢ρ`.
 
 """
-function hrdamp(R::AbstractRamanResponse, ρ)
-    error("abstract method called")
-end
+function hrdamp end
 
 """
     (R::AbstractRamanResponse)(t, ρ)
