@@ -180,12 +180,13 @@ struct CombinedRamanResponse
 end
 
 function CombinedRamanResponse(t, Rs)
-    hpres = [hrpre.(R, t) for R in Rs]
     tt = collect(0:(length(t) - 1)) .* (t[2] - t[1])
+    hpres = [hrpre.(R, tt) for R in Rs]
     CombinedRamanResponse(Rs, tt, hpres)
 end
 
 function (R::CombinedRamanResponse)(ht, ρ)
+    fill!(ht, 0.0)
     for i=1:length(R.Rs)
         ht .+= R.hpres[i] .* exp.(-R.t ./ hrdamp.(R.Rs[i], ρ))
     end

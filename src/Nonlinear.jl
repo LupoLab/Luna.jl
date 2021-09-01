@@ -312,7 +312,6 @@ function (R::RamanPolar)(out, Et, ρ)
     # note that the response function time 0 is put into the first element of the response array
     # this ensures that causality is maintained, and no artificial delay between the field and
     # the start of the response function occurs, at each convolution point.  
-    fill!(R.ht, 0.0)
     R.r(R.ht, ρ)
     # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
