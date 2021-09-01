@@ -2,9 +2,6 @@ import Test: @test, @testset, @test_throws
 import Luna: Antiresonant, Capillary, Modes
 import Luna.PhysData: wlfreq
 
-import PyPlot: plt, pygui
-pygui(true)
-
 @testset "Antiresonant PCF" begin
     a = 20e-6
     m = Capillary.MarcatilliMode(a, :Air, 0, (ω; z) -> 1.45)
