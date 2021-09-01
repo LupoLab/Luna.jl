@@ -643,13 +643,20 @@ If `rotation == :nonrigid` then the following must also be specified:
 Along with one of:
 - `τ2r::Real`: coherence time [s]
 - `Bρr::Real` : density dependent broadening coefficient [Hz/amagat]
-If both the above are specified, then `Bρ` takes precedence.
+If both `τ2r` and `Bρr` are specified, then `Bρr` takes precedence.
+If `Bρr` is specified then we also need:
+- `Aρr::Real` : self diffusion coefficient [Hz amagat]
 
 If `vibration == :sdo` then the following must also be specified:
 - `Ωv::Real`: vibrational frequency [rad/s]
 - `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
 - `μ::Real`: reduced molecular mass [kg]
+Along with one of:
 - `τ2v::Real`: coherence time [s]
+- `Bρv::Real` : density dependent broadening coefficient [Hz/amagat]
+If both `τ2v` and `Bρv` are specified, then `Bρv` takes precedence.
+If `Bρv` is specified then we also need:
+- `Aρv::Real` : self diffusion coefficient [Hz amagat]
 
 # References
 [1] Phys. Rev. A, 94, 023816 (2016)
@@ -661,6 +668,8 @@ If `vibration == :sdo` then the following must also be specified:
 [7] Phys. Rev. A, 34, 3, 1944 (1986)
 [8] Can. J. Phys., 44, 4, 797 (1966)
 [9] G. V. MIKHAtLOV, SOVIET PHYSICS JETP, vol. 36, no. 9, (1959).
+[10] Phys. Rev. A, 33, 5, 3113 (1986)
+
 """
 function raman_parameters(material)
     if material == :N2
@@ -680,6 +689,7 @@ function raman_parameters(material)
               # [7] gives ~3.3e9 Hz/amagat (measured at lower pressures), but they claim
               # their results are more accurate (of course!)
               Bρr = 3.3e9, # [7]
+              Aρr = 0.0, # [7]
               dαdQ = 1.75e-20, # [6]
               Ωv = 2*π*2330.0*100.0*c, # [4]
               μ = 1.16e-26,
@@ -698,11 +708,15 @@ function raman_parameters(material)
               qJodd = 3,
               qJeven = 1,
               Δα = 3e-31, # [3]
+              Bρr = 77e6, # [7]
+              Aρr = 1.87e6, # [7]
               τ2r = 280e-12, # at 10 bar, TODO pressure dependence
               dαdQ = 1.3e-20, # [3]
               Ωv = 2*π*124.5669e12,
               μ = 8.369e-28,
               τ2v = 578e-12, # at 10 bar, TODO pressure dependence
+              Bρv = 76.6e6, # [10]
+              Aρv = 257e6, # [10]
               )
     elseif material == :D2
         rp = (kind = :molecular,

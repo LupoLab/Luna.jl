@@ -69,7 +69,7 @@ hrdamp(R::RamanRespSingleDampedOscillator, ρ) = R.τ2ρ(ρ)
 
 
 """
-    RamanRespVibrational(Ωv, dαdQ, μ, τ2)
+    RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
 
 Construct a molecular vibrational Raman model (single damped oscillator).
 
@@ -77,7 +77,12 @@ Construct a molecular vibrational Raman model (single damped oscillator).
 - `Ωv::Real`: vibrational frequency [rad/s]
 - `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
 - `μ::Real`: reduced molecular mass [kg]
-- `τ2::Real`: coherence time [s]
+- `τ2::Real=nothing`: coherence time [s]
+- `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat]
+- `Aρ::Real=nothing` : self diffusion coefficient [Hz amagat]
+
+Only one of `τ2` or `Bρ` should be specified.
+If `Bρ` is specified then `Aρ` must be too.
 
 # References
 - Full model description: To be published, Yingying paper.
@@ -85,13 +90,22 @@ Construct a molecular vibrational Raman model (single damped oscillator).
   But note that that paper uses weird units, and we converted it to SI for
   the above reference. 
 """
-function RamanRespVibrational(Ωv, dαdQ, μ, τ2)
+function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
     # TODO we assume pressure independent linewidth which is incorrect
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
-    τ2̢ρ = let τ2=τ2
-        ρ -> τ2
+    τ2ρ = if isnothing(Bρ)
+        isnothing(τ2) && error("one of `τ2` or `Bρ` must be specified")
+        let τ2=τ2
+            ρ -> τ2
+        end
+    else
+        !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
+        isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
+        let Bρ=Bρ, Aρ=Aρ
+            ρ -> pi/(Aρ/(ρ/amg) + Bρ*ρ/amg)
+        end
     end
-    RamanRespSingleDampedOscillator(K, Ωv, τ2̢ρ)
+    RamanRespSingleDampedOscillator(K, Ωv, τ2ρ)
 end
 
 
@@ -104,7 +118,7 @@ end
 """
     RamanRespRotationalNonRigid(B, Δα, τ2, qJodd, qJeven;
                                 D=0.0, minJ=0, maxJ=50, temp=roomtemp,
-                                τ2=nothing, Bρ=nothing)
+                                τ2=nothing, Bρ=nothing, Aρ=nothing)
 
 Construct a rotational nonrigid rotor Raman model.
 
@@ -118,9 +132,11 @@ Construct a rotational nonrigid rotor Raman model.
 - `maxJ::Integer=50`: J value to sum until
 - `temp::Real=roomtemp`: temperature
 - `τ2::Real=nothing`: coherence time [s]
-- `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat])]
+- `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat]
+- `Aρ::Real=nothing` : self diffusion coefficient [Hz amagat]
 
 Only one of `τ2` or `Bρ` should be specified.
+If `Bρ` is specified then `Aρ` must be too.
 
 # References
 - Full model description: To be published, Yingying paper.
@@ -129,7 +145,7 @@ Only one of `τ2` or `Bρ` should be specified.
   the above reference. 
 """
 function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
-    D=0.0, minJ=0, maxJ=50, temp=roomtemp, τ2=nothing, Bρ=nothing)
+    D=0.0, minJ=0, maxJ=50, temp=roomtemp, τ2=nothing, Bρ=nothing, Aρ=nothing)
     J = minJ:maxJ # range of J values to start with
     EJ = @. 2π*ħ*c*(B*J*(J + 1) - D*(J*(J + 1))^2) # energy of each J level
     # limit J range to those which have monotonic increasing energy
@@ -159,8 +175,9 @@ function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
               end
           else
               !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
-              let Bρ=Bρ
-                  ρ -> pi/(Bρ*ρ/amg)
+              isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
+              let Bρ=Bρ, Aρ=Aρ
+                  ρ -> pi/(Aρ/(ρ/amg) + Bρ*ρ/amg)
               end
           end
     Rs = [RamanRespSingleDampedOscillator((K*(J[i] + 1)*(J[i] + 2)/(2*J[i] + 3)
@@ -212,7 +229,7 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
             throw(DomainError(rp.rotation, "Unknown Rotational Raman model $(rp.rotation)"))
         end
         if haskey(rp, :Bρr)
-            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, Bρ=rp.Bρr,
+            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, Bρ=rp.Bρr, Aρ=rp.Aρr,
                                             D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
         else
             hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, τ2=rp.τ2r,
@@ -224,7 +241,11 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end
-        hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
+        if haskey(rp, :Bρv)
+            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, Bρ=rp.Bρv, Aρ=rp.Aρv)
+        else
+            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, τ2=rp.τ2v)
+        end
         push!(Rs, hv)
     end 
     CombinedRamanResponse(t, Rs) 
