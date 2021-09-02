@@ -319,13 +319,13 @@ function (R::RamanPolar)(out, Et, ρ)
     # this is safe, until we come up with one.
     # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
-    mul!(R.Eω2, R.FT, R.E2)
+    R.Eω2 .= R.FT * R.E2
     @. R.Pω = R.hω * R.Eω2 * R.dt
-    ldiv!(R.P, R.FT, R.Pω)
+    R.P .= R.FT \ R.Pω
 
     # calculate full polarisation, extracting only the valid
     # grid region
-    for i = eachindex(E)
+    for i = 1:length(E)
         R.Pout[i] = E[i]*R.P[(n ÷ 2) - 1 + i]
     end
     
