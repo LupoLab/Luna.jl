@@ -3,7 +3,7 @@ import Luna
 import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths, Utils
 import FFTW
-import LinearAlgebra: mul!
+import LinearAlgebra: mul!, ldiv!
 
 """
     scaled_response(resp, scale)
@@ -309,11 +309,7 @@ function (R::RamanPolar)(out, Et, ρ)
     # this ensures that causality is maintained, and no artificial delay between the field and
     # the start of the response function occurs, at each convolution point.  
     R.r(R.ht, ρ)
-    # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
-    # the ifft already scales by 1/n = dt*df, so we need an additional dt
-    R.ht .*= R.dt
-    #mul!(R.hω, R.FT, R.h)
-    R.hω .= R.FT * R.h # inplace version needs complex R.h ?
+    R.hω .= R.FT * R.h
 
     # convolution by multiplication in frequency domain
     # The double grid gives us accurate full convolution between the full field grid
@@ -321,9 +317,11 @@ function (R::RamanPolar)(out, Et, ρ)
     # in glass. But for gases with very long decay times it prevents artefacts due to
     # truncation of the response function. There is likely a more efficient way. But
     # this is safe, until we come up with one.
+    # we scale to correct for missing dt*dt*df from IFFT(FFT*FFT)
+    # the ifft already scales by 1/n = dt*df, so we need an additional dt
     mul!(R.Eω2, R.FT, R.E2)
-    @. R.Pω = R.hω * R.Eω2
-    mul!(R.P, inv(R.FT), R.Pω)
+    @. R.Pω = R.hω * R.Eω2 * R.dt
+    ldiv!(R.P, R.FT, R.Pω)
 
     # calculate full polarisation, extracting only the valid
     # grid region
