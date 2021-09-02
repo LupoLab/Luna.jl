@@ -1,6 +1,7 @@
 module Raman
 import Luna.PhysData: c, ε_0, ħ, k_B, roomtemp, amg
 import Luna.PhysData: raman_parameters
+import Luna.Maths: planck_taper
 
 abstract type AbstractRamanResponse end
 
@@ -188,13 +189,15 @@ hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
 struct CombinedRamanResponse
     Rs::Vector{Any} # list of Raman responses
     t::Vector{Float64} # time grid
+    w::Vector{Float64} # filter window
     hpres::Vector{Vector{Float64}} # pre Raman responses for each R in Rs
 end
 
 function CombinedRamanResponse(t, Rs)
     tt = collect(0:(length(t) - 1)) .* (t[2] - t[1])
     hpres = [hrpre.(R, tt) for R in Rs]
-    CombinedRamanResponse(Rs, tt, hpres)
+    w = planck_taper(tt, -tt[end], -tt[end]*0.7, tt[end]*0.7, tt[end])
+    CombinedRamanResponse(Rs, tt, w, hpres)
 end
 
 function (R::CombinedRamanResponse)(ht, ρ)
@@ -202,6 +205,7 @@ function (R::CombinedRamanResponse)(ht, ρ)
     for i=1:length(R.Rs)
         ht .+= R.hpres[i] .* exp.(-R.t ./ hrdamp.(R.Rs[i], ρ))
     end
+    ht .*= R.w
 end
 
 

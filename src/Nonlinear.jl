@@ -285,10 +285,6 @@ end
 
 "Calculate Raman polarisation for field/envelope Et"
 function (R::RamanPolar)(out, Et, ρ)
-    # possible improvements to this code:
-    # TODO: use a temporal window function to smooth frequency response for response functions
-    #       which do not decay (common in gases, e.g. H2, which never decays on our usual grids)
-
     # get the field as a 1D Array
     n = size(Et, 1)
     if ndims(Et) > 1
