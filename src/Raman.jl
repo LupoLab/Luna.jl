@@ -51,10 +51,10 @@ to unity.
 """
 function RamanRespNormedSingleDampedOscillator(K, Ω, τ2)
     K *= (Ω^2 + 1/τ2^2)/Ω # normalise SDO model to unity integral, scaled by prefactor K.
-    τ2̢ρ = let τ2=τ2
+    τ2ρ = let τ2=τ2
         ρ -> τ2
     end
-    RamanRespSingleDampedOscillator(K, Ω, τ2̢ρ)
+    RamanRespSingleDampedOscillator(K, Ω, τ2ρ)
 end
 
 function hrpre(R::RamanRespSingleDampedOscillator, t)
@@ -87,7 +87,6 @@ If `Bρ` is specified then `Aρ` must be too.
   the above reference. 
 """
 function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
-    # TODO we assume pressure independent linewidth which is incorrect
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
     τ2ρ = if isnothing(Bρ)
         isnothing(τ2) && error("one of `τ2` or `Bρ` must be specified")

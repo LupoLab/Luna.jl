@@ -9,7 +9,7 @@ flength = 200e-2
 λ0 = 800e-9
 energy = 1e-6
 
-grid = Grid.EnvGrid(flength, λ0, (180e-9, 3000e-9), 4e-12)
+grid = Grid.EnvGrid(flength, λ0, (160e-9, 3000e-9), 40e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff = let m=m
