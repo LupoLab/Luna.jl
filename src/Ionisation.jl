@@ -152,6 +152,15 @@ function keldysh(material, λ, E)
     ω0_au*sqrt(2Ip_au)/E_au
 end
 
+"""
+    ionfrac(rate, E, δt)
+
+Given an ionisation rate function `rate` and an electric field array `E` sampled with time
+spacing `δt`, calculate the ionisation fraction as a function of time on the same time axis.
+
+The function `rate` should have the signature `rate!(out, E)` and place its results into
+`out`, like the functions returned by e.g. `ionrate_fun!_ADK` or `ionrate_fun!_PPTcached`.
+"""
 function ionfrac(rate, E, δt)
     r = similar(E)
     frac = similar(E)
