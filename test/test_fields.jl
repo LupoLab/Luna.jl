@@ -15,26 +15,25 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 320e-9
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 800e-9
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 320e-9
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
 
@@ -42,26 +41,25 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 320e-9
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 800e-9
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
     λ0 = 320e-9
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     @test isapprox(PhysData.wlfreq(grid.ω[argmax(abs2.(Eω))]), λ0, rtol=3e-4)
 end
@@ -71,19 +69,18 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     @test isapprox(energy_t(Et), energy, rtol=1e-14)
     
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     @test isapprox(energy_t(Et), energy, rtol=1e-14)
@@ -92,19 +89,18 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     @test isapprox(energy_t(Et), energy, rtol=1e-14)
 
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     @test isapprox(energy_t(Et), energy, rtol=1e-14)
@@ -115,20 +111,19 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(Maths.fwhm(grid.t, It), τfwhm, rtol=1e-5)
     
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
@@ -138,20 +133,19 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕ = [0.0, 0.0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
     @test isapprox(Maths.fwhm(grid.t, It), τfwhm, rtol=2e-5)
 
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
@@ -163,20 +157,22 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
+    ϕ = [0.0, τ0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
     
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
@@ -186,20 +182,22 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
+    ϕ = [0.0, τ0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
 
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
@@ -212,19 +210,22 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
+    τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
+    ϕ = [0.0, τ0]
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
     
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
@@ -234,19 +235,22 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
+    τ0 = 5e-15
+    # elements of ϕ are [CEP, group delay, GDD, TOD, ...]
+    # so [0.0, τ0] is a delay by τ0
+    ϕ = [0.0, τ0]
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
 
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
@@ -258,47 +262,45 @@ end
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕCEO = 0.0
     grid = Grid.RealGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
-    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕCEO, rtol=1e-15, atol=1e-15)
     
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
-    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕCEO, rtol=1e-15, atol=1e-15)
 
     # Envelope
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
-    ϕ = 0.0
-    τ0 = 0.0
+    ϕCEO = 0.0
     grid = Grid.EnvGrid(1.0, λ0, (160e-9, 3000e-9), 10e-12)
     energy_t = Fields.energyfuncs(grid)[1]
     x = Array{ComplexF64}(undef, length(grid.t))
     FT = FFTW.plan_fft(x, 1)
 
-    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕCEO, rtol=1e-15, atol=1e-15)
 
-    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+    input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
     Eω = input(grid, FT)
     Et = FT \ Eω
     It = abs2.(Et)
-    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-15, atol=1e-15)
+    @test isapprox(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)), ϕCEO, rtol=1e-15, atol=1e-15)
 
     # non zero
 
@@ -315,19 +317,19 @@ end
     # Make CEO exact multiple of one grid point to avoid issues with argmax() in getceo()
     δt = grid.t[2] - grid.t[1]
     for i = 1:10
-        ϕ = i*δt*PhysData.wlfreq(λ0)
+        ϕCEO = i*δt*PhysData.wlfreq(λ0)
 
-        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
         Eω = input(grid, FT)
         Et = FT \ Eω
         It = abs2.(Maths.hilbert(Et))
-        @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-10)
+        @test isapprox(abs(getceo(grid.t, Et, It, PhysData.wlfreq(λ0))), ϕCEO, rtol=1e-10)
         
-        input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
         Eω = input(grid, FT)
         Et = FT \ Eω
         It = abs2.(Maths.hilbert(Et))
-        @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕ, rtol=1e-10)
+        @test isapprox(abs(getceo(grid.t, Et, It, PhysData.wlfreq(λ0))), ϕCEO, rtol=1e-10)
     end
 
     # Envelope
@@ -344,24 +346,24 @@ end
     δt = grid.t[2] - grid.t[1]
 
     for i = 1:10
-        ϕ = i*δt*PhysData.wlfreq(λ0)
+        ϕCEO = i*δt*PhysData.wlfreq(λ0)
 
-        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
         Eω = input(grid, FT)
         Et = FT \ Eω
         It = abs2.(Et)
         @test isapprox(
-            getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)),
-            ϕ,
+            abs(getceo(grid.t, real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0))),
+            ϕCEO,
             rtol=1e-10)
 
-        input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ, τ0=τ0)
+        input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
         Eω = input(grid, FT)
         Et = FT \ Eω
         It = abs2.(Et)
         @test isapprox(
-            getceo(grid.t,real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0)),
-            ϕ,
+            abs(getceo(grid.t,real(Et.*exp.(im .* grid.ω0 .* grid.t)), It, PhysData.wlfreq(λ0))),
+            ϕCEO,
             rtol=1e-10)
     end
 end
@@ -534,3 +536,31 @@ Etcomp = FT \ Eωcomp
 @test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
 end
 
+@testset "Gaussian beam initialisation" begin
+    a = 16e-6
+    gas = :Kr
+    pres = 17.2
+    τfwhm = 230e-15
+    λ0 = 1030e-9
+    energy = 5.2e-6
+    modes = (
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=3, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=3, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TE, ϕ=0.0, loss=false),
+        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0, loss=false)
+    )
+    inputs = Fields.gauss_beam_init(modes, 2π/λ0, a*0.64, Fields.GaussField, λ0=λ0, τfwhm=τfwhm, energy=energy)
+    inputs = (inputs..., ((mode=i, fields=(Fields.ShotNoise(),)) for i=1:length(modes))...)
+    @test inputs[1].fields[1].energy/energy ≈ 0.9807131210817726
+    @test inputs[2].fields[1].energy/energy ≈ 0.006182621678046407
+    @test inputs[3].fields[1].energy/energy ≈ 0.0013567813790567626
+    @test inputs[4].fields[1].energy/energy ≈ 0.0008447236094573648
+    @test inputs[5].fields[1].energy/energy < 1e-20
+    @test inputs[6].fields[1].energy/energy < 2e-20
+    @test inputs[7].fields[1].energy/energy < 1e-20
+    @test inputs[8].fields[1].energy/energy < 1e-20
+end

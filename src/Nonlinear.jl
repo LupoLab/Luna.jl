@@ -6,25 +6,22 @@ import FFTW
 import LinearAlgebra: mul!
 
 """
-    scaled_response(resp, scale, shape)
+    scaled_response(resp, scale)
 
-Scale the response function `resp` by the factor `scale`. `shape` should be `size(Eto)` where
-`Eto` is the oversampled field in time.
+Scale the response function `resp` by the factor `scale`.
 """
-function scaled_response(resp, scale, shape)
-    buffer = Array{ComplexF64}(undef, shape)
-    let buffer=buffer, resp=resp
+function scaled_response(resp, scale)
+    let resp=resp
         function resp!(out, E)
-            fill!(buffer, 0)
-            resp(buffer, E)
-            @. out += scale*buffer
+            resp(out, E)
+            out .*= scale
         end
     end
 end
 
 
 function KerrScalar(out, E, fac)
-    @. out += fac*E^3
+    @. out = fac*E^3
 end
 
 function KerrVector(out, E, fac)
@@ -33,8 +30,8 @@ function KerrVector(out, E, fac)
         Ey = E[i,2]
         Ex2 = Ex^2
         Ey2 = Ey^2
-        out[i,1] += fac*(Ex2 + Ey2)*Ex
-        out[i,2] += fac*(Ex2 + Ey2)*Ey
+        out[i,1] = fac*(Ex2 + Ey2)*Ex
+        out[i,2] = fac*(Ex2 + Ey2)*Ey
     end
 end
 
@@ -57,13 +54,13 @@ function Kerr_field_nothg(γ3, n)
     hilbert = Maths.plan_hilbert(E)
     Kerr = let γ3 = γ3, hilbert = hilbert
         function Kerr(out, E)
-            out .+= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
+            out .= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
         end
     end
 end
 
 function KerrScalarEnv(out, E, fac)
-    @. out += 3/4*fac*abs2(E)*E
+    @. out = 3/4*fac*abs2(E)*E
 end
 
 function KerrVectorEnv(out, E, fac)
@@ -72,8 +69,8 @@ function KerrVectorEnv(out, E, fac)
         Ey = E[i,2]
         Ex2 = abs2(Ex)
         Ey2 = abs2(Ey)
-        out[i,1] += 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
-        out[i,2] += 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
+        out[i,1] = 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
+        out[i,2] = 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
     end
 end
 
@@ -96,7 +93,7 @@ function Kerr_env_thg(γ3, ω0, t)
     C = exp.(2im*ω0.*t)
     Kerr = let γ3 = γ3, C = C
         function Kerr(out, E)
-            @. out += ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
+            @. out = ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
 end
@@ -110,7 +107,6 @@ struct PlasmaCumtrapz{R, EType, tType}
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
     J::EType # buffer to hold the plasma current
-    P::EType # buffer to hold the plasma polarisation
     δt::Float64 # the time step
 end
 
@@ -126,8 +122,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     fraction = similar(t)
     phase = similar(E)
     J = similar(E)
-    P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, t[2]-t[1])
 end
 
 "The plasma response for a scalar electric field"
@@ -142,7 +137,7 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
-    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
+    Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
 """
@@ -166,31 +161,23 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
     for ii in eachindex(Em)
         if abs(Em[ii]) > 0
             pre = Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/Em[ii]^2
-            Plas.J[ii,1] +=  pre*Ex[ii]
-            Plas.J[ii,2] +=  pre*Ey[ii]
+            Plas.J[ii,1] += pre*Ex[ii]
+            Plas.J[ii,2] += pre*Ey[ii]
         end
     end
-    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-    @. out += Plas.P
+    Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
 function (Plas::PlasmaCumtrapz)(out, Et)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
-            E = reshape(Et, size(Et,1))
+            PlasmaScalar!(out, Plas, reshape(Et, size(Et, 1)))
         else
             PlasmaVector!(out, Plas, Et) # vector case
-            return
         end
     else
-        E = Et # straight scalar case
-    end
-    PlasmaScalar!(out, Plas, E)
-    if ndims(Et) > 1
-        out .+= reshape(Plas.P, size(Et))
-    else
-        @. out += Plas.P
+        PlasmaScalar!(out, Plas, Et)
     end
 end
 
@@ -240,11 +227,13 @@ function gethω!(h, t, ht, FT)
     # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
     scale = dt
-    # starting from positive t, fill only up to the first half of h
+    # fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
-    start = findfirst(t .>= 0.0)
-    for i = start:length(t)
-        h[i] = ht(t[i])*scale
+    # note that the response function time 0 is put into the first element of the response array
+    # this ensures that causality is maintained, and no artificial delay between the field and
+    # the start of the response function occurs, at each convolution point.  
+    for i = 1:length(t)
+        h[i] = ht((i - 1) * dt)*scale
     end
     hω = FT * h
     Eω2 = similar(hω)
@@ -331,8 +320,11 @@ function (R::RamanPolar)(out, Et)
     sqr!(R, E)
 
     # convolution by multiplication in frequency domain
-    # the double grid gives us accurate convolution between the
-    # full field grid and full response function
+    # The double grid gives us accurate full convolution between the full field grid
+    # and full response function. It is unnecessary for highly damped responses, like
+    # in glass. But for gases with very long decay times it prevents artefacts due to
+    # truncation of the response function. There is likely a more efficient way. But
+    # this is safe, until we come up with one.
     mul!(R.Eω2, R.FT, R.E2)
     @. R.Pω = R.hω * R.Eω2
     mul!(R.P, inv(R.FT), R.Pω)
@@ -343,11 +335,11 @@ function (R::RamanPolar)(out, Et)
         R.Pout[i] = E[i]*R.P[(n ÷ 2) - 1 + i]
     end
     
-    # add to output in dimensions requested
+    # copy to output in dimensions requested
     if ndims(Et) > 1
-        out .+= reshape(R.Pout, size(Et))
+        out .= reshape(R.Pout, size(Et))
     else
-        @. out += R.Pout
+        out .= R.Pout
     end
 end
 
