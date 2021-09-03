@@ -227,11 +227,13 @@ function gethω!(h, t, ht, FT)
     # scale factor to correct for missing dt*dt*df from IFFT(FFT*FFT)
     # the ifft already scales by 1/n = dt*df, so we need an additional dt
     scale = dt
-    # starting from positive t, fill only up to the first half of h
+    # fill only up to the first half of h
     # i.e. only the part corresponding to the original time grid
-    start = findfirst(t .>= 0.0)
-    for i = start:length(t)
-        h[i] = ht(t[i])*scale
+    # note that the response function time 0 is put into the first element of the response array
+    # this ensures that causality is maintained, and no artificial delay between the field and
+    # the start of the response function occurs, at each convolution point.  
+    for i = 1:length(t)
+        h[i] = ht((i - 1) * dt)*scale
     end
     hω = FT * h
     Eω2 = similar(hω)
@@ -318,8 +320,11 @@ function (R::RamanPolar)(out, Et)
     sqr!(R, E)
 
     # convolution by multiplication in frequency domain
-    # the double grid gives us accurate convolution between the
-    # full field grid and full response function
+    # The double grid gives us accurate full convolution between the full field grid
+    # and full response function. It is unnecessary for highly damped responses, like
+    # in glass. But for gases with very long decay times it prevents artefacts due to
+    # truncation of the response function. There is likely a more efficient way. But
+    # this is safe, until we come up with one.
     mul!(R.Eω2, R.FT, R.E2)
     @. R.Pω = R.hω * R.Eω2
     mul!(R.P, inv(R.FT), R.Pω)

@@ -132,9 +132,20 @@ end
     include(joinpath(testdir, "test_vectorplasma.jl"))
 end
 
+@testset "Statistics" begin
+    @info("================= test_stats.jl")
+    include(joinpath(testdir, "test_stats.jl"))
+end
+
 @testset "Gas mixtures" begin
     @info("================= test_mixtures.jl")
     include(joinpath(testdir, "test_mixtures.jl"))
 end
+
+@testset "Interface" begin
+    @info("================= test_interface.jl")
+    include(joinpath(testdir, "test_interface.jl"))
+end
+
 
 end
