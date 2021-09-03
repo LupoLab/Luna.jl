@@ -326,7 +326,7 @@ function (R::RamanPolar)(out, Et, ρ)
     # calculate full polarisation, extracting only the valid
     # grid region
     for i = 1:length(E)
-        R.Pout[i] = E[i]*R.P[(n ÷ 2) - 1 + i]
+        R.Pout[i] = -E[i]*R.P[(n ÷ 2) - 1 + i]
     end
     
     # copy to output in dimensions requested
