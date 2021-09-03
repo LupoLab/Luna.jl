@@ -7,13 +7,13 @@ import FunctionZeros: besselj_zero
 # Manually normalise the field distribution of HE11 to find scaling factor between
 # power and intensity
 a = 13e-6
-energy = 1e-6
 unm = besselj_zero(0, 1)
 E(r) = besselj(0, unm*r/a)
 norm, err = hquadrature(0, a) do r
     2π*r * abs2(E(r))
 end
 
+energy = 1e-6
 gas = :Ar
 pres = 5
 τ = 30e-15
