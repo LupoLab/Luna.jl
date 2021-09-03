@@ -1,8 +1,9 @@
 module Tools
-import Luna: Modes, PhysData, Capillary, RectModes
+import Luna: Modes, PhysData, Capillary, RectModes, Maths
 import Luna.PhysData: wlfreq
 import Roots: find_zero
 import Base: show
+import Cubature: hquadrature
 import Printf: @sprintf
 
 "Calculate 'natural' pulse width from FWHM" 
@@ -196,6 +197,15 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
         find_zero(Δβ, (1e-6, Pmax))
     catch
         missing
+    end
+end
+
+function aperture_filter(a, dist, radius)
+    w0 = 0.64*a
+    function filter(λ)
+        w1 = dist*λ/(π*w0)
+        I(r) = Maths.gauss(r, w1/2) / Maths.gaussnorm(w1/2)
+        2*hquadrature(I, 0, radius)[1]
     end
 end
 

@@ -143,6 +143,14 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
     end
 end
 
+function save_dict_h5(fpath, t::NamedTuple; kwargs...)
+    d = Dict{String, Any}()
+    for (k, v) in pairs(t)
+        d[string(k)] = v
+    end
+    save_dict_h5(fpath, d; kwargs...)
+end
+
 function load_dict_h5(fpath)
     isfile(fpath) || error("Error loading file $fpath: file does not exist")
 

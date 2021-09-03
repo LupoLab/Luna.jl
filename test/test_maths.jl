@@ -136,6 +136,15 @@ end
     @test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:max), fw+sep, rtol=1e-4)
 
+    fw = 1:10
+    x = collect(range(-50, 50; length=2^14))
+    y = zeros((length(x), length(fw)))
+    for (idx, fwi) in enumerate(fw)
+        y[:, idx] .= Maths.gauss.(x; fwhm=fwi)
+    end
+    @test all([isapprox(f, fwi; rtol=1e-4) for (f, fwi) in zip(Maths.fwhm(x, y; dim=1), fw)])
+    @test all([isapprox(f, fwi; rtol=1e-4) for (f, fwi) in zip(Maths.fwhm(x, y'; dim=2), fw)])
+
     hw = 1
     f(x) = Maths.gauss.(x, fwhm=2*hw)
     @test Maths.hwhm(f, 0) ≈ hw

@@ -34,6 +34,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     trange_even = δto*samples # keep frequency window fixed, expand time window as necessary
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
                             trange/δto, samples, δto*1e18)
+    Logging.@info @sprintf("Requested time window: %.1f fs, actual time window: %.1f fs", trange*1e15, trange_even*1e15)
     δωo = 2π/trange_even # frequency spacing for fine grid
     # Make fine grid 
     Nto = collect(range(0, length=samples))
