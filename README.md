@@ -114,6 +114,8 @@ There are many resources to help you learn Julia. A good place to start is [Juli
 
 To edit and run Julia code, a very good option is the [Julia extension](https://www.julia-vscode.org/) for [Visual Studio Code](https://code.visualstudio.com/).
 
+Julia fully supports [Unicode symbols in code](https://docs.julialang.org/en/v1/manual/variables/), including Greek letters. Luna makes heavy use of this to name variables `ω` instead of `omega`, `π` instead of `pi`, etc. In any Julia console you can enter many Unicode characters using [a backslash and the tab key](https://docs.julialang.org/en/v1/manual/unicode-input/), for example `\omega<tab>` will result in `ω`, and `\ne<tab>` will result in `≠` (and the latter is equivalent to `!=`). For even faster entry of Greek letters specifically, you can use [this AutoHotkey script](https://github.com/q2apro/ahk_greekletters) or a number of other solutions.
+
 ## Getting help & contributing
 If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](https://github.com/LupoLab/Luna/issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!
 
