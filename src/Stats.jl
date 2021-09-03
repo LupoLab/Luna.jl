@@ -443,7 +443,7 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
         push!(funs, pressure(transform.densityfun, gas))
     end
     if onaxis
-        push!(funs, peakintensity(grid, (m,)))
+        push!(funs, peakintensity(grid, (mode,)))
     else
         push!(funs, peakintensity(grid, transform.aeff))
     end
@@ -451,7 +451,7 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc
             if onaxis
-                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, (m,)))
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, (mode,)))
             else
                 push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff))
             end
