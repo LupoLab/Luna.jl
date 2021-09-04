@@ -5,33 +5,18 @@ import Luna: Maths, Utils
 import FFTW
 import LinearAlgebra: mul!, ldiv!
 
-"""
-    scaled_response(resp, scale)
-
-Scale the response function `resp` by the factor `scale`.
-"""
-function scaled_response(resp, scale)
-    let resp=resp
-        function resp!(out, E)
-            resp(out, E)
-            out .*= scale
-        end
-    end
+function KerrScalar!(out, E, fac)
+    @. out += fac*E^3
 end
 
-
-function KerrScalar(out, E, fac)
-    @. out = fac*E^3
-end
-
-function KerrVector(out, E, fac)
+function KerrVector!(out, E, fac)
     for i = 1:size(E,1)
         Ex = E[i,1]
         Ey = E[i,2]
         Ex2 = Ex^2
         Ey2 = Ey^2
-        out[i,1] = fac*(Ex2 + Ey2)*Ex
-        out[i,2] = fac*(Ex2 + Ey2)*Ey
+        out[i,1] += fac*(Ex2 + Ey2)*Ex
+        out[i,2] += fac*(Ex2 + Ey2)*Ey
     end
 end
 
@@ -40,9 +25,9 @@ function Kerr_field(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E, ρ)
             if size(E,2) == 1
-                KerrScalar(out, E, ε_0*γ3)
+                KerrScalar!(out, E, ρ*ε_0*γ3)
             else
-                KerrVector(out, E, ε_0*γ3)
+                KerrVector!(out, E, ρ*ε_0*γ3)
             end
         end
     end
@@ -54,23 +39,23 @@ function Kerr_field_nothg(γ3, n)
     hilbert = Maths.plan_hilbert(E)
     Kerr = let γ3 = γ3, hilbert = hilbert
         function Kerr(out, E, ρ)
-            out .= 3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
+            out .+= ρ*3/4*ε_0*γ3.*abs2.(hilbert(E)).*E
         end
     end
 end
 
-function KerrScalarEnv(out, E, fac)
-    @. out = 3/4*fac*abs2(E)*E
+function KerrScalarEnv!(out, E, fac)
+    @. out += 3/4*fac*abs2(E)*E
 end
 
-function KerrVectorEnv(out, E, fac)
+function KerrVectorEnv!(out, E, fac)
     for i = 1:size(E,1)
         Ex = E[i,1]
         Ey = E[i,2]
         Ex2 = abs2(Ex)
         Ey2 = abs2(Ey)
-        out[i,1] = 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
-        out[i,2] = 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
+        out[i,1] += 3/4*fac*((Ex2 + 2/3*Ey2)*Ex + 1/3*conj(Ex)*Ey^2)
+        out[i,2] += 3/4*fac*((Ey2 + 2/3*Ex2)*Ey + 1/3*conj(Ey)*Ex^2)
     end
 end
 
@@ -79,9 +64,9 @@ function Kerr_env(γ3)
     Kerr = let γ3 = γ3
         function Kerr(out, E, ρ)
             if size(E,2) == 1
-                KerrScalarEnv(out, E, ε_0*γ3)
+                KerrScalarEnv!(out, E, ρ*ε_0*γ3)
             else
-                KerrVectorEnv(out, E, ε_0*γ3)
+                KerrVectorEnv!(out, E, ρ*ε_0*γ3)
             end
         end
     end
@@ -93,7 +78,7 @@ function Kerr_env_thg(γ3, ω0, t)
     C = exp.(2im*ω0.*t)
     Kerr = let γ3 = γ3, C = C
         function Kerr(out, E, ρ)
-            @. out = ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
+            @. out += ρ*ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
 end
@@ -107,6 +92,7 @@ struct PlasmaCumtrapz{R, EType, tType}
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
     J::EType # buffer to hold the plasma current
+    P::EType # buffer to hold the plasma polarisation
     δt::Float64 # the time step
 end
 
@@ -122,11 +108,12 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
     fraction = similar(t)
     phase = similar(E)
     J = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, t[2]-t[1])
+    P = similar(E)
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
 end
 
 "The plasma response for a scalar electric field"
-function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
+function PlasmaScalar!(Plas::PlasmaCumtrapz, E)
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -137,7 +124,7 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
-    Maths.cumtrapz!(out, Plas.J, Plas.δt)
+    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
 end
 
 """
@@ -149,7 +136,7 @@ for the vector field.
 
 A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.  
 """
-function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
+function PlasmaVector!(Plas::PlasmaCumtrapz, E)
     Ex = E[:,1]
     Ey = E[:,2]
     Em = @. hypot.(Ex, Ey)
@@ -165,19 +152,22 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
             Plas.J[ii,2] += pre*Ey[ii]
         end
     end
-    Maths.cumtrapz!(out, Plas.J, Plas.δt)
+    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
 function (Plas::PlasmaCumtrapz)(out, Et, ρ)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
-            PlasmaScalar!(out, Plas, reshape(Et, size(Et, 1)))
+            PlasmaScalar!(Plas, reshape(Et, size(Et,1)))
+            out .+= ρ .* reshape(Plas.P, size(Et))
         else
-            PlasmaVector!(out, Plas, Et) # vector case
+            PlasmaVector!(Plas, Et) # vector case
+            out .+= ρ .* Plas.P
         end
     else
-        PlasmaScalar!(out, Plas, Et)
+        PlasmaScalar!(Plas, Et) # straight scalar case
+        out .+= ρ .* Plas.P
     end
 end
 
@@ -324,16 +314,16 @@ function (R::RamanPolar)(out, Et, ρ)
     R.P .= R.FT \ R.Pω
 
     # calculate full polarisation, extracting only the valid
-    # grid region
+    # grid region, which is the first length(E) part.
     for i = 1:length(E)
-        R.Pout[i] = E[i]*R.P[i]#(n ÷ 2) + i]
+        R.Pout[i] = ρ*E[i]*R.P[i]
     end
     
     # copy to output in dimensions requested
     if ndims(Et) > 1
-        out .= reshape(R.Pout, size(Et))
+        out .+= reshape(R.Pout, size(Et))
     else
-        out .= R.Pout
+        out .+= R.Pout
     end
 end
 
