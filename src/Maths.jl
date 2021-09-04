@@ -16,7 +16,11 @@ import Peaks
    11th order. Above that creates overflow errors, so we cap it. =#
 FDMs = [FiniteDifferences.central_fdm(min(order+6, 11), order, adapt=2) for order=1:7]
 
-"Calculate derivative of function f(x) at value x using finite differences"
+"""
+    derivative(f, x, order::Integer)
+
+Calculate derivative of function f(x) at value x using finite differences
+"""
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
@@ -28,6 +32,7 @@ end
 
 """
     gauss(x, σ; x0=0, power=2)
+
 Gaussian or hypergaussian function over `x` with std dev `σ`, power in the exponent of `power`,
 centred at `x0`.
 """
@@ -35,6 +40,7 @@ gauss(x, σ; x0=0, power=2) = exp(-1/2 * ((x-x0)/σ)^power)
 
 """
     gauss(x; fwhm, x0=0, power=2)
+
 Gaussian or hypergaussian function over `x` with FWHM `fwhm`, power in the exponent of `power`,
 centred at `x0`.
 """
@@ -55,16 +61,24 @@ Any additional `args` are passed onto `randn` and can be used to specify the out
 randgauss(μ, σ, args...) = randgauss(GLOBAL_RNG, μ, σ, args...)
 randgauss(rng::AbstractRNG, μ, σ, args...) = σ*randn(rng, args...) .+ μ
 
-"nth moment of the vector y"
-function moment(x::Vector, y::Vector, n = 1)
+"""
+    moment(x::Vector, y::Vector, n = 1)
+
+Calculate the nth moment of the vector y.
+"""
+function moment(x::Vector, y::Vector, n=1)
     if length(x) ≠ length(y)
         throw(DomainError(x, "x and y must have same length"))
     end
     return sum(x.^n .* y) / sum(y)
 end
 
-"nth moment of multi-dimensional array y along dimension dim"
-function moment(x::Vector, y, n = 1; dim = 1)
+"""
+    moment(x::Vector, y, n=1; dim=1)
+
+Calculate the nth moment of multi-dimensional array y along dimension dim.
+"""
+function moment(x::Vector, y, n=1; dim=1)
     if size(y, dim) ≠ length(x)
         throw(DomainError(y, "y must be of same length as x along dim"))
     end
@@ -73,19 +87,23 @@ function moment(x::Vector, y, n = 1; dim = 1)
     return sum(reshape(x, Tuple(xshape)).^n .* y, dims=dim) ./ sum(y, dims=dim)
 end
 
-"RMS width of distribution y on axis x"
-function rms_width(x::Vector, y::Vector; dim = 1)
+"""
+    rms_width(x::Vector, y; dim=1)
+
+RMS width of distribution y on axis x
+"""
+function rms_width(x::Vector, y::Vector; dim=1)
     return sqrt(moment(x, y, 2) - moment(x, y, 1)^2)
 end
 
-function rms_width(x::Vector, y; dim = 1)
-    return sqrt.(moment(x, y, 2, dim = dim) - moment(x, y, 1, dim = dim).^2)
+function rms_width(x::Vector, y; dim=1)
+    return sqrt.(moment(x, y, 2, dim=dim) - moment(x, y, 1, dim=dim).^2)
 end
 
 """
     fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
 
-Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
+Calculate the full width at half maximum (FWHM) of `y` on the axis `x`.
 
 `method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
 `:nearest` finds the closest values either side of the crossing point and interpolates linearly.
@@ -307,30 +325,43 @@ function cumtrapz(y, x; dim=1)
     return out
 end
 
-"Normalise an array by its maximum value"
-function normbymax(x, dims)
-    return x ./ maximum(x; dims = dims)
+"""
+    normbymax(x, dims)
+
+Return an array normalised by its maximum value
+"""
+function normbymax(x; dims)
+    return x ./ maximum(x; dims=dims)
 end
 
 function normbymax(x)
     return x ./ maximum(x)
 end
 
-"Normalised log10 i.e. maximum of output is 0"
+"""
+    log10_norm(x)
+
+Normalised log10 i.e. maximum of output is 0
+"""
 function log10_norm(x)
     return log10.(normbymax(x))
 end
 
 function log10_norm(x, dims)
-    return log10.(normbymax(x, dims = dims))
+    return log10.(normbymax(x; dims=dims))
 end
 
-"Window based on the error function"
+"""
+    errfun_window(x, xmin, xmax, width)
+    errfun_window(x, xmin, xmax, width_left, width_right)
+
+Filtering window based on the error function. If `width_left` and `width_right` are given
+separately, the smoothing width is different on each side.
+"""
 function errfun_window(x, xmin, xmax, width)
     return @. 0.5 * (erf((x - xmin) / width) + erfc((x - xmax) / width) - 1)
 end
 
-"Error function window but with different widths on each side"
 function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5 * (erf((x - xmin) / width_left) + erfc((x - xmax) / width_right) - 1)
 end
@@ -393,7 +424,9 @@ function _taper(xc, x1, x2, x3, x4)
 end
 
 """
-Hypergaussian window
+    hypergauss_window(x, xmin, xmax, power = 10)
+
+Hypergaussian window function.
 """
 function hypergauss_window(x, xmin, xmax, power = 10)
     fw = xmax - xmin
@@ -484,7 +517,10 @@ function plan_hilbert(x; dim=1)
 end
 
 """
-Oversample (smooth) an array by 0-padding in the frequency domain
+    oversample(t, x; factor::Int=4, dim=1)
+
+Oversample (smooth) an array by 0-padding in the frequency domain. Works for both real-valued
+and complex-valued arrays.
 """
 function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     if factor == 1
@@ -514,9 +550,6 @@ function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     return to, FFTW.irfft(xfo, newlen_t, dim)
 end
 
-"""
-Oversampling for complex-valued arryas (e.g. envelope fields)
-"""
 function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
@@ -547,7 +580,9 @@ function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
 end
 
 """
-Find limit of a series by Aitken acceleration
+    aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
+
+Find limit of a series by Aitken acceleration.
 """
 function aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
@@ -577,7 +612,10 @@ function aitken(x0, x1, x2)
 end
 
 """
-Find limit of series by brute force
+    converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
+
+Find limit of series by brute force. The iteration is stopped when the relative change in
+accumulated value is smaller than `rtol`.
 """
 function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
@@ -752,7 +790,11 @@ function (l::LinTerp)(x)
     linterp(x, l.x[i - 1], l.y[i - 1], l.x[i], l.y[i])
 end
 
-"Calculate frequency vector k from samples x for FFT"
+"""
+    fftfreq(x)
+
+Calculate frequency vector k from samples x for complex-valued FFT
+"""
 function fftfreq(x)
     Dx = abs(x[2] - x[1])
     all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
@@ -761,7 +803,11 @@ function fftfreq(x)
     (n .- N/2) .* 2π/(N*Dx)
 end
 
-"Calculate frequency vector k from samples x for rFFT"
+"""
+    rfftfreq(x)
+
+Calculate frequency vector k from samples x for rFFT
+"""
 function rfftfreq(x)
     Dx = abs(x[2] - x[1])
     all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
