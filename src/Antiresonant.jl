@@ -66,7 +66,7 @@ function _neff(m::Capillary.MarcatilliMode, ω, wallthickness, loss; z=0)
             C = m.unm^4/8 + 2*m.unm^2*ϵ^2/(ϵ - 1)/tan(ϕ)^2
             D = m.unm^3*ϵ^2*(1+1/tan(ϕ)^2)/(ϵ - 1)
         end
-        return __neff(A, B, C, D, σ, nco)
+        return __neff(A, B, C, D, σ, nco, loss)
     else
         if m.kind == :EH
             s = 1
