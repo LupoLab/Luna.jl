@@ -20,7 +20,7 @@ The files can be given as:
 
 - a `Vector` of `AbstractString`s containing file paths
 - a directory to search for files according to the naming pattern of
-    [`Output.@ScanHDF5Output`](@ref)
+    `Output.@ScanHDF5Output`
 - a directory and a `glob` pattern
 
 If nothing is specified, `scanproc` uses the current working directory.
@@ -642,7 +642,7 @@ end
 Apply a frequency window to the field `Eω` if required. Possible values for `win`:
 
 - `nothing` : no window is applied
-- 4-`Tuple` of `Number`s : the 4 parameters for a [`Maths.planck_taper`](@ref) in **wavelength**
+- 4-`Tuple` of `Number`s : the 4 parameters for a `Maths.planck_taper` in **wavelength**
 - 3-`Tuple` of `Number`s : minimum, maximum **wavelength**, and smoothing in **radial frequency**
 - 2-`Tuple` of `Number`s : minimum and maximum **wavelength** with automatically chosen smoothing
 - `Vector{<:Real}` : a pre-defined window function (shape must match `ω`)
