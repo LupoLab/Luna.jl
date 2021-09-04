@@ -218,6 +218,8 @@ If oversampling > 1, the field is oversampled before the calculation
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling=1)
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
         ratemax = maximum(out)
@@ -250,6 +252,8 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
                          components=:y, oversampling=1) where N
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
         ratemax = maximum(out)
