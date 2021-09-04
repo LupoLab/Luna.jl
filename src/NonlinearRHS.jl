@@ -115,7 +115,7 @@ end
 
 
 """
-    Et_to_Pt!(Pt, Et, responses)
+    Et_to_Pt!(Pt, Et, responses, density)
 
 Accumulate responses induced by Et in Pt.
 """
@@ -299,6 +299,13 @@ function (t::TransModal)(nl, Eω, z)
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
+"""
+    norm_modal(grid; shock=true)
+
+Normalisation function for modal propagation. If `shock` is `false`, the intrinsic frequency
+dependence of the nonlinear response is ignored, which turns off optical shock formation/
+self-steepening.
+"""
 function norm_modal(grid; shock=true)
     ω0 = PhysData.wlfreq(grid.referenceλ)
     withshock!(nl) = @. nl *= (-im * grid.ω/4)

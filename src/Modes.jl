@@ -11,6 +11,11 @@ import DSP: unwrap
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
+"""
+    AbstractMode
+
+Abstract type representing a single mode of a waveguide.
+"""
 abstract type AbstractMode end
 
 ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
