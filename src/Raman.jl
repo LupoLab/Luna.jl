@@ -200,13 +200,15 @@ function CombinedRamanResponse(t, Rs)
     CombinedRamanResponse(Rs, tt, w, hpres)
 end
 
-function (R::CombinedRamanResponse)(ht, ρ)
+function (R::CombinedRamanResponse)(ht::AbstractVector, ρ)
     fill!(ht, 0.0)
     for i=1:length(R.Rs)
         ht .+= R.hpres[i] .* exp.(-R.t ./ hrdamp.(R.Rs[i], ρ))
     end
     ht .*= R.w
 end
+
+(R::CombinedRamanResponse)(t::Number, ρ) = sum(R(t, ρ) for R in R.Rs)
 
 
 """
