@@ -503,8 +503,20 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
     push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 end
 
+function makeplasma!(out, grid::Grid.EnvGrid, gas, plasma::Symbol, pol)
+    ionpot = PhysData.ionisation_potential(gas)
+    if plasma == :ADK
+        error("ADK not supported for envelopes at present")
+    elseif plasma == :PPT
+        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ, rcycle=false)
+    else
+        throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
+    end
+    Et = pol ? Array{Complex{Float64}}(undef, length(grid.to), 2) : Vector{Complex{Float64}}(undef, length(grid.to))
+    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
+end
+
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
-    plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
     if kerr
@@ -516,6 +528,7 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
+    makeplasma!(out, grid, gas, plasma, pol)
     raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
     Tuple(out)
 end
