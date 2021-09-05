@@ -140,6 +140,17 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
     Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
+"The plasma response for a scalar electric field"
+function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E::Vector{Complex{Float64}})
+    Plas.ratefunc(Plas.rate, E)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
+    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.phase = Plas.fraction * e_ratio * E
+    ω = 2π .* FFTW.fftfreq(length(E),1/Plas.δt) .+ 1.2557677115392355e15
+    Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
+    out .= FFTW.ifft(-FFTW.fft(Plas.phase) ./ ω.^2 .- 1im .* FFTW.fft(Jabs) ./ ω)
+end
+
 """
 The plasma response for a vector electric field.
 
