@@ -315,7 +315,8 @@ end
     widths = (30e-15, 3e-15, 100e-15, 200e-15)
     powers = (1e3, 1e4, 1e2, 2e3)
     for i in 1:length(positions)
-        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i], τ0=positions[i])
+        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i],
+                                  ϕ=[2π*i/length(widths), positions[i]])
         Eω .+= field(grid, FT)
     end
     Et = FT \ Eω
