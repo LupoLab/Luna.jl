@@ -154,11 +154,11 @@ end
 function load_dict_h5(fpath)
     isfile(fpath) || error("Error loading file $fpath: file does not exist")
 
-    function h52dict(x::HDF5.HDF5Dataset)
+    function h52dict(x::HDF5.Dataset)
         return read(x)
     end
 
-    function h52dict(x::Union{HDF5.HDF5Group, HDF5.HDF5File})
+    function h52dict(x::Union{HDF5.Group, HDF5.File})
         dd = Dict{String, Any}()
         for n in names(x)
             dd[n] = h52dict(x[n])
