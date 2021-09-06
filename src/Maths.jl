@@ -48,6 +48,13 @@ gauss(x; x0=0, power=2, fwhm) = gauss(x, fwhm_to_σ(fwhm; power=power), x0 = x0,
 
 fwhm_to_σ(fwhm; power=2) = fwhm / (2 * (2 * log(2))^(1 / power))
 
+"""
+    gaussnorm(σ; power=2)
+    gaussnorm(;fwhm, power=2)
+
+Norm of a Gaussian with standard deviation `σ` or FWHM `fwhm` and power in the exponent
+`power`.
+"""
 gaussnorm(σ; power=2) = 2σ*2^(1/power)*gamma((power+1)/power)
 gaussnorm(;fwhm, power=2) = gaussnorm(fwhm_to_σ(fwhm; power=power); power=power)
 
@@ -330,7 +337,7 @@ end
 
 Return an array normalised by its maximum value
 """
-function normbymax(x; dims)
+function normbymax(x, dims)
     return x ./ maximum(x; dims=dims)
 end
 
@@ -348,7 +355,7 @@ function log10_norm(x)
 end
 
 function log10_norm(x, dims)
-    return log10.(normbymax(x; dims=dims))
+    return log10.(normbymax(x, dims))
 end
 
 """
@@ -505,7 +512,7 @@ Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` withou
     The closure returned always returns a reference to the same array buffer, which could lead
     to unexpected results if it is called from more than one location. To avoid this the array
     should either: (i) only be used in the same code segment; (ii) only be used transiently
-    as part of a larger computation; (iii) copied.
+    as part of a larger computation; (iii) be copied.
 """
 function plan_hilbert(x; dim=1)
     out = complex(x)
