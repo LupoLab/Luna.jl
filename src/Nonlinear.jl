@@ -98,9 +98,11 @@ function Kerr_env_thg(γ3, ω0, t)
     end
 end
 
+abstract type PlasmaPolar end
+
 "Response type for cumtrapz-based plasma polarisation, adapted from:
 M. Geissler, G. Tempea, A. Scrinzi, M. Schnürer, F. Krausz, and T. Brabec, Physical Review Letters 83, 2930 (1999)."
-struct PlasmaCumtrapz{R, EType, tType}
+struct PlasmaCumtrapz{R, EType, tType} <: PlasmaPolar
     ratefunc::R # the ionization rate function
     ionpot::Float64 # the ionization potential (for calculation of ionization loss)
     rate::tType # buffer to hold the rate
@@ -146,9 +148,9 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E::Vector{Complex{Float64}})
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
-    ω = 2π .* FFTW.fftfreq(length(E),1/Plas.δt) .+ 1.2557677115392355e15
-    Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
-    out .= FFTW.ifft(-FFTW.fft(Plas.phase) ./ ω.^2 .- 1im .* FFTW.fft(Jabs) ./ ω)
+    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
+    Plas.J .+= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
+    Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
 """
@@ -179,8 +181,42 @@ function PlasmaVector!(out, Plas::PlasmaCumtrapz, E)
     Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
+struct PlasmaFourier{R, EType, tType, FTType} <: PlasmaPolar
+    ratefunc::R # the ionization rate function
+    ionpot::Float64 # the ionization potential (for calculation of ionization loss)
+    rate::tType # buffer to hold the rate
+    fraction::tType # buffer to hold the ionization fraction
+    phase::EType # buffer to hold the plasma induced (mostly) phase modulation
+    J::EType # buffer to hold the plasma current
+    ω::tType # buffer to hold the frequency grid
+    FT::FTType # Fourier transform to use for integrations
+    δt::Float64
+end
+
+function PlasmaFourier(ω, E, ratefunc, ionpot, δt)
+    rate = similar(ω)
+    fraction = similar(ω)
+    phase = similar(E)
+    J = similar(E)
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_fft(E, 1, flags=Luna.settings["fftw_flag"])
+    inv(FT)
+    Utils.saveFFTwisdom()
+    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, ω, FT, δt)
+end
+
+"The plasma response for a scalar electric field"
+function PlasmaScalar!(out, Plas::PlasmaFourier, E::Vector{Complex{Float64}})
+    Plas.ratefunc(Plas.rate, E)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
+    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.phase = Plas.fraction * e_ratio * E
+    Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E # (E + conj.(E))
+    out .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
+end
+
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
-function (Plas::PlasmaCumtrapz)(out, Et)
+function (Plas::PlasmaPolar)(out, Et)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
             PlasmaScalar!(out, Plas, reshape(Et, size(Et, 1)))
