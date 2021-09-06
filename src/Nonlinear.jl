@@ -142,6 +142,9 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
     Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
+# This version, for envelope fields does not work. Not sure why. The exact same
+# equations, with cumulative integration performed by FFT (see PlasmaFourier
+# version below) does work.
 "The plasma response for a scalar electric field"
 function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E::Vector{Complex{Float64}})
     Plas.ratefunc(Plas.rate, E)
@@ -207,11 +210,20 @@ end
 
 "The plasma response for a scalar electric field"
 function PlasmaScalar!(out, Plas::PlasmaFourier, E::Vector{Complex{Float64}})
+    # The equations used here for envelopes are very similar to the real field cases above.
+    # So far I have not been able to derive them directly. The modified loss term (Jabs)
+    # is taken from [1]. The plasma term is obtained by inspection. Essentially, you can start
+    # from the definition of the plasma refractive index, insert it into the general relation
+    # between polarisation and refractive index, and obtain this version (in the frequency domain)
+    # but with the electron density in the time domain(!). I also think this term could be obtained
+    # from Geissler's model [2], by making use of the Bedrosian identity for Hilbert transforms of
+    # products of functions, but I have not yet achieved it.
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E # (E + conj.(E))
+    # here we perform cumulative integration via the Fourier transform.
     out .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
 end
 
