@@ -105,29 +105,29 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
     end
 
     function dict2h5(k::AbstractString, v, parent)
-        if HDF5.exists(parent, k) && !force
+        if HDF5.haskey(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = v
     end
 
     function dict2h5(k::AbstractString, v::BitArray, parent)
-        if HDF5.exists(parent, k) && !force
+        if HDF5.haskey(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = Array{Bool, 1}(v)
     end
 
     function dict2h5(k::AbstractString, v::Nothing, parent)
-        if HDF5.exists(parent, k) && !force
+        if HDF5.haskey(parent, k) && !force
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = Float64[]
     end
 
     function dict2h5(k::AbstractString, v::AbstractDict, parent)
-        if !HDF5.exists(parent, k)
-            subparent = HDF5.g_create(parent, k)
+        if !HDF5.haskey(parent, k)
+            subparent = HDF5.create_group(parent, k)
         else
             subparent = parent[k]
         end
@@ -160,7 +160,7 @@ function load_dict_h5(fpath)
 
     function h52dict(x::Union{HDF5.Group, HDF5.File})
         dd = Dict{String, Any}()
-        for n in names(x)
+        for n in keys(x)
             dd[n] = h52dict(x[n])
         end
         return dd
