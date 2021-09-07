@@ -182,7 +182,7 @@ function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
     RamanRespRotationalNonRigid(Rs, τ2ρ)
 end
 
-hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre(Ri.Rs, t) for Ri in R.Rs)
+hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre(Ri, t) for Ri in R.Rs)
 
 hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
 
