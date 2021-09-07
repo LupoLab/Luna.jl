@@ -9,6 +9,14 @@ import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths
 import Luna: @hlock
 
+"""
+    ionrate_fun!_ADK(ionpot::Float64, threshold=true)
+    ionrate_fun!_ADK(material::Symbol)
+
+Return a closure `ionrate!(out, E)` which calculates the ADK ionisation rate for the electric
+field `E` and places the result in `out`. If `threshold` is true, use [`ADK_threshold`](@ref)
+to avoid calculation below floating-point precision.
+"""
 function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
     nstar = sqrt(0.5/(ionpot/au_energy))
     cn_sq = 2^(2*nstar)/(nstar*gamma(nstar+1)*gamma(nstar))
@@ -39,22 +47,28 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
     return ionrate!  
 end
 
-function ionrate_fun!_ADK(material::Symbol)
-    return ionrate_fun!_ADK(ionisation_potential(material))
+function ionrate_fun!_ADK(material::Symbol; kwargs...)
+    return ionrate_fun!_ADK(ionisation_potential(material); kwargs...)
 end
 
-function ionrate_ADK(IP_or_material, E)
+function ionrate_ADK(IP_or_material, E; kwargs...)
     out = zero(E)
-    ionrate_fun!_ADK(IP_or_material)(out, E)
+    ionrate_fun!_ADK(IP_or_material; kwargs...)(out, E)
     return out
 end
 
-function ionrate_ADK(IP_or_material, E::Number)
+function ionrate_ADK(IP_or_material, E::Number; kwargs...)
     out = [zero(E)]
-    ionrate_fun!_ADK(IP_or_material)(out, [E])
+    ionrate_fun!_ADK(IP_or_material; kwargs...)(out, [E])
     return out[1]
 end
 
+"""
+    ADK_threshold(ionpot)
+
+Determine the lowest electric field strength at which the ADK ionisation rate for the
+ionisation potential `ionpot` is non-zero to within 64-bit floating-point precision.
+"""
 function ADK_threshold(ionpot)
     out = [0.0]
     ADKfun = ionrate_fun!_ADK(ionpot, false)
@@ -66,6 +80,12 @@ function ADK_threshold(ionpot)
     return E
 end
 
+"""
+    ionrate_fun!_PPTaccel(material::Symbol, λ0; kwargs...)
+    ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)
+
+Create an accelerated (interpolated) PPT ionisation rate function.
+"""
 function ionrate_fun!_PPTaccel(material::Symbol, λ0; kwargs...)
     n, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
@@ -77,6 +97,21 @@ function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)
     return makePPTaccel(E, rate)
 end
 
+"""
+    ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
+    ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l; kwargs...)
+
+Create a cached (saved) interpolated PPT ionisation rate function. If a saved lookup table
+exists, load this rather than recalculate.
+
+# Keyword arguments
+- `N::Int`: Number of samples with which to create the `CSpline` interpolant.
+- `Emax::Number`: Maximum field strength to include in the interpolant.
+- `cachedir::String`: Path to the directory where the cache should be stored and loaded from.
+    Defaults to \$HOME/.luna/pptcache
+
+Other keyword arguments are passed on to [`ionrate_fun_PPT`](@ref)
+"""
 function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
     n, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
@@ -139,12 +174,24 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
     return E, rate
 end
 
+"""
+    barrier_suppression(ionpot, Z)
+
+Calculate the barrier-suppresion **field strength** for the ionisation potential `ionpot`
+and charge state `Z`.
+"""
 function barrier_suppression(ionpot, Z)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2*Ip_au)
     Z^3/(16*ns^4) * au_Efield
 end
 
+"""
+    keldysh(material, λ, E)
+
+Calculate the Keldysh parameter for the given `material` at wavelength `λ` and electric field
+strength `E`.
+"""
 function keldysh(material, λ, E)
     Ip_au = ionisation_potential(material)/au_energy
     E_au = E/au_Efield
@@ -192,8 +239,11 @@ end
 
 Create closure to calculate PPT ionisation rate.
 
-Following:
+# Keyword arguments
+- `sum_tol::Number`: Relative tolerance used to truncate the infinite sum.
+- `rcycle::Bool`: If `true` (default), remove the cycle-average factor.
 
+# References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
 Ionization of atoms in the tunnelling regime with experimental evidence
 using Hg atoms. Journal of Physics B: Atomic, Molecular and Optical
@@ -203,8 +253,6 @@ Physics 25, 4005–4020 (1992)
 Ultrashort filaments of light in weakly ionized, optically transparent
 media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 (Appendix A)
-
-
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
     Ip_au = ionpot / au_energy
