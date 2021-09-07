@@ -14,7 +14,7 @@ import Peaks
 #= Pre-created finite difference methods for speed.
    Use (order+6)th order central finite differences with 2 adaptive steps up to
    11th order. Above that creates overflow errors, so we cap it. =#
-FDMs = [FiniteDifferences.central_fdm(min(order+6, 11), order, adapt=2) for order=1:7]
+FDMs = [FiniteDifferences.central_fdm(min(order+6, 11), order, adapt=1) for order=1:7]
 
 "Calculate derivative of function f(x) at value x using finite differences"
 function derivative(f, x, order::Integer)
