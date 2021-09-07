@@ -188,7 +188,7 @@ end
 Plan a suitable FFT for the electric field type `E`.
 
 """
-function make_fft(E::Vector{<:Real})
+function make_fft(E::Array{T,N}) where T<:Real where N
     Utils.loadFFTwisdom()
     FT = FFTW.plan_rfft(E, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
@@ -196,7 +196,7 @@ function make_fft(E::Vector{<:Real})
     FT
 end
 
-function make_fft(E::Vector{Complex{<:Real}})
+function make_fft(E::Array{Complex{T},N}) where T<:Real where N
     Utils.loadFFTwisdom()
     FT = FFTW.plan_fft(E, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
