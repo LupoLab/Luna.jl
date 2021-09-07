@@ -108,8 +108,8 @@ end
     @test isapprox(Capillary.dispersion(m, 2, ω), -1.68187063100098e-29, rtol=3e-7)
     @test isapprox(Capillary.dispersion(m, 3, ω), 8.44025458282146e-44, rtol=2e-6)
     @test isapprox(Capillary.dispersion(m, 4, ω), -1.13289638668388e-58, rtol=8e-6)
-    @test isapprox(Capillary.dispersion(m, 5, ω), 2.45046358889987e-73, rtol=5e-5)
-    @test isapprox(Capillary.zdw(m), 7.289431065526978e-07, rtol=5e-9)
+    @test isapprox(Capillary.dispersion(m, 5, ω), 2.45046358889987e-73, rtol=2e-4)
+    @test isapprox(Capillary.zdw(m), 7.289431065526978e-07, rtol=1e-7)
 
     rfg = ref_index_fun(:Ar, 2.0, 294.0)
     coren = (ω; z) -> rfg(wlfreq(ω))

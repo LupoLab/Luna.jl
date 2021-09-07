@@ -167,9 +167,9 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
                     script=nothing, cache=true, readonly=false)
     if isfile(fpath) && cache
         @hlock HDF5.h5open(fpath, "cw") do file
-            if HDF5.exists(file["meta"], "cache")
+            if HDF5.haskey(file["meta"], "cache")
                 saved = read(file["meta"]["cache"]["saved"])
-                chash = hash((sort(names(file["stats"])), size(file[yname])[1:end-1]))
+                chash = hash((sort(keys(file["stats"])), size(file[yname])[1:end-1]))
             else
                 error("cached HDF5Output created, file exists, but has no cache")
             end
@@ -182,15 +182,15 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
         fdir, fname = splitdir(fpath)
         isdir(fdir) || mkpath(fdir)
         @hlock HDF5.h5open(fpath, "cw") do file
-            HDF5.g_create(file, "stats")
-            HDF5.g_create(file, "meta")
+            HDF5.create_group(file, "stats")
+            HDF5.create_group(file, "meta")
             file["meta"]["sourcecode"] = Utils.sourcecode()
             file["meta"]["git_commit"] = Utils.git_commit()
             if !isnothing(script)
                 file["meta"]["script_code"] = script
             end
             if cache
-                HDF5.g_create(file["meta"], "cache")
+                HDF5.create_group(file["meta"], "cache")
             end
         end
         chash = UInt64(0)
@@ -220,14 +220,14 @@ function initialise(o::HDF5Output, y)
     maxdims = Tuple(mdims)
     @hlock HDF5.h5open(o.fpath, "r+") do file
         if o.compression
-            HDF5.d_create(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
-                          "chunk", chdims, "blosc", 3)
+            HDF5.create_dataset(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
+                          chunk=chdims, blosc=3)
         else
-            HDF5.d_create(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
-                          "chunk", chdims)
+            HDF5.create_dataset(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
+                          chunk=chdims)
         end
-        HDF5.d_create(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
-                      "chunk", (1,))
+        HDF5.create_dataset(file, o.tname, HDF5.datatype(Float64), ((dims[end],), (-1,)),
+                      chunk=(1,))
         statsnames = sort(collect(keys(o.stats_tmp[end])))
         o.cachehash = hash((statsnames, size(y)))
         file["meta"]["cachehash"] = o.cachehash
@@ -266,14 +266,8 @@ function getindex(o::HDF5Output, ds::AbstractString,
         idcs = to_indices(dset, I)
         adim = findfirst(isa.(idcs, Array)) # which of the indices is the array
         arr = idcs[adim] # the array itself
-        dtype = HDF5.datatype(dset)
-        local ret
-        try
-            T = HDF5.hdf5_to_julia_eltype(dtype)
-            ret = Array{T}(undef, map(length, idcs))
-        finally
-            close(dtype)
-        end
+        T = eltype(dset)
+        ret = Array{T}(undef, map(length, idcs))
         Ilo = idcs[1:adim-1]
         Ihi = idcs[adim+1:end]
         for ii in eachindex(arr)
@@ -286,7 +280,7 @@ end
 function show(io::IO, o::HDF5Output)
     if isfile(o.fpath)
         fields = @hlock HDF5.h5open(o.fpath) do file
-            names(file)
+            keys(file)
         end
         print(io, "HDF5Output$(fields)")
     else
@@ -309,7 +303,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
-            !HDF5.exists(file, o.yname) && initialise(o, y)
+            !HDF5.haskey(file, o.yname) && initialise(o, y)
             statsnames = sort(collect(keys(o.stats_tmp[end])))
             cachehash = hash((statsnames, size(y)))
             cachehash == o.cachehash || error(
@@ -319,13 +313,13 @@ function (o::HDF5Output)(y, t, dt, yfun)
                 idcs = fill(:, length(s)-1)
                 if s[end] < o.saved+1
                     s[end] += 1
-                    HDF5.set_dims!(file[o.yname], Tuple(s))
+                    HDF5.set_extent_dims(file[o.yname], Tuple(s))
                 end
                 file[o.yname][idcs..., o.saved+1] = yfun(ts)
                 s = collect(size(file[o.tname]))
                 if s[end] < o.saved+1
                     s[end] += 1
-                    HDF5.set_dims!(file[o.tname], Tuple(s))
+                    HDF5.set_extent_dims(file[o.tname], Tuple(s))
                 end
                 file[o.tname][o.saved+1] = ts
                 o.saved += 1
@@ -345,7 +339,7 @@ end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
     N = length(a)
-    names = HDF5.names(parent)
+    names = HDF5.keys(parent)
     for (k, v) in pairs(a[1])
         if ~(k in names)
             create_dataset(parent, k, v)
@@ -359,7 +353,7 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
         if ~(k in names)
             s[end] -= 1 # new dataset - overwrite initial value
         end
-        HDF5.set_dims!(parent[k], Tuple(s))
+        HDF5.set_extent_dims(parent[k], Tuple(s))
         for ii = 1:N
             parent[k][fill(:, ndims(a[ii][k]))..., curN+ii] = a[ii][k]
         end
@@ -367,15 +361,15 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
 end
 
 function create_dataset(parent, name, x::Number)
-    @hlock HDF5.d_create(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
-                  "chunk", (1,))
+    @hlock HDF5.create_dataset(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
+                  chunk=(1,))
 end
 
 function create_dataset(parent, name, x::AbstractArray)
     dims = (size(x)..., 1)
     maxdims = (size(x)..., -1)
-    @hlock HDF5.d_create(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
-                  "chunk", dims)
+    @hlock HDF5.create_dataset(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
+                  chunk=dims)
 end
 
 "Calling the output on a dictionary writes the items to the file"
@@ -384,27 +378,27 @@ function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing
     @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
-            if HDF5.exists(parent, k)
+            if HDF5.haskey(parent, k)
                 if force
                     Logging.@warn("Dataset $k already present in file $(o.fpath)"*
                                   " and will be overwritten")
-                    HDF5.o_delete(parent, k)
+                    HDF5.delete_object(parent, k)
                 else
                     error("File $(o.fpath) already has dataset $(k)")
                 end
             end
             isa(v, BitArray) && (v = Array{Bool, 1}(v))
             if !isnothing(group)
-                if !HDF5.exists(parent, group)
-                    HDF5.g_create(parent, group)
+                if !HDF5.haskey(parent, group)
+                    HDF5.create_group(parent, group)
                 end
-                if HDF5.exists(parent[group], k)
+                if HDF5.haskey(parent[group], k)
                     write(parent[group][k], v)
                 else
                     parent[group][k] = v
                 end
             else
-                if HDF5.exists(parent, k)
+                if HDF5.haskey(parent, k)
                     write(parent[k], v)
                 else
                     parent[k] = v
@@ -419,27 +413,27 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
     o.readonly && error("Cannot add data to read-only output!")
     @hlock HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
-        if HDF5.exists(parent, key)
+        if HDF5.haskey(parent, key)
             if force
                 Logging.@warn("Dataset $key already present in file $(o.fpath)"*
                                 " and will be overwritten")
-                HDF5.o_delete(parent, key)
+                HDF5.delete_object(parent, key)
             else
                 error("File $(o.fpath) already has dataset $(key)")
             end
         end
         isa(val, BitArray) && (val = Array{Bool, 1}(val))
         if !isnothing(group)
-            if !HDF5.exists(parent, group)
-                HDF5.g_create(parent, group)
+            if !HDF5.haskey(parent, group)
+                HDF5.create_group(parent, group)
             end
-            if HDF5.exists(parent[group], key)
+            if HDF5.haskey(parent[group], key)
                 write(parent[group][key], val)
             else
                 parent[group][key] = val
             end
         else
-            if HDF5.exists(parent, key)
+            if HDF5.haskey(parent, key)
                 write(parent[key], val)
             else
                 parent[key] = val
@@ -615,7 +609,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
     if !isfile(fpath)
         # First save - set up file structure
         @hlock HDF5.h5open(fpath, "cw") do file
-            group = HDF5.g_create(file, "scanvariables")
+            group = HDF5.create_group(file, "scanvariables")
             order = String[]
             shape = Int[] # scan shape
             # create grid of scan points
@@ -627,7 +621,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             end
             file["scanorder"] = order
             if !isnothing(stats)
-                group = HDF5.g_create(file, "stats")
+                group = HDF5.create_group(file, "stats")
                 for (k, v) in pairs(stats)
                     dims = (size(v)..., shape...)
                     #= last dimension of a statistics array is number of steps,
@@ -635,13 +629,13 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                     fixeddims_v = size(v)[1:end-1]
                     mdims = (fixeddims_v..., -1, shape...)
                     chdims = (fixeddims_v..., 100, fill(1, length(shape))...)
-                    HDF5.d_create(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
-                                  "chunk", chdims)
+                    HDF5.create_dataset(group, k, HDF5.datatype(eltype(v)), (dims, mdims),
+                                  chunk=chdims)
                 end
                 group["valid_length"] = zeros(Int, shape...)
             end
             if !isnothing(grid)
-                group = HDF5.g_create(file, "grid")
+                group = HDF5.create_group(file, "grid")
                 for (k, v) in pairs(grid)
                     isa(v, BitArray) && (v = Array{Bool, 1}(v))
                     group[k] = v
@@ -664,8 +658,8 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                 dims = (size(v)..., shape...)
                 # chunk size is dimension of one array
                 chdims = (size(v)..., fill(1, length(shape))...)
-                HDF5.d_create(file, string(k), HDF5.datatype(eltype(v)), (dims, dims),
-                              "chunk", chdims)
+                HDF5.create_dataset(file, string(k), HDF5.datatype(eltype(v)), (dims, dims),
+                              chunk=chdims)
             end
         end
     end
@@ -684,7 +678,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                     oldlength = size(file["stats"][k])[ndims(v)] # current Ns
                     newlength = size(v)[end] # new Ns
                     newdims = (size(v)..., scanshape...) # (N1, N2,..., new Ns, Nx, Ny,...)
-                    HDF5.set_dims!(file["stats"][k], newdims) # set new dimensions
+                    HDF5.set_extent_dims(file["stats"][k], newdims) # set new dimensions
                     # For existing shorter arrays, fill everything above their length with NaN
                     nanidcs = (fill(:, (ndims(v)-1))..., oldlength+1:newlength)
                     allscan = fill(:, length(scanshape)) # = (1:Nx, 1:Ny,...)
