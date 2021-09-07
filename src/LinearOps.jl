@@ -275,6 +275,12 @@ function make_const_linop(grid::Grid.EnvGrid, βfun!, αfun!, β1, β0ref)
     return linop
 end
 
+"""
+    make_const_linop(grid, mode, λ0)
+
+Make constant linear operator for mode-averaged propagation in mode `mode` with a reference
+wavelength `λ0`.
+"""
 function make_const_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
     β1const = Modes.dispersion(mode, 1, wlfreq(λ0))
     if thg
@@ -385,7 +391,13 @@ end
 #=================================================#
 #=================   MULTIMODE   =================#
 #=================================================#
+"""
+    make_const_linop(grid, modes, λ0; ref_mode=1)
 
+Make constant (z-invariant) linear operator for multimode propagation. The frame velocity is
+taken as the group velocity at wavelength `λ0` in the mode given by `ref_mode` (which 
+indexes into `modes`)
+"""
 function make_const_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
     nmodes = length(modes)

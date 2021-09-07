@@ -800,6 +800,12 @@ function optcomp_material(Eω, args...; kwargs...)
     dout, out
 end
 
+"""
+    optfield_cep(Eω, grid)
+
+Find the value of the absolute phase which produces the maximal field strength in the time
+domain.
+"""
 function optfield_cep(Eω::AbstractVector, grid)
     res = Optim.optimize(-π, π) do ϕ
         Et = real(iFT(Eω*exp(1im*ϕ), grid))

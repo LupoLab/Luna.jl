@@ -58,46 +58,70 @@ const gas_str = Dict(
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
 
-"Change from ω to λ and vice versa"
+"""
+    wlfreq(ωλ)
+
+Change from ω (angular frequency) to λ (wavelength) and vice versa
+"""
 wlfreq(ωλ) = 2π*c/ωλ
 
-"convert Δλ at λ to Δω"
+"""
+    ΔλΔω(Δλ, λ)
+
+Convert Δλ (wavelength bandwidth) at λ (central wavelength) to Δω (angular frequency bandwidth)
+"""
 ΔλΔω(Δλ, λ) = (2π*c)*Δλ/λ^2
 
 eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
-"Linear coefficients"
 
-"Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
-room temperature and atmospheric pressure"
+"""
+    γ_Börzsönyi(B1, C1, B2, C2)
+
+Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
+room temperature and atmospheric pressure
+"""
 function γ_Börzsönyi(B1, C1, B2, C2)
     return μm -> (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
-"Adapted Sellmeier expansion for helium made to fit high frequency data
-Phys. Rev. A 92, 033821 (2015)"
+"""
+    γ_JCT(B1, C1, B2, C2, B3, C3)
+
+Adapted Sellmeier expansion for helium made to fit high frequency data
+Phys. Rev. A 92, 033821 (2015)
+"""
 function γ_JCT(B1, C1, B2, C2, B3, C3)
     return μm -> (B1 * μm^2 / (μm^2 - C1)
                   + B2 * μm^2 / (μm^2 - C2)
                   + B3 * μm^2 / (μm^2 - C3))
 end
 
-"
+"""
+    γ_Peck(B1, C1, B2, C2, dens)
+
 Sellmeier expansion for linear susceptibility from
 J. Opt. Soc. Am. 67, 1550 (1977)
-"
+"""
 function γ_Peck(B1, C1, B2, C2, dens)
     return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
-"Sellmeier expansion for Oxygen from
-Applied Optics 50, 35, 6484 (2011)"
+"""
+    γ_Zhang(A, B, C, dens)
+
+Sellmeier expansion for Oxygen from Applied Optics 50, 35, 6484 (2011)
+"""
 function γ_Zhang(A, B, C, dens)
     return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
 end
 
-"Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
-susceptibility of a single particle."
+"""
+    sellmeier_gas(material::Symbol)
+
+Return function for linear polarisability γ, i.e. susceptibility of a single particle,
+calculated from Sellmeier expansions.
+"""
 function sellmeier_gas(material::Symbol)
     dens = density(material, 1.0, 273.15)
     if material == :He
@@ -167,8 +191,12 @@ function sellmeier_gas(material::Symbol)
     end
 end
 
-"Sellmeier for glasses. Returns function of wavelength in μm which in turn
-returns the refractive index directly"
+"""
+    sellmeier_glass(material::Symbol)
+
+Sellmeier for glasses. Returns function of wavelength in μm which in turn returns the
+refractive index directly
+"""
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
@@ -254,6 +282,12 @@ function sellmeier_glass(material::Symbol)
     end
 end
 
+"""
+    sellmeier_crystal(material, axis)
+
+Sellmeier for crystals. Returns function of wavelength in μm which in turn returns the
+refractive index directly. Possible values for `axis` depend on the type of crystal.
+"""
 function sellmeier_crystal(material, axis)
     if material == :BBO
         if axis == :o
@@ -307,11 +341,12 @@ function ref_index_fun_uniax(material; axes=(:o, :e))
     return n
 end
 
-"Get function to return χ1 as a function of:
-    wavelength in SI units
-    pressure in bar
-    temperature in Kelvin
-Gases only."
+"""
+    χ1_fun(gas::Symbol)
+
+Get function to return χ1 (linear susceptibility) for gases as a function of
+wavelength in SI units, pressure in bar, and temperature in Kelvin.
+"""
 function χ1_fun(gas::Symbol)
     γ = sellmeier_gas(gas)
     f = let γ=γ, gas=gas
@@ -328,19 +363,31 @@ function χ1_fun(gas::Symbol, P, T)
     return λ -> γ(λ*1e6)*dens
 end
 
-"Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
-Gases only."
+"""
+    χ1(gas::Symbol, λ, P=1.0, T=roomtemp)
+
+Calculate χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
+Gases only.
+"""
 function χ1(gas::Symbol, λ, P=1.0, T=roomtemp)
     return χ1_fun(gas)(λ, P, T)
 end
 
 
-"Get refractive index for any material at wavelength given in SI units"
+"""
+    ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
+
+Get refractive index for any material at wavelength given in SI units.
+"""
 function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
     return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
-"Get function which returns refractive index."
+"""
+    ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
+
+Get function which returns refractive index.
+"""
 function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
@@ -371,7 +418,12 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     end
 end
 
-"Get function which returns refractive index for gas mixture."
+"""
+    ref_index_fun(gases, P, T=roomtemp; lookup=nothing)
+
+Get function which returns refractive index for gas mixture. `gases` is a `Tuple` of gas
+identifiers (`Symbol`s) and `P` is a `Tuple` of equal length containing pressures.
+"""
 function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
     ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
         function ngas(λ)
@@ -385,7 +437,11 @@ function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtem
     return ngas
 end
 
-"Get function which returns ref index for mixture as function of wavelength and densities."
+"""
+    ref_index_fun(gases, T=roomtemp)
+
+Get function which returns ref index for mixture as function of wavelength and densities.
+"""
 function ref_index_fun(gases::NTuple{N, Symbol}, T=roomtemp) where N
     let γs=[sellmeier_gas(gi) for gi in gases]
         function ngas(λ, densities::Vector{<:Number})
@@ -440,7 +496,11 @@ function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothi
     return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
-"Get reflection coefficients"
+"""
+    fresnel(n2, θi; n1=1.0)
+
+Calcualte reflection coefficients from Fresnel's equations.
+"""
 function fresnel(n2, θi; n1=1.0)
     θt = asin(n1*sin(θi)/n2)
     rs = (n1*cos(θi) - n2*cos(θt))/(n1*cos(θi) + n2*cos(θt))
@@ -449,15 +509,14 @@ function fresnel(n2, θi; n1=1.0)
 end
 
 
-"Nonlinear coefficients"
+"""
+    γ3_gas(material::Symbol; source=nothing)
 
-"Calculate single-molecule third-order hyperpolarisability of a gas
-at given wavelength(s) and at room temperature.
-If source == :Bishop:
-Uses reference values to calculate γ
-If source == :Lehmeier (default):
-Uses scaling factors to calculate χ3 at 1 bar and scales by density
-to get to a single molecule i.e. the hyperpolarisability
+Calculate single-molecule third-order hyperpolarisability of a gas at given wavelength(s)
+and at room temperature.
+If `source` == `:Bishop`: Uses reference values to calculate γ
+If `source` == `:Lehmeier` (default): Uses scaling factors to calculate χ3 at 1 bar and
+scales by density to get to a single molecule i.e. the hyperpolarisability
 
 References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
@@ -465,12 +524,10 @@ References:
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
 [5] Optics Letters Vol. 40, No. 24 (2015))
-
-TODO: More Bishop/Shelton; Wahlstrand updated values.
-
-"
+"""
 function γ3_gas(material::Symbol; source=nothing)
-    if source == nothing
+    # TODO: More Bishop/Shelton; Wahlstrand updated values.
+    if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2,)
@@ -539,17 +596,34 @@ function density(gas::Symbol, P, T=roomtemp)
     P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
 end
 
+"""
+    pressure(gas, density, T=roomtemp)
+
+Calculate the pressure in bar of the `gas` at number density `density` and temperature `T`.
+"""
 function pressure(gas, density, T=roomtemp)
     density == 0 ? zero(density) :
                    CoolProp.PropsSI("P", "T", T, "DMOLAR", density/N_A, gas_str[gas])/bar
 end
 
+"""
+    densityspline(gas; Pmax, Pmin=0, N=2^10, T=roomtemp)
+
+Create a `CSpline` interpolant for the density of the `gas` between pressures `Pmin` and
+`Pmax` at temperature `T`. The spline is created using `N` samples.
+"""
 function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     P = collect(range(Pmin, Pmax, length=N))
     ρ = density.(gas, P, T)
     Maths.CSpline(P, ρ)
 end
 
+"""
+    ionisation_potential(material; unit=:SI)
+
+Return the first ionisation potential of the `material` in a specific unit (default: SI).
+Possible units are `:SI`, `:atomic` and `:eV`.
+"""
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
         Ip = 0.9036
@@ -584,6 +658,11 @@ function ionisation_potential(material; unit=:SI)
     end
 end
 
+"""
+    quantum_numbers(material)
+
+Return the quantum numbers of the `material` for use in the PPT ionisation rate.
+"""
 function quantum_numbers(material)
     # Returns n, l, ion Z
     if material == :Ar
@@ -605,6 +684,11 @@ function quantum_numbers(material)
     end
 end
 
+"""
+    lookup_glass(material::Symbol)
+
+Create a `CSpline` interpolant for look-up-table values of the refractive index.
+"""
 function lookup_glass(material::Symbol)
     if material == :SiO2
         data = data_glass(:SiO2)
@@ -615,8 +699,11 @@ function lookup_glass(material::Symbol)
     return spl
 end
 
-"Returns function of wavelength in μm which in turn
- returns the refractive index directly"
+"""
+    lookup_metal(material::Symbol)
+
+Create a `CSpline` interpolant for look-up-table values of the refractive index.
+"""
 function lookup_metal(material::Symbol)
     data = data_metal(material)::Array{Float64,2}
     nspl = Maths.BSpline(data[:,1], data[:,2] .+ im.*data[:,3])
@@ -624,6 +711,8 @@ function lookup_metal(material::Symbol)
 end
 
 """
+    raman_parameters(material)
+
 Get the Raman parameters for `material`.
 
 # Fields
@@ -739,6 +828,11 @@ function raman_parameters(material)
     rp
 end
 
+"""
+    lookup_mirror(type)
+
+Create a `CSpline` interpolant for the complex-valued reflectivity of a mirror of `type`.
+"""
 function lookup_mirror(type)
     if type == :PC70
         # λ (nm), R(5deg) (%), R(19deg) (%)
