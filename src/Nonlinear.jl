@@ -128,7 +128,7 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot)
 end
 
 "The plasma response for a scalar electric field"
-function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
+function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E::Vector{Float64})
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -139,20 +139,6 @@ function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E)
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
-    Maths.cumtrapz!(out, Plas.J, Plas.δt)
-end
-
-# This version, for envelope fields does not work. Not sure why. The exact same
-# equations, with cumulative integration performed by FFT (see PlasmaFourier
-# version below) does work.
-"The plasma response for a scalar electric field"
-function PlasmaScalar!(out, Plas::PlasmaCumtrapz, E::Vector{Complex{Float64}})
-    Plas.ratefunc(Plas.rate, E)
-    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
-    @. Plas.phase = Plas.fraction * e_ratio * E
-    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
-    Plas.J .+= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
     Maths.cumtrapz!(out, Plas.J, Plas.δt)
 end
 
@@ -196,15 +182,34 @@ struct PlasmaFourier{R, EType, tType, FTType} <: PlasmaPolar
     δt::Float64
 end
 
+"""
+    make_fft(E::Vector)
+
+Plan a suitable FFT for the electric field type `E`.
+
+"""
+function make_fft(E::Vector{<:Real})
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_rfft(E, 1, flags=Luna.settings["fftw_flag"])
+    inv(FT)
+    Utils.saveFFTwisdom()
+    FT
+end
+
+function make_fft(E::Vector{Complex{<:Real}})
+    Utils.loadFFTwisdom()
+    FT = FFTW.plan_fft(E, 1, flags=Luna.settings["fftw_flag"])
+    inv(FT)
+    Utils.saveFFTwisdom()
+    FT
+end
+
 function PlasmaFourier(ω, E, ratefunc, ionpot, δt)
     rate = similar(ω)
     fraction = similar(ω)
     phase = similar(E)
     J = similar(E)
-    Utils.loadFFTwisdom()
-    FT = FFTW.plan_fft(E, 1, flags=Luna.settings["fftw_flag"])
-    inv(FT)
-    Utils.saveFFTwisdom()
+    FT = make_fft(E)
     PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, ω, FT, δt)
 end
 
@@ -223,6 +228,21 @@ function PlasmaScalar!(out, Plas::PlasmaFourier, E::Vector{Complex{Float64}})
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E # (E + conj.(E))
+    # here we perform cumulative integration via the Fourier transform.
+    out .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
+end
+
+"The plasma response for a scalar electric field"
+function PlasmaScalar!(out, Plas::PlasmaFourier, E::Vector{Float64})
+    Plas.ratefunc(Plas.rate, E)
+    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
+    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.phase = Plas.fraction * e_ratio * E
+    for ii in eachindex(E)
+        if abs(E[ii]) > 0
+            Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
+        end
+    end
     # here we perform cumulative integration via the Fourier transform.
     out .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
 end
@@ -309,10 +329,7 @@ harmonic generation component of the response.
 """
 function RamanPolarField(t, ht; thg=true)
     h = zeros(length(t)*2) # note double grid size, see explanation below
-    Utils.loadFFTwisdom()
-    FT = FFTW.plan_rfft(h, 1, flags=Luna.settings["fftw_flag"])
-    inv(FT)
-    Utils.saveFFTwisdom()
+    FT = make_fft(h)
     hω, Eω2, Pω = gethω!(h, t, ht, FT)
     E2 = similar(h)
     E2v = view(E2, 1:length(t))
@@ -331,10 +348,7 @@ using response function `ht`.
 """
 function RamanPolarEnv(t, ht)
     h = zeros(length(t)*2) # note double grid size, see explanation below
-    Utils.loadFFTwisdom()
-    FT = FFTW.plan_fft(h, 1, flags=Luna.settings["fftw_flag"])
-    inv(FT)
-    Utils.saveFFTwisdom()
+    FT = make_fft(h)
     hω, Eω2, Pω = gethω!(h, t, ht, FT)
     E2 = similar(hω)
     P = similar(hω)
