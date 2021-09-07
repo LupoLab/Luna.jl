@@ -19,7 +19,7 @@ function hrpre end
 """
     hrdamp(R::AbstractRamanResponse, ρ)
 
-Get the damping constant `τ2` for density `̢ρ`.
+Get the damping (dephasing) constant `τ2` for density `̢ρ`.
 
 """
 function hrdamp end
@@ -182,7 +182,7 @@ function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
     RamanRespRotationalNonRigid(Rs, τ2ρ)
 end
 
-hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre.(R.Rs, t))
+hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre(Ri.Rs, t) for Ri in R.Rs)
 
 hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
 
@@ -208,7 +208,7 @@ function (R::CombinedRamanResponse)(ht::AbstractVector, ρ)
     ht .*= R.w
 end
 
-(R::CombinedRamanResponse)(t::Number, ρ) = sum(R(t, ρ) for R in R.Rs)
+(R::CombinedRamanResponse)(t::Number, ρ) = sum(Ri(t, ρ) for Ri in R.Rs)
 
 
 """
