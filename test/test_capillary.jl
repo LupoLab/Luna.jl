@@ -134,7 +134,7 @@ end
     @test isapprox(Capillary.dispersion(m, 3, ω), 8.80530032930868e-44, rtol=7e-7)
     @test isapprox(Capillary.dispersion(m, 4, ω), -1.21092167154788e-58, rtol=1e-5)
     @test isapprox(Capillary.dispersion(m, 5, ω), 2.64991510536236e-73, rtol=5e-5)
-    @test isapprox(Capillary.zdw(m), 7.225347947615157e-07, rtol=8e-9)
+    @test isapprox(Capillary.zdw(m), 7.225347947615157e-07, rtol=2e-8)
     @test isapprox(Capillary.α(m, ω), 0.0290115706883820, rtol=1e-14)
     @test Capillary.Aeff(Capillary.MarcatilliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
 end
