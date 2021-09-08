@@ -1,9 +1,13 @@
 module Stats
-import Luna: Maths, Grid, Modes, Utils, settings
+import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields, Processing
 import Luna.PhysData: wlfreq, c, ε_0
+import Luna.NonlinearRHS: TransModal, TransModeAvg
+import Luna.Nonlinear: PlasmaCumtrapz
+import Luna.Capillary: MarcatilliMode
 import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf
+import Logging: @warn
 
 """
     ω0(grid)
@@ -14,11 +18,14 @@ density.
 function ω0(grid)
     addstat! = let ω=grid.ω
         function addstat!(d, Eω, Et, z, dz)
-            d["ω0"] = Maths.moment(ω, abs2.(Eω))
+            d["ω0"] = squeeze(Maths.moment(ω, abs2.(Eω); dim=1))
         end
     end
     return addstat!
 end
+
+squeeze(ω0::Array{T, 1}) where T = ω0[1]
+squeeze(ω0::Array{T, 2}) where T = ω0[1, :]
 
 """
     energy(grid, energyfun_ω)
@@ -88,6 +95,45 @@ function peakpower(grid)
 end
 
 """
+    peakpower(grid, Eω, window; label)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+window function `window`. `window` must have the same length as `grid.ω`. The stats
+dataset is labeled as `peakpower_[label]`.
+"""
+function peakpower(grid, Eω, window::Vector{<:Real}; label)
+    Etbuf, analytic! = plan_analytic(grid, Eω) # output buffer and function for inverse FT
+    Eωbuf = similar(Eω) # buffer for Eω with window applied
+    key = "peakpower_$label"
+    function addstat!(d, Eω, Et, z, dz)
+        Eωbuf .= Eω .* window
+        analytic!(Etbuf, Eωbuf)
+        if ndims(Etbuf) > 1
+            d[key] = dropdims(maximum(abs2.(Etbuf), dims=1), dims=1)
+        else
+            d[key] = maximum(abs2.(Etbuf))
+        end
+    end
+end
+
+"""
+    peakpower(grid, Eω, λlims; label=nothing)
+
+Create stats function to calculate the peak power within a frequency range defined by the
+wavelength limits `λlims`. If `label` is given, the stats dataset is labeled as
+`peakpower_[label]`, otherwise `label` is created automatically from `λlims`.
+"""
+function peakpower(grid, Eω, λlims::NTuple{2, <:Real}; label=nothing, winwidth=:auto)
+    window = Processing.ωwindow_λ(grid.ω, λlims; winwidth=winwidth)
+    if isnothing(label)
+        λnm = 1e9.*λlims
+        label = @sprintf("%.2fnm_%.2fnm", minimum(λnm), maximum(λnm))
+    end
+    peakpower(grid, Eω, window; label=label)
+end
+
+
+"""
     peakintensity(grid, aeff)
 
 Create stats function to calculate the mode-averaged peak intensity given the effective area
@@ -104,7 +150,7 @@ end
 
 Create stats function to calculate the peak intensity for several modes.
 """
-function peakintensity(grid, modes::NTuple{N, Modes.AbstractMode}; components=:y) where N
+function peakintensity(grid, modes::Modes.ModeCollection; components=:y)
     tospace = Modes.ToSpace(modes, components=components)
     npol = tospace.npol
     Et0 = zeros(ComplexF64, (length(grid.t), npol))
@@ -125,14 +171,18 @@ Create stats function to calculate the temporal FWHM (pulse duration) for mode a
 """
 function fwhm_t(grid)
     function addstat!(d, Eω, Et, z, dz)
+        Pt = abs2.(Et)
         if ndims(Et) > 1
-            d["fwhm_t_min"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear)
+            Ptsum = dropdims(sum(Pt; dims=2); dims=2)
+            d["fwhm_t_min"] = [Maths.fwhm(grid.t, Pt[:, i], method=:linear)
                               for i=1:size(Et, 2)]
-            d["fwhm_t_max"] = [Maths.fwhm(grid.t, abs2.(Et[:, i]), method=:linear, minmax=:max)
+            d["fwhm_t_max"] = [Maths.fwhm(grid.t, Pt[:, i], method=:linear, minmax=:max)
                               for i=1:size(Et, 2)]
+            d["fwhm_t_min_allmodes"] = Maths.fwhm(grid.t, Ptsum, method=:linear)
+            d["fwhm_t_max_allmodes"] = Maths.fwhm(grid.t, Ptsum, method=:linear, minmax=:max)
         else
-            d["fwhm_t_min"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:min)
-            d["fwhm_t_max"] = Maths.fwhm(grid.t, abs2.(Et), method=:linear, minmax=:max)
+            d["fwhm_t_min"] = Maths.fwhm(grid.t, Pt, method=:linear, minmax=:min)
+            d["fwhm_t_max"] = Maths.fwhm(grid.t, Pt, method=:linear, minmax=:max)
         end
     end
 end
@@ -168,18 +218,23 @@ If oversampling > 1, the field is oversampled before the calculation
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling=1)
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     frac = similar(to)
     function addstat!(d, Eω, Et, z, dz)
         # note: oversampling returns its arguments without any work done if factor==1
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
-        ionfrac!(frac, real(Eto))
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        ratemax = ionfrac!(frac, real(Eto))
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
@@ -193,14 +248,18 @@ If oversampling > 1, the field is oversampled before the calculation
     Oversampling can lead to a significant performance hit
 """
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
-                         modes::NTuple{N, Modes.AbstractMode},
-                         components=:y; oversampling=1) where N
+                         modes::Modes.ModeCollection;
+                         components=:y, oversampling=1) where N
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     tospace = Modes.ToSpace(modes, components=components)
     frac = similar(to)
@@ -211,20 +270,53 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         Modes.to_space!(Et0, Eto, (0, 0), tospace; z=z)
         if npol > 1
-            ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
+            ratemax = ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
         else
-            ionfrac!(frac, real(Et0[:, 1]))
+            ratemax = ionfrac!(frac, real(Et0[:, 1]))
         end
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
+"""
+    density(dfun)
+
+Create stats function to capture the gas density as defined by `dfun(z)`
+"""
 function density(dfun)
     function addstat!(d, Eω, Et, z, dz)
         d["density"] = dfun(z)
     end
 end
 
+"""
+    pressure(dfun, gas)
+
+Create stats function to capture the pressure. Like [`density`](@ref) but converts to
+pressure.
+"""
+function pressure(dfun, gas)
+    function addstat!(d, Eω, Et, z, dz)
+        d["pressure"] = PhysData.pressure(gas, dfun(z))
+    end
+end
+
+function pressure(dfun, gases::Tuple)
+    function addstat!(d, Eω, Et, z, dz)
+        dens = dfun(z)
+        for (di, gi) in zip(dens, gases)
+            d["pressure_$gi"] = PhysData.pressure(gi, di)
+        end
+    end
+end
+
+"""
+    core_radius(a)
+
+Create stats function to capture core radius as defined by `a` (either a `Number` or a 
+callable `a(z)`)
+"""
 function core_radius(a::Number)
     function addstat!(d, Eω, Et, z, dz)
         d["core_radius"] = a
@@ -236,6 +328,49 @@ function core_radius(afun)
         d["core_radius"] = afun(z)
     end
 end
+
+"""
+    zdw(mode)
+
+Create stats function to capture the zero-dispersion wavelength (ZDW).
+
+!!! warning
+    Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
+"""
+function zdw(mode::Modes.AbstractMode; λmin=100e-9, λmax=3000e-9)
+    λ00 = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
+    function addstat!(d, Eω, Et, z, dz)
+        d["zdw"] = missnan(Modes.zdw(mode, λ00; z=z))
+        λ00 = d["zdw"]
+    end
+end
+
+"""
+    zdw(mode)
+
+Create stats function to capture the zero-dispersion wavelength (ZDW).
+
+!!! warning
+    Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
+"""
+function zdw(modes; λmin=100e-9, λmax=3000e-9)
+    λ00 = zeros(length(modes))
+    for (ii, mode) in enumerate(modes)
+        tmp = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
+        if ismissing(tmp)
+            λ00[ii] = λmin
+        else
+            λ00[ii] = tmp
+        end
+    end
+    function addstat!(d, Eω, Et, z, dz)
+        d["zdw"] = [missnan(Modes.zdw(modes[ii], λ00[ii]; z=z)) for ii in eachindex(modes)]
+        λ00 .= d["zdw"]
+    end
+end
+
+# convert missing to NaN
+missnan(x) = ismissing(x) ? NaN : x
 
 function zdz!(d, Eω, Et, z, dz)
     d["z"] = z
@@ -320,5 +455,91 @@ function collect_stats(grid, Eω, funcs...)
     end
     return f
 end
+
+function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
+                 windows=nothing, gas=nothing, onaxis=false, userfuns=Any[])
+    _, energyfunω = Fields.energyfuncs(grid)
+    funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
+            fwhm_t(grid), zdw_linop(mode, linop),
+            density(transform.densityfun)]
+    if !isnothing(gas)
+        push!(funs, pressure(transform.densityfun, gas))
+    end
+    if onaxis
+        push!(funs, peakintensity(grid, (mode,)))
+    else
+        push!(funs, peakintensity(grid, transform.aeff))
+    end
+    for resp in transform.resp
+        if resp isa PlasmaCumtrapz
+            ir = resp.ratefunc
+            if onaxis
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, (mode,)))
+            else
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff))
+            end
+        end
+    end
+    if !isnothing(windows)
+        for win in windows
+            push!(funs, energy_λ(grid, energyfunω, win))
+        end
+    end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $idx is already present in the default set and will be ignored")
+        else
+            push!(funs, uf)
+        end
+    end
+    collect_stats(grid, Eω, funs...)
+end
+
+function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
+                 windows=nothing, gas=nothing, userfuns=Any[])
+    _, energyfunω = Fields.energyfuncs(grid)
+    pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
+    funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
+            peakintensity(grid, modes, components=pol), fwhm_t(grid),
+            zdw_linop(modes, linop), density(transform.densityfun),
+            fwhm_r(grid, modes; components=pol)]
+    if !isnothing(gas)
+        push!(funs, pressure(transform.densityfun, gas))
+    end
+    for resp in transform.resp
+        if resp isa PlasmaCumtrapz
+            ir = resp.ratefunc
+            ed = electrondensity(grid, resp.ratefunc, transform.densityfun, modes,
+                                 components=pol)
+            push!(funs, ed)
+        end
+    end
+    if !isnothing(windows)
+        for win in windows
+            push!(funs, energy_λ(grid, energyfunω, win))
+        end
+    end
+    for (idx, uf) in enumerate(userfuns)
+        if uf in funs
+            @warn("userfun $uf is already present in the default set and will be ignored")
+        else
+            push!(funs, uf)
+        end
+    end
+    collect_stats(grid, Eω, funs...)
+end
+
+# For constant linop, ZDW is also constant
+function zdw_linop(mode::Modes.AbstractMode, linop::AbstractArray)
+    zdw = missnan(Modes.zdw(mode))
+    (d, Eω, Et, z, dz) -> d["zdw"] = zdw
+end
+
+function zdw_linop(modes, linop::AbstractArray)
+    zdw = [missnan(Modes.zdw(mode)) for mode in modes]
+    (d, Eω, Et, z, dz) -> d["zdw"] = zdw
+end
+
+zdw_linop(mode_s, linop) = zdw(mode_s)
 
 end

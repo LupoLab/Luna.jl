@@ -5,7 +5,12 @@ import Logging
 import LibGit2
 import Pidfile: mkpidlock
 import HDF5
-import Luna: @hlock
+import Luna: @hlock, settings
+
+subzero = '\u2080'
+subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
+subscript(num::AbstractString) = prod([subscript(chi) for chi in num])
+subscript(num::Int) = subscript(string(num))
 
 function git_commit()
     try
@@ -60,8 +65,17 @@ function sourcecode()
     return out
 end
 
+function FFTWthreads()
+    if Threads.nthreads() == 1
+        1
+    else
+        settings["fftw_threads"] == 0 ? 4*Threads.nthreads() : settings["fftw_threads"]
+    end
+end
+
 function loadFFTwisdom()
-    fpath = joinpath(cachedir(), "FFTWcache")
+    FFTW.set_num_threads(FFTWthreads())
+    fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     isdir(cachedir()) || mkpath(cachedir())
     if isfile(fpath)
@@ -69,17 +83,13 @@ function loadFFTwisdom()
         pidlock = mkpidlock(lockpath)
         ret = FFTW.import_wisdom(fpath)
         close(pidlock)
-        success = (ret != 0)
-        Logging.@info(success ? "FFTW wisdom loaded" : "Loading FFTW wisdom failed")
-        return success
     else
         Logging.@info("No FFTW wisdom found")
-        return false
     end
 end
 
 function saveFFTwisdom()
-    fpath = joinpath(cachedir(), "FFTWcache")
+    fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     pidlock = mkpidlock(lockpath)
     isfile(fpath) && rm(fpath)
@@ -99,6 +109,13 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
             error("Dataset $k exists in $fpath. Set force=true to overwrite.")
         end
         parent[k] = v
+    end
+
+    function dict2h5(k::AbstractString, v::BitArray, parent)
+        if HDF5.exists(parent, k) && !force
+            error("Dataset $k exists in $fpath. Set force=true to overwrite.")
+        end
+        parent[k] = Array{Bool, 1}(v)
     end
 
     function dict2h5(k::AbstractString, v::Nothing, parent)
@@ -124,6 +141,14 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
             dict2h5(k, v, file)
         end
     end
+end
+
+function save_dict_h5(fpath, t::NamedTuple; kwargs...)
+    d = Dict{String, Any}()
+    for (k, v) in pairs(t)
+        d[string(k)] = v
+    end
+    save_dict_h5(fpath, d; kwargs...)
 end
 
 function load_dict_h5(fpath)

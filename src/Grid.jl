@@ -22,6 +22,19 @@ struct RealGrid <: TimeGrid
     towin::Array{Float64, 1}
 end
 
+"""
+    RealGrid(zmax, referenceλ, λ_lims, trange; δt=1)
+
+Time grid for simulations with real-valued (field-resolved) fields
+
+# Arguments
+- `zmax::Real` : Total distance to propagate
+- `referenceλ::Real` : Reference wavelength (e.g. centre wavelength of input pulse)
+- `λ_lims::Tuple{Real, Real}` : Wavelength limits of the frequency window
+- `trange::Real` : Total extent of the time window required
+- `δt::Real` : Sample spacing in time. The value actually used is either δt or the value
+    required to satisfy `trange` and `λ_lims`, whichever is smaller.
+"""
 function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     f_lims = PhysData.c./λ_lims
     Logging.@info @sprintf("Freq limits %.2f - %.2f PHz", f_lims[2]*1e-15, f_lims[1]*1e-15)
@@ -30,6 +43,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     trange_even = δto*samples # keep frequency window fixed, expand time window as necessary
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
                             trange/δto, samples, δto*1e18)
+    Logging.@info @sprintf("Requested time window: %.1f fs, actual time window: %.1f fs", trange*1e15, trange_even*1e15)
     δωo = 2π/trange_even # frequency spacing for fine grid
     # Make fine grid 
     Nto = collect(range(0, length=samples))
@@ -55,7 +69,8 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
 
-    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win)
 
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ maximum(ωo)/maximum(ω)
@@ -63,6 +78,10 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     Logging.@info @sprintf("Grid: samples %d / %d, ωmax %.2e / %.2e",
                            length(t), length(to), maximum(ω), maximum(ωo))
     return RealGrid(float(zmax), referenceλ, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+end
+
+function RealGrid(;zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    RealGrid(zmax, referenceλ, t, ω, to, ωo, sidx, ωwin, twin, towin)
 end
 
 struct EnvGrid{T} <: TimeGrid
@@ -79,6 +98,20 @@ struct EnvGrid{T} <: TimeGrid
     towin::Array{Float64, 1}
 end
 
+"""
+    EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
+
+Time grid for simulations with envelope (a.k.a. analytic) fields
+
+# Arguments
+- `zmax::Real` : Total distance to propagate
+- `referenceλ::Real` : Reference wavelength (e.g. centre wavelength of input pulse)
+- `λ_lims::Tuple{Real, Real}` : Wavelength limits of the frequency window
+- `trange::Real` : Total extent of the time window required
+- `δt::Real` : Sample spacing in time. The value actually used is either δt or the value
+    required to satisfy `trange` and `λ_lims`, whichever is smaller.
+- `thg::Bool` : Whether the grid should include space for the third hamonic (default: false)
+"""
 function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     fmin = PhysData.c/maximum(λ_lims)
     fmax = PhysData.c/minimum(λ_lims)
@@ -136,7 +169,8 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     t = @. (Nt - tsamples/2)*δt
     
     ω = v .+ ω0 # True frequency grid
-    sidx = ω .> 0 # Indices to select real frequencies (for dispersion relation)
+    # Indices to select real frequencies (for dispersion relation)
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win) 
     
     # Make apodisation windows
     ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win)
@@ -148,11 +182,15 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     @assert δt/δto ≈ minimum(vo)/minimum(v) # FFT grid -> sample at -fs/2 but not +fs/2
     factor = Int(length(to)/length(t))
     zeroidx = findfirst(x -> x==0, to)
-    # Starting at zero, time samples should be exactly the same (except fewer in t)
-    @assert all(to[zeroidx:factor:end] .== t[t .>= 0])
-    @assert all(to[zeroidx:-factor:1] .== t[t .<= 0][end:-1:1])
+    # The time samples should be exactly the same (except fewer in t)
+    @assert all(to[zeroidx:factor:end] .≈ t[t .>= 0])
+    @assert all(to[zeroidx:-factor:1] .≈ t[t .<= 0][end:-1:1])
 
     return EnvGrid(float(zmax), referenceλ, ω0, t, ω, to, ωo, sidx, ωwindow, twindow, towindow)
+end
+
+function EnvGrid(;zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
+    EnvGrid(zmax, referenceλ, ω0, t, ω, to, ωo, sidx, ωwin, twin, towin)
 end
 
 struct FreeGrid <: SpaceGrid
@@ -164,6 +202,13 @@ struct FreeGrid <: SpaceGrid
     xywin::Array{Float64, 3}
 end
 
+"""
+    FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
+
+Spatial grid for full 3D freespace propagation with `x`/`y` half-width `Rx`/`Ry` and
+`Nx`/`Ny` samples. `window_factor` determines by how much the grid size is extended to fit
+a filtering window.
+"""
 function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
     Rxw = Rx * (1 + window_factor)
     Ryw = Ry * (1 + window_factor)
@@ -196,6 +241,39 @@ function to_dict(g::GT) where GT <: AbstractGrid
         d[string(field)] = getfield(g, field)
     end
     d
+end
+
+function from_dict(gridtype, d)
+    kwargs = (Symbol(k) => v for (k, v) in pairs(d))
+    grid = gridtype(;kwargs...)
+
+    # Make sure the grid is valid
+    validate(grid)
+    return grid
+end
+
+RealGrid(d::AbstractDict) = from_dict(RealGrid, d)
+EnvGrid(d::AbstractDict) = from_dict(EnvGrid, d)
+
+function validate(grid::TimeGrid)
+    δt = grid.t[2] - grid.t[1]
+    δto = grid.to[2] - grid.to[1]
+    @assert δt/δto ≈ length(grid.to)/length(grid.t)
+    @assert length(grid.towin) == length(grid.to)
+    @assert length(grid.ωwin) == length(grid.ω)
+    @assert length(grid.sidx) == length(grid.ω)
+    if grid isa EnvGrid
+        δω = grid.ω[2] - grid.ω[1]
+        Δω = length(grid.ω)*δω
+        @assert δt ≈ 2π/Δω
+        @assert length(grid.t) == length(grid.ω)
+        @assert length(grid.to) == length(grid.ωo)
+    else
+        Δω = maximum(grid.ω)
+        @assert δt ≈ π/Δω
+        @assert length(grid.t) == 2*(length(grid.ω)-1)
+        @assert length(grid.to) == 2*(length(grid.ωo)-1)
+    end
 end
 
 end

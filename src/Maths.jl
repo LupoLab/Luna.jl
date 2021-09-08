@@ -1,52 +1,91 @@
 module Maths
 import FiniteDifferences
 import LinearAlgebra: Tridiagonal, mul!, ldiv!
-import SpecialFunctions: erf, erfc
+import SpecialFunctions: erf, erfc, gamma
 import StaticArrays: SVector
-import Random: AbstractRNG, randn, MersenneTwister
+import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
 import Roots: fzero
 import Dierckx
+import Peaks
 
-"Calculate derivative of function f(x) at value x using finite differences"
+#= Pre-created finite difference methods for speed.
+   Use (order+6)th order central finite differences with 2 adaptive steps up to
+   11th order. Above that creates overflow errors, so we cap it. =#
+FDMs = [FiniteDifferences.central_fdm(min(order+6, 11), order, adapt=2) for order=1:7]
+
+"""
+    derivative(f, x, order::Integer)
+
+Calculate derivative of function f(x) at value x using finite differences
+"""
 function derivative(f, x, order::Integer)
     if order == 0
         return f(x)
     else
-        # use 5th order central finite differences with 4 adaptive steps
         scale = abs(x) > 0 ? x : 1.0
-        FiniteDifferences.fdm(FiniteDifferences.central_fdm(order+6, order), y->f(y*scale), x/scale, adapt=2)/scale^order
+        FDMs[order](y->f(y*scale), x/scale)/scale^order
     end
 end
 
-"Gaussian or hypergaussian function (with std dev σ as input)"
-function gauss(x, σ; x0 = 0, power = 2)
-    return exp(-1/2 * ((x-x0)/σ)^power)
-end
+"""
+    gauss(x, σ; x0=0, power=2)
 
-"Gaussian or hypergaussian function (with FWHM as input)"
-function gauss(x; x0 = 0, power = 2, fwhm)
-    σ = fwhm / (2 * (2 * log(2))^(1 / power))
-    return gauss(x, σ, x0 = x0, power=power)
-end
+Gaussian or hypergaussian function over `x` with std dev `σ`, power in the exponent of `power`,
+centred at `x0`.
+"""
+gauss(x, σ; x0=0, power=2) = exp(-1/2 * ((x-x0)/σ)^power)
 
-function randgauss(μ, σ, args...; seed=nothing)
-    rng = MersenneTwister(seed)
-    σ*randn(rng, args...) .+ μ
-end
+"""
+    gauss(x; fwhm, x0=0, power=2)
 
-"nth moment of the vector y"
-function moment(x::Vector, y::Vector, n = 1)
+Gaussian or hypergaussian function over `x` with FWHM `fwhm`, power in the exponent of `power`,
+centred at `x0`.
+"""
+gauss(x; x0=0, power=2, fwhm) = gauss(x, fwhm_to_σ(fwhm; power=power), x0 = x0, power=power)
+
+fwhm_to_σ(fwhm; power=2) = fwhm / (2 * (2 * log(2))^(1 / power))
+
+"""
+    gaussnorm(σ; power=2)
+    gaussnorm(;fwhm, power=2)
+
+Norm of a Gaussian with standard deviation `σ` or FWHM `fwhm` and power in the exponent
+`power`.
+"""
+gaussnorm(σ; power=2) = 2σ*2^(1/power)*gamma((power+1)/power)
+gaussnorm(;fwhm, power=2) = gaussnorm(fwhm_to_σ(fwhm; power=power); power=power)
+
+"""
+    randgauss([rng=GLOBAL_RNG], μ, σ, args...)
+
+Generate random numbers with normal distribution centred on `μ` with standard deviation `σ`.
+
+Any additional `args` are passed onto `randn` and can be used to specify the output dimensions.
+"""
+randgauss(μ, σ, args...) = randgauss(GLOBAL_RNG, μ, σ, args...)
+randgauss(rng::AbstractRNG, μ, σ, args...) = σ*randn(rng, args...) .+ μ
+
+"""
+    moment(x::Vector, y::Vector, n = 1)
+
+Calculate the nth moment of the vector y.
+"""
+function moment(x::Vector, y::Vector, n=1)
     if length(x) ≠ length(y)
         throw(DomainError(x, "x and y must have same length"))
     end
     return sum(x.^n .* y) / sum(y)
 end
 
-"nth moment of multi-dimensional array y along dimension dim"
-function moment(x::Vector, y, n = 1; dim = 1)
+"""
+    moment(x::Vector, y, n=1; dim=1)
+
+Calculate the nth moment of multi-dimensional array y along dimension dim.
+"""
+function moment(x::Vector, y, n=1; dim=1)
     if size(y, dim) ≠ length(x)
         throw(DomainError(y, "y must be of same length as x along dim"))
     end
@@ -55,35 +94,77 @@ function moment(x::Vector, y, n = 1; dim = 1)
     return sum(reshape(x, Tuple(xshape)).^n .* y, dims=dim) ./ sum(y, dims=dim)
 end
 
-"RMS width of distribution y on axis x"
-function rms_width(x::Vector, y::Vector; dim = 1)
+"""
+    rms_width(x::Vector, y; dim=1)
+
+RMS width of distribution y on axis x
+"""
+function rms_width(x::Vector, y::Vector; dim=1)
     return sqrt(moment(x, y, 2) - moment(x, y, 1)^2)
 end
 
-function rms_width(x::Vector, y; dim = 1)
-    return sqrt.(moment(x, y, 2, dim = dim) - moment(x, y, 1, dim = dim).^2)
+function rms_width(x::Vector, y; dim=1)
+    return sqrt.(moment(x, y, 2, dim=dim) - moment(x, y, 1, dim=dim).^2)
 end
 
 """
-    fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+    fwhm(x, y; method=:linear, baseline=false, minmax=:min, level=0.5)
 
-Calculate the full width at half maximum (FWHM) of `y` on the axis `x`
+Calculate the full width at half maximum (FWHM) of `y` on the axis `x`.
 
 `method` can be `:spline` or `:nearest`. `:spline` uses a [`CSpline`](@ref), whereas
 `:nearest` finds the closest values either side of the crossing point and interpolates linearly.
 
 If `baseline` is true, the width is not taken at
-half the global maximum, but at half of the span of `y`.
+`level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
 
 `minmax` determines whether the FWHM is taken at the narrowest (`:min`) or the widest (`:max`)
 point of y.
+
+The default `level=0.5` requests the full width at half maximum. Setting `level` to something
+different computes the corresponding width. E.g. `level=0.1` for the 10% width.
 """
-function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
+function fwhm(x, y::AbstractVector; kwargs...)
+    left, right = level_xings(x, y; kwargs...)
+    return abs(right-left)
+end
+
+function fwhm(x, y::AbstractArray; dim=1, kwargs...)
+    idxlo = CartesianIndices(size(y)[1:dim-1])
+    idxhi = CartesianIndices(size(y)[dim+1:end])
+    outshape = collect(size(y))
+    outshape[dim] = 1
+    out = zeros(eltype(y), Tuple(outshape))
+    for hi in idxhi
+        for lo in idxlo
+            out[lo, 1, hi] = fwhm(x, y[lo, :, hi]; kwargs...)
+        end
+    end
+    out
+end
+
+"""
+    level_xings(x, y; method=:linear, baseline=false, minmax=:min)
+
+Find crossings of the curve `y` on the axis `x` with the value `level * maximum(y)`.
+
+`method` can be `:spline`, `:linear` or `:nearest`. `:spline` uses a [`CSpline`](@ref).
+`:linear` finds the closest values either side of the crossing point and interpolates linearly. 
+`:nearest` just uses the closest values either side of the crossing point.
+
+If `baseline` is true, the width is not taken at
+`level * maximum(y)`, but at half of the span of `y`, `level * (maximum(y) - minimum(y))`.
+
+`minmax` determines whether the crossings are taken at the narrowest (`:min`) or the widest (`:max`)
+point of y.
+"""
+function level_xings(x::AbstractVector, y::AbstractVector;
+                     method=:linear, baseline=false, minmax=:min, level=0.5)
     minmax in (:min, :max) || error("minmax has to be :min or :max")
     if baseline
-        val = minimum(y) + 0.5*(maximum(y) - minimum(y))
+        val = minimum(y) + level*(maximum(y) - minimum(y))
     else
-        val = 0.5*maximum(y)
+        val = level*maximum(y)
     end
     if !(method in (:spline, :linear, :nearest))
         error("Unknown FWHM method $method")
@@ -95,19 +176,21 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
             if minmax == :min
                 lefti = findlast((x .< xmax) .& (y .< val))
                 righti = findfirst((x .> xmax) .& (y .< val))
-                (method == :nearest) && return abs(x[lefti] - x[righti])
+                (method == :nearest) && return (x[lefti], x[righti])
+
                 left = linterpx(x[lefti], x[lefti+1], y[lefti], y[lefti+1], val)
                 right = linterpx(x[righti-1], x[righti], y[righti-1], y[righti], val)
             else
                 lefti = findfirst((x .< xmax) .& (y .> val))
                 righti = findlast((x .> xmax) .& (y .> val))
-                (method == :nearest) && return abs(x[lefti] - x[righti])
+                (method == :nearest) && return (x[lefti], x[righti])
+
                 left = linterpx(x[lefti-1], x[lefti], y[lefti-1], y[lefti], val)
                 right = linterpx(x[righti], x[righti+1], y[righti], y[righti+1], val)
             end
-            return abs(right - left)
+            return left, right
         catch
-            return NaN
+            return NaN, NaN
         end
     elseif method == :spline
         #spline method
@@ -117,15 +200,15 @@ function fwhm(x, y; method=:linear, baseline=false, minmax=:min)
             rleft = r[r .< xmax]
             rright = r[r .> xmax]
             if minmax == :min
-                return abs(minimum(rright) - maximum(rleft))
+                return maximum(rleft), minimum(rright)
             else
-                return abs(maximum(rright) - minimum(rleft))
+                return minimum(rleft), maximum(rright)
             end
         catch e
-            return NaN
+            return NaN, NaN
         end
     else
-        error("Unknown FWHM method $method")
+        error("Unknown level_xings method $method")
     end
 end
 
@@ -249,41 +332,58 @@ function cumtrapz(y, x; dim=1)
     return out
 end
 
-"Normalise an array by its maximum value"
+"""
+    normbymax(x, dims)
+
+Return an array normalised by its maximum value
+"""
 function normbymax(x, dims)
-    return x ./ maximum(x; dims = dims)
+    return x ./ maximum(x; dims=dims)
 end
 
 function normbymax(x)
     return x ./ maximum(x)
 end
 
-"Normalised log10 i.e. maximum of output is 0"
+"""
+    log10_norm(x)
+
+Normalised log10 i.e. maximum of output is 0
+"""
 function log10_norm(x)
     return log10.(normbymax(x))
 end
 
 function log10_norm(x, dims)
-    return log10.(normbymax(x, dims = dims))
+    return log10.(normbymax(x, dims))
 end
 
-"Window based on the error function"
+"""
+    errfun_window(x, xmin, xmax, width)
+    errfun_window(x, xmin, xmax, width_left, width_right)
+
+Filtering window based on the error function. If `width_left` and `width_right` are given
+separately, the smoothing width is different on each side.
+"""
 function errfun_window(x, xmin, xmax, width)
     return @. 0.5 * (erf((x - xmin) / width) + erfc((x - xmax) / width) - 1)
 end
 
-"Error function window but with different widths on each side"
 function errfun_window(x, xmin, xmax, width_left, width_right)
     return @. 0.5 * (erf((x - xmin) / width_left) + erfc((x - xmax) / width_right) - 1)
 end
 
 """
-Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)):
-    xmin: lower limit (window is 0 here)
-    xmax: upper limit (window is 0 here)
-    ε: fraction of window width over which to increase from 0 to 1
+    planck_taper(x, xmin, xmax, ε)
+
+Planck taper window as defined in the paper (https://arxiv.org/pdf/1003.2939.pdf eq(7)).
+
+#Arguments
+-`xmin` : lower limit (window is 0 here)
+-`xmax` : upper limit (window is 0 here)
+-`ε` : fraction of window width over which to increase from 0 to 1
 """
-function planck_taper(x::AbstractArray, xmin, xmax, ε)
+function planck_taper(x, xmin, xmax, ε)
     x0 = (xmax + xmin) / 2
     xc = x .- x0
     X = (xmax - xmin)
@@ -291,15 +391,17 @@ function planck_taper(x::AbstractArray, xmin, xmax, ε)
     x2 = -X / 2 * (1 - 2ε)
     x3 = X / 2 * (1 - 2ε)
     x4 = X / 2
-    return _taper(xc, x1, x2, x3, x4)
+    return _taper.(xc, x1, x2, x3, x4)
 end
 
 """
+    planck_taper(x, left0, left1, right1, right0)
+
 Planck taper window, but finding the taper width by defining 4 points:
-The window increases from 0 to 1 between left0 and left1, and then drops again
-to 0 between right1 and right0
+The window increases from 0 to 1 between `left0` and `left1`, and then drops again
+to 0 between `right1` and `right0`.
 """
-function planck_taper(x::AbstractArray, left0, left1, right1, right0)
+function planck_taper(x, left0, left1, right1, right0)
     x0 = (right0 + left0) / 2
     xc = x .- x0
     X = right0 - left0
@@ -309,33 +411,52 @@ function planck_taper(x::AbstractArray, left0, left1, right1, right0)
     x2 = -X / 2 * (1 - 2εleft)
     x3 = X / 2 * (1 - 2εright)
     x4 = X / 2
-    return _taper(xc, x1, x2, x3, x4)
+    return _taper.(xc, x1, x2, x3, x4)
 end
 
-"""
-Planck taper helper function, common to both versions of planck_taper
-"""
 function _taper(xc, x1, x2, x3, x4)
-    idcs12 = x1 .< xc .< x2
-    idcs23 = x2 .<= xc .<= x3
-    idcs34 = x3 .< xc .< x4
-    z12 = @. (x2 - x1) / (xc[idcs12] - x1) + (x2 - x1) / (xc[idcs12] - x2)
-    z34 = @. (x3 - x4) / (xc[idcs34] - x3) + (x3 - x4) / (xc[idcs34] - x4)
-    out = zero(xc)
-    @. out[idcs12] = 1 / (1 + exp(z12))
-    @. out[idcs23] = 1
-    @. out[idcs34] = 1 / (1 + exp(z34))
-    return out
+    if xc < x1
+        return zero(xc)
+    elseif x1 < xc < x2
+        z12 = (x2 - x1) / (xc - x1) + (x2 - x1) / (xc - x2)
+        return 1 / (1 + exp(z12))
+    elseif x2 <= xc <= x3
+        return one(xc)
+    elseif x3 < xc < x4
+        z34 = (x3 - x4) / (xc - x3) + (x3 - x4) / (xc - x4)
+        return 1 / (1 + exp(z34))
+    else
+        return zero(xc)
+    end
 end
 
 """
-Hypergaussian window
+    hypergauss_window(x, xmin, xmax, power = 10)
+
+Hypergaussian window function.
 """
 function hypergauss_window(x, xmin, xmax, power = 10)
     fw = xmax - xmin
     x0 = (xmax + xmin) / 2
     return gauss(x, x0 = x0, fwhm = fw, power = power)
 end
+
+"""
+    gabor(t, A, ts, fw)
+
+Compute the Gabor transform (aka spectrogram or time-gated Fourier transform) of the vector
+`A`, sampled on axis `t`, with windows centred at `ts` and a window FWHM of `fw`.
+"""
+function gabor(t::Vector, A::Vector, ts, fw)
+    tmp = Array{eltype(A), 2}(undef, (length(t), length(ts)))
+    for (ii, ti) in enumerate(ts)
+        tmp[:, ii] = A .* Maths.gauss.(t; x0=ti, fwhm=fw)
+    end
+    _gaborFT(tmp)
+end
+
+_gaborFT(x::Array{T, 2}) where T <: Real = FFTW.rfft(x, 1)
+_gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
 
 """
     hilbert(x; dim=1)
@@ -362,7 +483,7 @@ Returns a closure `hilbert!(out, x)` which places the Hilbert transform of `x` i
 """
 function plan_hilbert!(x; dim=1)
     loadFFTwisdom()
-    FT = FFTW.plan_fft(x, dim, flags=Luna.settings["fftw_flag"])
+    FT = FFTW.plan_fft(copy(x), dim, flags=Luna.settings["fftw_flag"])
     saveFFTwisdom()
     xf = Array{ComplexF64}(undef, size(FT))
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
@@ -391,7 +512,7 @@ Returns a closure `hilbert(x)` which returns the Hilbert transform of `x` withou
     The closure returned always returns a reference to the same array buffer, which could lead
     to unexpected results if it is called from more than one location. To avoid this the array
     should either: (i) only be used in the same code segment; (ii) only be used transiently
-    as part of a larger computation; (iii) copied.
+    as part of a larger computation; (iii) be copied.
 """
 function plan_hilbert(x; dim=1)
     out = complex(x)
@@ -403,9 +524,12 @@ function plan_hilbert(x; dim=1)
 end
 
 """
-Oversample (smooth) an array by 0-padding in the frequency domain
+    oversample(t, x; factor::Int=4, dim=1)
+
+Oversample (smooth) an array by 0-padding in the frequency domain. Works for both real-valued
+and complex-valued arrays.
 """
-function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Real where N
+function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
@@ -425,17 +549,15 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: R
 
     shape = collect(size(xf))
     shape[dim] = newlen_ω
-    xfo = zeros(eltype(xf), Tuple(shape))
+    xfo = Array{eltype(xf), N}(undef, Tuple(shape))
+    fill!(xfo, 0.0)
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, 1:len, idxhi] .= factor .* xf
     return to, FFTW.irfft(xfo, newlen_t, dim)
 end
 
-"""
-Oversampling for complex-valued arryas (e.g. envelope fields)
-"""
-function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: Complex where N
+function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
@@ -456,16 +578,18 @@ function oversample(t, x::Array{T,N}; factor::Integer = 4, dim = 1) where T <: C
 
     shape = collect(size(xf))
     shape[dim] = newlen
-    xfo = zeros(eltype(xf), Tuple(shape))
+    xfo = Array{eltype(xf), N}(undef, Tuple(shape))
+    fill!(xfo, 0.0)
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, startidx:endidx, idxhi] .= factor .* xf
     return to, FFTW.ifft(FFTW.ifftshift(xfo, dim), dim)
 end
 
-
 """
-Find limit of a series by Aitken acceleration
+    aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
+
+Find limit of a series by Aitken acceleration.
 """
 function aitken_accelerate(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
@@ -495,7 +619,10 @@ function aitken(x0, x1, x2)
 end
 
 """
-Find limit of series by brute force
+    converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
+
+Find limit of series by brute force. The iteration is stopped when the relative change in
+accumulated value is smaller than `rtol`.
 """
 function converge_series(f, x0; n0 = 0, rtol = 1e-6, maxiter = 10000)
     n = n0
@@ -572,13 +699,14 @@ struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
     y::Vy
     D::Vy
     ifun::fT
+    bounds_error::Bool
 end
 
-# make  broadcast like a scalar
+# make broadcast like a scalar
 Broadcast.broadcastable(c::CSpline) = Ref(c)
 
 """
-    CSpline(x, y [, ifun])
+    CSpline(x, y [, ifun]; bounds_error=false)
 
 Construct a `CSpline` to interpolate the values `y` on axis `x`.
 
@@ -587,7 +715,7 @@ than x0. Otherwise, it defaults two one of two options:
 1. If `x` is uniformly spaced, the index is calculated based on the spacing of `x`
 2. If `x` is not uniformly spaced, a `FastFinder` is used instead.
 """
-function CSpline(x, y, ifun=nothing)
+function CSpline(x, y, ifun=nothing; bounds_error=false)
     x, y = check_spline_args(x, y)
     R = similar(y)
     R[1] = y[2] - y[1]
@@ -602,7 +730,7 @@ function CSpline(x, y, ifun=nothing)
     dl = fill(1.0, length(y) - 1)
     M = Tridiagonal(dl, d, dl)
     D = M \ R
-    CSpline(x, y, D, make_spline_ifun(x, ifun))
+    CSpline(x, y, D, make_spline_ifun(x, ifun), bounds_error)
 end
 
 """
@@ -611,6 +739,10 @@ end
 Evaluate the `CSpline` at coordinate `x0`
 """
 function (c::CSpline)(x0)
+    if c.bounds_error
+        x0 < c.x[1] && throw(DomainError("CSpline evaulated out of bounds, $x0 < $(c.x[1])"))
+        x0 > c.x[end] && throw(DomainError("CSpline evaulated out of bounds, $x0 > $(c.x[end])"))
+    end
     i = c.ifun(x0)
     x0 == c.x[i] && return c.y[i]
     x0 == c.x[i-1] && return c.y[i-1]
@@ -621,7 +753,55 @@ function (c::CSpline)(x0)
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
-"Calculate frequency vector k from samples x for FFT"
+"""
+    linterp(x, x1, y1, x2, y2)
+
+Linear interpolation of `y` at position `xp`, between points `(x1, y1)` and `(x2, y2)`.
+For `xp` outside interval `[x1, x2]` this corresponds to linear extrapolation.
+"""
+function linterp(xp, x1, y1, x2, y2)
+    t = (xp - x1) / (x2 - x1)
+    (1 - t) * y1 + t * y2
+end
+
+"""
+    LinTerp
+
+Linear interpolation.
+"""
+struct LinTerp{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
+    x::Vx
+    y::Vy
+    ifun::fT
+end
+
+# make  broadcast like a scalar
+Broadcast.broadcastable(l::LinTerp) = Ref(l)
+
+"""
+    LinTerp(xp, xs, ys)
+
+Construct a linear interpolator over `xs`, `ys`.
+"""
+function LinTerp(xs, ys)
+    LinTerp(xs, ys, make_spline_ifun(xs, nothing))
+end
+
+"""
+    (l::LinTerp)(x)
+
+Evaluate a linear interpolator `LinTerp` at point `x`.
+"""
+function (l::LinTerp)(x)
+    i = l.ifun(x)
+    linterp(x, l.x[i - 1], l.y[i - 1], l.x[i], l.y[i])
+end
+
+"""
+    fftfreq(x)
+
+Calculate frequency vector k from samples x for complex-valued FFT
+"""
 function fftfreq(x)
     Dx = abs(x[2] - x[1])
     all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
@@ -629,6 +809,23 @@ function fftfreq(x)
     n = collect(range(0, length=N))
     (n .- N/2) .* 2π/(N*Dx)
 end
+
+"""
+    rfftfreq(x)
+
+Calculate frequency vector k from samples x for rFFT
+"""
+function rfftfreq(x)
+    Dx = abs(x[2] - x[1])
+    all(diff(x) .≈ Dx) || error("x must be spaced uniformly")
+    Nx = length(x)
+    Nf = length(x)÷2 + 1
+    n = collect(range(0, length=Nf))
+    n .* 2π/(Nx*Dx)
+end
+
+rfftnorm(δt) = 2*fftnorm(δt)
+fftnorm(δt) = δt/sqrt(2π)
 
 """
     FastFinder
@@ -902,6 +1099,62 @@ function fpbspl!(h, hh, t, k, x, l)
         end
     end
     return h
+end
+
+"""
+    pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
+
+Find the full width of a peak in `y` over `x` centred at index `pki`.
+
+The default `level=0.5` requests the full width at half maximum. Setting `level` to something
+different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
+
+`skipnonmono=true` skips peaks which are not monotonically increaing/decreasing before/after the peak.
+
+`closest=5` sets the minimum number of indices for the full width.
+"""
+function pkfw(x, y, pki; level=0.5, skipnonmono=true, closest=5)
+    val = level*y[pki]
+    iup = findnext(x -> x < val, y, pki)
+    if iup == nothing
+        iup = length(x)
+    end
+    idn = findprev(x -> x < val, y, pki)
+    if idn == nothing
+        idn = 1
+    end
+    if skipnonmono
+        if any(diff(y[pki:iup]) .> 0)
+            return missing
+        end
+        if any(diff(y[idn:pki]) .< 0)
+            return missing
+        end
+    end
+    if (iup - idn) < closest
+        return missing
+    end
+    up = Maths.linterpx(x[iup - 1], x[iup], y[iup - 1], y[iup], val)
+    dn = Maths.linterpx(x[idn], x[idn + 1], y[idn], y[idn + 1], val)
+    return up - dn
+end
+
+"""
+    findpeaks(x, y; threshold=0.0, filterfw=true)
+
+Find isolated peaks in a signal `y` over `x` and return their value, FWHM and index.
+`threshold=0.0` allows filtering peaks above a threshold value.
+If `filterfw=true` then only peaks with a clean FWHM are returned.
+"""
+function findpeaks(x, y; threshold=0.0, filterfw=true)
+    pkis, proms = Peaks.peakprom(Peaks.Maxima(), y, 10)
+    pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
+    # filter out peaks with missing fws
+    if filterfw
+        pks = filter(x -> !(x.fw === missing), pks)
+    end
+    # filter out peaks below threshold
+    pks = filter(x -> x.peak > threshold, pks)
 end
 
 end

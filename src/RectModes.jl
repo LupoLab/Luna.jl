@@ -22,6 +22,16 @@ struct RectMode{Ta, Tb, Tcore, Tclad} <: AbstractMode
     cladn::Tclad
 end
 
+function show(io::IO, m::RectMode)
+    a = "a(z=0)=$(m.a(0))"
+    b = "b(z=0)=$(m.b(0))"
+    pol = string(m.pol)
+    out = "RectMode{"*join([mode_string(m), a, b, "pol=$pol"], ", ")*"}"
+    print(io, out)
+end
+
+mode_string(m::RectMode) = string(m.n)*string(m.m)
+
 RectMode(a::Number, args...; kwargs...) = RectMode(z->a, args...; kwargs...)
 RectMode(afun, b::Number, args...; kwargs...) = RectMode(afun, z->b, args...; kwargs...)
 RectMode(a::Number, b::Number, args...; kwargs...) = RectMode(z->a, z->b, args...; kwargs...)
@@ -44,7 +54,10 @@ end
 
 dimlimits(m::RectMode; z=0) = (:cartesian, (-m.a(z), -m.b(z)), (m.a(z), m.b(z)))
 
-"effective index of rectangular mode with dielectric core and arbitrary
+"""
+    neff(m::RectMode, ω; z=0)
+
+effective index of rectangular mode with dielectric core and arbitrary
  (metal or dielectric) cladding.
 
 Adapted from
@@ -54,7 +67,7 @@ Appl. Opt., AO 15, 1334–1340 (1976).
 
 I had to re-derive the result in order to get the complex cladding index contribution
 to the real part of neff.
-"
+"""
 function neff(m::RectMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2

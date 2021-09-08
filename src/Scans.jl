@@ -2,6 +2,9 @@ module Scans
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Base.Threads: @threads
 import Base: length
+import Dates
+import Logging: @info, @warn
+import DataStructures: OrderedDict
 
 """
     @scaninit(name="scan")
@@ -101,7 +104,7 @@ mutable struct Scan
     mode::Symbol # :cirrus, :condor, :local, :batch or :range
     batch::Tuple{Int, Int} # batch index and number of batches
     idcs # Array or iterator of indices to be run on this execution
-    vars::Dict{Symbol, Any} # maps from variable names to arrays
+    vars::OrderedDict{Symbol, Any} # maps from variable names to arrays
     arrays # Array of arrays, each element is one of the arrays to be scanned over
     values::IdDict # maps from each scan array to the expanded array of values
     parallel::Bool # true if scan is being run multi-threaded
@@ -129,7 +132,7 @@ function Scan(name, args)
     else
         error("One of batch, range, local or cirrus options must be given!")
     end
-    Scan(name, mode, batch, idcs, Dict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
+    Scan(name, mode, batch, idcs, OrderedDict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
 end
 
 """
@@ -148,8 +151,9 @@ cartesian product.
 
 This function is used internally by `@scanvar`
 """
-function addvar!(s::Scan, var::Symbol, arr::AbstractArray)
+function addvar!(s::Scan, var::AbstractString, arr::AbstractArray)
     push!(s.arrays, arr)
+    var = Symbol(var)
     s.vars[var] = arr
     makearray!(s)
 end
@@ -233,7 +237,6 @@ Create an array first and add it to the scan later:
 ```
 """
 macro scanvar(expr)
-    global ex = expr
     if isa(expr, Symbol)
         # existing array being added
         q = quote
@@ -246,7 +249,7 @@ macro scanvar(expr)
     isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
     quote
         $(esc(expr)) # First, simply execute the assignment
-        addvar!($(esc(:__SCAN__)), lhs, $(esc(:($lhs)))) # now add the resulting array to the Scan
+        addvar!($(esc(:__SCAN__)), $(string(lhs)), $(esc(:($lhs)))) # now add the resulting array to the Scan
     end
 end
 
@@ -314,11 +317,21 @@ macro scan(ex)
         else
             if $(esc(:__SCAN__)).parallel
                 @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch e
+                        bt = catch_backtrace()
+                        @warn sprint(showerror, e, bt)
+                    end
                 end
             else
                 for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    $(esc(body))
+                    try
+                        $(esc(body))
+                    catch e
+                        bt = catch_backtrace()
+                        @warn sprint(showerror, e, bt)
+                    end
                 end
             end
         end

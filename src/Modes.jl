@@ -1,15 +1,21 @@
 module Modes
-import Roots: fzero
-import Cubature: hcubature
+import Roots: find_zero, Order2
+import Cubature: hcubature, hquadrature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
-import Luna: Maths
+import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0
 import Memoize: @memoize
 import LinearAlgebra: mul!
+import DSP: unwrap
 
 export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
 
+"""
+    AbstractMode
+
+Abstract type representing a single mode of a waveguide.
+"""
 abstract type AbstractMode end
 
 ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
@@ -18,22 +24,34 @@ ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
-"Maximum dimensional limits of validity for this mode"
-function dimlimits(m::AbstractMode; z=0.0)
-    error("abstract method called")
-end
+"""
+    dimlimits(m::AbstractMode; z=0.0)
 
-"Get the field components `(Ex, Ey)`` at position `xs`, `z`"
-function field(m::AbstractMode, xs; z=0.0)
-    error("abstract method called")
-end
+Maximum dimensional limits of validity for mode `m` at position `z`.
+"""
+function dimlimits end
 
-"Create function of coords that returns (xs) -> (Ex, Ey)"
+"""
+    field(m::AbstractMode, xs; z=0.0)
+
+Get the field components `(Ex, Ey)`` at position `xs`, `z`
+"""
+function field end
+
+"""
+    field(m::AbstractMode; z=0)
+
+Create function of coords that returns (xs) -> (Ex, Ey) for the mode `m`.
+"""
 field(m::AbstractMode; z=0) =  (xs) -> field(m, xs, z=z)
 
-"Get mode normalization constant"
-# we memoize this so it is only called once for each mode and z position
+"""
+    N(m::AbstractMode; z=0.0)
+
+Get mode normalization constant of mode `m` at longitudinal position `z`.
+"""
 @memoize function N(m::AbstractMode; z=0.0)
+    # we memoize this so it is only called once for each mode and z position
     f = field(m, z=z)
     dl = dimlimits(m, z=z)
     function Nfunc(xs)
@@ -45,21 +63,42 @@ field(m::AbstractMode; z=0) =  (xs) -> field(m, xs, z=z)
     0.5*abs(val)
 end
 
-"Get the normalised field components at position `xs`, `z`"
+"""
+    Exy(m::AbstractMode, xs; z=0.0)
+
+Get the normalised field components at position `xs`, `z`.
+"""
 Exy(m::AbstractMode, xs; z=0.0) = field(m, xs, z=z) ./ sqrt(N(m, z=z))
 
-"Create function that returns normalised (xs) -> (Ex, Ey)"
+"""
+    Exy(m::AbstractMode; z=0.0)
+
+Create function that returns normalised (xs) -> (Ex, Ey)"""
 Exy(m::AbstractMode; z=0.0) = (xs) -> Exy(m, xs, z=z)
 
-"Get the field norm `|E|`` at position `xs`, `z`"
+"""
+    absE(m::AbstractMode, xs; z=0.0)
+
+Get the field norm ``|E|`` at position `xs`, `z`
+"""
 absE(m::AbstractMode, xs; z=0.0) = norm(Exy(m, xs, z=z))
 
-"Create function that returns normalised (xs) -> |E|"
+"""
+    absE(m::AbstractMode; z=0.0)
+
+Create function that returns normalised (xs) -> ``|E|``.
+"""
 absE(m::AbstractMode; z=0.0) = (xs) -> absE(m, xs, z=z)
 
-"Get effective area of mode"
-# we memoize this so it is only called once for each mode and z position
+"""
+    Aeff(m::AbstractMode; z=0.0)
+
+Get effective area of mode `m` and longitudinal position `z`.
+
+This is the brute-force implementation valid for any mode.
+"""
 @memoize function Aeff(m::AbstractMode; z=0.0)
+    # we memoize this so it is only called once for each mode and z position
     em = absE(m, z=z)
     dl = dimlimits(m, z=z)
     # Numerator
@@ -78,57 +117,137 @@ absE(m::AbstractMode; z=0.0) = (xs) -> absE(m, xs, z=z)
     return num / den
 end
 
-"full complex refractive index of a mode"
-function neff(m::AbstractMode, ω; z=0.0)
-    error("abstract method called")
-end
+"""
+    neff(m::AbstractMode, ω; z=0.0)
 
+Get the full complex refractive index of mode `m` at frequency `ω`
+and longitudinal position `z`.
+"""
+function neff end
+
+"""
+    β(m::AbstractMode, ω; z=0.0)
+
+Calculate the propagation constant ``β`` for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function β(m::AbstractMode, ω; z=0.0)
     return ω/c*real(neff(m, ω, z=z))
 end
 
+"""
+    α(m::AbstractMode, ω; z=0.0)
+
+Calculate the attenuation constant ``α`` for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function α(m::AbstractMode, ω; z=0.0)
     return 2*ω/c*imag(neff(m, ω, z=z))
 end
 
+"""
+    losslength(m::AbstractMode, ω; z=0.0)
+
+Calculate the losslength (``1/α``) for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function losslength(m::AbstractMode, ω; z=0.0)
     return 1/α(m, ω, z=z)
 end
 
-function transmission(m::AbstractMode, ω, L; z=0.0)
-    return exp(-α(m, ω)*L)
-end
+"""
+    dB_per_m(m::AbstractMode, ω; z=0.0)
 
+Calculate the attenuation in dB/m for the mode `m` at frequency `ω` and
+longitudinal position `z`.
+"""
 function dB_per_m(m::AbstractMode, ω; z=0.0)
-    return 10/log(10).*α(m, ω)
+    return 10/log(10).*α(m, ω; z=z)
 end
 
+"""
+    transmission(m::AbstractMode, ω, L)
+
+Calculate the power transmission after propagation through length `L` in the mode `m` for
+radiation at the frequency `ω`.
+"""
+function transmission(m::AbstractMode, ω, L)
+    αint, err = hquadrature(0, L) do z
+        -α(m, ω; z)
+    end
+    return exp(αint)
+end
+
+"""
+    dispersion_func(m::AbstractMode, order; z=0.0)
+
+Get a function `βn(ω)` which returns the dispersion of a given `order` at frequency `ω`.
+"""
 function dispersion_func(m::AbstractMode, order; z=0.0)
     βn(ω) = Maths.derivative(ω -> β(m, ω, z=z), ω, order)
     return βn
 end
 
+"""
+    dispersion_func(m::AbstractMode, order; z=0.0)
+
+Calculate the dispersion of a given `order` at frequency `ω`.
+"""
 function dispersion(m::AbstractMode, order, ω; z=0.0)
     return dispersion_func(m, order, z=z).(ω)
 end
 
-function zdw(m::AbstractMode; ub=200e-9, lb=3000e-9, z=0.0)
-    ubω = 2π*c/ub
-    lbω = 2π*c/lb
+"""
+    zdw(m::AbstractMode; λmin=100e-9, λmax=3000e-9, z=0.0)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` within the range `ub` to `lb`.
+"""
+function zdw(m::AbstractMode; λmin=100e-9, λmax=3000e-9, z=0.0)
+    ubω = 2π*c/λmin
+    lbω = 2π*c/λmax
     ω0 = missing
     try
-        ω0 = fzero(dispersion_func(m, 2, z=z), lbω, ubω)
+        ω0 = find_zero(dispersion_func(m, 2, z=z), (lbω, ubω))
     catch
     end
     return 2π*c/ω0
 end
 
+"""
+    zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-4)
+
+Calculate the zero-dispersion wavelength (ZDW) of mode `m` with an initial guess of `λ0`.
+
+This method is faster than the bounded version if the ZDW is known to be close to `λ0`.
+"""
+function zdw(m::AbstractMode, λ0; z=0.0, rtol=1e-6)
+    ωguess = 2π*c/λ0 * 1e-15 # convert everything find_zero sees to units close to 1.0
+    dfun = dispersion_func(m, 2, z=z)
+    β2(ω) = 1e30 * dfun(ω*1e15)
+    ω0 = missing
+    try
+        ω0 = 1e15*find_zero(β2, ωguess, Order2(), rtol=rtol)
+    catch
+    end
+    return 2π*c/ω0
+end
+
+"""
+    β_ret(m::AbstractMode, ω; z=0, λ0)
+
+Calculate the propagation constant ``β`` for mode `m` transformed into a frame which moves with
+the group and phase velocity of `m` at wavelength `λ0`.
+"""
 function β_ret(m::AbstractMode, ω; z=0, λ0)
     ω0 = 2π*c/λ0
     β.(m, ω; z=z) .- dispersion(m, 1, ω0; z=z)*(ω.-ω0) .- β(m, ω0; z=z)
 end
 
-"Check that function accepts z keyword argument and add it if necessary"
+"""
+    chkzkwarg(func)
+
+Check that function accepts `z` keyword argument and add it if necessary.
+"""
 function chkzkwarg(func)
     try
         func(2.5e15, z=0.0)
@@ -191,6 +310,102 @@ function overlap(m::AbstractMode, r, E; dim, norm=true)
     end
     return integral
 end
+
+"""
+    overlap(m::AbstractMode, E)
+
+Calculate mode overlap between (analytic) 2D field `E` and mode `m`.
+The field function `E(xs)` should return the normalised cartesian vector
+components of the field `(Ex, Ey)` as an `SVector` as a function of polar
+coordinates `xs = (r,θ)`.
+```
+"""
+function overlap(m::AbstractMode, E)
+    dl = dimlimits(m)
+    function f(xs)
+        0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1]
+    end
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
+    abs(val)
+end
+
+"""
+    overlap(modes::ModeCollection, newgrid, oldgrid, r, Eωr)
+
+Decompose the spatio-spectral field `Eωr`, sampled on radial coordinate `r` and time-grid
+`oldgrid`, into the given `modes` and resample onto `newgrid` via cubic interpolation.
+"""
+function overlap(modes::ModeCollection, newgrid::Grid.RealGrid, oldgrid::Grid.RealGrid, r, Eωr)
+    Egm = zeros(ComplexF64, (length(newgrid.ω), length(modes))) # output array
+    # If old and new grids have different number of samples, we need to scale by δt1/δt2
+    scale = (oldgrid.t[2] - oldgrid.t[1]) / (newgrid.t[2] - newgrid.t[1])
+    #= Pulses centred on t=0 have large linear spectral phase components which can confuse
+        phase unwrapping and lead to oscillations in the spectral phase after interpolation.
+        Here we shift the pulse to t=-t_max of the old grid to remove this, then do the
+        interpolation, then shift back to t=0 on the new grid. Note that this preserves any
+        actual time shifts on the original pulse =#
+    τold = length(oldgrid.t) * (oldgrid.t[2] - oldgrid.t[1])/2
+    τnew = length(newgrid.t) * (newgrid.t[2] - newgrid.t[1])/2
+    for (midx, mode) in enumerate(modes)
+        Eωm = overlap(mode, r, Eωr; norm=false, dim=2)[:, 1]
+        Eωm .*= exp.(1im.*oldgrid.ω.*τold) # shift to -t_max before unwrapping
+        Aω = abs.(Eωm) # spectral amplitude
+        ϕω = unwrap(angle.(Eωm)) # spectral phase
+        Ag = Maths.BSpline(oldgrid.ω, Aω).(newgrid.ω)
+        ϕg = Maths.BSpline(oldgrid.ω, ϕω).(newgrid.ω) .- newgrid.ω*τnew # shift to t=0
+        Egm[:, midx] = scale * Ag .* exp.(1im*ϕg)
+    end
+    Egm
+end
+
+function _overlap(mode1::AbstractMode, mode2::AbstractMode)
+    dl = dimlimits(mode1)
+    if dl != dimlimits(mode2)
+        error("Integration limits for both modes must be the same")
+    end
+    function f(xs)
+        ret = 1/2*sqrt(ε_0/μ_0)*dot(conj(Exy(mode1, xs)), Exy(mode2, xs))
+        dl[1] == :polar ? xs[1]*ret : ret
+    end
+    val, err = hcubature(f, dl[2], dl[3]; maxevals=5000)
+end
+
+"""
+    overlap(mode1, mode2)
+
+Calculate the normalised overlap between two `AbstractMode`s.
+"""
+function overlap(mode1::AbstractMode, mode2::AbstractMode)
+    val, err = _overlap(mode1, mode2)
+    val
+end
+
+"""
+    orthogonal(mode1, mode2)
+
+Test whether the `AbstractMode`s `mode1` and `mode2` are orthogonal to each other.
+"""
+function orthogonal(mode1::AbstractMode, mode2::AbstractMode)
+    val, err = _overlap(mode1, mode2)
+    isapprox(val, 0; atol=max(err, eps(typeof(val))))
+end
+
+"""
+    orthonormal(modes)
+
+Test whether the `modes` form an orthonormal set.
+"""
+function orthonormal(modes)
+    out = true
+    for (ii1, ii2) in Iterators.product(eachindex(modes), eachindex(modes))
+        val, err = _overlap(modes[ii1], modes[ii2])
+        atol = max(err, eps(typeof(val)))
+        this = ii1 == ii2 ? isapprox(val, 1; atol) : isapprox(val, 0; atol)
+        out = out && this
+    end
+    out
+end
+    
 
 struct ToSpace{mT,iT}
     ms::mT
@@ -316,7 +531,7 @@ function to_space(Emω, xs, ms; components=:xy, z=0.0)
 end
 
 struct DelegatedMode{mT, idT} <: AbstractMode
-    mode::mT # wrapper mode
+    mode::mT # wrapped mode
     id::idT # unique identifier type to distinguish different DelegatedModes
 end
 
