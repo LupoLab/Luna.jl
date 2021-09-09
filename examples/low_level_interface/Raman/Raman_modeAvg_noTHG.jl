@@ -9,7 +9,7 @@ flength = 200e-2
 λ0 = 800e-9
 energy = 1e-6
 
-grid = Grid.RealGrid(flength, λ0, (180e-9, 3000e-9), 4e-12)
+grid = Grid.RealGrid(flength, λ0, (300e-9, 3000e-9), 4e-12)
 
 m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
 aeff = let m=m
@@ -21,7 +21,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
 end
 
 responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)),
-             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas), thg=false))
+             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas), thg=false))
 
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
@@ -37,5 +37,5 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 Plotting.pygui(true)
 Plotting.stats(output)
 Plotting.prop_2D(output)
-Plotting.time_1D(output, [5e-2, 10e-2, 11e-2])
-Plotting.spec_1D(output, [5e-2, 10e-2, 11e-2])
+Plotting.time_1D(output, range(0,flength,length=5), trange=(-0.5e-12, 2e-12))
+Plotting.spec_1D(output, range(0,flength,length=5), λrange=(500e-9, 1400e-9))
