@@ -11,7 +11,7 @@ import Base: display
 """
     displayall()
 
-[`display`](@ref) all currently open PyPlot figures.
+`display` all currently open PyPlot figures.
 """
 function displayall()
     for fign in plt.get_fignums()

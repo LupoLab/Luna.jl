@@ -1,39 +1,4 @@
 # Luna Documentation
+This is the documentation for [Luna](https://github.com/LupoLab/Luna). The [README](https://github.com/LupoLab/Luna/blob/master/README.md) contains installation and quickstart instructions. This documentation is intended to lay out the physical model used give deeper insight into the workings of Luna. It is not yet complete--any contributions are welcome!
 
-## Installation
-Use a recent version of Julia (e.g. 1.4.1).
-
-First install CoolProp, then Luna:
-
-```julia
-]
-add https://github.com//CoolProp/CoolProp.jl
-add https://github.com/LupoLab/Luna
-```
-
-or using `Pkg`
-
-```julia
-using Pkg
-Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"))
-Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master")
-```
-
-## Running an example
-To run an example you need a few more packages
-```julia
-ENV["PYTHON"] = ""
-] add FFTW PyPlot
-```
-
-Then
-```julia
-using Luna
-include(joinpath(pkgdir(Luna), "test/test_main.jl"))
-```
-
-This should run a simple propagation and plot the result. Note that the first time this is run it may take a while to precompile `Luna`. On subsequent runs it should be much faster.
-
-
-!!! warning
-    This documentation is not finished.
+If you are new to Luna, the most interesting page is probably [the simple interface](#The-simple-interface). Details about the actual equation Luna solves can be found in [the numerical model](#The-numerical-model) section.

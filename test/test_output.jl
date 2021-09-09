@@ -5,7 +5,7 @@ using EllipsisNotation
 @testset "HDF5" begin
     import HDF5
     import Luna: Utils
-    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+    fpath = joinpath(tempname(), "test.h5")
     isfile(fpath) && rm(fpath)
     shape = (1024, 4, 2)
     n = 11
@@ -97,8 +97,9 @@ end
     @test "src" == o.data["meta"]["meta2"]
 end
 
-fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
-fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
+dirpath = tempname()
+fpath = joinpath(dirpath, "test.h5")
+fpath_comp = joinpath(dirpath, "test_comp.h5")
 @testset "HDF5 vs Memory" begin
     using Luna
     import FFTW

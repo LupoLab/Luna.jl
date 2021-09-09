@@ -39,7 +39,7 @@ peak power specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function CustomPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -74,7 +74,7 @@ specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function GaussPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -108,7 +108,7 @@ specified, and duration given either as `τfwhm` or `τw`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function SechPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -152,7 +152,7 @@ A custom pulse defined by tabulated data to be used with `prop_capillary`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function DataPulse(ω::AbstractVector, Iω, ϕω;
@@ -200,7 +200,7 @@ For multi-mode simulations, only the lowest-order modes is transferred.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function LunaPulse(o::Output.AbstractOutput; kwargs...)
@@ -274,7 +274,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
     or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
     ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
@@ -482,7 +482,13 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
         end
     end
     makeplasma!(out, grid, gas, plasma, pol)
-    raman && push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
+    if raman
+        if thg
+            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas)))
+        else
+            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas), thg=false))
+        end
+    end
     Tuple(out)
 end
 
@@ -517,7 +523,7 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
-    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
+    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, gas)))
     Tuple(out)
 end
 

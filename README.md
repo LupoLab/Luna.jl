@@ -8,7 +8,7 @@ There are two ways of using Luna:
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
 ## Installation
-Luna currently on runs with Julia 1.5. More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
+Luna currently only runs with Julia 1.5, which can be obtained from [here](https://julialang.org/downloads/oldreleases/) More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
 
 Julia can be obtained from the [Julia website](https://julialang.org/). Download the latest version of Julia 1.5 and install it. Then open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
 
@@ -26,10 +26,10 @@ Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master")
 ```
 
 ## Quickstart
-To run a simple simulation of ultrafast pulse propagation in a gas-filled hollow capillary fibre, you can use `prop_capillary`. As an example, take a 3-metre length of HCF 125 μm core radius, filled with 1 bar of helium gas, and driving pulses centred at 800 nm wavelength with 120 μJ of energy and 10 fs duration.
+To run a simple simulation of ultrafast pulse propagation in a gas-filled hollow capillary fibre, you can use `prop_capillary`. As an example, take a 3-metre length of HCF with 125 μm core radius, filled with 1 bar of helium gas, and driving pulses centred at 800 nm wavelength with 120 μJ of energy and 10 fs duration. We consider a frequency grid which spans from 120 nm to 4 μm and a time window of 1 ps.
 ```julia
 julia> using Luna
-julia> output = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, energy=120e-6, τfwhm=10e-15)
+julia> output = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, energy=120e-6, τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12)
 ```
 The first time you run this code, you will see the precompilation message:
 ```julia
@@ -38,7 +38,7 @@ julia> using Luna
 ```
 This will take some time to complete (and you may see additional precompilation messages for the packages Luna depends on), but is only necessary once, unless you update Luna or edit the package source code. Since this is using the default options including FFT planning and caching of the PPT ionisation rate, you will also have to wait for those processes to finish. After the simulation finally runs (which for this example should take between 10 seconds and one minute), you will have the results stored in `output`:
 ```julia
-julia> output = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, energy=120e-6, τfwhm=10e-15)
+julia> output = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, energy=120e-6, τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12)
 [...]
 MemoryOutput["simulation_type", "dumps", "meta", "Eω", "grid", "stats", "z"]
 ```
@@ -63,7 +63,7 @@ julia> output_multimode["Eω"]
 2049×4×201 Array{Complex{Float64},3}:
 [...]
 ```
-> **NOTE:** Setting `modes=:HE11` and `modes=1` is **not** equivalent. The former uses mode-averaged propagation (treating all spatial dependence of the nonlinear polarisation the same as the Kerr effect) whereas the latter projects the spatially dependent nonlinear polarisation onto a single mode. This difference is especially important when photoionisation plays a major role.
+**NOTE:** Setting `modes=:HE11` and `modes=1` are **not** equivalent, except if only the Kerr effect is included in the simulation. The former uses mode-averaged propagation (treating all spatial dependence of the nonlinear polarisation the same as the Kerr effect) whereas the latter projects the spatially dependent nonlinear polarisation onto a single mode. This difference is especially important when photoionisation plays a major role.
 ### Plotting results
 More usefully, you can directly plot the propagation results using `Plotting.prop_2D()` (`Plotting` is imported at the same time as `prop_capillary` by the `using Luna` statement):
 ```julia
@@ -105,15 +105,20 @@ The `Processing` module contains many useful functions for more detailed process
 - g₁₂ coherence between multiple fields (`Processing.coherence`)
 
 ## Examples
-The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the low-level interface. Some of these require the `PyPlot` package to be present--you can install this by simply typing `] add PyPlot` at the Julia REPL.
+The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the [low-level interface](examples/low_level_interface). Some of the simple interface examples require the `PyPlot` package to be present, and many of the low-level examples require other packages as well--you can install these by simply typing `] add PyPlot` at the Julia REPL or the equivalent for other packages.
 
 ## The low-level interface
+At its core, Luna is extremely flexible, and the simple interface using `prop_capillary` only exposes part of what Luna can do. There are lots of examples in the [low-level interface examples folder](examples/low_level_interface). These are not actively maintained and are not guaranteed to run. As a side effect of its flexibility, it is quite easy to make mistakes when using the low-level interface. For example, changing from single-mode to multi-mode propagation in a fibre requires several concurrent changes to your code. If you have trouble with this interface, [open an issue](https://github.com/LupoLab/Luna/issues/new) with as much detail as possible and we will try to help you run it.
 
 ## Running parameter scans
 Luna comes with a built-in interface which allows for the running of single- and multi-dimensional parameter scans with very little additional code. An example can be found in the [examples folder](examples/simple_interface/scan.jl) and more information is available in the documentation (INSERT DOCS LINK).
 
 ## New to Julia?
-There are many resources to help you learn Julia. I good place to start is [Julia Academy](https://juliaacademy.com/) which has several courses for learning Julia depending on your current experience. There are additional resources linked from the [Julia website](https://julialang.org/learning/).
+There are many resources to help you learn Julia. A good place to start is [Julia Academy](https://juliaacademy.com/) which has several courses for learning Julia depending on your current experience. There are additional resources linked from the [Julia website](https://julialang.org/learning/).
+
+To edit and run Julia code, a very good option is the [Julia extension](https://www.julia-vscode.org/) for [Visual Studio Code](https://code.visualstudio.com/).
+
+Julia fully supports [Unicode symbols in code](https://docs.julialang.org/en/v1/manual/variables/), including Greek letters. Luna makes heavy use of this to name variables `ω` instead of `omega`, `π` instead of `pi`, etc. In any Julia console you can enter many Unicode characters using [a backslash and the tab key](https://docs.julialang.org/en/v1/manual/unicode-input/), for example `\omega<tab>` will result in `ω`, and `\ne<tab>` will result in `≠` (and the latter is equivalent to `!=`). For even faster entry of Greek letters specifically, you can use [this AutoHotkey script](https://github.com/q2apro/ahk_greekletters) or a number of other solutions.
 
 ## Getting help & contributing
 If something does not work as expected, you have found a bug, or you simply want some advice, please [open a new issue](https://github.com/LupoLab/Luna/issues/new) on this GitHub repository. Please do not email us with problems/questions about Luna!

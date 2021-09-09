@@ -218,18 +218,23 @@ If oversampling > 1, the field is oversampled before the calculation
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling=1)
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     frac = similar(to)
     function addstat!(d, Eω, Et, z, dz)
         # note: oversampling returns its arguments without any work done if factor==1
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
-        ionfrac!(frac, real(Eto))
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        ratemax = ionfrac!(frac, real(Eto))
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
@@ -247,10 +252,14 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
                          components=:y, oversampling=1) where N
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
     function ionfrac!(out, Et)
         ionrate!(out, Et)
+        ratemax = maximum(out)
         Maths.cumtrapz!(out, δt) # in-place cumulative integration
         @. out = 1 - exp(-out)
+        return ratemax
     end
     tospace = Modes.ToSpace(modes, components=components)
     frac = similar(to)
@@ -261,11 +270,12 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         Modes.to_space!(Et0, Eto, (0, 0), tospace; z=z)
         if npol > 1
-            ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
+            ratemax = ionfrac!(frac, hypot.(real(Et0[:, 1]), real(Et0[:, 2])))
         else
-            ionfrac!(frac, real(Et0[:, 1]))
+            ratemax = ionfrac!(frac, real(Et0[:, 1]))
         end
-        d["electrondensity"] = maximum(frac)*dfun(z)
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
     end
 end
 
@@ -327,8 +337,8 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(mode::Modes.AbstractMode; ub=100e-9, lb=3000e-9)
-    λ00 = Modes.zdw(mode; ub=ub, lb=lb, z=0)
+function zdw(mode::Modes.AbstractMode; λmin=100e-9, λmax=3000e-9)
+    λ00 = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
     function addstat!(d, Eω, Et, z, dz)
         d["zdw"] = missnan(Modes.zdw(mode, λ00; z=z))
         λ00 = d["zdw"]
@@ -343,12 +353,12 @@ Create stats function to capture the zero-dispersion wavelength (ZDW).
 !!! warning
     Since [`Modes.zdw`](@ref) is based on root-finding of a derivative, this can be slow!
 """
-function zdw(modes; ub=100e-9, lb=3000e-9)
+function zdw(modes; λmin=100e-9, λmax=3000e-9)
     λ00 = zeros(length(modes))
     for (ii, mode) in enumerate(modes)
-        tmp = Modes.zdw(mode; ub=ub, lb=lb, z=0)
+        tmp = Modes.zdw(mode; λmin=λmin, λmax=λmax, z=0)
         if ismissing(tmp)
-            λ00[ii] = ub
+            λ00[ii] = λmin
         else
             λ00[ii] = tmp
         end
@@ -447,19 +457,27 @@ function collect_stats(grid, Eω, funcs...)
 end
 
 function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
-                 windows=nothing, gas=nothing, userfuns=Any[])
+                 windows=nothing, gas=nothing, onaxis=false, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
-            peakintensity(grid, transform.aeff), fwhm_t(grid), zdw_linop(mode, linop),
+            fwhm_t(grid), zdw_linop(mode, linop),
             density(transform.densityfun)]
     if !isnothing(gas)
         push!(funs, pressure(transform.densityfun, gas))
     end
+    if onaxis
+        push!(funs, peakintensity(grid, (mode,)))
+    else
+        push!(funs, peakintensity(grid, transform.aeff))
+    end
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
             ir = resp.ratefunc
-            ed = electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff)
-            push!(funs, ed)
+            if onaxis
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, (mode,)))
+            else
+                push!(funs, electrondensity(grid, resp.ratefunc, transform.densityfun, transform.aeff))
+            end
         end
     end
     if !isnothing(windows)
