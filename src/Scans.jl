@@ -9,23 +9,50 @@ import HDF5
 import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
 import Dates
 
+"""
+    AbstractExec
+
+Abstract supertype for scan execution modes.
+"""
 abstract type AbstractExec end
 
-# execution type to simply run everything locally
+"""
+    LocalExec
+
+Execution mode to simply run the whole scan in the current Julia session in a `for` loop.
+"""
 struct LocalExec <: AbstractExec end
 
-# execution type to run a specific range of scan indices
+"""
+    RangeExec(range)
+
+Execution mode to run a subsection of the scan, given by a `UnitRange`, in the current Julia session.
+"""
 struct RangeExec <: AbstractExec
     r::UnitRange{Int}
 end
 
-# execution type to divide the scan into batches and run one
+
+"""
+    BatchExec(Nbatches, batch)
+
+Execution mode to divide the scan into `Nbatches` chunks and run only the given `batch`.
+"""
 struct BatchExec <: AbstractExec
     Nbatches::Int
     batch::Int
 end
 
-# execution type to use a file-based queue
+
+"""
+    QueueExec(nproc=0, queuefile="")
+
+Execution mode to run a scan using a file-based queueing system. Can be run in multiple separate
+Julia sessions, or can spawn `nproc` subprocesses which then take items from the queue to run.
+
+If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is 
+stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
+"""
 struct QueueExec <: AbstractExec
     nproc::Int
     queuefile::String
@@ -33,11 +60,30 @@ end
 
 QueueExec(nproc=0) = QueueExec(nproc, "")
 
+"""
+    CondorExec(scriptfile, ncores)
+
+Execution mode which submits a scan to an HTCondor queue system claiming `ncores` cores.
+
+!!!note
+    `scriptfile` must **always** be `@__FILE__`
+"""
 struct CondorExec <: AbstractExec
     scriptfile::String
     ncores::Int
 end
 
+"""
+    SSHExec(localexec, script, hostname, subdir)
+
+Execution mode which transfers the `script` file to the host given by `hostname` via SSH
+and executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
+subdirectory (relative to the home directory) where scans are stored on the remote host. A
+subfolder with automatically chosen name will be created in `subdir` to store this scan.
+
+!!!note
+    `script` must **always** be `@__FILE__`
+"""
 struct SSHExec{eT} <: AbstractExec
     localexec::eT
     script::String
