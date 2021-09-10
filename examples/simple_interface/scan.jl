@@ -9,6 +9,9 @@ gas = :HeJ
 λ0 = 800e-9
 τfwhm = 10e-15
 
+λlims = (100e-9, 4e-6)
+trange = 400e-15
+
 # Scan dimensions:
 energies = collect(range(50e-6, 200e-6; length=16))
 pressures = collect(0.6:0.4:1.4)
@@ -23,7 +26,7 @@ outputdir = joinpath(@__DIR__, "scanoutput")
 
 runscan(scan) do scanidx, energy, pressure
     prop_capillary(a, flength, gas, pressure; λ0, τfwhm, energy,
-                   trange=400e-15, scan, scanidx, filedir=outputdir)
+                   λlims, trange, scan, scanidx, filepath=outputdir)
 end
 
 # Use Processing.scanproc to apply a processing function to each output file and
