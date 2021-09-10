@@ -192,7 +192,17 @@ function make_fft(E::Array{Complex{T},N}) where T<:Real where N
     FT
 end
 
-function PlasmaFourier(ω, E, ratefunc, ionpot, δt)
+function PlasmaFourier(ω, E::Array{T,N}, ratefunc, ionpot, δt) where T<:Real where N
+    rate = similar(E)
+    fraction = similar(E)
+    phase = similar(E)
+    J = similar(E)
+    P = similar(E)
+    FT = make_fft(E)
+    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, P, ω, FT, δt)
+end
+
+function PlasmaFourier(ω, E::Array{Complex{T},N}, ratefunc, ionpot, δt) where T<:Real where N
     rate = similar(ω)
     fraction = similar(ω)
     phase = similar(E)
@@ -216,9 +226,9 @@ function PlasmaScalar!(Plas::PlasmaFourier, E::Vector{Complex{Float64}})
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
-    Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
+    Plas.J .= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
     # here we perform cumulative integration via the Fourier transform.
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
+    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
 end
 
 function PlasmaVector!(Plas::PlasmaFourier, E::Array{Complex{Float64},2})
@@ -229,8 +239,8 @@ function PlasmaVector!(Plas::PlasmaFourier, E::Array{Complex{Float64},2})
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
-    Jabs = Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ Em .* E
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
+    Plas.J .= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ Em.^2 .* E
+    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
 end
 
 "The plasma response for a scalar electric field"
@@ -239,13 +249,14 @@ function PlasmaScalar!(Plas::PlasmaFourier, E::Vector{Float64})
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
+    fill!(Plas.J, 0.0)
     for ii in eachindex(E)
         if abs(E[ii]) > 0
             Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
         end
     end
     # here we perform cumulative integration via the Fourier transform.
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Jabs) ./ Plas.ω)
+    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
