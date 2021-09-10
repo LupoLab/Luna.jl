@@ -164,6 +164,7 @@ struct PlasmaFourier{R, EType, tType, FTType} <: PlasmaPolar
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
     J::EType # buffer to hold the plasma current
+    P::EType # buffer to hold the plasma polarisation
     ω::tType # buffer to hold the frequency grid
     FT::FTType # Fourier transform to use for integrations
     δt::Float64
@@ -196,8 +197,9 @@ function PlasmaFourier(ω, E, ratefunc, ionpot, δt)
     fraction = similar(ω)
     phase = similar(E)
     J = similar(E)
+    P = similar(E)
     FT = make_fft(E)
-    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, ω, FT, δt)
+    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, P, ω, FT, δt)
 end
 
 "The plasma response for a scalar electric field"

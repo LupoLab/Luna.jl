@@ -535,6 +535,7 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
         end
     end
     raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, gas)))
+    makeplasma!(out, grid, gas, plasma, pol)
     Tuple(out)
 end
 
