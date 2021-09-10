@@ -481,7 +481,13 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
         end
     end
     makeplasma!(out, grid, gas, plasma, pol)
-    raman && push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
+    if raman
+        if thg
+            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas)))
+        else
+            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas), thg=false))
+        end
+    end
     Tuple(out)
 end
 
@@ -528,8 +534,7 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
-    makeplasma!(out, grid, gas, plasma, pol)
-    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
+    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, gas)))
     Tuple(out)
 end
 
