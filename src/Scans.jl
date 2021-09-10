@@ -121,6 +121,7 @@ runscan(scan) do scanidx, energyi
     prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi
                    filepath=makefilename(scan, scanidx))
 end
+```
 """
 makefilename(scan, scanidx) = @sprintf("%s_%05d.h5", scan.name, scanidx)
 
@@ -198,7 +199,7 @@ scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
 runscan(scan) do scanidx, energyi
     prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi)
 end
-````
+```
 """
 function runscan(f, scan::Scan{LocalExec})
     for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
@@ -324,8 +325,9 @@ function _runscan(f, scan::Scan{QueueExec})
                 end
             end
         end # release pidlock
-        if isnothing(scanidx) # no scan points left to do
+        if isnothing(scanidx) # no scan points left to start
             if all(qdata .> 1) # completely done--either all done or failed
+                # this point is only reached by one process
                 rm(qfile) # remove the queue file
             end
             break # break out of the loop
@@ -349,14 +351,15 @@ function _runscan(f, scan::Scan{QueueExec})
 end
 
 function runscan(f, scan::Scan{CondorExec})
+    # make submission file for HTCondor
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
     script = scan.exec.scriptfile
     cores = scan.exec.ncores
     name = scan.name
     @info "Submitting Condor job for $script running on $cores cores."
-    # Adding the --queue command-line argument below means the CondorExec
-    # is ignored even if explicitly defined inside the script.
+    # Adding the --queue command-line argument below means that when running the Condor job,
+    # the CondorExec is ignored even if explicitly defined inside the script.
     lines = [
         "executable = $julia",
         """arguments = "$(basename(script)) --queue" """,
@@ -390,8 +393,10 @@ end
 
 function runscan(f, scan::Scan{<:SSHExec})
     if gethostname() == scan.exec.hostname
+        # running on the machine defined in the SSH Exec? just run the scan
         runscan(f, changexec(scan, scan.exec.localexec))
     else
+        # running somewhere else? submit the job via SSH
         host = scan.exec.hostname
         subdir = scan.exec.subdir
         script = scan.exec.script

@@ -1,4 +1,6 @@
 # Parameter scans
+Luna comes with a flexible interface to run, save and process scans over any parameter or combination of parameters you can think of. Scans can be executed in several ways, which are defined via the various subtypes of `Scans.AbstractExec`:
+- Local 
 
 ## Execution over SSH
 Setup steps required:

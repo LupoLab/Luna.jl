@@ -512,8 +512,14 @@ function nostats(args...)
     return Dict{String, Any}()
 end
 
-function ScanHDF5Output(scan, scanidx, args...;
-                        fdir=nothing, kwargs...)
+"""
+    ScanHDF5Output(scan, scanidx, args...; fdir=nothing, kwargs...)
+
+Create an [`HDF5Output`](@ref) for the given `scan` at the current `scanidx` and automatically
+save the scan arrays and current values of the scan variables in the file. If given,
+`fdir` is used as a directory in which to store the scan output.
+"""
+function ScanHDF5Output(scan, scanidx, args...; fdir=nothing, kwargs...)
     fpath = Scans.makefilename(scan, scanidx)
     if !isnothing(fdir)
         fpath = joinpath(fdir, fpath)

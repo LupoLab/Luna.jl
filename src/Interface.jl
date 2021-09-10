@@ -243,10 +243,10 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
     for a simple pressure gradient, or a `Tuple` of `(Z, P)` where `Z` and `P`
     contain `z` positions and the pressures at those positions.
 - `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
-        single-pulse inputs, this is also the central wavelength of the input pulse.
+    single-pulse inputs, this is also the central wavelength of the input pulse.
 - `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
 - `trange::Number`: The total width of the time grid. To make the number of samples a
-        power of 2, the actual grid used is usually bigger.
+    power of 2, the actual grid used is usually bigger.
 
 # Grid options
 - `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
@@ -308,7 +308,12 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `saveN::Integer`: Number of points along z at which to save the field.
 - `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
     only in the working memory. If not `nothing`, should be a file path as a `String`,
-    and the results are saved in a file at this location.
+    and the results are saved in a file at this location. If `scan` is passed, `filepath`
+    determines the output **directory** for the scan instead.
+- `scan`: A `Scan` instance defining a parameter scan. If `scan` is given`, a
+    `Output.ScanHDF5Output` is used to automatically name and populate output files of
+    the scan. `scanidx` must also be given.
+- `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
 function prop_capillary(radius, flength, gas, pressure;
@@ -321,7 +326,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
                         saveN=201, filepath=nothing,
-                        scan=nothing, scanidx=nothing, filedir=nothing,
+                        scan=nothing, scanidx=nothing,
                         status_period=5)
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
@@ -342,7 +347,7 @@ function prop_capillary(radius, flength, gas, pressure;
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
-    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filedir)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
@@ -708,16 +713,17 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
     linop, Eω, transform, FT
 end
 
-function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx, filedir)
+function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx)
     Output.MemoryOutput(0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx, filedir)
+function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx)
     Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath, scan, scanidx, filedir)
-    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats; fdir=filedir)
+function makeoutput(grid, saveN, stats, filepath, scan, scanidx)
+    isnothing(scanidx) && error("scanidx must be passed along with scan.")
+    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats; fdir=filepath)
 end
 
 end

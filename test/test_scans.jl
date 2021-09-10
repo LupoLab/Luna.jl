@@ -219,7 +219,7 @@ end
     mkpath(td)
     runscan(scan) do scanidx, energy
         prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                       trange=400e-15, filedir=td, scan, scanidx)
+                       trange=400e-15, filepath=td, scan, scanidx)
     end
     @test length(readdir(td)) == length(energies)
     rm(td; recursive=true)
