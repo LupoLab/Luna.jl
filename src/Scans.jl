@@ -65,7 +65,7 @@ QueueExec(nproc=0) = QueueExec(nproc, "")
 
 Execution mode which submits a scan to an HTCondor queue system claiming `ncores` cores.
 
-!!!note
+!!! note
     `scriptfile` must **always** be `@__FILE__`
 """
 struct CondorExec <: AbstractExec
@@ -74,19 +74,19 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SSHExec(localexec, script, hostname, subdir)
+    SSHExec(localexec, scriptfile, hostname, subdir)
 
-Execution mode which transfers the `script` file to the host given by `hostname` via SSH
+Execution mode which transfers the `scriptfile` file to the host given by `hostname` via SSH
 and executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
 subdirectory (relative to the home directory) where scans are stored on the remote host. A
 subfolder with automatically chosen name will be created in `subdir` to store this scan.
 
-!!!note
-    `script` must **always** be `@__FILE__`
+!!! note
+    `scriptfile` must **always** be `@__FILE__`
 """
 struct SSHExec{eT} <: AbstractExec
     localexec::eT
-    script::String
+    scriptfile::String
     hostname::String
     subdir::String
 end
@@ -445,7 +445,7 @@ function runscan(f, scan::Scan{<:SSHExec})
         # running somewhere else? submit the job via SSH
         host = scan.exec.hostname
         subdir = scan.exec.subdir
-        script = scan.exec.script
+        script = scan.exec.scriptfile
         scriptfile = basename(script)
         name = scan.name
         folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
