@@ -7,10 +7,26 @@ import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
 
+"""
+    Common(val)
+
+Wrapper type to tell `scanproc` that `val` is the same for each simulation being processed,
+and so only needs to be returned once rather than for each simulation in the scan.
+"""
 struct Common{dT}
     data::dT
 end
 
+"""
+    VarLength(val)
+
+Wrapper type to tell `scanproc` that the shape of `val` is different for each simulation being
+processed. Return values wrapped in `VarLength` will be placed in an array of arrays.
+
+!!! note
+    While the **shape** of `val` can be different between simulations, the **type** must be
+    the same, including the dimensionality and element type of arrays.
+"""
 struct VarLength{dT}
     data::dT
 end
