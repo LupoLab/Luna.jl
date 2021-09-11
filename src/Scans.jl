@@ -169,7 +169,8 @@ runscan(scan) do scanidx, energyi
 end
 ```
 """
-makefilename(scan, scanidx) = @sprintf("%s_%05d.h5", scan.name, scanidx)
+makefilename(scan::Scan, scanidx) = makefilename(scan.name, scanidx)
+makefilename(name::AbstractString, scanidx) = @sprintf("%s_%05d.h5", name, scanidx)
 
 function makeexec(args::Vector{String})
     isempty(args) && return LocalExec()
