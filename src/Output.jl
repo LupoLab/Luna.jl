@@ -416,10 +416,11 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
         if HDF5.haskey(parent, key)
             if force
                 Logging.@warn("Dataset $key already present in file $(o.fpath)"*
-                                " and will be overwritten")
+                              " and will be overwritten")
                 HDF5.delete_object(parent, key)
             else
-                error("File $(o.fpath) already has dataset $(key)")
+                Logging.@warn("File $(o.fpath) already has dataset $(key). Pass force=true"*
+                              " to overwrite")
             end
         end
         isa(val, BitArray) && (val = Array{Bool, 1}(val))
@@ -513,14 +514,17 @@ function nostats(args...)
 end
 
 """
-    ScanHDF5Output(scan, scanidx, args...; fdir=nothing, kwargs...)
+    ScanHDF5Output(scan, scanidx, args...; fname=nothing, fdir=nothing, kwargs...)
 
 Create an [`HDF5Output`](@ref) for the given `scan` at the current `scanidx` and automatically
 save the scan arrays and current values of the scan variables in the file. If given,
-`fdir` is used as a directory in which to store the scan output.
+`fdir` is used as a directory in which to store the scan output. `fname` can be used to
+manually name files. The running scan index will be appended to `fname` for each file.
 """
-function ScanHDF5Output(scan, scanidx, args...; fdir=nothing, kwargs...)
-    fpath = Scans.makefilename(scan, scanidx)
+function ScanHDF5Output(scan, scanidx, args...; fname=nothing, fdir=nothing, kwargs...)
+    fpath = isnothing(fname) ?
+        Scans.makefilename(scan, scanidx) :
+        Scans.makefilename(fname, scanidx)
     if !isnothing(fdir)
         fpath = joinpath(fdir, fpath)
         if !isdir(fdir)
