@@ -384,7 +384,8 @@ function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing
                                   " and will be overwritten")
                     HDF5.delete_object(parent, k)
                 else
-                    error("File $(o.fpath) already has dataset $(k)")
+                    Logging.@warn("File $(o.fpath) already has dataset $k. Pass force=true"*
+                              " to overwrite")
                 end
             end
             isa(v, BitArray) && (v = Array{Bool, 1}(v))
