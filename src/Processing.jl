@@ -76,17 +76,26 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
             arrays = _arrays(ret, shape)
         end
         for (ridx, ri) in enumerate(ret)
-            ri isa Common && continue
-            if ri isa VarLength
-                arrays[ridx][scanidcs[idx]] = ri.data
-            else
-                idcs = CartesianIndices(ri)
-                arrays[ridx][idcs, scanidcs[idx]] .= ri
-            end
+            _addret!(arrays[ridx], scanidcs[idx], ri)
         end
     end
     arrays
 end
+
+function _addret!(array, aidcs, ri::Number)
+    array[aidcs] = ri
+end
+
+function _addret!(array, aidcs, ri::AbstractArray)
+    idcs = CartesianIndices(ri)
+    array[idcs, aidcs] .= ri
+end
+
+function _addret!(array, aidcs, ri::VarLength)
+    array[aidcs] = ri.data
+end
+
+_addret!(array, aidcs, ri::Common) = nothing
 
 # Default pattern for files named by ScanHDF5Output is [name]_[scanidx].h5 with 5 digits
 defpattern = "*_[0-9][0-9][0-9][0-9][0-9].h5"
