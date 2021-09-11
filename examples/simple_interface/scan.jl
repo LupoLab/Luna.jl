@@ -31,10 +31,12 @@ end
 
 # Use Processing.scanproc to apply a processing function to each output file and
 # collect the result.
-λ, Iλ, energyout = Processing.scanproc(outputdir) do output
+λ, Iλ, zstat, edens, max_peakpower = Processing.scanproc(outputdir) do output
     λ, Iλ = Processing.getIω(output, :λ)
-    energyout = Processing.VarLength(output["stats"]["energy"])
-    Processing.Common(λ), Iλ[:, end], energyout
+    zstat = Processing.VarLength(output["stats"]["z"])
+    edens = Processing.VarLength(output["stats"]["electrondensity"])
+    max_peakpower = maximum(output["stats"]["peakpower"])
+    Processing.Common(λ), Iλ[:, end], zstat, edens, max_peakpower
 end
 
 fig, axs = plt.subplots(1, length(pressures))
@@ -49,3 +51,30 @@ for (pidx, pressure) in enumerate(pressures)
     ax.set_xlim(100, 1200)
 end
 plt.colorbar(img, ax=axs, label="Energy density (dB)")
+
+fig, axs = plt.subplots(1, length(pressures))
+fig.set_size_inches(8, 2)
+cols = Plotting.cmap_colours(length(energies))
+edmax = maximum(maximum.(edens))
+for (pidx, pressure) in enumerate(pressures)
+    ax = axs[pidx]
+    for eidx in eachindex(energies)
+        ax.plot(zstat[eidx, pidx], 1e-6edens[eidx, pidx], color=cols[eidx],
+                linewidth=1, alpha=0.8)
+    end
+    ax.set_xlabel("Distance (m)")
+    ax.set_ylabel("Electron density (cm\$^{-3}\$)")
+    ax.set_ylim(0, 1.1e-6edmax)
+    ax.set_xlim(0, flength)
+    ax.set_title("Pressure: $pressure bar")
+end
+
+fig = plt.figure()
+for (pidx, pressure) in enumerate(pressures)
+    plt.plot(energies*1e6, max_peakpower[:, pidx], label="$pressure bar")
+end
+plt.xlim(1e6.*extrema(energies))
+plt.ylim_ymin=0
+plt.xlabel("Energy (μJ)")
+plt.ylabel("Maximum peak power (W)")
+plt.legend()
