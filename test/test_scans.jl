@@ -162,7 +162,7 @@ end
     @test (length(i2) > 0) && (length(i3) > 0) # check that both processes ran something
     push!(i2, i3...)
     for scanidx in 1:16
-        @test !isnothing(findfirst(i2 .== scanidx)) # check that all indices have been run
+        @test scanidx in i2 # check that all indices have been run
     end
 
     # do it again but with one process giving an error
@@ -189,7 +189,7 @@ end
     push!(i2, i3...)
     for scanidx in 1:15
         # check that all indices have been run, except for the one with an error
-        @test !isnothing(findfirst(i2 .== scanidx))
+        @test scanidx in i2
     end
     h = string(hash(scanname); base=16)
     qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
