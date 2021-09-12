@@ -175,7 +175,7 @@ end
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                            trange=400e-15, λlims=(200e-9, 4e-6))
             if scanidx == 16
-                error("I failed for some reason!")
+                error("This exception is expected as part of the test suite")
             end
             push!(idcs_run, scanidx)
         end
