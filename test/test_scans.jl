@@ -205,7 +205,8 @@ end
     runscan(scan) do scanidx, energy
         println("running on $(myid())")
         prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                       trange=400e-15, filepath=joinpath(td, makefilename(scan, scanidx)))
+                       trange=400e-15, λlims=(200e-9, 4e-6),
+                       filepath=joinpath(td, makefilename(scan, scanidx)))
     end
     @test length(readdir(td)) == length(energies)
     rm(td; recursive=true)
@@ -215,12 +216,26 @@ end
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
     energies = collect(range(5e-6, 10e-6; length=4))
     scan = Scan("scantest", Scans.LocalExec(); energy=energies)
-    td = joinpath(tempdir(), tempname())
-    mkpath(td)
-    runscan(scan) do scanidx, energy
-        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                       trange=400e-15, filepath=td, scan, scanidx)
+    mktempdir() do td
+        runscan(scan) do scanidx, energy
+            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                        trange=400e-15, λlims=(200e-9, 4e-6), filepath=td, scan, scanidx)
+        end
+        @test length(readdir(td)) == length(energies)
     end
-    @test length(readdir(td)) == length(energies)
-    rm(td; recursive=true)
+end
+
+##
+@testset "manual filename in ScanHDF5Output" begin
+    energies = collect(range(5e-6, 10e-6; length=4))
+    scan = Scan("scantest", Scans.LocalExec(); energy=energies)
+    mktempdir() do td
+        runscan(scan) do scanidx, energy
+            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                        trange=400e-15, λlims=(200e-9, 4e-6), filepath=td, scan, scanidx,
+                        filename="newname")
+        end
+        @test length(readdir(td)) == length(energies)
+    @test all(startswith.(readdir(td), "newname"))
+    end
 end
