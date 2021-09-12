@@ -314,6 +314,8 @@ In this case, all keyword arguments except for `λ0` are ignored.
     `Output.ScanHDF5Output` is used to automatically name and populate output files of
     the scan. `scanidx` must also be given.
 - `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
+- `filename`: Can be used to to overwrite the scan name when running a parameter scan.
+    The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
 function prop_capillary(radius, flength, gas, pressure;
@@ -326,7 +328,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
                         saveN=201, filepath=nothing,
-                        scan=nothing, scanidx=nothing,
+                        scan=nothing, scanidx=nothing, filename=nothing,
                         status_period=5)
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
@@ -347,11 +349,11 @@ function prop_capillary(radius, flength, gas, pressure;
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
-    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath)
+        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath, filename)
 
     Luna.run(Eω, grid, linop, transform, FT, output; status_period)
     output
@@ -713,17 +715,18 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
     linop, Eω, transform, FT
 end
 
-function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx)
+function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx, filename)
     Output.MemoryOutput(0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx)
+function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx, filename)
     Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath, scan, scanidx)
+function makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
     isnothing(scanidx) && error("scanidx must be passed along with scan.")
-    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats; fdir=filepath)
+    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats;
+                          fdir=filepath, fname=filename)
 end
 
 end
