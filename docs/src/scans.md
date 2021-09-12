@@ -142,7 +142,7 @@ runscan(scan) do scanidx, energy, pressure
                                    Εω=output["Eω"][:, end])
 end
 ```
-If `fpath` is not explicitly given as a keyword argument to `scansave`, it automatically names the file. Here it's called `pressure_energy_example_collected.h5` and is stored in the current working directory. This file then contains only the grid, the field `Eω`, and some metadata about the scan:
+Note here that `scan` and `scanidx` are not given to `prop_capillary`, so our `output` lives purely in memory without being saved to disk. If `fpath` is not explicitly given as a keyword argument to `scansave`, it automatically names the file. Here it's called `pressure_energy_example_collected.h5` and is stored in the current working directory. This file then contains only the grid, the field `Eω`, and some metadata about the scan:
 ```julia
 julia> HDF5.h5open("pressure_energy_example_collected.h5", "r") do fi
          println(keys(fi))
