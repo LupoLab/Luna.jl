@@ -150,7 +150,7 @@ end
         idcs_run = Int[]
         runscan(scan) do scanidx, energy
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                           trange=400e-15)
+                           trange=400e-15, λlims=(200e-9, 4e-6))
             push!(idcs_run, scanidx)
         end
         idcs_run
@@ -173,7 +173,7 @@ end
         idcs_run = Int[]
         runscan(scan) do scanidx, energy
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                           trange=400e-15)
+                           trange=400e-15, λlims=(200e-9, 4e-6))
             if scanidx == 16
                 error("I failed for some reason!")
             end
