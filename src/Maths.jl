@@ -1147,7 +1147,8 @@ Find isolated peaks in a signal `y` over `x` and return their value, FWHM and in
 If `filterfw=true` then only peaks with a clean FWHM are returned.
 """
 function findpeaks(x, y; threshold=0.0, filterfw=true)
-    pkis, proms = Peaks.peakprom(Peaks.Maxima(), y, 10)
+    pkis = Peaks.argmaxima(y, 10)
+    proms = Peaks.peakproms(pkis, y)
     pks = [(peak=y[pki], fw=pkfw(x, y, pki), position=x[pki], index=pki) for pki in pkis]
     # filter out peaks with missing fws
     if filterfw
