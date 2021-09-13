@@ -50,6 +50,12 @@ end
 Execution mode to run a scan using a file-based queueing system. Can be run in multiple separate
 Julia sessions, or can spawn `nproc` subprocesses which then take items from the queue to run.
 
+Possible values for `nproc` are:
+- `0`: run only in the current Julia process
+- `n > 0`: spawn `n` subprocesses and run on these
+- `-1`: spawn as many subprocesses as the number of logical cores on the CPU
+    (`Base.Sys.CPU_THREADS`)
+
 If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is 
 stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
 """
