@@ -193,6 +193,11 @@ fpath_comp = joinpath(dirpath, "test_comp.h5")
     ω, Eω, zac = Processing.getEω(o, 5e-2)
     @test (ω, Eω[:, 1]) == Processing.getEω(grid, mem["Eω"][:, 51])
     @test zac[1] == 5e-2
+    # test stat save locations
+    @test length(unique(mem["stats"]["z"])) == length(mem["stats"]["z"])
+    @test length(unique(o["stats"]["z"])) == length(o["stats"]["z"])
+    @test all([z in o["stats"]["z"] for z in o["z"]])
+    @test all([z in mem["stats"]["z"] for z in mem["z"]])
 end
 rm(fpath)
 rm(fpath_comp)
