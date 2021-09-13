@@ -343,7 +343,9 @@ function (o::HDF5Output)(y, t, dt, yfun)
             end
         end
     end
-    push!(o.stats_tmp, o.statsfun(y, t, dt))
+    if ts != t
+        push!(o.stats_tmp, o.statsfun(y, t, dt))
+    end
 end
 
 function append_stats!(parent, a::Array{Dict{String,Any},1})
