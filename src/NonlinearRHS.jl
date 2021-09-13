@@ -8,8 +8,12 @@ import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
 
-"Transform A(ω) to A(t) on oversampled time grid - real field"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
+"""
+    to_time!(Ato, Aω, Aωo, IFTplan)
+
+Transform ``A(ω)`` on normal grid to ``A(t)`` on oversampled time grid.
+"""
+function to_time!(Ato::Array{<:Real, D}, Aω, Aωo, IFTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
@@ -18,8 +22,7 @@ function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Real where D
     mul!(Ato, IFTplan, Aωo)
 end
 
-"Transform A(ω) to A(t) on oversampled time grid - envelope"
-function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
+function to_time!(Ato::Array{<:Complex, D}, Aω, Aωo, IFTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = No/N # Scale factor makes up for difference in FFT array length
@@ -28,8 +31,12 @@ function to_time!(Ato::Array{T, D}, Aω, Aωo, IFTplan) where T<:Complex where D
     mul!(Ato, IFTplan, Aωo)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - real field"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
+"""
+    to_freq!(Aω, Aωo, Ato, FTplan)
+
+Transform oversampled A(t) to A(ω) on normal grid
+"""
+function to_freq!(Aω, Aωo, Ato::Array{<:Real, D}, FTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (N-1)/(No-1) # Scale factor makes up for difference in FFT array length
@@ -37,8 +44,7 @@ function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Real where D
     copy_scale!(Aω, Aωo, N, scale)
 end
 
-"Transform oversampled A(t) to A(ω) on normal grid - envelope"
-function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
+function to_freq!(Aω, Aωo, Ato::Array{<:Complex, D}, FTplan) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = N/No # Scale factor makes up for difference in FFT array length
@@ -46,15 +52,25 @@ function to_freq!(Aω, Aωo, Ato::Array{T, D}, FTplan) where T<:Complex where D
     copy_scale_both!(Aω, Aωo, N÷2, scale)
 end
 
-"Copy first N elements from source to dest and simultaneously multiply by scale factor"
+"""
+    copy_scale!(dest, source, N, scale)
+
+Copy first N elements from source to dest and simultaneously multiply by scale factor.
+For multi-dimensional `dest` and `source`, work along first axis.
+"""
 function copy_scale!(dest::Vector, source::Vector, N, scale)
     for i = 1:N
         dest[i] = scale * source[i]
     end
 end
 
-"""Copy first and last N elements from source to first and last N elements in dest
-and simultaneously multiply by scale factor"""
+"""
+    copy_scale_both!(dest::Vector, source::Vector, N, scale)
+
+Copy first and last N elements from source to first and last N elements in dest
+and simultaneously multiply by scale factor.
+For multi-dimensional `dest` and `source`, work along first axis.
+"""
 function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     for i = 1:N
         dest[i] = scale * source[i]
@@ -64,7 +80,6 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
     end
 end
 
-"copy_scale! for multi-dim arrays. Works along first axis"
 function copy_scale!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
@@ -80,7 +95,6 @@ function _cpsc_core(dest, source, N, scale, idcs)
     end
 end
 
-"copy_scale_both! for multi-dim arrays. Works along first axis"
 function copy_scale_both!(dest, source, N, scale)
     (size(dest)[2:end] == size(source)[2:end] 
      || error("dest and source must be same size except along first dimension"))
@@ -99,20 +113,39 @@ function _cpscb_core(dest, source, N, scale, idcs)
     end
 end
 
-"Accumulate responses induced by Et in Pt"
-function Et_to_Pt!(Pt, Et, responses)
-    for resp in responses
-        resp(Pt, Et)
+"""
+    Et_to_Pt!(Pt, Et, responses, density)
+
+Accumulate responses induced by Et in Pt.
+"""
+function Et_to_Pt!(Pt, Et, responses, density::Number)
+    fill!(Pt, 0)
+    for resp! in responses
+        resp!(Pt, Et, density)
     end
 end
 
-function Et_to_Pt!(Pt, Et, responses, idcs)
+function Et_to_Pt!(Pt, Et, responses, density::AbstractVector)
+    fill!(Pt, 0)
+    for ii in eachindex(density)
+        for resp! in responses[ii]
+            resp!(Pt, Et, density[ii])
+        end
+    end
+end
+
+function Et_to_Pt!(Pt, Et, responses, density, idcs)
     for i in idcs
-        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses)
+        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses, density)
     end
 end
 
-mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
+"""
+    TransModal
+
+Transform E(ω) -> Pₙₗ(ω) for modal fields.
+"""
+mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT}
     ts::tsT
     full::Bool
     dimlimits::lT
@@ -128,6 +161,7 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, nT}
     resp::rT
     grid::gT
     densityfun::dT
+    density::ddT
     norm!::nT
     ncalls::Int
     z::Float64
@@ -148,10 +182,23 @@ function show(io::IO, t::TransModal)
     print(io, out)
 end
 
-"Transform E(ω) -> Pₙₗ(ω) for modal field."
-# FT - forward FFT for the grid
-# resp - tuple of nonlinear responses
-# if full is true, we integrate over whole cross section
+"""
+    TransModal(grid, ts, FT, resp, densityfun, norm!; rtol=1e-3, atol=0.0, mfcn=300, full=false)
+
+Construct a `TransModal`, transform E(ω) -> Pₙₗ(ω) for modal fields.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `ts::Modes.ToSpace` : pre-created `ToSpace` for conversion from modal fields to space
+- `FT::FFTW.Plan` : the time-frequency Fourier transform for the oversampled time grid
+- `resp` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `norm!` : normalisation function as fctn of `z`, can be created via [`norm_modal`](@ref)
+- `rtol::Float=1e-3` : relative tolerance on the `HCubature` integration
+- `atol::Float=0.0` : absolute tolerance on the `HCubature` integration
+- `mfcn::Int=300` : maximum number of function evaluations for one modal integration
+- `full::Bool=false` : if `true`, use full 2-D mode integral, if `false`, only do radial integral
+"""
 function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
                     rtol=1e-3, atol=0.0, mfcn=300, full=false)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
@@ -164,7 +211,7 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
     TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, norm!, 0, 0.0, rtol, atol, mfcn)
+               FT, resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn)
 end
 
 function TransModal(grid::Grid.RealGrid, args...; kwargs...)
@@ -180,6 +227,7 @@ function reset!(t::TransModal, Emω::Array{ComplexF64,2}, z::Float64)
     t.ncalls = 0
     t.z = z
     t.dimlimits = Modes.dimlimits(t.ts.ms[1], z=z)
+    t.density = t.densityfun(z)
 end
 
 function pointcalc!(fval, xs, t::TransModal)
@@ -215,8 +263,7 @@ function pointcalc!(fval, xs, t::TransModal)
         Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
-        fill!(t.Pr, 0.0)
-        Et_to_Pt!(t.Pr, t.Er, t.resp)
+        Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
         @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
         @. t.Prω *= t.grid.ωwin
@@ -243,9 +290,16 @@ function (t::TransModal)(nl, Eω, z)
             (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
-    nl .= t.densityfun(z) .* reshape(reinterpret(ComplexF64, val), size(nl))
+    nl .= reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
+"""
+    norm_modal(grid; shock=true)
+
+Normalisation function for modal propagation. If `shock` is `false`, the intrinsic frequency
+dependence of the nonlinear response is ignored, which turns off optical shock formation/
+self-steepening.
+"""
 function norm_modal(grid; shock=true)
     ω0 = PhysData.wlfreq(grid.referenceλ)
     withshock!(nl) = @. nl *= (-im * grid.ω/4)
@@ -253,11 +307,16 @@ function norm_modal(grid; shock=true)
     shock ? withshock! : withoutshock!
 end
 
+"""
+    TransModeAvg
+
+Transform E(ω) -> Pₙₗ(ω) for mode-averaged single-mode propagation.
+"""
 struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
-    Pto::Array{TT,1}
-    Eto::Array{TT,1}
-    Eωo::Array{ComplexF64,1}
-    Pωo::Array{ComplexF64,1}
+    Pto::Vector{TT}
+    Eto::Vector{TT}
+    Eωo::Vector{ComplexF64}
+    Pωo::Vector{ComplexF64}
     FT::FTT
     resp::rT
     grid::gT
@@ -292,19 +351,16 @@ end
 
 const nlscale = sqrt(PhysData.ε_0*PhysData.c/2)
 
-"Transform E(ω) -> Pₙₗ(ω) for mode-averaged field/envelope."
 function (t::TransModeAvg)(nl, Eω, z)
-    fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
     @. t.Eto /= nlscale*sqrt(t.aeff(z))
-    Et_to_Pt!(t.Pto, t.Eto, t.resp)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z))
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
-    dens = t.densityfun(z)
     t.norm!(nl, z)
     for i in eachindex(nl)
         !t.grid.sidx[i] && continue
-        nl[i] *= t.grid.ωwin[i] * dens
+        nl[i] *= t.grid.ωwin[i]
     end
 end
 
@@ -388,14 +444,13 @@ Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field
 place the result in `nl`
 """
 function (t::TransRadial)(nl, Eω, z)
-    fill!(t.Pto, 0)
     to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
     ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
-    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
 """
@@ -519,15 +574,14 @@ Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the f
 and place the result in `nl`.
 """
 function (t::TransFree)(nl, Eωk, z)
-    fill!(t.Pto, 0)
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
-    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.idcs) # add up responses
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
-    nl .*= t.grid.ωwin .* t.densityfun(z) .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
 """

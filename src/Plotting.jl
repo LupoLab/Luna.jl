@@ -11,7 +11,7 @@ import Base: display
 """
     displayall()
 
-[`display`](@ref) all currently open PyPlot figures.
+`display` all currently open PyPlot figures.
 """
 function displayall()
     for fign in plt.get_fignums()
@@ -90,6 +90,21 @@ function get_modes(output)
     endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
     mlines = lines[modeline+1 : endline-1]
     labels = [match(r"{([^,]*),", li).captures[1] for li in mlines]
+    angles = parse.(Float64, [match(r"ϕ=([0-9]+.[0-9]+)π", li).captures[1] for li in mlines])
+    if !all(angles .== 0)
+        for i in eachindex(labels)
+            if startswith(labels[i], "HE")
+                if angles[i] == 0
+                    θs = "y"
+                elseif angles[i] == 0.5
+                    θs = "x"
+                else
+                    θs = "$(angles[i])π"
+                end
+                labels[i] *= " ($θs)"
+            end
+        end
+    end
     return true, labels
 end
 
@@ -286,8 +301,9 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
                     kwargs...)
     pfigs = Figure[]
     Iω = Maths.normbymax(Iω)
+    id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
-        num = "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+        num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = plt.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
@@ -296,7 +312,7 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
         push!(pfigs, pfig)
     end
 
-    num = "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)

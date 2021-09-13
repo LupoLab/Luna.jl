@@ -136,6 +136,15 @@ end
     @test isapprox(Maths.fwhm(x, y, minmax=:max), fw+sep, rtol=1e-4)
     @test isapprox(Maths.fwhm(x, y, method=:spline, minmax=:max), fw+sep, rtol=1e-4)
 
+    fw = 1:10
+    x = collect(range(-50, 50; length=2^14))
+    y = zeros((length(x), length(fw)))
+    for (idx, fwi) in enumerate(fw)
+        y[:, idx] .= Maths.gauss.(x; fwhm=fwi)
+    end
+    @test all([isapprox(f, fwi; rtol=1e-4) for (f, fwi) in zip(Maths.fwhm(x, y; dim=1), fw)])
+    @test all([isapprox(f, fwi; rtol=1e-4) for (f, fwi) in zip(Maths.fwhm(x, y'; dim=2), fw)])
+
     hw = 1
     f(x) = Maths.gauss.(x, fwhm=2*hw)
     @test Maths.hwhm(f, 0) ≈ hw
@@ -306,15 +315,16 @@ end
     widths = (30e-15, 3e-15, 100e-15, 200e-15)
     powers = (1e3, 1e4, 1e2, 2e3)
     for i in 1:length(positions)
-        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i], τ0=positions[i])
+        field = Fields.GaussField(λ0=800e-9, τfwhm=widths[i], power=powers[i],
+                                  ϕ=[2π*i/length(widths), positions[i]])
         Eω .+= field(grid, FT)
     end
     Et = FT \ Eω
     It = Fields.It(Et, grid)
     pks = Maths.findpeaks(grid.t, It, threshold=10.0, filterfw=false)
     for i in 1:length(positions)
-        @test isapprox(pks[i].position, positions[i], atol=dt*1.1)
-        @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.1)
+        @test isapprox(pks[i].position, positions[i], atol=dt*1.2)
+        @test isapprox(pks[i].fw, widths[i], rtol=1e-7, atol=dt*1.2)
         @test isapprox(pks[i].peak, powers[i], rtol=1e-2)
     end
 end
