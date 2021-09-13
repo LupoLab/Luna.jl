@@ -305,11 +305,10 @@ function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     if save
         @hlock HDF5.h5open(o.fpath, "r+") do file
+            statsnames = sort(collect(keys(o.statsfun(y, t, dt))))
             if  !HDF5.haskey(file, o.yname)
-                statsnames = sort(collect(keys(o.statsfun(y, t, dt))))
                 initialise(o, y, statsnames)
-            else
-                statsnames = sort(collect(keys(o.stats_tmp[end])))    
+            else    
                 cachehash = hash((statsnames, size(y)))
                 cachehash == o.cachehash || error(
                     "the hash for this propagation does not agree with cache in file")
