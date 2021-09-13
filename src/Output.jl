@@ -77,7 +77,9 @@ function (o::MemoryOutput)(y, t, dt, yfun)
         o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
     end
-    append_stats!(o, o.statsfun(y, t, dt))
+    if ts != t
+        append_stats!(o, o.statsfun(y, t, dt))
+    end
 end
 
 function append_stats!(o::MemoryOutput, d)
