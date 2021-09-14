@@ -57,7 +57,7 @@ Possible values for `nproc` are:
     (`Base.Sys.CPU_THREADS`)
 
 If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is 
-stored in the current directory. Note that the queuefile is deleted at the end of the scan.
+stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
 """
 struct QueueExec <: AbstractExec
     nproc::Int
@@ -348,11 +348,11 @@ end
 function _runscan(f, scan::Scan{QueueExec})
     if isempty(scan.exec.queuefile)
         h = string(hash(scan.name); base=16)
-        qfile = "qfile_$h.h5"
+        qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
     else
         qfile = scan.exec.queuefile
     end
-    lockpath = basename(qfile)*"_lock"
+    lockpath = joinpath(Utils.cachedir(), basename(qfile)*"_lock")
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     while true
