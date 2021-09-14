@@ -40,6 +40,7 @@ scan = Scan("test"; var=v)
 @test scan.exec isa exec
 runscan(scan) do scanidx, vi
     @test vi == v[scanidx]
+    sleep(rand()) # avoid two processes finishing at precisely the same time
 end
 end
 
@@ -159,7 +160,9 @@ end
     r3 = @spawnat ps[2] worker()
     i2 = fetch(r2)
     i3 = fetch(r3)
-    @test (length(i2) > 0) && (length(i3) > 0) # check that both processes ran something
+    # check that both processes ran something
+    @test (length(i2) > 0)
+    @test (length(i3) > 0)
     push!(i2, i3...)
     for scanidx in 1:16
         @test count(i2 .== scanidx) == 1 # check that all indices have been run exactly once
@@ -185,7 +188,9 @@ end
     r3 = @spawnat ps[2] worker_err()
     i2 = fetch(r2)
     i3 = fetch(r3)
-    @test (length(i2) > 0) && (length(i3) > 0) # check that both processes ran something
+    # check that both processes ran something
+    @test (length(i2) > 0)
+    @test (length(i3) > 0)
     push!(i2, i3...)
     for scanidx in 1:15
         # check that all indices have been run, except for the one with an error
