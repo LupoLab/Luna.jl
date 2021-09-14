@@ -162,7 +162,7 @@ end
     @test (length(i2) > 0) && (length(i3) > 0) # check that both processes ran something
     push!(i2, i3...)
     for scanidx in 1:16
-        @test scanidx in i2 # check that all indices have been run
+        @test count(i2 .== scanidx) == 1 # check that all indices have been run exactly once
     end
 
     # do it again but with one process giving an error
@@ -189,10 +189,10 @@ end
     push!(i2, i3...)
     for scanidx in 1:15
         # check that all indices have been run, except for the one with an error
-        @test scanidx in i2
+        @test count(i2 .== scanidx) == 1
     end
     h = string(hash(scanname); base=16)
-    qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
+    qfile = "qfile_$h.h5"
     @test !isfile(qfile) # check that scan completed fully and removed the queue file
     rmprocs(ps)
 end
