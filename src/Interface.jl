@@ -303,6 +303,9 @@ In this case, all keyword arguments except for `λ0` are ignored.
     Note that plasma is only available for full-field simulations.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
+If `raman` is `true`, then the following options apply:
+    - `rotation::Bool = true`: whether to include the rotational Raman contribution
+    - `vibration::Bool = true`: whether to include the vibrational Raman contribution
 
 # Output options
 - `saveN::Integer`: Number of points along z at which to save the field.
@@ -327,6 +330,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
+                        rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing,
                         status_period=5)
@@ -342,7 +346,7 @@ function prop_capillary(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -479,7 +483,8 @@ function makedensity(flength, gas, pressure)
     density
 end
 
-function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
+function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
+                      rotation, vibration)
     out = Any[]
     if kerr
         if thg
@@ -490,10 +495,11 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
     end
     makeplasma!(out, grid, gas, plasma, pol)
     if raman
+        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         if thg
-            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas)))
+            push!(out, Nonlinear.RamanPolarField(grid.to, rr))
         else
-            push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, gas), thg=false))
+            push!(out, Nonlinear.RamanPolarField(grid.to, rr, thg=false))
         end
     end
     Tuple(out)
@@ -517,7 +523,8 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
     push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 end
 
-function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
+function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
+                      rotation, vibration)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
@@ -530,7 +537,10 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
-    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, gas)))
+    if raman
+        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
+        push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
+    end
     Tuple(out)
 end
 
