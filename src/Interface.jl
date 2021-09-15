@@ -310,10 +310,14 @@ In this case, all keyword arguments except for `λ0` are ignored.
     only in the working memory. If not `nothing`, should be a file path as a `String`,
     and the results are saved in a file at this location.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
-- `run::Bool=true` : If true (default) run the simulation and return a `Luna.Output`
-   object. If false, setup the simulation, and return the prepared arguments for `Luna.run`.
 """
-function prop_capillary(radius, flength, gas, pressure;
+function prop_capillary(args...; status_period=5, kwargs...)
+    Eω, grid, linop, transform, FT, output = prop_capillary_args(args...; kwargs...)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
+end
+
+function prop_capillary_args(radius, flength, gas, pressure;
                         λlims, trange, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
@@ -322,8 +326,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
-                        saveN=201, filepath=nothing,
-                        status_period=5, run=true)
+                        saveN=201, filepath=nothing)
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
     @info "X+Y polarisation "* (pol ? "required." : "not required.")
@@ -349,12 +352,7 @@ function prop_capillary(radius, flength, gas, pressure;
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
         shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath)
 
-    if run
-        Luna.run(Eω, grid, linop, transform, FT, output; status_period)
-        return output
-    else
-        return Eω, grid, linop, transform, FT, output
-    end
+    return Eω, grid, linop, transform, FT, output
 end
 
 check_orth(mode::Modes.AbstractMode) = nothing
