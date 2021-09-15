@@ -27,8 +27,8 @@ end
 args_execs = Dict(["-l"] => Scans.LocalExec,
                   ["-r", "1:6"] => Scans.RangeExec,
                   ["-b", "2,1"] => Scans.BatchExec,
-                  ["-q"] =>  Scans.QueueExec,
-                  ["-q", "-p", "4"] =>  Scans.QueueExec)
+                  ["-q"] =>  Scans.QueueExec)
+                #   ["-q", "-p", "4"] =>  Scans.QueueExec)
 @testset "Scanning $arg" for (arg, exec) in pairs(args_execs)
 for _ in eachindex(ARGS)
     pop!(ARGS)
@@ -36,7 +36,7 @@ end
 push!(ARGS, arg...)
 
 v = collect(1:10)
-scan = Scan("test"; var=v)
+scan = Scan("scantest_cmdlineargs"; var=v)
 @test scan.exec isa exec
 runscan(scan) do scanidx, vi
     @test vi == v[scanidx]
@@ -51,7 +51,7 @@ end
     end
     push!(ARGS, "--range", "1:4")
     v = collect(1:10)
-    scan = Scan("test", Scans.LocalExec(); var=v)
+    scan = Scan("scantest_cmdlineargs_overwrite", Scans.LocalExec(); var=v)
     runscan(scan) do scanidx, vi
         # command line ARGS above should overwrite Scans.LocalExec passed in above
         @test scan.exec isa Scans.RangeExec
@@ -64,7 +64,7 @@ end
 ##
 try
 @testset "scansave" begin
-scan = Scan("scantest", Scans.LocalExec())
+scan = Scan("scantest_scansave", Scans.LocalExec())
 x = collect(1:8)
 y = collect(1:6)
 addvariable!(scan, :x, x)
@@ -79,7 +79,7 @@ runscan(scan) do scanidx, xi, yi
     xx, yy = xi, yi
     Output.@scansave(scan, scanidx, Eω=out, stats=stats, keyword=[xx, yy])
 end
-HDF5.h5open("scantest_collected.h5", "r") do file
+HDF5.h5open("scantest_scansave_collected.h5", "r") do file
     @test read(file["scanvariables"]["x"]) == x
     @test read(file["scanvariables"]["y"]) == y
     @test read(file["scanorder"]) == ["x", "y"]
@@ -107,17 +107,17 @@ HDF5.h5open("scantest_collected.h5", "r") do file
             end
     @test read(file["script"]) == this * "\n" * code
 end
-rm("scantest_collected.h5")
+rm("scantest_scansave_collected.h5")
 end
 catch
-rm("scantest_collected.h5")
+rm("scantest_scansave_collected.h5")
 end
 
 ##
 @testset "ScanHDF5Output" begin
 var1 = collect(range(1, length=5))
 var2 = collect(1:3)
-scan = Scan("scantest", Scans.LocalExec(); var1=var1, var2=var2)
+scan = Scan("scantest_hdf5output", Scans.LocalExec(); var1=var1, var2=var2)
 files = String[]
 runscan(scan) do scanidx, vi1, vi2
     out = Output.@ScanHDF5Output(scan, scanidx, 0, 1, 10)
@@ -147,7 +147,7 @@ end
     @everywhere using Luna
     function worker()
         energies = collect(range(5e-6, 20e-6; length=16))
-        scan = Scan("scantest", Scans.QueueExec(); energy=energies)
+        scan = Scan("scantest_queue_multiproc", Scans.QueueExec(); energy=energies)
         idcs_run = Int[]
         runscan(scan) do scanidx, energy
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
@@ -169,7 +169,7 @@ end
     end
 
     # do it again but with one process giving an error
-    scanname = "scantest"
+    scanname = "scantest_queue_multiproc_err"
     function worker_err()
         energies = collect(range(5e-6, 20e-6; length=16))
         scan = Scan(scanname, Scans.QueueExec(); energy=energies)
@@ -197,7 +197,7 @@ end
         @test count(i2 .== scanidx) == 1
     end
     h = string(hash(scanname); base=16)
-    qfile = "qfile_$h.h5"
+    qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
     @test !isfile(qfile) # check that scan completed fully and removed the queue file
     rmprocs(ps)
 end
@@ -205,22 +205,45 @@ end
 ##
 @testset "multi-process queue scan via exec" begin
     energies = collect(range(5e-6, 20e-6; length=16))
-    scan = Scan("scantest", Scans.QueueExec(4); energy=energies)
+    scan = Scan("scantest_queue_multiproc_exec", Scans.QueueExec(4); energy=energies)
     td = joinpath(tempdir(), tempname())
     runscan(scan) do scanidx, energy
         println("running on $(myid())")
         prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                        trange=400e-15, λlims=(200e-9, 4e-6),
                        filepath=joinpath(td, makefilename(scan, scanidx)))
+        open(joinpath(td, "$(scanidx)_on_$(myid())"), "w") do io
+            write(io, "$scanidx ran on $(myid())")
+        end
     end
-    @test length(readdir(td)) == length(energies)
+    # should be exactly 2 files per scanidx: output .h5 and "scanidx_on_procid"
+    @test length(readdir(td)) == 2length(energies)
+    rm(td; recursive=true)
+end
+
+# do it again to make sure we can run multiple multi-process scans in one session
+@testset "multi-process queue scan via exec--again" begin
+    energies = collect(range(5e-6, 20e-6; length=16))
+    scan = Scan("scantest_queue_multiproc_exec_again", Scans.QueueExec(4); energy=energies)
+    td = joinpath(tempdir(), tempname())
+    runscan(scan) do scanidx, energy
+        println("running on $(myid())")
+        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                       trange=400e-15, λlims=(200e-9, 4e-6),
+                       filepath=joinpath(td, makefilename(scan, scanidx)))
+        open(joinpath(td, "$(scanidx)_on_$(myid())"), "w") do io
+            write(io, "$scanidx ran on $(myid())")
+        end
+    end
+    # should be exactly 2 files per scanidx: output .h5 and "scanidx_on_procid"
+    @test length(readdir(td)) == 2length(energies)
     rm(td; recursive=true)
 end
 
 ##
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
     energies = collect(range(5e-6, 10e-6; length=4))
-    scan = Scan("scantest", Scans.LocalExec(); energy=energies)
+    scan = Scan("scantest_autofilename", Scans.LocalExec(); energy=energies)
     mktempdir() do td
         runscan(scan) do scanidx, energy
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
@@ -233,7 +256,7 @@ end
 ##
 @testset "manual filename in ScanHDF5Output" begin
     energies = collect(range(5e-6, 10e-6; length=4))
-    scan = Scan("scantest", Scans.LocalExec(); energy=energies)
+    scan = Scan("scantest_manualfilename", Scans.LocalExec(); energy=energies)
     mktempdir() do td
         runscan(scan) do scanidx, energy
             prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
