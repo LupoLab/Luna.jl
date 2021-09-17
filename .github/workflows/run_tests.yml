@@ -6,6 +6,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         julia-version: ['1.5', ^1.7.0-rc1]
         julia-arch: [x64, x86]
@@ -20,7 +21,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
-        run: julia --project -e "using Pkg; Pkg.add(PackageSpec(url=\"https://github.com/CoolProp/CoolProp.jl\", rev=\"master\"));"
+        run: julia --project -e "using Pkg; Pkg.add(PackageSpec(url="""https://github.com/CoolProp/CoolProp.jl""", rev="""master"""));"
       - name: Install dependencies (linux)
         if: matrix.os == 'ubuntu-latest'
         env:
