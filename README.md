@@ -1,4 +1,4 @@
-# Luna
+# Luna.jl
 
 
 [![DOI](https://zenodo.org/badge/190623784.svg)](https://zenodo.org/badge/latestdoi/190623784)
