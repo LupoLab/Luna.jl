@@ -11,7 +11,7 @@ pressure = 5.0 # gas pressure in bar
 energy = 1.7e-6 # energy in the pump pulse
 
 pssfbs = prop_capillary(radius, flength, gas, pressure; λ0, τfwhm, energy,
-                        trange=1.6e-12, λlims=(300e-9, 1.8e-6), loss=false, envelope=true, plasma=true)
+                        trange=1.6e-12, λlims=(300e-9, 1.8e-6), loss=false, envelope=true)
 
 Plotting.prop_2D(pssfbs, :λ; modes=:sum, trange=(-700e-15, 100e-15), λrange=(300e-9, 1800e-9),
                  dBmin=-30)
