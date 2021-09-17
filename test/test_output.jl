@@ -31,9 +31,7 @@ using EllipsisNotation
     for (ii, ti) in enumerate(t)
         o(y0, ti, 0, y)
     end
-    @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
-    @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open(fpath, "r") do file
         @test all(read(file["t"]) == t)
         global yr = read(file["y"])

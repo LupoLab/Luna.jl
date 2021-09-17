@@ -1,196 +1,283 @@
 module Scans
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
-import Base.Threads: @threads
-import Base: length
-import Dates
 import Logging: @info, @warn
-import DataStructures: OrderedDict
+import Printf: @sprintf
+import Base: length
+import Luna: @hlock, Utils
+import Pidfile: mkpidlock
+import HDF5
+import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
+import Dates
 
 """
-    @scaninit(name="scan")
+    AbstractExec
 
-Initialise a scan for this file by parsing command line arguments and creating a `Scan` object
-in the variable `__SCAN__`. The scan name (added to file names via `@ScanHDF5Output`)
-can also be given.
-
-# Examples
-```julia
-julia> push!(ARGS, "--local")
-julia> @scaninit "scantest"
-julia> __SCAN__
-Luna.Scans.Scan("scantest", :local, (0, 0), nothing, Dict{Symbol,Any}(), Any[], IdDict{Any,Any}(), false)
-```
+Abstract supertype for scan execution modes.
 """
-macro scaninit(name="scan")
-    quote
-        args = parse_scan_cmdline()
-        $(esc(:__SCAN__)) = Scan($name, args)
+abstract type AbstractExec end
+
+"""
+    LocalExec
+
+Execution mode to simply run the whole scan in the current Julia session in a `for` loop.
+"""
+struct LocalExec <: AbstractExec end
+
+"""
+    RangeExec(range)
+
+Execution mode to run a subsection of the scan, given by a `UnitRange`, in the current Julia session.
+"""
+struct RangeExec <: AbstractExec
+    r::UnitRange{Int}
+end
+
+
+"""
+    BatchExec(Nbatches, batch)
+
+Execution mode to divide the scan into `Nbatches` chunks and run only the given `batch`.
+"""
+struct BatchExec <: AbstractExec
+    Nbatches::Int
+    batch::Int
+end
+
+
+"""
+    QueueExec(nproc=0, queuefile="")
+
+Execution mode to run a scan using a file-based queueing system. Can be run in multiple separate
+Julia sessions, or can spawn `nproc` subprocesses which then take items from the queue to run.
+
+Possible values for `nproc` are:
+- `0`: run only in the current Julia process
+- `n > 0`: spawn `n` subprocesses and run on these
+- `-1`: spawn as many subprocesses as the number of logical cores on the CPU
+    (`Base.Sys.CPU_THREADS`)
+
+If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is 
+stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
+"""
+struct QueueExec <: AbstractExec
+    nproc::Int
+    queuefile::String
+end
+
+QueueExec(nproc=0) = QueueExec(nproc, "")
+
+"""
+    CondorExec(scriptfile, ncores)
+
+Execution mode which submits a scan to an HTCondor queue system claiming `ncores` cores.
+
+!!! note
+    `scriptfile` must **always** be `@__FILE__`
+"""
+struct CondorExec <: AbstractExec
+    scriptfile::String
+    ncores::Int
+end
+
+"""
+    SSHExec(localexec, scriptfile, hostname, subdir)
+
+Execution mode which transfers the `scriptfile` file to the host given by `hostname` via SSH
+and executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
+subdirectory (relative to the home directory) where scans are stored on the remote host. A
+subfolder with automatically chosen name will be created in `subdir` to store this scan.
+
+!!! note
+    `scriptfile` must **always** be `@__FILE__`
+"""
+struct SSHExec{eT} <: AbstractExec
+    localexec::eT
+    scriptfile::String
+    hostname::String
+    subdir::String
+end
+
+function SSHExec(le::CondorExec, hostname, subdir)
+    SSHExec(le, le.scriptfile, hostname, subdir)
+end
+
+struct Scan{eT}
+    name::String
+    variables::Vector{Symbol}
+    arrays::Vector
+    exec::eT
+end
+
+"""
+    Scan(name; kwargs...)
+    Scan(name, ex::AbstractExec; kwargs...)
+
+Create a new `Scan` with name `name` and variables given as keyword arguments. The execution
+mode `ex` can be given directly or via command-line arguments to the script. **If given,
+command-line arguments overwrite any explicitly passed execution mode.**
+
+If neither an explicit execution mode nor command-line arguments are given,
+`ex` defaults to `LocalExec`, i.e. running the whole scan locally in the current Julia process.
+"""
+function Scan(name, cmdlineargs::Vector{String}=ARGS; kwargs...)
+    Scan(name, makeexec(cmdlineargs); kwargs...)
+end
+
+function Scan(name, ex::AbstractExec; kwargs...)
+    if !isempty(ARGS)
+        cmdlineargs = copy(ARGS)
+        # remove command-line arguments to avoid infinite recursion:
+        [pop!(ARGS) for _ in eachindex(ARGS)]
+        return Scan(name, cmdlineargs; kwargs...)
+    end
+    variables = Symbol[]
+    arrays = Vector[]
+    for (var, arr) in kwargs
+        push!(variables, var)
+        push!(arrays, arr)
+    end
+    Scan(name, variables, arrays, ex)
+end
+
+length(s::Scan) = (length(s.arrays) == 0) ? 0 : prod(length, s.arrays)
+
+"""
+    addvariable!(scan, variable::Symbol, array)
+    addvariable!(scan; kwargs...)
+
+Add scan variable(s) to the `scan`, either as a single pair of `Symbol` and array, or as a 
+sequence of keyword arguments.
+"""
+function addvariable!(scan, variable::Symbol, array)
+    push!(scan.variables, variable)
+    push!(scan.arrays, array)
+end
+
+function addvariable!(scan; kwargs...)
+    for (var, arr) in kwargs
+        push!(scan.variables, var)
+        push!(scan.arrays, arr)
     end
 end
 
-function parse_scan_cmdline()
+"""
+    makefilename(scan, scanidx)
+
+Make an appropriate file name for an `HDF5Output` or `prop_capillary` output for the
+`scan` at the current `scanidx`.
+
+# Examples
+```
+scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
+runscan(scan) do scanidx, energyi
+    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi
+                   filepath=makefilename(scan, scanidx))
+end
+```
+"""
+makefilename(scan::Scan, scanidx) = makefilename(scan.name, scanidx)
+makefilename(name::AbstractString, scanidx) = @sprintf("%s_%05d.h5", name, scanidx)
+
+function makeexec(args::Vector{String})
+    isempty(args) && return LocalExec()
     s = ArgParseSettings()
     @add_arg_table! s begin
-        "--range"
-            help = "Linear range of scan indices to execute"
+        "--local", "-l"
+            help = "Execute the whole scan locally."
+            action = :store_true
+        "--range", "-r"
+            help = "Linear range of scan indices to execute."
             arg_type = UnitRange{Int}
-        "--batch"
-            help = "Batch index to execute"
+        "--batch", "-b"
+            help = "Number of batches and batch index to execute"
             arg_type = Tuple{Int, Int}
-        "--cirrus"
-            help = "Make job script for cirrus to run in given number of batches, do not run any simulations."
-            arg_type = Int
-        "--condor"
-            help = "Make job submission script for HTCondor. Do not run any simulations."
-            arg_type = Int
-        "--local"
-            help = "Simply run the scan locally"
+        "--queue", "-q"
+            help = """Use a file-based queue to execute the scan. Can be run in parallel
+                      using the --procs/-p option."""
             action = :store_true
-        "--parallel", "-p"
-            help = "Run multi-threaded"
-            action = :store_true
+        "--procs", "-p"
+            help = """Number of processes to use with queued execution. If 0, use only the
+                      main Julia instance. If -1, use as many processes as the machine
+                      has logical cores."""
+            arg_type = Int
+            default = 0
     end
-    args = parse_args(s)
+    args = parse_args(args, s)
     for k in keys(args)
         isnothing(args[k]) && delete!(args, k)
     end
-    if haskey(args, "batch") && haskey(args, "range")
-        error("Only one of range or batch can be given.")
-    end
-    if haskey(args, "range") && args["local"]
-        error("Option --local and range cannot both be given")
-    end
-    if haskey(args, "batch") && args["local"]
-        error("Option --local and batch cannot both be given")
-    end
-    if args["local"] && haskey(args, "cirrus")
-        error("Local and cirrus-setup options cannot both be given.")
-    end
-    if args["local"] && haskey(args, "condor")
-        error("Local and condor-setup options cannot both be given.")
-    end
-    return args
+    args["local"] && return LocalExec()
+    haskey(args, "range") && return RangeExec(args["range"])
+    haskey(args, "r") && return RangeExec(args["r"])
+    haskey(args, "batch") && return BatchExec(args["batch"]...)
+    haskey(args, "b") && return BatchExec(args["b"]...)
+    args["queue"] && return QueueExec(args["procs"])
+    error("Command-line arguments do not define a valid execution mode.")
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
 parse_item(::Type{UnitRange{Int}}, x::AbstractString) = eval(Meta.parse(x))
 
-# Enable parsing of command-line arguments of the form"1,5" to a Tuple of integers
+# Enable parsing of command-line arguments of the form "1,5" to a Tuple of integers
 parse_item(::Type{Tuple{Int, Int}}, x::AbstractString) = Tuple(parse(Int, xi) for xi in split(x, ","))
 
-
-"""
-    Scan
-
-Struct to contain information about a scan, including the arrays to be scanned over.
-
-When an array is annotated by `@scanvar`, it is added to the `Scan` and then the cartesian
-product (all possible combinations) of the annotated arrays is computed. This product has
-contains (`N1 * N2 * N3...`) entries, where `N1` etc are the lengths of the arrays
-to be scanned over. Each entry is unique and itself has one entry for each annotated array.
-
-The cartesian product is split up into several arrays, one per annotated array, each also
-of length (`N1 * N2 * N3...`)--these contain the values that a given scan variable should take
-for each simulation in the scan. They are saved in in `values`, an `IdDict` that maps
-**from an annoted array itself** to the (`N1 * N2 * N3...`)-length array of values.
-By then indexing into this value array using `__SCANIDX__`, we find the value that this scan
-variable should take for this particular simulation.
-
-The first array added using `@scanvar` varies the fastest, all other fields of 
-`Scan.values` will contain repeated entries.
-"""
-mutable struct Scan
-    name::AbstractString # Name for the scan
-    mode::Symbol # :cirrus, :condor, :local, :batch or :range
-    batch::Tuple{Int, Int} # batch index and number of batches
-    idcs # Array or iterator of indices to be run on this execution
-    vars::OrderedDict{Symbol, Any} # maps from variable names to arrays
-    arrays # Array of arrays, each element is one of the arrays to be scanned over
-    values::IdDict # maps from each scan array to the expanded array of values
-    parallel::Bool # true if scan is being run multi-threaded
-end
-
-# Constructor taking parsed command line arguments.
-function Scan(name, args)
-    mode = :setup
-    batch = (0, 0)
-    idcs = nothing
-    if haskey(args, "batch")
-        mode = :batch
-        batch = args["batch"] # store batch index
-    elseif haskey(args, "range")
-        mode = :range
-        idcs = args["range"]
-    elseif args["local"]
-        mode = :local
-    elseif haskey(args, "cirrus")
-        mode = :cirrus
-        batch = (0, args["cirrus"])
-    elseif haskey(args, "condor")
-        mode = :condor
-        batch = (0, args["condor"])
-    else
-        error("One of batch, range, local or cirrus options must be given!")
+function logiter(scan, scanidx, args)
+    logmsg = @sprintf("Running scan: %s (%d points)\nIndex: %05d\nVariables:\n",
+                      scan.name, length(scan), scanidx)
+    for (variable, value) in zip(scan.variables, args)
+        logmsg *= @sprintf("\t%s: %g\n", variable, value)
     end
-    Scan(name, mode, batch, idcs, OrderedDict{Symbol, Any}(), Array{Any, 1}(), IdDict(), args["parallel"])
+    @info logmsg
+end
+
+function getvalue(scan, variable, scanidx)
+    values = vec(collect(Iterators.product(scan.arrays...)))[scanidx]
+    idx = findfirst(scan.variables .== variable)
+    values[idx]
 end
 
 """
-    length(s::Scan)
+    runscan(f, scan)
 
-Compute the total number of simulations in a scan, which is is the product
-of the lengths of the arrays to be scanned over.
-"""
-length(s::Scan) = (length(s.arrays) > 0) ? prod([length(ai) for ai in s.arrays]) : 0
+Run the function `f` in a scan with arguments defined by the `scan::Scan`.
+The function `f` must have the signature `f(scanidx, args...)` where the length of `args`
+is the number of variables to be scanned over. Can be used with the `do` block syntax.
 
-"""
-    addvar!(s::Scan, var::Symbol, arr::AbstractArray)
+The exact subset and order of scan points which is run depends on `scan.exec`, see
+[`Scan`](@ref).
 
-Add an array to a scan, saving both the symbol given and the array, then re-make the 
-cartesian product.
-
-This function is used internally by `@scanvar`
-"""
-function addvar!(s::Scan, var::AbstractString, arr::AbstractArray)
-    push!(s.arrays, arr)
-    var = Symbol(var)
-    s.vars[var] = arr
-    makearray!(s)
+# Examples
+```
+scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
+runscan(scan) do scanidx, energyi
+    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi)
 end
-
+```
 """
-    getval(s::Scan, var::Symbol, scanidx::Int)
-
-Get the value of a scan variable (identified by a symbol) for a given scan index.
-
-This function is used in e.g. `Output.@ScanHDF5Output` to get the values used for one
-particular simulation.
-"""
-getval(s::Scan, var::Symbol, scanidx::Int) = s.values[s.vars[var]][scanidx]
-
-"""
-    makearray!(s::Scan)
-
-Make the cartesian product array containing all possible combinations of the scan arrays,
-as well as the array of indices that are to be used in the current run of the script.
-"""
-function makearray!(s::Scan)
-    combos = vec(collect(Iterators.product(s.arrays...)))
-    s.values = IdDict()
-    for (i, a) in enumerate(s.arrays)
-        # The keys in the IdDict s.values are the arrays themselves
-        # Each field s.values[a] contains an array of length (N1*N2*N3...)
-        s.values[a] = [ci[i] for ci in combos]
+function runscan(f, scan::Scan{LocalExec})
+    for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
+        logiter(scan, scanidx, args)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
     end
-    if s.mode == :batch
-        # Running one batch - create chunks and select desired one.
-        linidx = collect(1:length(s))
-        chunkidx, Nchunks = s.batch
-        chs = chunks(linidx, Nchunks)
-        s.idcs = chs[chunkidx]
-    elseif s.mode == :local
-        # Running everything locally - idcs are simply everything.
-        s.idcs = collect(1:length(s))
+end
+
+function runscan(f, scan::Scan{RangeExec})
+    combos = vec(collect(Iterators.product(scan.arrays...)))
+    for (scanidx, args) in enumerate(combos[scan.exec.r])
+        logiter(scan, scanidx, args)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
     end
 end
 
@@ -220,187 +307,162 @@ function chunks(a::AbstractArray, n::Int)
     return out
 end
 
-"""
-    @scanvar
-
-Add an array as a variable to be scanned over.
-
-# Examples
-Create an array and add it to the scan simultaneously:
-```julia
-@scanvar energy = range(0.1e-6, 1.5e-6, length=16)
-```
-Create an array first and add it to the scan later:
-```julia
-τ = range(25e-15, 35e-15, length=11)
-@scanvar τ
-```
-"""
-macro scanvar(expr)
-    if isa(expr, Symbol)
-        # existing array being added
-        q = quote
-            addvar!($(esc(:__SCAN__)), ex, $(esc(:($expr))))
+function runscan(f, scan::Scan{BatchExec})
+    combos = vec(collect(Iterators.product(scan.arrays...)))
+    linidx = collect(1:length(scan))
+    chs = chunks(linidx, scan.exec.Nbatches)
+    idcs = chs[scan.exec.batch]
+    scanidcs_this = linidx[idcs]
+    combos_this = combos[idcs]
+    for (scanidx, args) in zip(scanidcs_this, combos_this)
+        logiter(scan, scanidx, args)
+        try
+            f(scanidx, args...)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
         end
-        return q
-    end
-    expr.head == :(=) || error("@scanvar must be applied to an assignment expression or variable")
-    global lhs = expr.args[1]
-    isa(lhs, Symbol) || error("@scanvar expressions must assign to a variable")
-    quote
-        $(esc(expr)) # First, simply execute the assignment
-        addvar!($(esc(:__SCAN__)), $(string(lhs)), $(esc(:($lhs)))) # now add the resulting array to the Scan
     end
 end
 
-"""
-    interpolate!(ex::Expr)
-
-Recursively interpolate scan variables into a scan expression.
-
-# Examples
-```jldoctest
-julia> for i in eachindex(ARGS)
-           pop!(ARGS) # remove existing command line args
-       end
-julia> push!(ARGS, "--local")
-julia> __SCANIDX__ = 1 # pretend we're in a @scan block
-julia> @scaninit
-julia> @scanvar energy = range(0.1e-6, 1.5e-6, length=16);
-julia> ex = Expr(:\$, :energy)
-:(\$(Expr(:\$, :energy)))
-julia> exi = interpolate!(ex)
-:((__SCAN__.values[energy])[__SCANIDX__])
-julia> eval(exi)
-1.0e-7
-```
-"""
-function interpolate!(ex::Expr)
-    if ex.head === :($)
-        var = ex.args[1]
-        if var == :__SCANIDX__
-            return :__SCANIDX__
-        else
-            return :(__SCAN__.values[$var][__SCANIDX__])
-        end
+function runscan(f, scan::Scan{QueueExec})
+    if scan.exec.nproc == 0
+        _runscan(f, scan)
     else
-        for i in 1:length(ex.args)
-            arg = ex.args[i]
-            if isa(arg, Expr)
-                ex.args[i] = interpolate!(arg)
-            end
+        nproc = (scan.exec.nproc == -1) ? Base.Sys.CPU_THREADS : scan.exec.nproc
+        procs = addprocs(nproc)
+        @everywhere eval(:(using Luna))
+        futures = Future[]
+        for p in procs
+            fut = @spawnat p _runscan(f, scan)
+            push!(futures, fut)
         end
-    end
-    return ex
-end
-
-"""
-    @scan
-
-Run the enclosed expression as a scan.
-
-Depending on `__SCAN__.mode`, different things happen:
-* `:batch`, `:range`, `:local` -> run enclosed expression as many times as required, using values
-    from the cartesian product `__SCAN__.values`. If `__SCAN__.parallel` is true, these runs
-    are done on different threads.
-* `:cirrus` -> make PBS job script for batched run on cirrus
-* `:condor` -> make HTCondor job script for batched run on HWLX0003
-"""
-macro scan(ex)
-    body = interpolate!(ex)
-    global script = string(__source__.file)
-    quote
-        if $(esc(:__SCAN__)).mode == :cirrus
-            cirrus_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
-        elseif $(esc(:__SCAN__)).mode == :condor
-            condor_setup($(esc(:__SCAN__)).name, script, $(esc(:__SCAN__)).batch[2])
-        else
-            if $(esc(:__SCAN__)).parallel
-                @threads for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    try
-                        $(esc(body))
-                    catch e
-                        bt = catch_backtrace()
-                        @warn sprint(showerror, e, bt)
-                    end
-                end
-            else
-                for $(esc(:__SCANIDX__)) in $(esc(:__SCAN__)).idcs
-                    try
-                        $(esc(body))
-                    catch e
-                        bt = catch_backtrace()
-                        @warn sprint(showerror, e, bt)
-                    end
-                end
-            end
+        for fut in futures
+            fetch(fut)
         end
+        rmprocs(procs)
     end
 end
 
-"""
-    condor_setup(name, script, batches)
+function _runscan(f, scan::Scan{QueueExec})
+    if isempty(scan.exec.queuefile)
+        h = string(hash(scan.name); base=16)
+        qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
+    else
+        qfile = scan.exec.queuefile
+    end
+    lockpath = joinpath(Utils.cachedir(), basename(qfile)*"_lock")
 
-Make and save HTCondor job script for a scan named `name` contained in the script located at
-`script` which is to be run in batches.
-"""
-function condor_setup(name, script, batches)
+    combos = vec(collect(Iterators.product(scan.arrays...)))
+    while true
+        mkpidlock(lockpath) do
+            # first process to catch the pidlock creates the queue file
+            if ~isfile(qfile)
+                @hlock HDF5.h5open(qfile, "cw") do file
+                    file["qdata"] = zeros(Int, length(scan))
+                end
+            end
+            # read the queue data
+            global qdata = @hlock HDF5.h5open(qfile) do file
+                read(file["qdata"])
+            end
+            # find the first index which is neither done nor in progress
+            global scanidx = findfirst(qdata) do qi
+                qi == 0
+            end
+            if ~isnothing(scanidx)
+                # mark the index as in progress
+                @hlock HDF5.h5open(qfile, "r+") do file
+                    file["qdata"][scanidx] = 1
+                end
+            end
+        end # release pidlock
+        if isnothing(scanidx) # no scan points left to start
+            if all(qdata .> 1) # completely done--either all done or failed
+                # this point is only reached by one process
+                rm(qfile) # remove the queue file
+            end
+            break # break out of the loop
+        end
+        logiter(scan, scanidx, combos[scanidx])
+        code = 2 # code for finished successfully
+        try
+            f(scanidx, combos[scanidx]...) # run scan function
+        catch e
+            code = 3 # code for failed
+            bt = catch_backtrace()
+            msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
+        mkpidlock(lockpath) do # acquire lock on qfile again
+            @hlock HDF5.h5open(qfile, "r+") do file
+                file["qdata"][scanidx] = code # mark as done/failed
+            end
+        end
+    end
+end
+
+function runscan(f, scan::Scan{CondorExec})
+    # make submission file for HTCondor
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
+    script = scan.exec.scriptfile
+    cores = scan.exec.ncores
+    name = scan.name
+    @info "Submitting Condor job for $script running on $cores cores."
+    # Adding the --queue command-line argument below means that when running the Condor job,
+    # the CondorExec is ignored even if explicitly defined inside the script.
     lines = [
         "executable = $julia",
-        """arguments = "$(basename(script)) --batch \$\$([\$(Process)+1]),$batches" """,
+        """arguments = "$(basename(script)) --queue" """,
         "log = $name.log.\$(Process)",
         "output = $name.out.\$(Process)",
         "error = $name.err.\$(Process)",
+        "stream_error = True",
         "initialdir = $(dirname(script))",
         "request_cpus = 1",
-        "queue $batches"
+        "queue $cores"
     ]
-
-    fpath = joinpath(dirname(script), "doit.sub")
-    println(fpath)
-    open(fpath, "w") do file
+    subfile = joinpath(dirname(script), "doit.sub")
+    @info "Writing job file to $subfile..."
+    open(subfile, "w") do file
         for l in lines
             write(file, l*"\n")
         end
     end
+    @info "Submitting job..."
+    out = read(`condor_submit $subfile`, String)
+    @info "Condor submission output:\n$out"
 end
 
-"""
-    cirrus_setup(name, script, batches)
-
-Make and save PBS job script for a scan named `name` contained in the script located at
-`script` which is to be run in batches.
-"""
-function cirrus_setup(name, script, batches)
-    if Sys.iswindows()
-        error("--cirrus option must be invoked on the cirrus login node!")
+function changexec(scan, newexec)
+    newscan = Scan(scan.name, newexec)
+    for (var, arr) in zip(scan.variables, scan.arrays)
+        addvariable!(newscan, var, arr)
     end
-    cmd = split(string(Base.julia_cmd()))[1]
-    julia = strip(cmd, ['`', '\''])
-    lines = [
-        "#!/bin/bash --login",
-        "#PBS -N " * name,
-        "#PBS -J 0-$(batches-1)",
-        "#PBS -V",
-        "#PBS -l select=1:ncpus=4",
-        "#PBS -l walltime=48:00:00",
-        "#PBS -A sc007",
-        "",
-        "module load gcc",
-        "export OMP_NUM_THREADS=4",
-        "",
-        "cd \$PBS_O_WORKDIR",
-        "$julia $(basename(script)) --batch \$((PBS_ARRAY_INDEX+1)),$batches "
-    ]
+    newscan
+end
 
-    fpath = joinpath(dirname(script), "doit.sh")
-    println(fpath)
-    open(fpath, "w") do file
-        for l in lines
-            write(file, l*"\n")
-        end
+function runscan(f, scan::Scan{<:SSHExec})
+    if gethostname() == scan.exec.hostname
+        # running on the machine defined in the SSH Exec? just run the scan
+        runscan(f, changexec(scan, scan.exec.localexec))
+    else
+        # running somewhere else? submit the job via SSH
+        host = scan.exec.hostname
+        subdir = scan.exec.subdir
+        script = scan.exec.scriptfile
+        scriptfile = basename(script)
+        name = scan.name
+        folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
+        @info "Making directory \$HOME/$subdir/$folder"
+        read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
+        @info "Transferring file..."
+        read(`scp $script $host:\$HOME/$subdir/$folder`)
+        @info "Running Luna script on remote host $host"
+        read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
     end
 end
+
 end
