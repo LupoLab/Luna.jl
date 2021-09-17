@@ -10,20 +10,14 @@ jobs:
       matrix:
         julia-version: ['1.5', ^1.7.0-rc1]
         julia-arch: [x64, x86]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest] # [ubuntu-latest, windows-latest]
     if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
-      - name: Install dependencies (windows)
-        if: matrix.os == 'windows-latest'
-        env:
-          PYTHON: # remove PYTHON env variable to make sure packages are installed
-        run: julia --project -e "using Pkg; Pkg.add(PackageSpec(url="""https://github.com/CoolProp/CoolProp.jl""", rev="""master"""));"
-      - name: Install dependencies (linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install dependencies
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
         run: julia --project -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"));'
