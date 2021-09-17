@@ -300,7 +300,6 @@ In this case, all keyword arguments except for `λ0` are ignored.
     - `:PPT` -- include plasma using the PPT ionisation rate.
     - `true` (default) -- same as `:PPT`.
     - `false` -- ignore plasma.
-    Note that plasma is only available for full-field simulations.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
@@ -329,7 +328,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
-                        raman=false, kerr=true, plasma=nothing,
+                        raman=false, kerr=true, plasma=true,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing,
@@ -337,7 +336,6 @@ function prop_capillary(radius, flength, gas, pressure;
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
     @info "X+Y polarisation "* (pol ? "required." : "not required.")
-    plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
     gas = (gas == :He) ? :HeJ : gas
