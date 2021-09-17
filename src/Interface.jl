@@ -230,7 +230,7 @@ end
 
 
 """
-    prop_capillary(radius, flength, gas, pressure; λ0, kwargs...)
+    prop_capillary(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
 
 Simulate pulse propagation in a hollow fibre using the capillary model.
 
@@ -327,6 +327,15 @@ function prop_capillary(args...; status_period=5, kwargs...)
     output
 end
 
+"""
+    prop_capillary_args(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
+
+Prepare to simulate pulse propagation in a hollow fibre using the capillary model. This
+function takes the same arguments as `prop_capillary` but instead or running the
+simulation and returning the output, it returns the required arguments for `Luna.run`,
+which is useful for repeated simulations in an indentical fibre with different initial
+conditions.
+"""
 function prop_capillary_args(radius, flength, gas, pressure;
                         λlims, trange, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
