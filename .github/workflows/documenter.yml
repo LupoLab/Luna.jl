@@ -14,12 +14,12 @@ jobs:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@latest
         with:
-          version: 1.4
+          version: 1.5
       - name: Install dependencies
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
-        run: julia --project=docs/ -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master")); Pkg.add(PackageSpec(url="https://github.com/chrisbrahms/Documenter.jl", rev="master")); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate();'
+        run: julia --project=docs/ -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master")); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate();'
       - name: Build and deploy
         env:
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # For authentication with SSH deploy key
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
         run: julia --project=docs/ docs/make.jl

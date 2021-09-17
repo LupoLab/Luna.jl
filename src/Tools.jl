@@ -104,13 +104,17 @@ function params(E, τfw, λ, mode, material; shape=:sech, P=1.0, T=PhysData.room
     N0, n0, n2 = getN0n0n2(ω, material, P=P, T=T)
     γ = getγ(ω, mode, n2)
     N = getN(P0, τfw, γ, β2, shape=shape)
+    zdw = Modes.zdw(mode)
+    if ismissing(zdw)
+        zdw = Modes.zdw(mode, λ)
+    end
     p = (E=E, τfw=τfw, τ0=τ0, ω=ω, λ=λ, material=material, P=P, T=T, shape=shape,
          P0=P0, β2=β2, N0=N0, n0=n0, n2=n2, γ=γ, N=N,
          I0=P0_to_I(P0, mode), Pcr=Pcr(ω, n0, n2),
          Ld=Ld(τfw, β2, shape=shape),
          Lnl=Lnl(P0, γ),
          Lfiss=Lfiss(P0, τfw, γ, β2, shape=shape),
-         zdw=Modes.zdw(mode),
+         zdw=zdw,
          Lloss=Modes.losslength(mode, ω),
          Aeff=Modes.Aeff(mode),
          mode=mode)
