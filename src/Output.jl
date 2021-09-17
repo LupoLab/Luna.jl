@@ -384,7 +384,8 @@ function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing
                                   " and will be overwritten")
                     HDF5.delete_object(parent, k)
                 else
-                    error("File $(o.fpath) already has dataset $(k)")
+                    Logging.@warn("File $(o.fpath) already has dataset $k. Pass force=true"*
+                              " to overwrite")
                 end
             end
             isa(v, BitArray) && (v = Array{Bool, 1}(v))
@@ -416,10 +417,11 @@ function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, grou
         if HDF5.haskey(parent, key)
             if force
                 Logging.@warn("Dataset $key already present in file $(o.fpath)"*
-                                " and will be overwritten")
+                              " and will be overwritten")
                 HDF5.delete_object(parent, key)
             else
-                error("File $(o.fpath) already has dataset $(key)")
+                Logging.@warn("File $(o.fpath) already has dataset $(key). Pass force=true"*
+                              " to overwrite")
             end
         end
         isa(val, BitArray) && (val = Array{Bool, 1}(val))
@@ -512,7 +514,59 @@ function nostats(args...)
     return Dict{String, Any}()
 end
 
-macro ScanHDF5Output(args...)
+"""
+    ScanHDF5Output(scan, scanidx, args...; fname=nothing, fdir=nothing, kwargs...)
+
+Create an [`HDF5Output`](@ref) for the given `scan` at the current `scanidx` and automatically
+save the scan arrays and current values of the scan variables in the file. If given,
+`fdir` is used as a directory in which to store the scan output. `fname` can be used to
+manually name files. The running scan index will be appended to `fname` for each file.
+"""
+function ScanHDF5Output(scan, scanidx, args...; fname=nothing, fdir=nothing, kwargs...)
+    fpath = isnothing(fname) ?
+        Scans.makefilename(scan, scanidx) :
+        Scans.makefilename(fname, scanidx)
+    if !isnothing(fdir)
+        fpath = joinpath(fdir, fpath)
+        if !isdir(fdir)
+            mkpath(fdir)
+        end
+    end
+    savescan(HDF5Output(fpath, args...; kwargs...), scan, scanidx)
+end
+
+function ScanMemoryOutput(scan, scanidx, args...; kwargs...)
+    savescan(MemoryOutput(args...; kwargs...), scan, scanidx)
+end
+
+function savescan(out, scan, scanidx)
+    out("scanidx", scanidx, meta=true)
+    vars = Dict{String, Any}()
+    arrays = Dict{String, Any}()
+    order = String[]
+    shape = Int[] # scan shape
+    # create grid of scan points
+    for (var, arr) in zip(scan.variables, scan.arrays)
+        push!(order, string(var))
+        push!(shape, length(arr))
+        arrays[string(var)] = arr
+        vars[string(var)] = Scans.getvalue(scan, var, scanidx)
+    end
+    out(vars; meta=true, group="scanvars")
+    out(arrays; meta=true, group="scanarrays")
+    out("scanorder", order; meta=true)
+    out("scanshape", shape; meta=true)
+    out
+end
+
+"""
+    @ScanHDF5Output(scan, scanidx, args...)
+
+Create an [`HDF5Output`](@ref) for the given `scan` at the current `scanidx` and automatically
+save the running script, scan arrays, and current values of the scan variables in the file.
+All arguments, including keyword arguments, after `scanidx` are identical to `HDF5Output`.
+"""
+macro ScanHDF5Output(scan, scanidx, args...)
     code = ""
     try
         script = string(__source__.file)
@@ -526,37 +580,12 @@ macro ScanHDF5Output(args...)
             arg.head = :kw
         end
     end
-    fname = quote
-        $(esc(:__SCAN__)).name*"_"*@sprintf("%05d", $(esc(:__SCANIDX__)))*".h5"
-    end
-    ex = Expr(:call, HDF5Output, fname)
+    ex = Expr(:call, :ScanHDF5Output, esc(scan), esc(scanidx))
     for arg in args
         push!(ex.args, esc(arg))
     end
     push!(ex.args, Expr(:kw, :script, code))
-    quote 
-        begin
-            out = $ex
-            out("scanidx", $(esc(:__SCANIDX__)),  meta=true)
-            vars = Dict{String, Any}()
-            arrays = Dict{String, Any}()
-            order = String[] # scan order
-            shape = Int[] # scan shape
-            for var in keys($(esc(:__SCAN__)).vars)
-                val = Scans.getval($(esc(:__SCAN__)), var, $(esc(:__SCANIDX__)))
-                arr = $(esc(:__SCAN__)).vars[var]
-                vars[string(var)] = val
-                push!(order, string(var))
-                push!(shape, length(arr))
-                arrays[string(var)] = arr
-            end
-            out(vars; meta=true, group="scanvars")
-            out(arrays; meta=true, group="scanarrays")
-            out("scanorder", order; meta=true)
-            out("scanshape", shape; meta=true)
-            out
-        end
-    end
+    ex
 end
 
 # Auto-generate @MemoryOutput and @HDF5Output macros
@@ -590,20 +619,19 @@ for op in (:MemoryOutput, :HDF5Output)
 end
 
 """
-    scansave(scan, scanidx, Eω, stats; kwargs...)
+    scansave(scan, scanidx; grid, stats, fpath, script, kwargs...)
 
-Save the field `Eω` and statistics dictionary `stats` in the "collected" scan output file, 
-placing it into the scan-grid as indicated by `scanidx` and the arrays of `scan`. Additional
-keyword arguments are also saved in this manner, in a field given by the keyword.
+While running the given `scan`, save the variables given as keyword arguments into the scan grid as determined from the variables of the `scan`. Special keyword arguments are:
 
-E.g. if scanning over 2 arrays with length 16 and 10, shape of the `"Eω"` dataset in the 
-file will be `(size(Eω)..., 16, 10)`. Stats and additional keyword arguments are also saved
-in this manner.
+- `grid::AbstractGrid`: Save the simulation grid in a dictionary (but only once)
+- `stats`: The statistics dictionary from a simulation is saved in scan grid and `NaN`-padded to account for variable lengths in the output arrays
+- `fpath`: Path to the file. Defaults to the scan name plus "_collected"
+- `script`: Path to the Julia scrpt file running the scan. Can be grabbed automatically using the macro [`@scansave`](@ref).
 """
 function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                                  grid=nothing, script=nothing, kwargs...)
     fpath = isnothing(fpath) ? "$(scan.name)_collected.h5" : fpath
-    lockpath = joinpath(Utils.cachedir(), "scanlock")
+    lockpath = joinpath(Utils.cachedir(), "$(basename(fpath)).scanlock")
     isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
     pidlock = mkpidlock(lockpath)
     if !isfile(fpath)
@@ -613,8 +641,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             order = String[]
             shape = Int[] # scan shape
             # create grid of scan points
-            for (k, var) in pairs(scan.vars)
-                # scan.vars is an OrderedDict so this iteration is deterministic
+            for (k, var) in zip(scan.variables, scan.arrays)
                 group[string(k)] = var
                 push!(order, string(k))
                 push!(shape, length(var))
@@ -703,14 +730,13 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
 end
 
 """
-    @scansave(Eω, stats; kwargs...)
+    @scansave(scan, scanidx; kwargs...)
 
-Like [`scansave`](@ref) but automatically grabs the scan index and scan instance from the
-surrounding scope and also saves the script being run.
+Like [`scansave`](@ref) but also saves the script being run automatically.
 """
-macro scansave(kwargs...)
+macro scansave(scan, scanidx, kwargs...)
     global script = string(__source__.file)
-    ex = :(scansave($(esc(:__SCAN__)), $(esc(:__SCANIDX__)),
+    ex = :(scansave($(esc(scan)), $(esc(scanidx)),
                     script=script))
     for arg in kwargs
         if isa(arg, Expr) && arg.head == :(=)
@@ -718,7 +744,7 @@ macro scansave(kwargs...)
             push!(ex.args, esc(arg))
         else
             # To a macro, arguments and keyword arguments look the same, so check manually
-            error("@scansave only accepts")
+            error("@scansave only accepts keyword arguments")
         end
     end
     ex
