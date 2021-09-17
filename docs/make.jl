@@ -25,5 +25,5 @@ makedocs(
 )
 
 deploydocs(
-    repo = "github.com/lupolab/Luna.jl.git",
+    repo = "github.com/LupoLab/Luna.jl.git",
 )
