@@ -29,7 +29,7 @@ There are two ways of using Luna:
 1. A very simple high-level interface for the most heavily optimised application of Luna--propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres--consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
-For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information on the internals of Luna can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
+For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
 Luna currently only runs with Julia 1.5, which can be obtained from [here](https://julialang.org/downloads/oldreleases/). More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
