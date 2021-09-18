@@ -141,7 +141,7 @@ A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.
 function PlasmaVector!(Plas::PlasmaCumtrapz, E)
     Ex = E[:,1]
     Ey = E[:,2]
-    Em = @. hypot.(Ex, Ey)
+    Em = hypot.(Ex, Ey)
     Plas.ratefunc(Plas.rate, Em)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
@@ -234,7 +234,7 @@ end
 function PlasmaVector!(Plas::PlasmaFourier, E::Array{Complex{Float64},2})
     Ex = E[:,1]
     Ey = E[:,2]
-    Em = @. hypot.(Ex, Ey)
+    Em = hypot.(Ex, Ey)
     Plas.ratefunc(Plas.rate, Em)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
