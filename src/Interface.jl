@@ -230,7 +230,7 @@ end
 
 
 """
-    prop_capillary(radius, flength, gas, pressure; λ0, kwargs...)
+    prop_capillary(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
 
 Simulate pulse propagation in a hollow fibre using the capillary model.
 
@@ -321,7 +321,22 @@ If `raman` is `true`, then the following options apply:
     The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
-function prop_capillary(radius, flength, gas, pressure;
+function prop_capillary(args...; status_period=5, kwargs...)
+    Eω, grid, linop, transform, FT, output = prop_capillary_args(args...; kwargs...)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
+end
+
+"""
+    prop_capillary_args(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
+
+Prepare to simulate pulse propagation in a hollow fibre using the capillary model. This
+function takes the same arguments as `prop_capillary` but instead or running the
+simulation and returning the output, it returns the required arguments for `Luna.run`,
+which is useful for repeated simulations in an indentical fibre with different initial
+conditions.
+"""
+function prop_capillary_args(radius, flength, gas, pressure;
                         λlims, trange, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
@@ -332,8 +347,7 @@ function prop_capillary(radius, flength, gas, pressure;
                         raman=false, kerr=true, plasma=nothing,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
-                        scan=nothing, scanidx=nothing, filename=nothing,
-                        status_period=5)
+                        scan=nothing, scanidx=nothing, filename=nothing)
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
     @info "X+Y polarisation "* (pol ? "required." : "not required.")
@@ -359,8 +373,7 @@ function prop_capillary(radius, flength, gas, pressure;
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
         shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath, filename)
 
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
-    output
+    return Eω, grid, linop, transform, FT, output
 end
 
 check_orth(mode::Modes.AbstractMode) = nothing
