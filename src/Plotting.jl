@@ -328,7 +328,7 @@ end
 
 # a single logarithmic colour-scale spectral domain plot
 function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
-    im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); kwargs...)
+    im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); shading="auto", kwargs...)
     im.set_clim(dBmin, 0)
     cb = plt.colorbar(im, ax=ax)
     cb.set_label("SED (dB)")
@@ -340,7 +340,7 @@ end
 # a single time-domain propagation plot
 function _time2D(ax, t, z, I, trange; kwargs...)
     Pfac, unit = power_unit(I)
-    im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); kwargs...)
+    im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); shading="auto", kwargs...)
     cb = plt.colorbar(im, ax=ax)
     cb.set_label("Power ($unit)")
     ax.set_xlim(trange.*1e15)
@@ -542,7 +542,7 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))
 
     fig = plt.figure()
-    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; kwargs...)
+    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; shading="auto", kwargs...)
     plt.ylim(speclims...)
     plt.ylabel(speclabel)
     plt.xlabel("Time (fs)")

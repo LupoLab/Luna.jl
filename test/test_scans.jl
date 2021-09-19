@@ -167,7 +167,12 @@ end
     for scanidx in 1:16
         @test count(i2 .== scanidx) == 1 # check that all indices have been run exactly once
     end
+    rmprocs(ps)
+end
 
+@testset "multi-process queue scan with error" begin
+    ps = addprocs(2)
+    @everywhere using Luna
     # do it again but with one process giving an error
     scanname = "scantest_queue_multiproc_err"
     function worker_err()
@@ -193,7 +198,7 @@ end
     @test (length(i3) > 0)
     push!(i2, i3...)
     for scanidx in 1:15
-        # check that all indices have been run, except for the one with an error
+        # check that all indices have been run once, except for the one with an error
         @test count(i2 .== scanidx) == 1
     end
     h = string(hash(scanname); base=16)
