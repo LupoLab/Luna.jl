@@ -94,7 +94,7 @@ a = 125e-6
 L = 1
 grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12)
 coren, densityfun = Capillary.gradient(gas, L, pres, 0)
-m = Capillary.MarcatilliMode(a, coren)
+m = Capillary.MarcatiliMode(a, coren)
 dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version
 
 lom!, βm! = LinearOps.make_linop(grid, m, 800e-9)
@@ -117,7 +117,7 @@ L = 1
 for thg in (true, false)
     grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12; thg=thg)
     coren, densityfun = Capillary.gradient(gas, L, pres, 0)
-    m = Capillary.MarcatilliMode(a, coren)
+    m = Capillary.MarcatiliMode(a, coren)
     dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version...
 
     lom!, βm! = LinearOps.make_linop(grid, m, 800e-9; thg=thg)

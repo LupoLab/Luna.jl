@@ -10,7 +10,7 @@ import Test: @test, @testset, @test_throws
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
@@ -28,7 +28,7 @@ import Test: @test, @testset, @test_throws
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun, energyfunω = Fields.energyfuncs(grid)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
@@ -53,7 +53,7 @@ end
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
@@ -71,7 +71,7 @@ end
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=5)
 
     modes = (
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     energyfun, energyfunω = Fields.energyfuncs(grid)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
@@ -96,8 +96,8 @@ end
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
     modes = (
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
+         Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
     )
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)

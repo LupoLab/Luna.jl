@@ -35,7 +35,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 # Constant
 dens0 = PhysData.density(gas, pres)
 dens(z) = dens0
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
@@ -49,7 +49,7 @@ Luna.run(Eω, grid, linop, transform, FT, output_const, status_period=10)
 
 # Gradient
 coren, densityfun = Capillary.gradient(gas, L, pres, pres)
-m = Capillary.MarcatilliMode(a, coren, loss=false)
+m = Capillary.MarcatiliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)
@@ -63,7 +63,7 @@ Luna.run(Eω, grid, linop, transform, FT, output_grad, status_period=10)
 
 # Gradient array
 coren, densityfun = Capillary.gradient(gas, [0,L], [pres, pres]);
-m = Capillary.MarcatilliMode(a, coren, loss=false)
+m = Capillary.MarcatiliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)
@@ -95,7 +95,7 @@ responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 # Constant
 dens0 = PhysData.density(gas, pres)
 dens(z) = dens0
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid);
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0);
@@ -108,7 +108,7 @@ Luna.run(Eω, grid, linop, transform, FT, output_const, status_period=10)
 
 # Gradient
 coren, densityfun = Capillary.gradient(gas, L, pres, pres)
-m = Capillary.MarcatilliMode(a, coren, loss=false)
+m = Capillary.MarcatiliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)
@@ -122,7 +122,7 @@ Luna.run(Eω, grid, linop, transform, FT, output_grad, status_period=10)
 
 # Gradient array
 coren, densityfun = Capillary.gradient(gas, [0,L], [pres, pres]);
-m = Capillary.MarcatilliMode(a, coren, loss=false)
+m = Capillary.MarcatiliMode(a, coren, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 energyfun, energyfunω = Fields.energyfuncs(grid)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)

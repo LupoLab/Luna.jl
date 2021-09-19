@@ -20,7 +20,7 @@ import FunctionZeros: besselj_zero
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
