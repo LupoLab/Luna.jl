@@ -122,7 +122,7 @@ end
 
 function capillary_params(E, τfw, λ, a, material;
                           shape=:sech, P=1.0, T=PhysData.roomtemp, clad=:SiO2, n=1, m=1,kind=:HE, ϕ=0.0)
-    mode = Capillary.MarcatilliMode(a, material, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, clad=clad)
+    mode = Capillary.MarcatiliMode(a, material, P, n=n, m=m, kind=kind, ϕ=ϕ, T=T, clad=clad)
     params(E, τfw, λ, mode, material, shape=shape, P=P, T=T)
 end
 
@@ -168,12 +168,12 @@ end
 
 Calculate the phase-matching wavelength for resonant dispersive wave (RDW) emission in a 
 capillary with core radius `a` filled with `gas` at a certain `pressure`
-when pumping at `λ0`. Additional `kwargs` are passed onto `Capillary.MarcatilliMode`.
+when pumping at `λ0`. Additional `kwargs` are passed onto `Capillary.MarcatiliMode`.
 
 This neglects the nonlinear contribution to the phase mismatch.
 """
 function λRDW(a::Number, gas::Symbol, pressure, λ0; λlims=(100e-9, 0.9λ0), kwargs...)
-    m = Capillary.MarcatilliMode(a, gas, pressure; kwargs...)
+    m = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
     λRDW(m, λ0; λlims=λlims)
 end
 
@@ -191,7 +191,7 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
     ω0 = wlfreq(λ0)
     ω_target = wlfreq(λ_target)
     function Δβ(P)
-        m = Capillary.MarcatilliMode(a, gas, P, cladn; kwargs...)
+        m = Capillary.MarcatiliMode(a, gas, P, cladn; kwargs...)
         β1 = Modes.dispersion(m, 1, ω0)
         β0 = Modes.β(m, ω0)
         Modes.β(m, ω_target) - β1*(ω_target.-ω0) - β0

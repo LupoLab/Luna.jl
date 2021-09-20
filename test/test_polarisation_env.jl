@@ -20,7 +20,7 @@ import Luna: Output
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
     modes = (
-         Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy)
     Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
@@ -35,8 +35,8 @@ import Luna: Output
     Luna.run(Eω, grid, linop, transform, FT, output, status_period=10, init_dz=1e-3)
 
     modes = (
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false)
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false)
     )
     inf = (Fields.GaussField(λ0=λ0, τfwhm=τ, energy=energy/2.0),)
     # same field in each mode
