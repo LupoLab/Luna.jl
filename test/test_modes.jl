@@ -1,5 +1,5 @@
 import Test: @test, @testset, @test_throws
-import FunctionZeros: besselj_zero
+import GSL: sf_bessel_zero_Jnu
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
 import FFTW
@@ -49,11 +49,11 @@ end
 a = 100e-6
 m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced)
 r = collect(range(0, a, length=2^16))
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er = besselj.(0, unm*r/a) # spatial profile of the HE11 mode - overlap should be perfect
 η = Modes.overlap(m, r, Er; dim=1)
 @test abs2(η[1]) ≈ 1
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er = besselj.(0, unm*r/a) # spatial profile of HE12 - overlap should be 0
 η = Modes.overlap(m, r, Er; dim=1)
 @test isapprox(abs2(η[1]), 0, atol=1e-18)
@@ -97,7 +97,7 @@ It1 = Maths.gauss.(grid.t, fwhm=30e-15)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 # Spatial profile of the first pulse
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er1 = besselj.(0, unm*q.r/a)'
 Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
@@ -106,7 +106,7 @@ It2 = 4*Maths.gauss.(grid.t, fwhm=15e-15)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/400e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 # Spatial profile of the second pulse
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
 Er2[q.r .> a] .= 0
 Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
@@ -163,7 +163,7 @@ It1 = Maths.gauss.(grid.t, x0=τ1, fwhm=fwhm1)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 # Spatial profile of the first pulse
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er1 = besselj.(0, unm*q.r/a)'
 Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
@@ -172,7 +172,7 @@ It2 = 4*Maths.gauss.(grid.t, x0=τ2, fwhm=fwhm2)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 # Spatial profile of the second pulse
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
 Er2[q.r .> a] .= 0
 Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
