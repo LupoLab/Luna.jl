@@ -4,7 +4,7 @@ import Luna.PhysData: wlfreq
 
 @testset "Antiresonant PCF" begin
     a = 20e-6
-    m = Capillary.MarcatilliMode(a, :Air, 0, (ω; z) -> 1.45)
+    m = Capillary.MarcatiliMode(a, :Air, 0, (ω; z) -> 1.45)
     w = 0.7e-6
     arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w)
     arm2 = Antiresonant.ZeisbergerMode(m; wallthickness=w)

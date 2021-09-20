@@ -443,13 +443,13 @@ end
 function makemodes_pol(pol, args...; kwargs...)
     if pol
         if kwargs[:kind] == :HE && kwargs[:n] == 1
-            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
-                    Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+            return [Capillary.MarcatiliMode(args...; ϕ=0.0, kwargs...),
+                    Capillary.MarcatiliMode(args...; ϕ=π/2, kwargs...)]
         else
-            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...)]
+            return [Capillary.MarcatiliMode(args...; ϕ=0.0, kwargs...)]
         end
     else
-        Capillary.MarcatilliMode(args...; kwargs...)
+        Capillary.MarcatiliMode(args...; kwargs...)
     end
 end
 

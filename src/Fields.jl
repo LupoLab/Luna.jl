@@ -464,7 +464,7 @@ The temporal fields are initialised using `fieldfunc` (e.g. one of `GaussField`,
 julia> a = 125e-6;
 julia> energy = 1e-3;
 julia> λ0 = 800e-9;
-julia> modes = (Capillary.MarcatilliMode(a, :He, 1.0, m=1), Capillary.MarcatilliMode(a, :He, 1.0, m=2));
+julia> modes = (Capillary.MarcatiliMode(a, :He, 1.0, m=1), Capillary.MarcatiliMode(a, :He, 1.0, m=2));
 julia> fields = Fields.gauss_beam_init(modes, 2*pi/λ0, a*0.64, Fields.GaussField; λ0=λ0, τfwhm=30e-15, energy=energy);
 julia> fields[1].fields[1].energy/energy ≈ 0.98071312
 true

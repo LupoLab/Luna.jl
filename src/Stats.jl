@@ -3,7 +3,7 @@ import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.NonlinearRHS: TransModal, TransModeAvg
 import Luna.Nonlinear: PlasmaCumtrapz
-import Luna.Capillary: MarcatilliMode
+import Luna.Capillary: MarcatiliMode
 import FFTW
 import LinearAlgebra: mul!
 import Printf: @sprintf

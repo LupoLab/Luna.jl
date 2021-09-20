@@ -5,7 +5,7 @@ import Luna.PhysData: c
 @reexport using Luna.Modes
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 
-struct ZeisbergerMode{mT<:Capillary.MarcatilliMode, LT} <: AbstractMode
+struct ZeisbergerMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
     wallthickness::Float64
     loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
@@ -19,18 +19,18 @@ Create a capillary-like mode with the effective index given by eq. (15) in [1].
 `wallthickness` (mandatory kwarg) sets the thickness of the anti-resonant struts and
 `loss` (optional, defaults to `true`) can be either a `Bool` (to switch on/off loss
 completely) or a `Real` (to up/down-scale the loss given by the model).
- Other kwargs are passed on to the constructor of a [`Capillary.MarcatilliMode`](@ref).
+ Other kwargs are passed on to the constructor of a [`Capillary.MarcatiliMode`](@ref).
 
 [1] Zeisberger, M., Schmidt, M.A. Analytic model for the complex effective index of the
 leaky modes of tube-type anti-resonant hollow core fibers. Sci Rep 7, 11761 (2017).
 https://doi.org/10.1038/s41598-017-12234-5
 """
 function ZeisbergerMode(args...; wallthickness, loss=true, kwargs...)
-    return ZeisbergerMode(Capillary.MarcatilliMode(args...; kwargs...),
+    return ZeisbergerMode(Capillary.MarcatiliMode(args...; kwargs...),
                           wallthickness, wraptype(loss))
 end
 
-function ZeisbergerMode(m::Capillary.MarcatilliMode; wallthickness, loss=true)
+function ZeisbergerMode(m::Capillary.MarcatiliMode; wallthickness, loss=true)
     ZeisbergerMode(m, wallthickness, wraptype(loss))
 end
 
@@ -42,12 +42,12 @@ wraptype(loss) = throw(
 # Effective index is given by eq (15) in [1]
 neff(m::ZeisbergerMode, ω; z=0) = _neff(m.m, ω, m.wallthickness, m.loss; z=z)
 
-# All other mode properties are identical to a MarcatilliMode
+# All other mode properties are identical to a MarcatiliMode
 for fun in (:Aeff, :field, :N, :dimlimits)
     @eval ($fun)(m::ZeisbergerMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
 end
 
-function _neff(m::Capillary.MarcatilliMode, ω, wallthickness, loss; z=0)
+function _neff(m::Capillary.MarcatiliMode, ω, wallthickness, loss; z=0)
     nco = m.coren(ω, z=z)
     ncl = m.cladn(ω, z=z)
     ϵ = ncl^2 / nco^2
