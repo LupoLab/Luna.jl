@@ -1,5 +1,5 @@
 module Capillary
-import FunctionZeros: besselj_zero
+import GSL: sf_bessel_zero_Jnu
 import SpecialFunctions: besselj
 import StaticArrays: SVector
 import Cubature: hquadrature
@@ -246,9 +246,9 @@ function get_unm(n, m, kind)
         if (n != 0)
             error("n=0 for TE or TM modes")
         end
-        besselj_zero(1, m)
+        sf_bessel_zero_Jnu(1, m)
     elseif kind == :HE
-        besselj_zero(n-1, m)
+        sf_bessel_zero_Jnu(n-1, m)
     else
         error("kind must be :TE, :TM or :HE")
     end
