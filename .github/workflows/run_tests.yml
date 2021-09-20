@@ -4,13 +4,19 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ['1.5', ^1.7.0-rc1]
+        julia-arch: [x64, x86]
+        os: [ubuntu-latest] # [ubuntu-latest, windows-latest]
     if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
-          version: 1.5
+          version: ${{ matrix.julia-version }}
       - name: Install dependencies
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
