@@ -530,7 +530,8 @@ function makeplasma!(out, grid::Grid.EnvGrid, gas, plasma::Symbol, pol)
     else
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
-    Et = pol ? Array{Complex{Float64}}(undef, length(grid.to), 2) : Vector{Complex{Float64}}(undef, length(grid.to))
+    pol && error("vector ionisation not suppported with envelopes at present")
+    Et = Vector{Complex{Float64}}(undef, length(grid.to))
     push!(out, Nonlinear.PlasmaFourier(grid.ωo, Et, ionrate, ionpot, grid.to[2] - grid.to[1]))
 end
 

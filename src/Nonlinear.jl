@@ -93,7 +93,8 @@ struct PlasmaCumtrapz{R, EType, tType} <: PlasmaPolar
     rate::tType # buffer to hold the rate
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
-    J::EType # buffer to hold the plasma current
+    Jloss::EType # buffer to hold the ionization loss current
+    J::EType # buffer to hold the total plasma current
     P::EType # buffer to hold the plasma polarisation
     δt::Float64 # the time step
 end
@@ -101,59 +102,61 @@ end
 """
     PlasmaCumtrapz(t, E, ratefunc, ionpot)
 
-Construct the Plasma polarisation response for a field on time grid `t`
-with example electric field like `E`, an ionization rate callable
-`ratefunc` and ionization potential `ionpot`.
+Construct the Plasma polarisation response based on cumulative integration for a
+real field on time grid `t` with example electric field like `E`, an ionization
+rate callable `ratefunc` and ionization potential `ionpot`.
 """
-function PlasmaCumtrapz(t, E, ratefunc, ionpot)
+function PlasmaCumtrapz(t, E::Array{T,N}, ratefunc, ionpot) where T<:Real where N
     rate = similar(t)
     fraction = similar(t)
     phase = similar(E)
     J = similar(E)
+    Jloss = similar(E)
     P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, Jloss, J, P, t[2]-t[1])
 end
 
-"The plasma response for a scalar electric field"
-function PlasmaScalar!(Plas::PlasmaCumtrapz, E::Vector{Float64})
-    Plas.ratefunc(Plas.rate, E)
-    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
-    @. Plas.phase = Plas.fraction * e_ratio * E
-    Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
-    for ii in eachindex(E)
-        if abs(E[ii]) > 0
-            Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
-        end
-    end
-    Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
-end
+"ionizing field"
+ionE(E) = abs.(E)
+ionE(E::Array{T,2}) where T = hypot.(E[:,1], E[:,2])
+
+"ionization loss current"
+# for envelopes this follows Bergé et al. Rep. Prog. Phys. 70, 1633 (2007)
+Jloss!(out, ip, rate, fraction, Em, E) = @. out = ifelse(Em > 0, ip*rate*(1 - fraction)/abs2(Em)*E, 0.0)
+# minor optimisation for scalar real field, based on Geissler, PRL 83, 2930 (1999).
+Jloss!(out, ip, rate, fraction, Em, E::Vector{Float64}) =  @. out = ifelse(Em > 0, ip*rate*(1 - fraction)/E, 0.0)
 
 """
-The plasma response for a vector electric field.
-
-We take the magnitude of the electric field to calculate the ionization
-rate and fraction, and then solve the plasma polarisation component-wise
-for the vector field.
-
-A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.  
+Calculate the ionization rate, fraction, loss and phase term.
 """
-function PlasmaVector!(Plas::PlasmaCumtrapz, E)
-    Ex = E[:,1]
-    Ey = E[:,2]
-    Em = hypot.(Ex, Ey)
+function precalc!(Plas::PlasmaPolar, E)
+    # This is basd on Geissler, PRL 83, 2930 (1999) for the real scalar field.
+    # In the vector case we take the magnitude of the electric field to calculate the ionization
+    # rate and fraction, and then solve the plasma polarisation component-wise for the vector field.
+    # A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038. 
+    # The equations used here for envelopes are identical to the real field cases (apart from Jloss).
+    # So far I have not been able to derive them directly. The modified loss term
+    # is taken from Bergé et al. Rep. Prog. Phys. 70, 1633 (2007). The plasma phase term is obtained
+    # by inspection. Essentially, you can start from the definition of the plasma refractive index,
+    # insert it into the general relation between polarisation and refractive index, and obtain this
+    # version (in the frequency domain) but with the electron density in the time domain(!).
+    # I also think this term could be obtained from Geissler's model, by making use of the Bedrosian
+    # identity for Hilbert transforms of products of functions, but I have not yet achieved it.
+    Em = ionE(E)
     Plas.ratefunc(Plas.rate, Em)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
     @. Plas.fraction = 1-exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
+    Jloss!(Plas.Jloss, Plas.ionpot, Plas.rate, Plas.fraction, Em, E)
+end
+
+"""
+The plasma response for real electric field.
+"""
+function calc!(Plas::PlasmaCumtrapz, E::Array{Float64,N}) where N
+    precalc!(Plas, E)
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
-    for ii in eachindex(Em)
-        if abs(Em[ii]) > 0
-            pre = Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/Em[ii]^2
-            Plas.J[ii,1] += pre*Ex[ii]
-            Plas.J[ii,2] += pre*Ey[ii]
-        end
-    end
+    Plas.J .+= Plas.Jloss
     Maths.cumtrapz!(Plas.P, Plas.J, Plas.δt)
 end
 
@@ -163,7 +166,8 @@ struct PlasmaFourier{R, EType, tType, FTType} <: PlasmaPolar
     rate::tType # buffer to hold the rate
     fraction::tType # buffer to hold the ionization fraction
     phase::EType # buffer to hold the plasma induced (mostly) phase modulation
-    J::EType # buffer to hold the plasma current
+    Jloss::EType # buffer to hold the ionisation loss current
+    J::EType # buffer to hold the total plasma current
     P::EType # buffer to hold the plasma polarisation
     ω::tType # buffer to hold the frequency grid
     FT::FTType # Fourier transform to use for integrations
@@ -176,7 +180,7 @@ end
 Plan a suitable FFT for the electric field type `E`.
 
 """
-function make_fft(E::Array{T,N}) where T<:Real where N
+function make_fft(E::Array{T,N}) where {T<:Real, N}
     Utils.loadFFTwisdom()
     FT = FFTW.plan_rfft(E, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
@@ -184,7 +188,7 @@ function make_fft(E::Array{T,N}) where T<:Real where N
     FT
 end
 
-function make_fft(E::Array{Complex{T},N}) where T<:Real where N
+function make_fft(E::Array{Complex{T},N}) where {T<:Real, N}
     Utils.loadFFTwisdom()
     FT = FFTW.plan_fft(E, 1, flags=Luna.settings["fftw_flag"])
     inv(FT)
@@ -192,85 +196,37 @@ function make_fft(E::Array{Complex{T},N}) where T<:Real where N
     FT
 end
 
-function PlasmaFourier(ω, E::Array{T,N}, ratefunc, ionpot, δt) where T<:Real where N
-    rate = similar(E)
-    fraction = similar(E)
-    phase = similar(E)
-    J = similar(E)
-    P = similar(E)
-    FT = make_fft(E)
-    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, P, ω, FT, δt)
-end
-
-function PlasmaFourier(ω, E::Array{Complex{T},N}, ratefunc, ionpot, δt) where T<:Real where N
+function PlasmaFourier(ω, E, ratefunc, ionpot, δt)
     rate = similar(ω)
     fraction = similar(ω)
     phase = similar(E)
+    Jloss = similar(E)
     J = similar(E)
     P = similar(E)
-    FT = make_fft(E)
-    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, J, P, ω, FT, δt)
+    PlasmaFourier(ratefunc, ionpot, rate, fraction, phase, Jloss, J, P, ω, make_fft(E), δt)
 end
 
-"The plasma response for a scalar electric field"
-function PlasmaScalar!(Plas::PlasmaFourier, E::Vector{Complex{Float64}})
-    # The equations used here for envelopes are very similar to the real field cases above.
-    # So far I have not been able to derive them directly. The modified loss term (Jabs)
-    # is taken from [1]. The plasma term is obtained by inspection. Essentially, you can start
-    # from the definition of the plasma refractive index, insert it into the general relation
-    # between polarisation and refractive index, and obtain this version (in the frequency domain)
-    # but with the electron density in the time domain(!). I also think this term could be obtained
-    # from Geissler's model [2], by making use of the Bedrosian identity for Hilbert transforms of
-    # products of functions, but I have not yet achieved it.
-    Plas.ratefunc(Plas.rate, E)
-    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
-    @. Plas.phase = Plas.fraction * e_ratio * E
-    Plas.J .= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ abs2.(E) .* E
-    # here we perform cumulative integration via the Fourier transform.
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
-end
-
-function PlasmaVector!(Plas::PlasmaFourier, E::Array{Complex{Float64},2})
-    Ex = E[:,1]
-    Ey = E[:,2]
-    Em = hypot.(Ex, Ey)
-    Plas.ratefunc(Plas.rate, Em)
-    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
-    @. Plas.phase = Plas.fraction * e_ratio * E
-    Plas.J .= Plas.ionpot .* Plas.rate .* (1 .- Plas.fraction) ./ Em.^2 .* E
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
-end
-
-"The plasma response for a scalar electric field"
-function PlasmaScalar!(Plas::PlasmaFourier, E::Vector{Float64})
-    Plas.ratefunc(Plas.rate, E)
-    Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
-    @. Plas.phase = Plas.fraction * e_ratio * E
-    fill!(Plas.J, 0.0)
-    for ii in eachindex(E)
-        if abs(E[ii]) > 0
-            Plas.J[ii] += Plas.ionpot * Plas.rate[ii] * (1-Plas.fraction[ii])/E[ii]
-        end
-    end
-    # here we perform cumulative integration via the Fourier transform.
-    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.J) ./ Plas.ω)
+"""
+The plasma response for a scalar or vector, real field, or scalar envelope, based
+on cumulative integration using Fourier transforms.
+"""
+function calc!(Plas::PlasmaFourier, E)
+    precalc!(Plas, E)
+    Plas.P .= Plas.FT \ (-(Plas.FT * Plas.phase) ./ Plas.ω.^2 .- 1im .* (Plas.FT * Plas.Jloss) ./ Plas.ω)
 end
 
 "Handle plasma polarisation routing to `PlasmaVector` or `PlasmaScalar`."
 function (Plas::PlasmaPolar)(out, Et, ρ)
     if ndims(Et) > 1
         if size(Et, 2) == 1 # handle scalar case but within modal simulation
-            PlasmaScalar!(Plas, reshape(Et, size(Et,1)))
+            calc!(Plas, reshape(Et, size(Et,1)))
             out .+= ρ .* reshape(Plas.P, size(Et))
         else
-            PlasmaVector!(Plas, Et) # vector case
+            calc!(Plas, Et) # vector case
             out .+= ρ .* Plas.P
         end
     else
-        PlasmaScalar!(Plas, Et) # straight scalar case
+        calc!(Plas, Et) # straight scalar case
         out .+= ρ .* Plas.P
     end
 end
