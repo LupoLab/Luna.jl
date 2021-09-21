@@ -544,14 +544,14 @@ end
     λ0 = 1030e-9
     energy = 5.2e-6
     modes = (
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=3, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=3, m=1, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0, loss=false)
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=3, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=3, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=0, m=1, kind=:TE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0, loss=false)
     )
     inputs = Fields.gauss_beam_init(modes, 2π/λ0, a*0.64, Fields.GaussField, λ0=λ0, τfwhm=τfwhm, energy=energy)
     inputs = (inputs..., ((mode=i, fields=(Fields.ShotNoise(),)) for i=1:length(modes))...)

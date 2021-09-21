@@ -270,8 +270,8 @@ Calculate mode overlap between radially symmetric field and radially symmetric m
 # Examples
 ```jldoctest
 julia> a = 100e-6;
-julia> m = Capillary.MarcatilliMode(a, :He, 1.0);
-julia> unm = besselj_zero(0, 1);
+julia> m = Capillary.MarcatiliMode(a, :He, 1.0);
+julia> unm = approx_besselroots(0, 1)[end]
 julia> r = collect(range(0, a, length=512));
 julia> Er = besselj.(0, unm*r/a);
 

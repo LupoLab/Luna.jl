@@ -110,7 +110,7 @@ fpath_comp = joinpath(dirpath, "test_comp.h5")
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff = let m=m
         z -> Modes.Aeff(m, z=z)
     end
@@ -209,7 +209,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
     dens0 = PhysData.density(gas, pres)
