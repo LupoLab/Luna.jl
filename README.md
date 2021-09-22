@@ -154,6 +154,9 @@ Luna is being actively developed on this GitHub repository. To contribute a bugf
 ## Credits
 Luna is jointly developed by Chris Brahms ([@chrisbrahms](https://github.com/chrisbrahms)) and John Travers ([@jtravs](https://github.com/jtravs)). Chris started the project and leads the development, while John has made multiple major contributions, and much of Luna is based on John's earlier propagation code.
 
+## Funding
+The early development of Luna was supported by funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation program: Starting Grant agreement HISOL, No. 679649.
+
 ## References
 1. Kolesik, M., Moloney, J.V., 2004. Nonlinear optical pulse propagation simulation: From Maxwell’s to unidirectional equations. Physical Review E - Statistical, Nonlinear, and Soft Matter Physics 70. https://doi.org/10.1103/PhysRevE.70.036604
 2. Dormand, J.R., Prince, P.J., 1986. Runge-Kutta triples. Computers & Mathematics with Applications 12, 1007–1017. https://doi.org/10.1016/0898-1221(86)90025-8
