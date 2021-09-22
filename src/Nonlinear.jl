@@ -153,7 +153,7 @@ end
 """
 The plasma response for real electric field.
 """
-function calc!(Plas::PlasmaCumtrapz, E::Array{Float64,N}) where N
+function calc!(Plas::PlasmaCumtrapz, E::AbstractArray{Float64,N}) where N
     precalc!(Plas, E)
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     Plas.J .+= Plas.Jloss
@@ -299,7 +299,7 @@ using response function `r`.
 """
 function RamanPolarEnv(t, r)
     h = zeros(length(t)*2) # note double grid size, see explanation below
-    FT = make_fft(h)
+    FT = make_fft(complex.(h))
     ht = view(h, 1:length(t))
     hω = FT * h
     Eω2 = similar(hω)
