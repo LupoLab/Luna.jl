@@ -2,7 +2,7 @@
 
 
 [![DOI](https://zenodo.org/badge/190623784.svg)](https://zenodo.org/badge/latestdoi/190623784)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](http://lupo-lab.com/Luna.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://lupo-lab.com/Luna.jl)
 
 
 Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics both in waveguides and free-space geometries using the unidirectional pulse propagation equation (UPPE). Some of the key features of Luna:
