@@ -9,6 +9,7 @@ Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics 
 - A variety of propagation geometries treated in a unified way:
     - Single-mode (mode-averaged) propagation in waveguides
     - Multi-mode propagation in waveguides with arbitrary (including non-symmetric) mode-shapes, full polarisation resolution, and intermodal coupling for arbitrary nonlinear polarisation terms
+    - Waveguides with arbitrarily varying material properties and cross-sections (e.g. tapered fibres)
     - Free-space propagation with radial symmetry
     - Full (3+1)-dimensional free-space propagation
 - Both field-resolved and envelope propagation equations
@@ -17,11 +18,12 @@ Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics 
     - Optical Kerr effect (third-order nonlinearity)
     - Raman scattering in molecular gases
     - Strong-field photoionisation and plasma dynamics
-    - (Coming soon!) Saturable gain models for e.g. fibre lasers
-- A built-in interface for the running and processing of multi-dimensional [parameter scans](#running-parameter-scans)
-- A standard library of [plotting](#plotting-results) and [processing](#output-processing) functions
+- A built-in interface for the running and processing of multi-dimensional [parameter scans](#running-parameter-scans) in serial or parallel
+- A standard library of [plotting](#plotting-results) and [processing](#output-processing) functions, including calculation of spectrograms and beam properties
 
 Luna is designed to be extensible: adding e.g. a new type of waveguide or a new nonlinear effect is straightforward, even without editing the main source code.
+
+Luna was originally developed for modelling ultrafast pulse propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres. Therefore such simulations have particularly good support.
 
 Luna is written in the [Julia programming language](https://julialang.org/), chosen for its unique combination of readability, ease of use, and speed. If you want to use Luna but are new to Julia, see [the relevant section of this README](#new-to-julia).
 
