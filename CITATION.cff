@@ -1,0 +1,17 @@
+# YAML 1.2
+---
+authors: 
+  -
+    family-names: Brahms
+    given-names: Christian
+    orcid: "https://orcid.org/0000-0002-8009-3547"
+  -
+    family-names: "John C."
+    given-names: Travers
+    orcid: "https://orcid.org/0000-0003-0350-9104"
+cff-version: "1.1.0"
+doi: "10.5281/zenodo.5513570"
+license: MIT
+message: "If you use this software, please cite it using these metadata."
+title: "Luna.jl"
+...
