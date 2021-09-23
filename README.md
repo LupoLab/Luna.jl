@@ -5,7 +5,7 @@
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://lupo-lab.com/Luna.jl)
 
 
-Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics---both in waveguides (such as optical fibres) and free-space geometries---using the unidirectional pulse propagation equation (UPPE). Some of the key features of Luna:
+Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics—both in waveguides (such as optical fibres) and free-space geometries—using the unidirectional pulse propagation equation (UPPE). Some of the key features of Luna:
 - A variety of propagation geometries treated in a unified way:
     - Single-mode (mode-averaged) propagation in waveguides
     - Multi-mode propagation in waveguides with arbitrary (including non-symmetric) mode-shapes, full polarisation resolution, and intermodal coupling for arbitrary nonlinear polarisation terms
@@ -28,7 +28,7 @@ Luna was originally developed for modelling ultrafast pulse propagation in gas-f
 Luna is written in the [Julia programming language](https://julialang.org/), chosen for its unique combination of readability, ease of use, and speed. If you want to use Luna but are new to Julia, see [the relevant section of this README](#new-to-julia).
 
 There are two ways of using Luna:
-1. A very simple high-level interface for the most heavily optimised application of Luna--propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres--consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
+1. A very simple high-level interface for the most heavily optimised application of Luna—propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres—consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
