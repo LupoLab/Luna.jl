@@ -15,7 +15,8 @@ import Luna: @hlock
 
 Return a closure `ionrate!(out, E)` which calculates the ADK ionisation rate for the electric
 field `E` and places the result in `out`. If `threshold` is true, use [`ADK_threshold`](@ref)
-to avoid calculation below floating-point precision.
+to avoid calculation below floating-point precision. If `cycle_average` is `true`, calculate
+the cycle-averaged ADK ionisation rate instead.
 """
 function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
     nstar = sqrt(0.5/(ionpot/au_energy))
