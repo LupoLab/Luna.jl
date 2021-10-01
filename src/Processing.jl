@@ -751,7 +751,6 @@ function makemodes(output)
     end
 end
 
-
 function modeargs(line)
     sidx = nextind(line, findfirst('{', line))
     eidx = prevind(line, findfirst('}', line))
