@@ -789,6 +789,14 @@ function makemode(line, gas, pressure, flength)
     end
 end
 
+"""
+    beam(grid, Eωm, modes, x, y; z=0, components=:xy)
+    beam(output, x, y, zslice; bandpass=nothing)
+
+Calculate the beam profile of the multi-mode field `Eωm` on the grid given by spatial
+coordinates `x` and `y`. If `output` is given, create the `modes` from that and take the
+field nearest propagation slice `zslice`.
+"""
 function beam(output, x, y, zslice; bandpass=nothing)
     modes = makemodes(output)
     t = output["simulation_type"]["transform"]
@@ -803,24 +811,29 @@ function beam(output, x, y, zslice; bandpass=nothing)
     else
         pol = Symbol(pl[end])
     end
-    tospace = Modes.ToSpace(modes, components=:xy)
-    intensity = zeros(length(y), length(x))
     zidx = nearest_z(output, zslice)
     grid = makegrid(output)
     Eωm = output["Eω", .., zidx]
-    Eωm = window_maybe(grid.ω, Eωm, bandpass)
-    δω = grid.ω[2]-grid.ω[1]
     Eωm = dropdims(Eωm; dims=3)
-    Eω0 = zeros(ComplexF64, (length(grid.ω), tospace.npol))
+    Eωm = window_maybe(grid.ω, Eωm, bandpass)
+    beam(grid, Eωm, modes, x, y; z=zslice, components=pol)
+end
+
+function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    fluence = zeros(length(y), length(x))
+    _, energy_ω = Fields.energyfuncs(grid) # energyfuncs include correct FFT normalisation
+    Eωxy = zeros(ComplexF64, (length(grid.ω), tospace.npol))
     for (yidx, yi) in enumerate(y)
         for (xidx, xi) in enumerate(x)
             r = hypot(xi, yi)
             θ = atan(yi, xi)
-            Modes.to_space!(Eω0, Eωm, (r, θ), tospace; z=zslice)
-            intensity[yidx, xidx] = δω*sum(abs2.(Eω0))
+            Modes.to_space!(Eωxy, Eωm, (r, θ), tospace; z)
+            # integrate over time/frequency and multiply by ε₀c/2 -> fluence
+            fluence[yidx, xidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
         end
     end
-    intensity
+    fluence
 end
 
 
