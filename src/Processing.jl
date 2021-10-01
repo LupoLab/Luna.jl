@@ -2,7 +2,7 @@ module Processing
 import FFTW
 using EllipsisNotation
 import Glob: glob
-import Luna: Maths, Fields, PhysData
+using Luna
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
@@ -724,6 +724,61 @@ function makegrid(output)
         from_dict(RealGrid, output["grid"])
     else
         from_dict(EnvGrid, output["grid"])
+    end
+end
+
+function makemodes(output)
+    t = output["simulation_type"]["transform"]
+    startswith(t, "TransModal") || error("makemodes only works for multi-mode simulations")
+    lines = split(t, "\n")
+    modeline = findfirst(li -> startswith(li, "  modes:"), lines)
+    endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
+    mlines = lines[modeline+1 : endline-1]
+    if haskey(output, "prop_capillary_args")
+        gas = Symbol(output["prop_capillary_args"]["gas"])
+        flength = parse(Float64, output["prop_capillary_args"]["flength"])
+        return [makemode(l, gas, output["prop_capillary_args"]["pressure"], flength) for l in mlines]
+    else
+        return [makemode(l) for l in mlines]
+    end
+end
+
+
+function modeargs(line)
+    sidx = nextind(line, findfirst('{', line))
+    eidx = prevind(line, findfirst('}', line))
+    line = line[sidx:eidx]
+    kindnm, radius, loss, model, angle = split(line, ",")
+    kind = Symbol(kindnm[1:2])
+    n = parse(Int, Utils.unsubscript(kindnm[3]))
+    m = parse(Int, Utils.unsubscript(kindnm[nextind(kindnm, 3)]))
+    a = parse(Float64, split(radius, "=")[2])
+    loss = parse(Bool, split(loss, "=")[2])
+    model = Symbol(split(model, "=")[2])
+    ϕ = parse(Float64, split(angle, "=")[2][1:end-1])*π
+    a, kind, n, m, loss, model, ϕ
+end
+
+function makemode(line)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Capillary.MarcatiliMode(a; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    if occursin("(", pressure)
+        if occursin("[", pressure)
+            error("TODO: Z, P type inputs")
+        else
+            pin, pout = split(pressure, ",")
+            pin = parse(Float64, strip(pin, '('))
+            pout = parse(Float64, strip(pout, ')'))
+            coren, _ = Capillary.gradient(gas, flength, pressure...)
+            return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+        end
+    else
+        p = parse(Float64, pressure)
+        return Capillary.MarcatiliMode(a, gas, p; kind, n, m, loss, model, ϕ)
     end
 end
 
