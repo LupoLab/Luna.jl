@@ -727,6 +727,14 @@ function makegrid(output)
     end
 end
 
+"""
+    makemodes(output)
+
+Create the modes used in a simulation using `MarcatiliMode`s. If `output` was created by
+[`Interface.prop_capillary_args`](@ref) and hence has a field `prop_capillary_args`, this is
+used to match the gas fill from the simulation. Otherwise, the modes are created without gas
+fill.
+"""
 function makemodes(output)
     t = output["simulation_type"]["transform"]
     startswith(t, "TransModal") || error("makemodes only works for multi-mode simulations")
