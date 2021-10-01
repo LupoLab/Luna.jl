@@ -789,6 +789,41 @@ function makemode(line, gas, pressure, flength)
     end
 end
 
+function beam(output, x, y, zslice; bandpass=nothing)
+    modes = makemodes(output)
+    t = output["simulation_type"]["transform"]
+    startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
+    lines = split(t, "\n")
+    lidx = findfirst(lines) do line
+        occursin("polarisation:", line)
+    end
+    pl = lines[lidx]
+    if occursin("x,y", pl)
+        pol = :xy
+    else
+        pol = Symbol(pl[end])
+    end
+    tospace = Modes.ToSpace(modes, components=:xy)
+    intensity = zeros(length(y), length(x))
+    zidx = nearest_z(output, zslice)
+    grid = makegrid(output)
+    Eωm = output["Eω", .., zidx]
+    Eωm = window_maybe(grid.ω, Eωm, bandpass)
+    δω = grid.ω[2]-grid.ω[1]
+    Eωm = dropdims(Eωm; dims=3)
+    Eω0 = zeros(ComplexF64, (length(grid.ω), tospace.npol))
+    for (yidx, yi) in enumerate(y)
+        for (xidx, xi) in enumerate(x)
+            r = hypot(xi, yi)
+            θ = atan(yi, xi)
+            Modes.to_space!(Eω0, Eωm, (r, θ), tospace; z=zslice)
+            intensity[yidx, xidx] = δω*sum(abs2.(Eω0))
+        end
+    end
+    intensity
+end
+
+
 """
     nearest_z(output, z)
 
