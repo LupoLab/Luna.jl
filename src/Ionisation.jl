@@ -30,6 +30,9 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
         thr = 0
     end
 
+    # Zenghu Chang: Fundamentals of Attosecond Optics (2011) p. 184
+    # Section 4.2.3.1 Cycle-Averaged Rate
+    # ̄w_ADK(Fₐ) = √(3/π) √(Fₐ/F₀) w_ADK(Fₐ) where Fₐ is the field amplitude 
     Ip_au = ionpot / au_energy
     F0_au = (2Ip_au)^(3/2)
     F0 = F0_au*au_Efield
@@ -39,17 +42,15 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
     ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac, thr=thr
         function ir(E)
             if abs(E) >= thr
+                r = (ω_p*cn_sq*
+                    (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
+                    *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
                 if cycle_average
-                    (avfac*sqrt(abs(E))*ω_p*cn_sq*
-                    (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
-                    *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
-                else
-                    (ω_p*cn_sq*
-                    (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
-                    *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
+                    r *= avfac*sqrt(abs(E))
                 end
+                return r
             else
-                zero(E)
+                return zero(E)
             end
         end
         function ionrate!(out, E)
