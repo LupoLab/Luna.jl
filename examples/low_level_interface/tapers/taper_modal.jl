@@ -20,8 +20,8 @@ afun = let a0=a0, aL=aL, L=L
 end
 
 modes = (
-    Capillary.MarcatilliMode(afun, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-    Capillary.MarcatilliMode(afun, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
+    Capillary.MarcatiliMode(afun, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatiliMode(afun, gas, pres, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
 
 densityfun = let dens0=PhysData.density(gas, pres)

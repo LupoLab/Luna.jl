@@ -11,7 +11,7 @@ energy = 1.7e-6
 
 grid = Grid.RealGrid(flength, λ0, (200e-9, 3000e-9), 2e-12)
 
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
 aeff = let m=m
     z -> Modes.Aeff(m, z=z)
 end
