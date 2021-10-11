@@ -282,7 +282,7 @@ function energy(output::AbstractOutput; bandpass=nothing)
     energy(grid, output["Eω"]; bandpass=bandpass)
 end
 
-_energy(Eω::Vector, energyω) = energyω(Eω)
+_energy(Eω::AbstractVector, energyω) = energyω(Eω)
 
 function _energy(Eω, energyω)
     out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
@@ -824,11 +824,11 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
     fluence = zeros(length(y), length(x))
     _, energy_ω = Fields.energyfuncs(grid) # energyfuncs include correct FFT normalisation
     Eωxy = zeros(ComplexF64, (length(grid.ω), tospace.npol))
+    coords = Modes.dimlimits(modes[1])[1]
     for (yidx, yi) in enumerate(y)
         for (xidx, xi) in enumerate(x)
-            r = hypot(xi, yi)
-            θ = atan(yi, xi)
-            Modes.to_space!(Eωxy, Eωm, (r, θ), tospace; z)
+            xs = coords == :polar ? xs = (hypot(xi, yi), atan(yi, xi)) : (xi, yi)
+            Modes.to_space!(Eωxy, Eωm, xs, tospace; z)
             # integrate over time/frequency and multiply by ε₀c/2 -> fluence
             fluence[yidx, xidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
         end
