@@ -6,6 +6,8 @@ using Luna
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
+import Cubature: hcubature
+import ProgressLogging: @progress
 
 """
     Common(val)
@@ -67,7 +69,7 @@ end
 function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
     local scanidcs, arrays
     scanfiles = sort(scanfiles)
-    for (idx, fi) in enumerate(scanfiles)
+    @progress for (idx, fi) in enumerate(scanfiles)
         o = HDF5Output(fi)
         ret = f(o)
         if idx == 1 # initialise arrays
@@ -799,18 +801,7 @@ field nearest propagation slice `zslice`.
 """
 function beam(output, x, y, zslice; bandpass=nothing)
     modes = makemodes(output)
-    t = output["simulation_type"]["transform"]
-    startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
-    lines = split(t, "\n")
-    lidx = findfirst(lines) do line
-        occursin("polarisation:", line)
-    end
-    pl = lines[lidx]
-    if occursin("x,y", pl)
-        pol = :xy
-    else
-        pol = Symbol(pl[end])
-    end
+    pol = polarisation_components(output)
     zidx = nearest_z(output, zslice)
     grid = makegrid(output)
     Eωm = output["Eω", .., zidx]
