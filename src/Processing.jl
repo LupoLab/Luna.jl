@@ -836,6 +836,79 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
     fluence
 end
 
+function polarisation_components(output)
+    t = output["simulation_type"]["transform"]
+    startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
+    lines = split(t, "\n")
+    lidx = findfirst(lines) do line
+        occursin("polarisation:", line)
+    end
+    pl = lines[lidx]
+    if occursin("x,y", pl)
+        return :xy
+    else
+        return Symbol(pl[end])
+    end
+end
+
+"""
+    ionisation_fraction(output, xs; ratefun, oversampling=1)
+    ionisation_fraction(output; ratefun, oversampling=1, maxevals=1000)
+
+Calculate the ionisation fraction at transverse coordinates `xs` using the ionisation-rate
+function `ratefun`. If `xs` is not given, calculate the average ionisation fraction across
+the waveguide core. In this case, `maxevals` determines the maximum number of function
+evaluations for the integral.
+
+!!! warning
+    Calculating the average ionisation fraction is **much** slower than calculating it at
+    a single point
+"""
+function ionisation_fraction(output, xs; ratefun, oversampling=1)
+    modes = makemodes(output)
+    pol = polarisation_components(output)
+    tospace = Modes.ToSpace(modes; components=pol)
+    t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
+    δt = t[2]-t[1]
+    z = output["z"]
+    ionf = zero(z)
+    Etxy = zeros(Float64, (length(t), tospace.npol))
+    for ii in eachindex(ionf)
+        Modes.to_space!(Etxy, real(Et[:, :, ii]), xs, tospace; z=z[ii])
+        absEt = tospace.npol > 1 ? hypot.(Etxy[:, 1], Etxy[:, 2]) : Etxy
+        ionf[ii] = Ionisation.ionfrac(ratefun, absEt, δt)[end]
+    end
+    ionf
+end
+
+function ionisation_fraction(output; ratefun, oversampling=1, maxevals=1000)
+    modes = makemodes(output)
+    pol = polarisation_components(output)
+    tospace = Modes.ToSpace(modes; components=pol)
+    t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
+    Et = real(Et)
+    δt = t[2]-t[1]
+    z = output["z"]
+    frac_temp = zero(t)
+    ionf = zero(z)
+    dl = Modes.dimlimits(modes[1])
+    Etxy = zeros(Float64, (length(t), tospace.npol))
+    for ii in eachindex(ionf)
+        Et_this = Et[:, :, ii]
+        val, _ = hcubature(dl[2], dl[3]; maxevals) do xs
+            Modes.to_space!(Etxy, Et_this, xs, tospace; z=z[ii])
+            absEt = tospace.npol > 1 ? hypot.(Etxy[:, 1], Etxy[:, 2]) : Etxy
+            Ionisation.ionfrac!(frac_temp, ratefun, absEt, δt)
+            dl[1] == :polar ? xs[1]*frac_temp[end] : frac_temp[end]
+        end
+        ionf[ii] = val
+    end
+    area, _ = hcubature(dl[2], dl[3]) do xs
+        dl[1] == :polar ? xs[1] : one(xs[1])
+    end
+    ionf./area
+end
+
 
 """
     nearest_z(output, z)
