@@ -257,7 +257,7 @@ end
 radius(m::MarcatiliMode{<:Number, Tco, Tcl, LT}, z) where {Tcl, Tco, LT} = m.a
 radius(m::MarcatiliMode, z) = m.a(z)
 
-dimlimits(m::MarcatiliMode; z=0) = (:polar, (0.0, 0.0), (radius(m, z), π))
+dimlimits(m::MarcatiliMode; z=0) = (:polar, (0.0, 0.0), (radius(m, z), 2π))
 
 geomfac(m::MarcatiliMode) = 2
 

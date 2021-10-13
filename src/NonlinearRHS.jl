@@ -278,16 +278,20 @@ end
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
     if t.full
+        coords, ll, ul = t.dimlimits
+        if coords == :polar
+            ul = (ul[1], ul[2]/Modes.geomfac(t.ts.ms[1]))
+        end
         val, err = Cubature.pcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            t.dimlimits[2], t.dimlimits[3], 
+            ll, ul, 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
         val, err = Cubature.pcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
+            (ll[1],), (ul[1],), 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
