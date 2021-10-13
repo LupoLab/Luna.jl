@@ -827,6 +827,30 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
     fluence
 end
 
+"""
+    getEtxy(output, xs, z)
+    getEtxy(Etm, modes, xs, z; components=:xy)
+
+Calculate the time-dependent electric field at transverse position `xs` for the modal
+time-dependent field `Etm`.
+
+`xs` should be a 2-Tuple of coordinates, either `(r, θ)` for polar coordinates or `(x, y)`
+in Cartesian coordinates, depending on the coordinate system of the `modes`.
+"""
+function getEtxy(output, xs, z)
+    modes = makemodes(output)
+    pol = polarisation_components(output)
+    t, Etm = getEt(output, z; oversampling=1) # (Nt, Nm, Nz)
+    getEtxy(Etm, modes, xs, z; components=pol)
+end
+
+function getEtxy(Etm, modes, xs, z; components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    Etxy = zeros(Float64, (size(Etm, 1), tospace.npol))
+    Modes.to_space!(Etxy, Etm, xs, tospace; z)
+    Etxy
+end
+
 function polarisation_components(output)
     t = output["simulation_type"]["transform"]
     startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
