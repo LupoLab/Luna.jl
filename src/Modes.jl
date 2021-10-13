@@ -31,6 +31,8 @@ Maximum dimensional limits of validity for mode `m` at position `z`.
 """
 function dimlimits end
 
+geomfac(m::AbstractMode) = 1
+
 """
     field(m::AbstractMode, xs; z=0.0)
 
