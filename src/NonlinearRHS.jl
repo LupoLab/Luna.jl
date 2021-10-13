@@ -291,6 +291,7 @@ function (t::TransModal)(nl, Eω, z)
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
+    nl .*= Modes.geomfac(t.ts.ms[1])
 end
 
 """
