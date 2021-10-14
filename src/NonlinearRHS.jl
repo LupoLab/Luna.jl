@@ -259,6 +259,9 @@ function pointcalc!(fval, xs, t::TransModal)
                 pre = 1.0
             end
         end
+        if t.full
+            pre *= Modes.geomfac(t.ts.ms[1])
+        end
         x = (x1,x2)
         Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
@@ -277,8 +280,8 @@ end
 
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
+    coords, ll, ul = t.dimlimits
     if t.full
-        coords, ll, ul = t.dimlimits
         if coords == :polar
             ul = (ul[1], ul[2]/Modes.geomfac(t.ts.ms[1]))
         end
@@ -295,7 +298,6 @@ function (t::TransModal)(nl, Eω, z)
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
-    nl .*= Modes.geomfac(t.ts.ms[1])
 end
 
 """
