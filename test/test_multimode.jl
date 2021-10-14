@@ -89,7 +89,9 @@ end
 end
 
 @testset "Full, LP11 vs TM01" begin
-    # mode average and full integral should be identical for only Kerr and TM01 and LP11
+    # TM01 and LP11 (which is TM01+HE21) have the same dispersion and a ratio of effective
+    # areas of 2/3 -- mode averaged propagation in TM01 with 2/3x Aeff should be identical
+    # to full modal propagation in LP11, as long as only Kerr is considered.
     using Luna
     import LinearAlgebra: norm
     a = 13e-6
@@ -100,7 +102,7 @@ end
     energy = 1e-6
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 0.4e-12)
     m = Capillary.MarcatiliMode(a, gas, pres; kind=:TM, n=0, m=1, loss=false)
-    aeff(z) = 2/3*Modes.Aeff(m, z=z)
+    aeff(z) = 2/3*Modes.Aeff(m, z=z) # Aeff of LP11 is 2/3x smaller than that of TM01
     energyfun, energyfunω = Fields.energyfuncs(grid)
 
     dens0 = PhysData.density(gas, pres)
