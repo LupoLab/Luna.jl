@@ -242,13 +242,13 @@ function pointcalc!(fval, xs, t::TransModal)
         if size(xs, 1) > 1 # full 2-D mode integral
             x2 = xs[2, i]
             if t.dimlimits[1] == :polar
-                pre = Modes.geomfac(t.ts.ms[1])*x1
+                pre = x1
             else
                 if x2 <= t.dimlimits[2][2] || x1 >= t.dimlimits[3][2]
                     fval[:, i] .= 0.0
                     continue
                 end
-                pre = Modes.geomfac(t.ts.ms[1])*1.0
+                pre = 1.0
             end
         else
             if t.dimlimits[1] == :polar
@@ -264,6 +264,7 @@ function pointcalc!(fval, xs, t::TransModal)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
         Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
+        t.ncalls += 1
         @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
         @. t.Prω *= t.grid.ωwin
@@ -277,12 +278,9 @@ end
 
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
-    coords, ll, ul = t.dimlimits
+    _, ll, ul = t.dimlimits
     if t.full
-        if coords == :polar
-            ul = (ul[1], ul[2]/Modes.geomfac(t.ts.ms[1]))
-        end
-        val, err = Cubature.pcubature_v(
+        val, err = Cubature.hcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
             ll, ul, 

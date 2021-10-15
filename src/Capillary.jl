@@ -7,7 +7,7 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, geomfac
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 import Luna.LinearOps: make_linop, conj_clamp, neff_grid, neff_β_grid
 import Luna.PhysData: wlfreq
 import Luna.Utils: subscript
@@ -258,8 +258,6 @@ radius(m::MarcatiliMode{<:Number, Tco, Tcl, LT}, z) where {Tcl, Tco, LT} = m.a
 radius(m::MarcatiliMode, z) = m.a(z)
 
 dimlimits(m::MarcatiliMode; z=0) = (:polar, (0.0, 0.0), (radius(m, z), 2π))
-
-geomfac(m::MarcatiliMode) = 2
 
 # we use polar coords, so xs = (r, θ)
 function field(m::MarcatiliMode, xs; z=0)
