@@ -170,3 +170,45 @@ end
     @test Eω_single ≈ Eω_tuple
     @test Eω_single ≈ Eω_tuple_of_namedtuples
 end
+
+@testset "Nonlinear coupling" begin
+    using Luna
+    import LinearAlgebra: norm
+    a = 125e-6
+    gas = :Ar
+    pres = 0.167
+    flength = 3
+
+    τfwhm = 10e-15
+    λ0 = 800e-9
+    energy = 150e-6
+
+    # HE11 and LP11 (consisting of HE21 + TM01)
+    modes = (
+        Capillary.MarcatiliMode(a, gas, pres, n=0, m=1, kind=:TM, ϕ=0.0),
+        Capillary.MarcatiliMode(a, gas, pres, n=2, m=1, kind=:HE, ϕ=float(-π/4)),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=float(0.0)),
+    )
+
+    grid = Grid.RealGrid(flength, λ0, (160e-9, 3000e-9), 0.4e-12)
+
+    densityfun = let dens0=PhysData.density(gas, pres)
+        z -> dens0
+    end
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+
+    field = Fields.GaussField(;λ0, τfwhm, energy=energy/2)
+    inputs = ((mode=1, fields=(field,)), (mode=2, fields=(field,)))
+
+    Eω, transform, FT = Luna.setup(
+        grid, densityfun, responses, inputs, modes, :xy; full=true)
+    nl = similar(Eω)
+
+    transform(nl, Eω, 0.0);
+    # nonlinear polarisation in LP11
+    Inl12 = dropdims(sum(abs2.(nl[:, 1:2]); dims=2); dims=2)
+    # nonlinear polarisation in HE11
+    Inl3 = abs2.(nl[:, 3])
+    # LP11 should not couple nonlinearly to HE11
+    @test norm(Inl3)/norm(Inl12) < 1e-32
+end
