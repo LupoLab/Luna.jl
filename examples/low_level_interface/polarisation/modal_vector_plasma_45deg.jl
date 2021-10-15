@@ -12,8 +12,8 @@ energy = 1.7e-6
 grid = Grid.RealGrid(flength, λ0, (200e-9, 3000e-9), 2e-12)
 
 modes = (
-    Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-    Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false),
+    Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false),
 )
 nmodes = length(modes)
 
