@@ -137,7 +137,7 @@ end
 
     Iω = abs2.(output["Eω"])
     Iωf = dropdims(sum(abs2.(outputf["Eω"]); dims=2), dims=2)
-    @test norm(Iω - Iωf)/norm(Iω) < 0.0003
+    @test norm(Iω - Iωf)/norm(Iω) < 0.0006
 end
 
 @testset "FieldInputs" begin
