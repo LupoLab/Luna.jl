@@ -11,7 +11,7 @@ energy = 1e-6
 
 grid = Grid.EnvGrid(flength, λ0, (160e-9, 3000e-9), 1e-12, thg=true)
 
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
 aeff(z) = Modes.Aeff(m, z=z)
 
 energyfun, energyfunω = Fields.energyfuncs(grid)
