@@ -239,7 +239,7 @@ function pointcalc!(fval, xs, t::TransModal)
             fval[:, i] .= 0.0
             continue
         end
-        if size(xs, 1) > 1
+        if size(xs, 1) > 1 # full 2-D mode integral
             x2 = xs[2, i]
             if t.dimlimits[1] == :polar
                 pre = x1
@@ -264,6 +264,7 @@ function pointcalc!(fval, xs, t::TransModal)
         to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
         # get nonlinear pol at r,θ
         Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
+        t.ncalls += 1
         @. t.Pr *= t.grid.towin
         to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
         @. t.Prω *= t.grid.ωwin
@@ -277,17 +278,18 @@ end
 
 function (t::TransModal)(nl, Eω, z)
     reset!(t, Eω, z)
+    _, ll, ul = t.dimlimits
     if t.full
-        val, err = Cubature.pcubature_v(
+        val, err = Cubature.hcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            t.dimlimits[2], t.dimlimits[3], 
+            ll, ul, 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
         val, err = Cubature.pcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            (t.dimlimits[2][1],), (t.dimlimits[3][1],), 
+            (ll[1],), (ul[1],), 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
