@@ -219,3 +219,59 @@ end
     end
 end
 
+##
+@testset "scanproc" begin
+    a = 125e-6
+    flength = 0.1
+    gas = :HeJ
+
+    λ0 = 800e-9
+    τfwhm = 10e-15
+
+    λlims = (100e-9, 4e-6)
+    trange = 400e-15
+
+    # Scan dimensions:
+    energies = collect(range(50e-9, 200e-9; length=8))
+    pressures = collect(0.6:0.4:1.4)
+    scan = Scan("pressure_energy_example"; energy=energies, pressure=pressures)
+    mktempdir() do td
+        runscan(scan) do scanidx, energy, pressure
+            prop_capillary(a, flength, gas, pressure; λ0, τfwhm, energy,
+                           λlims, trange, plasma=false, loss=false, scan, scanidx, filepath=td)
+        end
+        # multi-output scanproc
+        λ, Iλ, zstat, max_peakpower = Processing.scanproc(td) do output
+            λ, Iλ = Processing.getIω(output, :λ)
+            zstat = Processing.VarLength(output["stats"]["z"])
+            max_peakpower = maximum(output["stats"]["peakpower"])
+            Processing.Common(λ), Iλ[:, end], zstat, max_peakpower
+        end
+        @test ndims(λ) == 1
+        @test size(Iλ) == (length(λ), length(energies), length(pressures))
+        @test size(zstat) == (length(energies), length(pressures))
+        @test size(max_peakpower) == (length(energies), length(pressures))
+        @test eltype(zstat) == Vector{Float64}
+
+        #single-output scanproc
+        energy_in = Processing.scanproc(td) do output
+            output["stats"]["energy"][1]
+        end
+        @test size(energy_in) == (length(energies), length(pressures))
+        @test all(isapprox.(energy_in[:, 1], energies, rtol=1e-4))
+
+        # single-array-output scanproc
+        Iλ2 = Processing.scanproc(td) do output
+            local _, Iλ = Processing.getIω(output, :λ, flength)
+            Iλ[:, 1]
+        end
+        @test Iλ == Iλ2
+
+        #string output scanproc
+        strings = Processing.scanproc(td) do output
+            "a string"
+        end
+        @test size(strings) == (length(energies), length(pressures))
+    end
+end
+

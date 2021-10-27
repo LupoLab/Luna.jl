@@ -71,7 +71,8 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
     scanfiles = sort(scanfiles)
     @progress for (idx, fi) in enumerate(scanfiles)
         o = HDF5Output(fi)
-        ret = f(o)
+        # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
+        ret = wraptuple(f(o))
         if idx == 1 # initialise arrays
             isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
             scanidcs = CartesianIndices(shape)
@@ -81,10 +82,16 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
             _addret!(arrays[ridx], scanidcs[idx], ri)
         end
     end
-    arrays
+    unwraptuple(arrays) # if f only returns one thing, we also only return one array
 end
 
-function _addret!(array, aidcs, ri::Number)
+wraptuple(x::Tuple) = x
+wraptuple(x) = (x,)
+
+unwraptuple(x::Tuple{<:Any}) = x[1] # single-element Tuple
+unwraptuple(x) = x
+
+function _addret!(array, aidcs, ri)
     array[aidcs] = ri
 end
 
@@ -109,9 +116,9 @@ function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=de
 end
 
 # Make array(s) with correct size to hold processing results
-_arrays(ret::Number, shape) = zeros(typeof(ret), shape)
+_arrays(ret, shape) = Array{typeof(ret)}(undef, shape)
 _arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
-_arrays(ret::Tuple, shape) = [_arrays(ri, shape) for ri in ret]
+_arrays(ret::Tuple, shape) = Tuple([_arrays(ri, shape) for ri in ret])
 _arrays(com::Common, shape) = com.data
 _arrays(vl::VarLength, shape) = Array{typeof(vl.data), length(shape)}(undef, shape)
 
