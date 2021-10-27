@@ -259,6 +259,19 @@ end
         end
         @test size(energy_in) == (length(energies), length(pressures))
         @test all(isapprox.(energy_in[:, 1], energies, rtol=1e-4))
+
+        # single-array-output scanproc
+        Iλ2 = Processing.scanproc(td) do output
+            local _, Iλ = Processing.getIω(output, :λ, flength)
+            Iλ[:, 1]
+        end
+        @test Iλ == Iλ2
+
+        #string output scanproc
+        strings = Processing.scanproc(td) do output
+            "a string"
+        end
+        @test size(strings) == (length(energies), length(pressures))
     end
 end
 

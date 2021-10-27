@@ -89,7 +89,7 @@ wraptuple(x) = (x,)
 unwraptuple(x::Tuple{<:Any}) = x[1] # single-element Tuple
 unwraptuple(x) = x
 
-function _addret!(array, aidcs, ri::Number)
+function _addret!(array, aidcs, ri)
     array[aidcs] = ri
 end
 
@@ -114,7 +114,7 @@ function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=de
 end
 
 # Make array(s) with correct size to hold processing results
-_arrays(ret::Number, shape) = zeros(typeof(ret), shape)
+_arrays(ret, shape) = Array{typeof(ret)}(undef, shape)
 _arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
 _arrays(ret::Tuple, shape) = Tuple([_arrays(ri, shape) for ri in ret])
 _arrays(com::Common, shape) = com.data
