@@ -57,9 +57,9 @@ end
             # With the exception of HE65 specifically, all of these also pass with rtol=1e-20
             mode = Capillary.MarcatiliMode(a, :He, 1.0, n=n, m=m)
             Ni, Nerr = N(mode)
-            @test isapprox(Modes.N(mode), Ni, atol=Nerr, rtol=1e-20)
+            @test isapprox(Modes.N(mode), Ni, atol=Nerr, rtol=1e-7)
             aeff, aefferr = Aeff(mode)
-            @test isapprox(Modes.Aeff(mode), aeff, rtol=1e-20, atol=aefferr)
+            @test isapprox(Modes.Aeff(mode), aeff, rtol=1e-7, atol=aefferr)
         end
     end
     m = Capillary.MarcatiliMode(a, :He, 1.0, n=0, kind=:TE)
