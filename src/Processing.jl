@@ -210,20 +210,21 @@ end
 
 
 """
-    fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1)
+    fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing, minmax=:min)
 
 Extract the temporal FWHM. If `bandpass` is given, bandpass the fieldaccording to
 [`window_maybe`](@ref). If `oversampling` > 1, the  time-domain field is oversampled before
 extracting the FWHM. If `sumdims` is given, the time-domain power is summed over these
-dimensions (e.g. modes) before extracting the FWHM.
+dimensions (e.g. modes) before extracting the FWHM. `minmax` determines determines whether the FWHM
+is taken at the narrowest (`:min`) or the widest (`:max`) point.
 """
-function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
+function fwhm_t(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing, minmax=:min)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
     Pt = abs2.(Eto)
     if !isnothing(sumdims)
         Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
     end
-    fwhm(to, Pt)
+    fwhm(to, Pt; minmax)
 end
 
 function fwhm_t(output::AbstractOutput; kwargs...)
@@ -233,32 +234,33 @@ end
 
 
 """
-    fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1)
+    fwhm_f(grid, Eω::Vector; bandpass=nothing, oversampling=1, sumdims=nothing, minmax=:min)
 
 Extract the frequency FWHM. If `bandpass` is given, bandpass the field according to
 [`window_maybe`](@ref). If `sumdims` is given, the energy density is summed over these
-dimensions (e.g. modes) before extracting the FWHM. 
+dimensions (e.g. modes) before extracting the FWHM. `minmax` determines determines whether the FWHM
+is taken at the narrowest (`:min`) or the widest (`:max`) point.
 """
-function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
+function fwhm_f(grid::AbstractGrid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing, minmax=:min)
     Eω = window_maybe(grid.ω, Eω, bandpass)
     f, If = getIω(getEω(grid, Eω)..., :f)
     if !isnothing(sumdims)
         If = dropdims(sum(If; dims=sumdims); dims=sumdims)
     end
-    fwhm(f, If)
+    fwhm(f, If; minmax)
 end
 
 
-function fwhm(x, I)
+function fwhm(x, I; minmax=:min)
     out = Array{Float64, ndims(I)-1}(undef, size(I)[2:end])
     cidcs = CartesianIndices(size(I)[2:end])
     for ii in cidcs
-        out[ii] = fwhm(x, I[:, ii])
+        out[ii] = fwhm(x, I[:, ii]; minmax)
     end
     out
 end
 
-fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
+fwhm(x::Vector, I::Vector; minmax=:min) = Maths.fwhm(x, I; minmax)
 
 """
     peakpower(grid, Eω; bandpass=nothing, oversampling=1)
