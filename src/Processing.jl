@@ -8,6 +8,7 @@ import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
 import Cubature: hcubature
 import ProgressLogging: @progress
+import Logging: @warn
 
 """
     Common(val)
@@ -70,16 +71,22 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
     local scanidcs, arrays
     scanfiles = sort(scanfiles)
     @progress for (idx, fi) in enumerate(scanfiles)
-        o = HDF5Output(fi)
-        # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
-        ret = wraptuple(f(o))
-        if idx == 1 # initialise arrays
-            isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
-            scanidcs = CartesianIndices(shape)
-            arrays = _arrays(ret, shape)
-        end
-        for (ridx, ri) in enumerate(ret)
-            _addret!(arrays[ridx], scanidcs[idx], ri)
+        try
+            o = HDF5Output(fi)
+            # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
+            ret = wraptuple(f(o))
+            if idx == 1 # initialise arrays
+                isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
+                scanidcs = CartesianIndices(shape)
+                arrays = _arrays(ret, shape)
+            end
+            for (ridx, ri) in enumerate(ret)
+                _addret!(arrays[ridx], scanidcs[idx], ri)
+            end
+        catch e
+            bt = catch_backtrace()
+            msg = "scanproc failed for file: $fi:\n"*sprint(showerror, e, bt)
+            @warn msg
         end
     end
     unwraptuple(arrays) # if f only returns one thing, we also only return one array
@@ -116,7 +123,7 @@ function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=de
 end
 
 # Make array(s) with correct size to hold processing results
-_arrays(ret, shape) = Array{typeof(ret)}(undef, shape)
+_arrays(ret, shape) = zeros(typeof(ret), shape)
 _arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
 _arrays(ret::Tuple, shape) = Tuple([_arrays(ri, shape) for ri in ret])
 _arrays(com::Common, shape) = com.data
@@ -744,21 +751,33 @@ Create the modes used in a simulation using `MarcatiliMode`s. If `output` was cr
 used to match the gas fill from the simulation. Otherwise, the modes are created without gas
 fill.
 """
-function makemodes(output)
-    t = output["simulation_type"]["transform"]
-    startswith(t, "TransModal") || error("makemodes only works for multi-mode simulations")
-    lines = split(t, "\n")
-    modeline = findfirst(li -> startswith(li, "  modes:"), lines)
-    endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
-    mlines = lines[modeline+1 : endline-1]
+function makemodes(output; warn_dispersion=true)
+    mlines = modelines(output["simulation_type"]["transform"])
     if haskey(output, "prop_capillary_args")
         gas = Symbol(output["prop_capillary_args"]["gas"])
         flength = parse(Float64, output["prop_capillary_args"]["flength"])
         return [makemode(l, gas, output["prop_capillary_args"]["pressure"], flength) for l in mlines]
     else
+        if warn_dispersion
+            @warn("Gas fill not available when creating modes. Dispersion will not be correct.")
+        end
         return [makemode(l) for l in mlines]
     end
 end
+
+function makemodes(output, gas, pressure, flength=nothing)
+    mlines = modelines(output["simulation_type"]["transform"])
+    return [makemode(l, gas, pressure, flength) for l in mlines]
+end
+
+function modelines(transform_text)
+    startswith(transform_text, "TransModal") || error("makemodes only works for multi-mode simulations")
+    lines = split(transform_text, "\n")
+    modeline = findfirst(li -> startswith(li, "  modes:"), lines)
+    endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
+    lines[modeline+1 : endline-1]
+end
+    
 
 function modeargs(line)
     sidx = nextind(line, findfirst('{', line))
@@ -780,7 +799,7 @@ function makemode(line)
     Capillary.MarcatiliMode(a; kind, n, m, loss, model, ϕ)
 end
 
-function makemode(line, gas, pressure, flength)
+function makemode(line, gas, pressure::AbstractString, flength)
     a, kind, n, m, loss, model, ϕ = modeargs(line)
     if occursin("(", pressure)
         if occursin("[", pressure)
@@ -789,13 +808,32 @@ function makemode(line, gas, pressure, flength)
             pin, pout = split(pressure, ",")
             pin = parse(Float64, strip(pin, '('))
             pout = parse(Float64, strip(pout, ')'))
-            coren, _ = Capillary.gradient(gas, flength, pressure...)
+            coren, _ = Capillary.gradient(gas, flength, pin, pout)
             return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
         end
     else
         p = parse(Float64, pressure)
         return Capillary.MarcatiliMode(a, gas, p; kind, n, m, loss, model, ϕ)
     end
+end
+
+function makemode(line, gas, pressure::Number, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Capillary.MarcatiliMode(a, gas, pressure; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure::Tuple, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    isnothing(flength) && error("To make two-point gradient, fibre length must be given")
+    coren, _ = Capillary.gradient(gas, flength, pressure...)
+    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure::AbstractArray, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Z, P = pressure
+    coren, _ = Capillary.gradient(gas, Z, P)
+    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
 end
 
 """
@@ -807,7 +845,7 @@ coordinates `x` and `y`. If `output` is given, create the `modes` from that and 
 field nearest propagation slice `zslice`.
 """
 function beam(output, x, y, zslice; bandpass=nothing)
-    modes = makemodes(output)
+    modes = makemodes(output; warn_dispersion=false)
     pol = polarisation_components(output)
     zidx = nearest_z(output, zslice)
     grid = makegrid(output)
@@ -845,7 +883,7 @@ time-dependent field `Etm`.
 in Cartesian coordinates, depending on the coordinate system of the `modes`.
 """
 function getEtxy(output, xs, z)
-    modes = makemodes(output)
+    modes = makemodes(output; warn_dispersion=false)
     pol = polarisation_components(output)
     t, Etm = getEt(output, z; oversampling=1) # (Nt, Nm, Nz)
     getEtxy(Etm, modes, xs, z; components=pol)
@@ -887,7 +925,7 @@ evaluations for the integral.
     a single point
 """
 function ionisation_fraction(output, xs; ratefun, oversampling=1)
-    modes = makemodes(output)
+    modes = makemodes(output; warn_dispersion=false)
     pol = polarisation_components(output)
     tospace = Modes.ToSpace(modes; components=pol)
     t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
@@ -904,7 +942,7 @@ function ionisation_fraction(output, xs; ratefun, oversampling=1)
 end
 
 function ionisation_fraction(output; ratefun, oversampling=1, maxevals=1000)
-    modes = makemodes(output)
+    modes = makemodes(output; warn_dispersion=false)
     pol = polarisation_components(output)
     tospace = Modes.ToSpace(modes; components=pol)
     t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
