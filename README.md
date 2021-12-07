@@ -48,7 +48,7 @@ or using `Pkg`
 ```julia
 using Pkg
 Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"))
-Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master")
+Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master"))
 ```
 
 ## Quickstart
