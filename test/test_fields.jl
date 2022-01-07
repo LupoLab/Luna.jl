@@ -564,3 +564,36 @@ end
     @test inputs[7].fields[1].energy/energy < 1e-20
     @test inputs[8].fields[1].energy/energy < 1e-20
 end
+
+@testset "DataField" begin
+    # create a Gaussian pulse with a delay in the frequency domain, write it to a file,
+    # load it back in a check it produces the correct pulse
+    import DelimitedFiles: writedlm, readdlm
+    import FFTW
+    λlims = (200e-9, 4e-6)
+    trange = 200e-15
+    τfwhm = 10e-15
+    τ0 = 20e-15
+    λ0 = 800e-9
+    f0 = PhysData.c/λ0
+    σt = Maths.fwhm_to_σ(τfwhm)
+    σf = 1/(4π*σt)
+    f = collect(range(PhysData.c/λlims[2], PhysData.c/λlims[1]; length=2048))
+    If = Maths.gauss.(f, σf; x0=f0)
+    ϕ = @. -2π*τ0*(f-f0) # Fourier transform in the maths convention here--pos. delay = neg. slope
+    dat = [f If ϕ]
+    grid = Grid.RealGrid(1, λ0, λlims, trange)
+    FT = FFTW.plan_rfft(copy(grid.t), 1)
+    field = mktempdir() do td
+        tf = joinpath(td, tempname())
+        writedlm(tf, dat, ' ')
+
+        @test readdlm(tf, ' ') == dat
+
+        Fields.DataField(tf; energy=1e-6)
+    end
+    Eω = field(grid, FT)
+    t, Et = Processing.getEt(grid, Eω)
+    @test isapprox(Maths.fwhm(t, abs2.(Et)), τfwhm, rtol=1e-5)
+    @test isapprox(Maths.moment(t, abs2.(Et)), τ0, rtol=1e-5)
+end

@@ -11,7 +11,7 @@ import LinearAlgebra: dot, norm
 import FFTW
 import BlackBoxOptim
 import Optim
-import CSV
+import DelimitedFiles: readdlm
 import HCubature: hquadrature
 import DSP: unwrap
 import Logging: @warn
@@ -226,7 +226,7 @@ contain 3 columns:
 - unwrapped spectral phase
 """
 function DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
-    dat = CSV.read(fpath)
+    dat = readdlm(fpath, ' ')
     DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3]; energy, ϕ)
 end
 
