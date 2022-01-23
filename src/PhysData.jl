@@ -4,6 +4,7 @@ import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import CSV
+import DelimitedFiles: readdlm
 import Polynomials
 import Luna: Maths, Utils
 
@@ -883,6 +884,54 @@ function lookup_mirror(type)
         ϕspl = Maths.BSpline(λGDD*1e-9, ϕ)
         return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
             λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
+    elseif type == :HD59
+        dat = readdlm(joinpath(Utils.datadir(), "HD59_GDD.dat"); skipstart=2)
+        λ = dat[:, 1] * 1e-9
+        ω = wlfreq.(λ)
+        GDD = dat[:, 2] .* 1e-30
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λ, ϕ)
+        return λ -> exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 993e-9, 1000e-9, 1060e-9, 1075e-9)
+    elseif type == :PC147
+        dat = readdlm(joinpath(Utils.datadir(), "PC147.txt"); skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] # average reflectivity per mirror (complementary pair)
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30 # average GDD per mirror (complementary pair)
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 640e-9, 650e-9, 1350e-9, 1360e-9)
+    elseif type == :HD120
+        dat = readdlm(joinpath(Utils.datadir(), "HD120.csv"), ','; skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] # reflectivity per mirror 
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30 # GDD per mirror
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 880e-9, 900e-9, 1200e-9, 1220e-9)
     elseif type == :ThorlabsUMC
         # λ (nm), R(p) (%), R(s) (%)
         Rdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
