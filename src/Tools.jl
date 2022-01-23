@@ -219,6 +219,21 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
     end
 end
 
+function pressureZDW(a::Number, gas::Symbol, λzd; Pmax=100, clad=:SiO2, kwargs...)
+    rfc = PhysData.ref_index_fun(clad)
+    cladn = (ω; z) -> rfc(wlfreq(ω))
+    ωzd = wlfreq(λzd)
+
+    try
+        find_zero((1e-6, Pmax)) do P
+            m = Capillary.MarcatiliMode(a, gas, P, cladn; kwargs...)
+            Modes.dispersion(m, 2, ωzd)
+        end
+    catch
+        missing
+    end
+end
+
 function aperture_filter(a, dist, radius)
     w0 = 0.64*a
     function filter(λ)
