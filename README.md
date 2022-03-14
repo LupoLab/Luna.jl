@@ -34,7 +34,7 @@ There are two ways of using Luna:
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna requires Julia v1.7, which can be obtained from [here](https://julialang.org/downloads/). Once Julia is installed, open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
+Luna requires Julia v1.7, which can be obtained from [here](https://julialang.org/downloads/). Once Julia is installed, open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna: # random comment
 
 ```julia
 ]
