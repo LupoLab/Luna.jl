@@ -95,6 +95,7 @@ struct VincettiMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
     t::Float64 # tube wall thickness
     r_ext::Float64 # tube radius
+    Ntubes::Int # number of tubes
     cladn::Float64 # cladding refractive index (constant, defaults to 1.45)
     Nterms::Int # number of terms (cladding modes) to include in the sum
     loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
@@ -110,23 +111,29 @@ Opt. Express, OE, vol. 24, no. 10, pp. 10313-10325, May 2016, doi: 10.1364/OE.24
 [2] L. Vincetti and L. Rosa
 A simple analytical model for confinement loss estimation in hollow-core Tube Lattice Fibers
 Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.005230.
+
+[3]L. Rosa, F. Melli, and L. Vincetti
+Analytical Formulas for Dispersion and Effective Area in Hollow-Core Tube Lattice Fibers
+Fibers, vol. 9, no. 10, Art. no. 10, Oct. 2021, doi: 10.3390/fib9100058.
+
     
 """
-function VincettiMode(args...; wallthickness, tube_radius, cladn=1.45, Nterms=8, loss=true, kwargs...)
+function VincettiMode(args...; wallthickness, tube_radius, Ntubes,
+                               cladn=1.45, Nterms=8, loss=true, kwargs...)
     return VincettiMode(Capillary.MarcatiliMode(args...; kwargs...),
-                          wallthickness, tube_radius, cladn, Nterms, wraptype(loss))
+                          wallthickness, tube_radius, Ntubes, cladn, Nterms, wraptype(loss))
 end
 
-α(m::VincettiMode, ω; z=0) = log(10)/10 * CL(m::VincettiMode, ω; z)
+neff(m::VincettiMode, ω; z=0) = neff_real(m, ω) + 1im*c/ω*α(m, ω; z)
 
-neff(m::VincettiMode, ω; z=0) = 1im * c/ω * α(m, ω; z)
+α(m::VincettiMode, ω; z=0) = log(10)/10 * CL(m::VincettiMode, ω; z)
 
 function CL(m::VincettiMode, ω; z=0)
     # eq. (6) of [2]
     # confinement loss in dB/m
     λ = wlfreq(ω)
     F = normfreq(λ, m.t, m.cladn)
-    pvs = p_ν_sum(F, m.m.a, m.t, m.r_ext, m.cladn, m.Nterms)
+    pvs = p_ν_sum(F, m.t, m.r_ext, m.cladn, m.Nterms)
     clm = CLmin(m.m.a, λ, m.t, m.r_ext, m.cladn)
     return clm*pvs 
 end
@@ -170,7 +177,7 @@ function p_ν(F, ν, t, r_ext, n=1.45, Nterms=8)
     out
 end
 
-function p_ν_sum(F, Rco, t, r_ext, n=1.45, Nterms=8)
+function p_ν_sum(F, t, r_ext, n=1.45, Nterms=8)
     out = p_ν(F, 1, t, r_ext, n, Nterms)
     for ν in 2:Nterms
         out += p_ν(F, ν, t, r_ext, n, Nterms)
@@ -178,6 +185,52 @@ function p_ν_sum(F, Rco, t, r_ext, n=1.45, Nterms=8)
     out
 end
 
-normfreq(λ, t, n) = 2t/λ*sqrt(n^2-1) # eq. (2) of [1]
+normfreq(λ, t, n, nco=1) = 2t/λ*sqrt(n^2-nco) # eq. (2) of [1]
+
+function Rco_eff(λ, Rco, t, r_ext, N, n=1.45)
+    # eq. (10) in [3]
+    δ = getδ(Rco, r_ext, N)
+    F = normfreq(λ, t, n)
+    t1 = 1.027 + 1e-3*(F + 2/F^4)
+    # corrected a probable typo here: |
+    #                                 V
+    t2 = sqrt(Rco^2 + N/π*3/64* r_ext^2 *(1+(3+20λ/Rco)*δ/r_ext))
+    # in the paper there is no square, but this would be dimensionally incorrect
+    # and eq. (9) has the square
+    return t1*t2
+end
+
+Rco_eff(m::VincettiMode, ω) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, m.cladn)
+
+getδ(Rco, r_ext, N) = 2*(sin(π/N)*(Rco + r_ext) - r_ext) # from eq. (1) in [1]
+
+Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (3e-3F)^2) # eq. (2) in [3]
+
+function νsum(F, t, r_ext, n=1.45, Nterms=8)
+    # eq. (6) of [3]
+    # here only μ=1 is considered
+    # ν=1 term:
+    out = Li(F, FcHE(1, 1, t, r_ext, n)) + Li(F, FcEH(1, 1, t, r_ext, n))
+    for ν in 2:Nterms
+        out += Li(F, FcHE(1, ν, t, r_ext, n)) + Li(F, FcEH(1, ν, t, r_ext, n))
+    end
+    return out * A(1)
+end
+
+function Δneff(λ, Rco, t, r_ext, n=1.45, Nterms=8)
+    # eq. (6) of [3]
+    F = normfreq(λ, t, n)
+    ρ = 1 - t/r_ext
+    return 4.5e-7/ρ^4 * (λ/Rco)^2 * νsum(F, t, r_ext, n, Nterms)
+end
+
+Δneff(m::VincettiMode, ω) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.cladn, m.Nterms)
+
+function neff_real(m::VincettiMode, ω; z=0)
+    ng = m.m.coren(ω; z) # gas index
+    return (ng
+            - 1/2 * (m.m.unm*c/(ω*ng*Rco_eff(m, ω)))^2
+            + Δneff(m, ω))
+end
 
 end # module

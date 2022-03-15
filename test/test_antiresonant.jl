@@ -50,9 +50,11 @@ N = 8 # number of tubes
 k = 1 + δ/2r_ext
 Rco = r_ext * (k/sin(π/N) - 1)
 
-m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, cladn=n)
+δcalc = 2*(sin(π/N)*(Rco + r_ext)-r_ext)
 
-F = collect(range(0.4, 4.2, 1024))
+m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n)
+
+F = collect(range(0.4, 4.2, 2^14))
 λ = @. 2t/F*sqrt(n^2-1)
 
 paperdata = readdlm(joinpath(
@@ -80,3 +82,9 @@ plt.xlim(extrema(λ).*1e9)
 plt.xlabel("Wavelength (nm)")
 plt.ylabel("Loss (dB/m)")
 plt.legend()
+
+##
+plt.figure()
+plt.plot(F, Antiresonant.neff_real.(m, PhysData.wlfreq.(λ)))
+plt.ylim(0.998, 1)
+plt.xlim(xmax=4)
