@@ -1,5 +1,5 @@
 import Test: @test, @testset, @test_throws
-import FunctionZeros: besselj_zero
+import GSL: sf_bessel_zero_Jnu
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
 import FFTW
@@ -8,15 +8,15 @@ import Luna.PhysData: wlfreq
 
 
 @testset "delegation" begin
-    m = Modes.delegated(Capillary.MarcatilliMode(75e-6, :He, 5.9))
+    m = Modes.delegated(Capillary.MarcatiliMode(75e-6, :He, 5.9))
     @test Modes.Aeff(m) ≈ 8.42157534886545e-09
     @test abs(1e9*Modes.zdw(m) - 562) < 1
     n(m, ω; z=0) = real(Modes.neff(m, ω; z=z))
-    m2 = Modes.delegated(Capillary.MarcatilliMode(75e-6, :He, 1.0), neff=n)
+    m2 = Modes.delegated(Capillary.MarcatiliMode(75e-6, :He, 1.0), neff=n)
     @test Modes.α(m2, 2e15) == 0
     @test Modes.α(m2, wlfreq(800e-9)) == 0
 
-    cm = Capillary.MarcatilliMode(75e-6, :He, 5.9)
+    cm = Capillary.MarcatiliMode(75e-6, :He, 5.9)
     dm = Modes.delegated(cm)
     @test Modes.Aeff(dm) ≈ 8.42157534886545e-09
     
@@ -47,13 +47,13 @@ end
 
 @testset "overlap" begin
 a = 100e-6
-m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced)
+m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced)
 r = collect(range(0, a, length=2^16))
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er = besselj.(0, unm*r/a) # spatial profile of the HE11 mode - overlap should be perfect
 η = Modes.overlap(m, r, Er; dim=1)
 @test abs2(η[1]) ≈ 1
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er = besselj.(0, unm*r/a) # spatial profile of HE12 - overlap should be 0
 η = Modes.overlap(m, r, Er; dim=1)
 @test isapprox(abs2(η[1]), 0, atol=1e-18)
@@ -61,7 +61,7 @@ Er = besselj.(0, unm*r/a) # spatial profile of HE12 - overlap should be 0
 fac = collect(range(0.3, stop=0.9, length=128))
 ηn = zero(fac)
 r = collect(range(0, 4a, length=2^16))
-m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1)
+m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1)
 for i in eachindex(fac)
     w0 = fac[i]*a
     Er = Maths.gauss.(r, w0/sqrt(2))
@@ -76,7 +76,7 @@ w0 = fac*a
 Er = Maths.gauss.(r, w0/sqrt(2))
 s = 0
 for mi = 1:10
-    m = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=mi)
+    m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=mi)
     η = Modes.overlap(m, r, Er, dim=1)[1]
     s += abs2(η[1])
 end
@@ -97,7 +97,7 @@ It1 = Maths.gauss.(grid.t, fwhm=30e-15)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 # Spatial profile of the first pulse
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er1 = besselj.(0, unm*q.r/a)'
 Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
@@ -106,7 +106,7 @@ It2 = 4*Maths.gauss.(grid.t, fwhm=15e-15)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/400e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 # Spatial profile of the second pulse
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
 Er2[q.r .> a] .= 0
 Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
@@ -120,8 +120,8 @@ energy1 = ert(Etr1)
 energy2 = ert(Etr2)
 @test ert(Etr) ≈ energy1 + energy2
 
-m1 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1)
-m2 = Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2)
+m1 = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1)
+m2 = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=2)
 Eωm1 = Modes.overlap(m1, q.r, Eωr; dim=2, norm=false)
 Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
 
@@ -163,7 +163,7 @@ It1 = Maths.gauss.(grid.t, x0=τ1, fwhm=fwhm1)
 Et1 = @. sqrt(It1)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω1 = FFTW.rfft(Et1)
 # Spatial profile of the first pulse
-unm = besselj_zero(0, 1)
+unm = sf_bessel_zero_Jnu(0, 1)
 Er1 = besselj.(0, unm*q.r/a)'
 Er1[q.r .> a] .= 0
 Etr1 = Et1 .* Er1 # create spatio-temporal pulse profile
@@ -172,7 +172,7 @@ It2 = 4*Maths.gauss.(grid.t, x0=τ2, fwhm=fwhm2)
 Et2 = @. sqrt(It2)*cos(2π*PhysData.c/800e-9*grid.t)
 Eω2 = FFTW.rfft(Et2)
 # Spatial profile of the second pulse
-unm = besselj_zero(0, 2)
+unm = sf_bessel_zero_Jnu(0, 2)
 Er2 = besselj.(0, unm*q.r/a)'
 Er2[q.r .> a] .= 0
 Etr2 = Et2 .* Er2 # create spatio-temporal pulse profile
@@ -186,8 +186,8 @@ energy1 = ert(Etr1)
 energy2 = ert(Etr2)
 @test ert(Etr) ≈ energy1 + energy2
 
-modes = (Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=1),
-         Capillary.MarcatilliMode(a, :He, 1.0, model=:reduced, m=2))
+modes = (Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1),
+         Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=2))
 newgrid = Grid.RealGrid(1, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 Eωm = Modes.overlap(modes, newgrid, grid, q.r, Eωr)
@@ -223,21 +223,21 @@ end
 ##
 @testset "Orthogonality" begin
 a = 100e-6
-m1 = Capillary.MarcatilliMode(a; n=1, m=1)
-m2 = Capillary.MarcatilliMode(a; n=1, m=2)
+m1 = Capillary.MarcatiliMode(a; n=1, m=1)
+m2 = Capillary.MarcatiliMode(a; n=1, m=2)
 @test Modes.overlap(m1, m1) ≈ 1
 @test isapprox(Modes.overlap(m1, m2), 0; atol=1e-10)
 @test Modes.orthonormal((m1, m2))
 # Capillary EH modes are all orthonormal
-mm = collect([Capillary.MarcatilliMode(a; n=1, m=mi) for mi=1:5])
+mm = collect([Capillary.MarcatiliMode(a; n=1, m=mi) for mi=1:5])
 @test Modes.orthonormal(mm)
 # Two identical modes in the list - not a valid basis set
 @test !Modes.orthonormal([mm..., m1])
 
-m1 = Capillary.MarcatilliMode(a)
-m2 = Capillary.MarcatilliMode(a; ϕ=π/2)
+m1 = Capillary.MarcatiliMode(a)
+m2 = Capillary.MarcatiliMode(a; ϕ=π/2)
 @test isapprox(Modes.overlap(m1, m2), 0; atol=1e-10)
 
-m2 = Capillary.MarcatilliMode(2a; ϕ=π/2)
+m2 = Capillary.MarcatiliMode(2a; ϕ=π/2)
 @test_throws ErrorException Modes.overlap(m1, m2)
 end

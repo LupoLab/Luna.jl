@@ -1,36 +1,70 @@
 module Raman
-import Luna.PhysData: c, ε_0, ħ, k_B, roomtemp
+import Luna.PhysData: c, ε_0, ħ, k_B, roomtemp, amg
 import Luna.PhysData: raman_parameters
 import Cubature: hquadrature
+import Luna.Maths: planck_taper
 
-struct RamanRespSingleDampedOscillator
+abstract type AbstractRamanResponse end
+
+# make Raman responses broadcast like a scalar
+Broadcast.broadcastable(R::AbstractRamanResponse) = Ref(R)
+
+"""
+    hrpre(R::AbstractRamanResponse, t)
+
+Get the pre (without damping) response function at time `t`.
+
+"""
+function hrpre end
+
+"""
+    hrdamp(R::AbstractRamanResponse, ρ)
+
+Get the damping (dephasing) constant `τ2` for density `̢ρ`.
+
+"""
+function hrdamp end
+
+"""
+    (R::AbstractRamanResponse)(t, ρ)
+
+Get the full response function at time `t` and density `̢ρ`.
+
+"""
+function (R::AbstractRamanResponse)(t, ρ)
+    hrpre(R, t) * exp(-t/hrdamp(R, ρ))
+end
+
+
+struct RamanRespSingleDampedOscillator{Tτ2} <: AbstractRamanResponse
     K::Float64 # overall scale factor
     Ω::Float64 # frequency
-    τ2::Float64 # coherence dephasing time
+    τ2ρ::Tτ2 # coherence dephasing time function density to τ2: ρ -> τ2
 end
 
 """
     RamanRespNormedSingleDampedOscillator(K, Ω, τ2)
 
 Construct a simple normalised single damped oscillator model with scale factor `K`,
-angular frequency `Ω` and coherence time `τ2`.
+angular frequency `Ω` and density independent coherence time `τ2`.
 
 The scale factor `K` is applied after normalising the integral of the response function
 to unity.
 """
 function RamanRespNormedSingleDampedOscillator(K, Ω, τ2)
     K *= (Ω^2 + 1/τ2^2)/Ω # normalise SDO model to unity integral, scaled by prefactor K.
-    RamanRespSingleDampedOscillator(K, Ω, τ2)
+    τ2ρ = let τ2=τ2
+        ρ -> τ2
+    end
+    RamanRespSingleDampedOscillator(K, Ω, τ2ρ)
 end
 
-"Get the response function at time `t`."
-function (R::RamanRespSingleDampedOscillator)(t)
-    h = 0.0
-    if t > 0.0
-        h = R.K*exp(-t/R.τ2)*sin(R.Ω*t)
-    end
-    return h
+function hrpre(R::RamanRespSingleDampedOscillator, t)
+    t > 0.0 ? R.K*sin(R.Ω*t) : 0.0
 end
+
+hrdamp(R::RamanRespSingleDampedOscillator, ρ) = R.τ2ρ(ρ)
+
 
 """
     RamanRespIntermediateBroadening(ωi, Ai, Γi, γi)
@@ -71,7 +105,7 @@ end
 
 
 """
-    RamanRespVibrational(Ωv, dαdQ, μ, τ2)
+    RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
 
 Construct a molecular vibrational Raman model (single damped oscillator).
 
@@ -79,60 +113,79 @@ Construct a molecular vibrational Raman model (single damped oscillator).
 - `Ωv::Real`: vibrational frequency [rad/s]
 - `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
 - `μ::Real`: reduced molecular mass [kg]
-- `τ2::Real`: coherence time [s]
+- `τ2::Real=nothing`: coherence time [s]
+- `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat]
+- `Aρ::Real=nothing` : self diffusion coefficient [Hz amagat]
+
+Only one of `τ2` or `Bρ` should be specified.
+If `Bρ` is specified then `Aρ` must be too.
 
 # References
-- Full model description: To be published, Yimgying paper.
+- Full model description: To be published, Yingying paper.
 - We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
   But note that that paper uses weird units, and we converted it to SI for
   the above reference. 
 """
-function RamanRespVibrational(Ωv, dαdQ, μ, τ2)
-    # TODO we assume pressure independent linewidth which is incorrect
+function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
-    RamanRespSingleDampedOscillator(K, Ωv, τ2)
+    τ2ρ = if isnothing(Bρ)
+        isnothing(τ2) && error("one of `τ2` or `Bρ` must be specified")
+        let τ2=τ2
+            ρ -> τ2
+        end
+    else
+        !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
+        isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
+        let Bρ=Bρ, Aρ=Aρ
+            ρ -> 1/(pi*(Aρ/(ρ/amg) + Bρ*ρ/amg))
+        end
+    end
+    RamanRespSingleDampedOscillator(K, Ωv, τ2ρ)
 end
 
+
 # TODO: we assume here that all rotational levels have same linewidth
-# TODO: we also assume pressure independent linewidth which is incorrect
-struct RamanRespRotationalNonRigid
-    K::Float64 # overall scale factor
-    J::Array{Int,1} # J levels to sum over
-    ρ::Array{Float64,1} # populations of each level
-    Ω::Array{Float64,1} # frequency shift between each pair of levels
-    τ2::Float64 # coherence dephasing time
+struct RamanRespRotationalNonRigid{TR, Tτ2} <: AbstractRamanResponse
+    Rs::TR # List of Raman responses
+    τ2ρ::Tτ2 # coherence dephasing time function density to τ2: ρ -> τ2
 end
 
 """
     RamanRespRotationalNonRigid(B, Δα, τ2, qJodd, qJeven;
-                                D=0.0, minJ=0, maxJ=50, temp=roomtemp)
+                                D=0.0, minJ=0, maxJ=50, temp=roomtemp,
+                                τ2=nothing, Bρ=nothing, Aρ=nothing)
 
 Construct a rotational nonrigid rotor Raman model.
 
 # Arguments
 - `B::Real`: the rotational constant [1/m]
 - `Δα::Real`: molecular polarizability anisotropy [m^3]
-- `τ2::Real`: coherence time [s]
 - `qJodd::Integer`: nuclear spin parameter for odd `J`
 - `qJeven::Integer`: nuclear spin parameter for even `J`
 - `D::Real=0.0`: centrifugal constant [1/m]
 - `minJ::Integer=0`: J value to start at
 - `maxJ::Integer=50`: J value to sum until
 - `temp::Real=roomtemp`: temperature
+- `τ2::Real=nothing`: coherence time [s]
+- `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat]
+- `Aρ::Real=nothing` : self diffusion coefficient [Hz amagat]
+
+Only one of `τ2` or `Bρ` should be specified.
+If `Bρ` is specified then `Aρ` must be too.
 
 # References
-- Full model description: To be published, Yimgying paper.
+- Full model description: To be published, Yingying paper.
 - We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
   But note that that paper uses weird units, and we converted it to SI for
   the above reference. 
 """
-function RamanRespRotationalNonRigid(B, Δα, τ2, qJodd::Int, qJeven::Int;
-    D=0.0, minJ=0, maxJ=50, temp=roomtemp)
+function RamanRespRotationalNonRigid(B, Δα, qJodd::Int, qJeven::Int;
+    D=0.0, minJ=0, maxJ=50, temp=roomtemp, τ2=nothing, Bρ=nothing, Aρ=nothing)
     J = minJ:maxJ # range of J values to start with
     EJ = @. 2π*ħ*c*(B*J*(J + 1) - D*(J*(J + 1))^2) # energy of each J level
     # limit J range to those which have monotonic increasing energy
     mJ = findfirst(x -> x < 0.0, diff(EJ))
-    if mJ != nothing
+    if !isnothing(mJ)
         if length(minJ:mJ) <= 2 # need at least 1 pair of J levels
             error("Raman rigid rotation model cannot sum over levels")
         end
@@ -150,22 +203,52 @@ function RamanRespRotationalNonRigid(B, Δα, τ2, qJodd::Int, qJeven::Int;
     Ω = (EJ[3:end] .- EJ[1:end-2])./ħ
     # absolute Raman prefactor
     K = -(4π*ε_0)^2*2/15*Δα^2/ħ
-    RamanRespRotationalNonRigid(K, J, ρ, Ω, τ2)
+    τ2ρ = if isnothing(Bρ)
+              isnothing(τ2) && error("one of `τ2` or `Bρ` must be specified")
+              let τ2=τ2
+                  ρ -> τ2
+              end
+          else
+              !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
+              isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
+              let Bρ=Bρ, Aρ=Aρ
+                  ρ -> 1/(pi*(Aρ/(ρ/amg) + Bρ*ρ/amg))
+              end
+          end
+    Rs = [RamanRespSingleDampedOscillator((K*(J[i] + 1)*(J[i] + 2)/(2*J[i] + 3)
+                                            *(ρ[i+2]/(2*J[i] + 5) - ρ[i]/(2*J[i] + 1))),
+                                          Ω[i], τ2ρ) for i=1:length(J)]
+    RamanRespRotationalNonRigid(Rs, τ2ρ)
 end
 
-"Get the response function at time `t`."
-function (R::RamanRespRotationalNonRigid)(t)
-    h = 0.0
-    if t > 0.0
-        for i = eachindex(R.J)
-            h += ((R.J[i] + 1)*(R.J[i] + 2)/(2*R.J[i] + 3)
-                  *(R.ρ[i+2]/(2*R.J[i] + 5) - R.ρ[i]/(2*R.J[i] + 1))
-                  *sin(R.Ω[i]*t)
-                  *exp(-t/R.τ2))
-        end
-    end
-    return h*R.K
+hrpre(R::RamanRespRotationalNonRigid, t) = sum(hrpre(Ri, t) for Ri in R.Rs)
+
+hrdamp(R::RamanRespRotationalNonRigid, ρ) = R.τ2ρ(ρ)
+
+struct CombinedRamanResponse
+    Rs::Vector{Any} # list of Raman responses
+    t::Vector{Float64} # time grid
+    w::Vector{Float64} # filter window
+    hpres::Vector{Vector{Float64}} # pre Raman responses for each R in Rs
 end
+
+function CombinedRamanResponse(t, Rs)
+    tt = collect(0:(length(t) - 1)) .* (t[2] - t[1])
+    hpres = [hrpre.(R, tt) for R in Rs]
+    w = planck_taper(tt, -tt[end], -tt[end]*0.7, tt[end]*0.7, tt[end])
+    CombinedRamanResponse(Rs, tt, w, hpres)
+end
+
+function (R::CombinedRamanResponse)(ht::AbstractVector, ρ)
+    fill!(ht, 0.0)
+    for i=1:length(R.Rs)
+        ht .+= R.hpres[i] .* exp.(-R.t ./ hrdamp.(R.Rs[i], ρ))
+    end
+    ht .*= R.w
+end
+
+(R::CombinedRamanResponse)(t::Number, ρ) = sum(Ri(t, ρ) for Ri in R.Rs)
+
 
 """
     molecular_raman_response(rp; kwargs...)
@@ -179,36 +262,33 @@ Get the Raman response function for the Raman parameters in named tuple `rp`.
 - `maxJ::Integer = 50`: the maximum rotational quantum number to include
 - `temp::Real = roomtemp`: the temperature
 """
-function molecular_raman_response(rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
+function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
+    Rs = []
     if rotation
         if rp.rotation != :nonrigid
             throw(DomainError(rp.rotation, "Unknown Rotational Raman model $(rp.rotation)"))
         end
+        if haskey(rp, :Bρr)
+            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, Bρ=rp.Bρr, Aρ=rp.Aρr,
+                                            D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
+        else
+            hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.qJodd, rp.qJeven, τ2=rp.τ2r,
+                                            D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
+        end
+        push!(Rs, hr)
     end
     if vibration
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end
+        if haskey(rp, :Bρv)
+            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, Bρ=rp.Bρv, Aρ=rp.Aρv)
+        else
+            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, τ2=rp.τ2v)
+        end
+        push!(Rs, hv)
     end 
-    if rotation && vibration
-        h = let hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.τ2r, rp.qJodd, rp.qJeven,
-                                                  D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp),
-                hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
-            (t) -> hr(t) + hv(t)
-        end 
-    elseif rotation
-        h = let hr = RamanRespRotationalNonRigid(rp.B, rp.Δα, rp.τ2r, rp.qJodd, rp.qJeven,
-                                                 D=rp.D, minJ=minJ, maxJ=maxJ, temp=temp)
-            (t) -> hr(t)
-        end 
-    elseif vibration
-        h = let hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, rp.τ2v)
-            (t) -> hv(t)
-        end 
-    else
-        h = (t) -> 0.0
-    end
-    h
+    CombinedRamanResponse(t, Rs) 
 end
 
 """
@@ -218,14 +298,15 @@ Get the Raman response function for `material`.
 
 For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(material, scale=1.0; kwargs...)
+function raman_response(t, material; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
-        return molecular_raman_response(rp, ; kwargs...)
+        return molecular_raman_response(t, rp; kwargs...)
     elseif rp.kind == :normedsdo
-        return RamanRespNormedSingleDampedOscillator(rp.K*scale, rp.Ω, rp.τ2)
+        return CombinedRamanResponse(t, [RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)])
     elseif rp.kind == :intermediate
-        return RamanRespIntermediateBroadening(rp.ωi, rp.Ai, rp.Γi, rp.γi, scale)
+        # TODO: scale argument is hardcoded to 1.0 here!
+        return RamanRespIntermediateBroadening(rp.ωi, rp.Ai, rp.Γi, rp.γi, 1.0)
     else
         throw(DomainError(rp.kind, "Unknown Raman model $(rp.kind)"))
     end

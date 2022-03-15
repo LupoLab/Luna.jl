@@ -19,7 +19,7 @@ import Test: @test, @testset, @test_throws
     ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
     # scalar modal
     modes = (
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     nmodes = length(modes)
     plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to,
@@ -48,8 +48,8 @@ import Test: @test, @testset, @test_throws
     @test Iωs ≈ Iωv
 
     modes = (
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-        Capillary.MarcatilliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+        Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=π/2, loss=false),
     )
     nmodes = length(modes)
     inputs = ((mode=1, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)),

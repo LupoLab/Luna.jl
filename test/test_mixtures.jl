@@ -40,7 +40,7 @@ grid = Grid.RealGrid(L, λ0, (160e-9, 3000e-9), 0.5e-12)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 
 # Single gas
-m = Capillary.MarcatilliMode(a, gas, pres; loss=false)
+m = Capillary.MarcatiliMode(a, gas, pres; loss=false)
 aeff(z) = Modes.Aeff(m; z=z)
 densityfun = let dens0=PhysData.density(gas, pres)
     z -> dens0
@@ -54,7 +54,7 @@ output_single = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_single)
 
 # Mixture
-m = Capillary.MarcatilliMode(a, (gas, gas), (halfpres, halfpres); loss=false)
+m = Capillary.MarcatiliMode(a, (gas, gas), (halfpres, halfpres); loss=false)
 aeff(z) = Modes.Aeff(m; z=z)
 densityfun = let dens0=PhysData.density(gas, halfpres)
     z -> [dens0, dens0]

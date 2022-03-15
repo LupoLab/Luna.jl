@@ -39,7 +39,7 @@ peak power specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function CustomPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -74,7 +74,7 @@ specified.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function GaussPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -108,7 +108,7 @@ specified, and duration given either as `τfwhm` or `τw`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function SechPulse(;mode=:lowest, polarisation=:linear, propagator=nothing, kwargs...)
@@ -152,7 +152,7 @@ A custom pulse defined by tabulated data to be used with `prop_capillary`.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function DataPulse(ω::AbstractVector, Iω, ϕω;
@@ -200,7 +200,7 @@ For multi-mode simulations, only the lowest-order modes is transferred.
 - `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
 function LunaPulse(o::Output.AbstractOutput; kwargs...)
@@ -230,7 +230,7 @@ end
 
 
 """
-    prop_capillary(radius, flength, gas, pressure; λ0, kwargs...)
+    prop_capillary(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
 
 Simulate pulse propagation in a hollow fibre using the capillary model.
 
@@ -243,10 +243,10 @@ Simulate pulse propagation in a hollow fibre using the capillary model.
     for a simple pressure gradient, or a `Tuple` of `(Z, P)` where `Z` and `P`
     contain `z` positions and the pressures at those positions.
 - `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
-        single-pulse inputs, this is also the central wavelength of the input pulse.
+    single-pulse inputs, this is also the central wavelength of the input pulse.
 - `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
 - `trange::Number`: The total width of the time grid. To make the number of samples a
-        power of 2, the actual grid used is usually bigger.
+    power of 2, the actual grid used is usually bigger.
 
 # Grid options
 - `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `false`.
@@ -274,7 +274,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
     or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
     ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
-- `propagator`: A function propagator!(Eω, grid) which **mutates** its first argument to
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
@@ -303,15 +303,40 @@ In this case, all keyword arguments except for `λ0` are ignored.
     Note that plasma is only available for full-field simulations.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
+If `raman` is `true`, then the following options apply:
+    - `rotation::Bool = true`: whether to include the rotational Raman contribution
+    - `vibration::Bool = true`: whether to include the vibrational Raman contribution
 
 # Output options
 - `saveN::Integer`: Number of points along z at which to save the field.
 - `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
     only in the working memory. If not `nothing`, should be a file path as a `String`,
-    and the results are saved in a file at this location.
+    and the results are saved in a file at this location. If `scan` is passed, `filepath`
+    determines the output **directory** for the scan instead.
+- `scan`: A `Scan` instance defining a parameter scan. If `scan` is given`, a
+    `Output.ScanHDF5Output` is used to automatically name and populate output files of
+    the scan. `scanidx` must also be given.
+- `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
+- `filename`: Can be used to to overwrite the scan name when running a parameter scan.
+    The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
-function prop_capillary(radius, flength, gas, pressure;
+function prop_capillary(args...; status_period=5, kwargs...)
+    Eω, grid, linop, transform, FT, output = prop_capillary_args(args...; kwargs...)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
+end
+
+"""
+    prop_capillary_args(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
+
+Prepare to simulate pulse propagation in a hollow fibre using the capillary model. This
+function takes the same arguments as `prop_capillary` but instead or running the
+simulation and returning the output, it returns the required arguments for `Luna.run`,
+which is useful for repeated simulations in an indentical fibre with different initial
+conditions.
+"""
+function prop_capillary_args(radius, flength, gas, pressure;
                         λlims, trange, envelope=false, thg=nothing, δt=1,
                         λ0, τfwhm=nothing, τw=nothing, ϕ=Float64[],
                         power=nothing, energy=nothing,
@@ -320,8 +345,9 @@ function prop_capillary(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=false, kerr=true, plasma=nothing,
+                        rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
-                        status_period=5)
+                        scan=nothing, scanidx=nothing, filename=nothing)
 
     pol = needpol(polarisation, pulses) || needpol_modes(modes)
     @info "X+Y polarisation "* (pol ? "required." : "not required.")
@@ -334,21 +360,20 @@ function prop_capillary(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
-    output = makeoutput(grid, saveN, stats, filepath)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath)
+        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath, filename)
 
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
-    output
+    return Eω, grid, linop, transform, FT, output
 end
 
 check_orth(mode::Modes.AbstractMode) = nothing
@@ -418,13 +443,13 @@ end
 function makemodes_pol(pol, args...; kwargs...)
     if pol
         if kwargs[:kind] == :HE && kwargs[:n] == 1
-            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...),
-                    Capillary.MarcatilliMode(args...; ϕ=π/2, kwargs...)]
+            return [Capillary.MarcatiliMode(args...; ϕ=0.0, kwargs...),
+                    Capillary.MarcatiliMode(args...; ϕ=π/2, kwargs...)]
         else
-            return [Capillary.MarcatilliMode(args...; ϕ=0.0, kwargs...)]
+            return [Capillary.MarcatiliMode(args...; ϕ=0.0, kwargs...)]
         end
     else
-        Capillary.MarcatilliMode(args...; kwargs...)
+        Capillary.MarcatiliMode(args...; kwargs...)
     end
 end
 
@@ -471,7 +496,8 @@ function makedensity(flength, gas, pressure)
     density
 end
 
-function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
+function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
+                      rotation, vibration)
     out = Any[]
     if kerr
         if thg
@@ -481,7 +507,14 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol)
         end
     end
     makeplasma!(out, grid, gas, plasma, pol)
-    raman && push!(out, Nonlinear.RamanPolarField(grid.to, Raman.raman_response(gas)))
+    if raman
+        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
+        if thg
+            push!(out, Nonlinear.RamanPolarField(grid.to, rr))
+        else
+            push!(out, Nonlinear.RamanPolarField(grid.to, rr, thg=false))
+        end
+    end
     Tuple(out)
 end
 
@@ -503,7 +536,8 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
     push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 end
 
-function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
+function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
+                      rotation, vibration)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
@@ -516,7 +550,10 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol)
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
-    raman && push!(out, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(gas)))
+    if raman
+        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
+        push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
+    end
     Tuple(out)
 end
 
@@ -701,12 +738,18 @@ function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
     linop, Eω, transform, FT
 end
 
-function makeoutput(grid, saveN, stats, filepath::Nothing)
+function makeoutput(grid, saveN, stats, filepath::Nothing, scan::Nothing, scanidx, filename)
     Output.MemoryOutput(0, grid.zmax, saveN, stats)
 end
 
-function makeoutput(grid, saveN, stats, filepath)
+function makeoutput(grid, saveN, stats, filepath, scan::Nothing, scanidx, filename)
     Output.HDF5Output(filepath, 0, grid.zmax, saveN, stats)
+end
+
+function makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
+    isnothing(scanidx) && error("scanidx must be passed along with scan.")
+    Output.ScanHDF5Output(scan, scanidx, 0, grid.zmax, saveN, stats;
+                          fdir=filepath, fname=filename)
 end
 
 end

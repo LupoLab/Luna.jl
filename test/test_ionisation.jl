@@ -1,5 +1,6 @@
 import Test: @test, @testset
-import Luna: Ionisation, Maths, PhysData
+import Luna: Ionisation, Maths, PhysData, Tools
+import NumericalIntegration: integrate, SimpsonEven
 
 @test Ionisation.ionrate_ADK(:He, 1e10) ≈ 1.2416371415312408e-18
 @test Ionisation.ionrate_ADK(:He, 2e10) ≈ 1.0772390893742478
@@ -44,6 +45,36 @@ outneg = similar(out)
 ratefun!(outneg, -E)
 @test out == outneg
 
+##
+@testset "cycle-averaging $gas" for gas in (:He, :Ar, :Xe)
+
+    bsi = Tools.field_to_intensity(
+        Ionisation.barrier_suppression(
+            PhysData.ionisation_potential(gas),
+            1))
+    isy = 10 .^ collect(16:0.01:log10(bsi))
+    E0 = Tools.intensity_to_field.(isy)
+
+    Ip_au = PhysData.ionisation_potential(gas; unit=:atomic)
+    F0_au = (2Ip_au)^(3/2)
+    F0 = F0_au*PhysData.au_Efield
+
+    t = collect(range(0, 2π; length=2^12))
+    Et = sin.(t)
+
+    adk_avg = zero(E0)
+    rf! = Ionisation.ionrate_fun!_ADK(gas)
+    out = zero(Et)
+    for (idx, E0i) in enumerate(E0)
+        rf!(out, E0i*Et)
+        adk_avg[idx] = 1/2π * integrate(t, out, SimpsonEven())
+    end
+
+    adk = Ionisation.ionrate_ADK.(gas, E0)
+    adk_avg_kw = Ionisation.ionrate_ADK.(gas, E0; cycle_average=true)
+    @test all(isapprox.(adk_avg, adk_avg_kw; rtol=0.05))
+end
+##
 # this_folder = dirname(@__FILE__)
 # import CSV
 # import PyPlot: plt, pygui

@@ -26,7 +26,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 
 ## mode-average
 Iωavg = let
-m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
+m = Capillary.MarcatiliMode(afun, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=600e-9)
@@ -40,7 +40,7 @@ end
 ## modal
 Iωmodal = let
 modes = (
-    Capillary.MarcatilliMode(afun, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatiliMode(afun, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
 )
 linop = LinearOps.make_linop(grid, modes, λ0)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=600e-9)
@@ -76,7 +76,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
 
 ## mode-average
 Iωavg = let
-m = Capillary.MarcatilliMode(afun, gas, pres, loss=false, model=:full);
+m = Capillary.MarcatiliMode(afun, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
 linop, βfun! = LinearOps.make_linop(grid, m, λ0)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
@@ -89,7 +89,7 @@ end
 
 ## mode-average, constant a
 Iωavg_c = let
-m = Capillary.MarcatilliMode(a, gas, pres, loss=false, model=:full);
+m = Capillary.MarcatiliMode(a, gas, pres, loss=false, model=:full);
 aeff(z) = Modes.Aeff(m, z=z)
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
 linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)

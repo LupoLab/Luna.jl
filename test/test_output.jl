@@ -5,7 +5,7 @@ using EllipsisNotation
 @testset "HDF5" begin
     import HDF5
     import Luna: Utils
-    fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
+    fpath = joinpath(tempname(), "test.h5")
     isfile(fpath) && rm(fpath)
     shape = (1024, 4, 2)
     n = 11
@@ -31,9 +31,7 @@ using EllipsisNotation
     for (ii, ti) in enumerate(t)
         o(y0, ti, 0, y)
     end
-    @test_throws ErrorException o(extra)
     @test o(extra, force=true) === nothing
-    @test_throws ErrorException o("git_commit", gitc)
     HDF5.h5open(fpath, "r") do file
         @test all(read(file["t"]) == t)
         global yr = read(file["y"])
@@ -97,8 +95,9 @@ end
     @test "src" == o.data["meta"]["meta2"]
 end
 
-fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
-fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
+dirpath = tempname()
+fpath = joinpath(dirpath, "test.h5")
+fpath_comp = joinpath(dirpath, "test_comp.h5")
 @testset "HDF5 vs Memory" begin
     using Luna
     import FFTW
@@ -111,7 +110,7 @@ fpath_comp = joinpath(homedir(), ".luna", "output_test", "test_comp.h5")
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff = let m=m
         z -> Modes.Aeff(m, z=z)
     end
@@ -210,7 +209,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
     dens0 = PhysData.density(gas, pres)

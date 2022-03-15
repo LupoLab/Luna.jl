@@ -2,13 +2,13 @@ using Luna
 import Test: @test, @testset
 import HCubature: hquadrature
 import SpecialFunctions: besselj
-import FunctionZeros: besselj_zero
+import GSL: sf_bessel_zero_Jnu
 
 @testset "On-axis intensity statistics" begin
     # Manually normalise the field distribution of HE11 to find scaling factor between
     # power and intensity
     a = 13e-6
-    unm = besselj_zero(0, 1)
+    unm = sf_bessel_zero_Jnu(0, 1)
     E(r) = besselj(0, unm*r/a)
     norm, err = hquadrature(0, a) do r
         2π*r * abs2(E(r))
@@ -20,7 +20,7 @@ import FunctionZeros: besselj_zero
     τ = 30e-15
     λ0 = 800e-9
     grid = Grid.RealGrid(15e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
-    m = Capillary.MarcatilliMode(a, gas, pres, loss=false)
+    m = Capillary.MarcatiliMode(a, gas, pres, loss=false)
     aeff(z) = Modes.Aeff(m, z=z)
     energyfun, energyfunω = Fields.energyfuncs(grid)
 

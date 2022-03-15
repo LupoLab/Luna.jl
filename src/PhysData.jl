@@ -4,6 +4,7 @@ import CoolProp
 import PhysicalConstants: CODATA2014
 import Unitful: ustrip
 import CSV
+import DelimitedFiles: readdlm
 import Polynomials
 import Luna: Maths, Utils
 
@@ -58,46 +59,70 @@ const gas_str = Dict(
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
 
-"Change from ω to λ and vice versa"
+"""
+    wlfreq(ωλ)
+
+Change from ω (angular frequency) to λ (wavelength) and vice versa
+"""
 wlfreq(ωλ) = 2π*c/ωλ
 
-"convert Δλ at λ to Δω"
+"""
+    ΔλΔω(Δλ, λ)
+
+Convert Δλ (wavelength bandwidth) at λ (central wavelength) to Δω (angular frequency bandwidth)
+"""
 ΔλΔω(Δλ, λ) = (2π*c)*Δλ/λ^2
 
 eV_to_m(eV) = wlfreq(electron*eV/ħ)
 
-"Linear coefficients"
 
-"Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
-room temperature and atmospheric pressure"
+"""
+    γ_Börzsönyi(B1, C1, B2, C2)
+
+Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (2008) at
+room temperature and atmospheric pressure
+"""
 function γ_Börzsönyi(B1, C1, B2, C2)
     return μm -> (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
-"Adapted Sellmeier expansion for helium made to fit high frequency data
-Phys. Rev. A 92, 033821 (2015)"
+"""
+    γ_JCT(B1, C1, B2, C2, B3, C3)
+
+Adapted Sellmeier expansion for helium made to fit high frequency data
+Phys. Rev. A 92, 033821 (2015)
+"""
 function γ_JCT(B1, C1, B2, C2, B3, C3)
     return μm -> (B1 * μm^2 / (μm^2 - C1)
                   + B2 * μm^2 / (μm^2 - C2)
                   + B3 * μm^2 / (μm^2 - C3))
 end
 
-"
+"""
+    γ_Peck(B1, C1, B2, C2, dens)
+
 Sellmeier expansion for linear susceptibility from
 J. Opt. Soc. Am. 67, 1550 (1977)
-"
+"""
 function γ_Peck(B1, C1, B2, C2, dens)
     return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
-"Sellmeier expansion for Oxygen from
-Applied Optics 50, 35, 6484 (2011)"
+"""
+    γ_Zhang(A, B, C, dens)
+
+Sellmeier expansion for Oxygen from Applied Optics 50, 35, 6484 (2011)
+"""
 function γ_Zhang(A, B, C, dens)
     return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
 end
 
-"Sellemier expansion for gases. Return function for linear polarisability γ, i.e.
-susceptibility of a single particle."
+"""
+    sellmeier_gas(material::Symbol)
+
+Return function for linear polarisability γ, i.e. susceptibility of a single particle,
+calculated from Sellmeier expansions.
+"""
 function sellmeier_gas(material::Symbol)
     dens = density(material, 1.0, 273.15)
     if material == :He
@@ -167,8 +192,12 @@ function sellmeier_gas(material::Symbol)
     end
 end
 
-"Sellmeier for glasses. Returns function of wavelength in μm which in turn
-returns the refractive index directly"
+"""
+    sellmeier_glass(material::Symbol)
+
+Sellmeier for glasses. Returns function of wavelength in μm which in turn returns the
+refractive index directly
+"""
 function sellmeier_glass(material::Symbol)
     if material == :SiO2
         #  J. Opt. Soc. Am. 55, 1205-1208 (1965)
@@ -254,6 +283,12 @@ function sellmeier_glass(material::Symbol)
     end
 end
 
+"""
+    sellmeier_crystal(material, axis)
+
+Sellmeier for crystals. Returns function of wavelength in μm which in turn returns the
+refractive index directly. Possible values for `axis` depend on the type of crystal.
+"""
 function sellmeier_crystal(material, axis)
     if material == :BBO
         if axis == :o
@@ -307,11 +342,12 @@ function ref_index_fun_uniax(material; axes=(:o, :e))
     return n
 end
 
-"Get function to return χ1 as a function of:
-    wavelength in SI units
-    pressure in bar
-    temperature in Kelvin
-Gases only."
+"""
+    χ1_fun(gas::Symbol)
+
+Get function to return χ1 (linear susceptibility) for gases as a function of
+wavelength in SI units, pressure in bar, and temperature in Kelvin.
+"""
 function χ1_fun(gas::Symbol)
     γ = sellmeier_gas(gas)
     f = let γ=γ, gas=gas
@@ -328,19 +364,31 @@ function χ1_fun(gas::Symbol, P, T)
     return λ -> γ(λ*1e6)*dens
 end
 
-"Get χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
-Gases only."
+"""
+    χ1(gas::Symbol, λ, P=1.0, T=roomtemp)
+
+Calculate χ1 at wavelength λ in SI units, pressure P in bar and temperature T in Kelvin.
+Gases only.
+"""
 function χ1(gas::Symbol, λ, P=1.0, T=roomtemp)
     return χ1_fun(gas)(λ, P, T)
 end
 
 
-"Get refractive index for any material at wavelength given in SI units"
+"""
+    ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
+
+Get refractive index for any material at wavelength given in SI units.
+"""
 function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
     return ref_index_fun(material, P, T; lookup=lookup)(λ)
 end
 
-"Get function which returns refractive index."
+"""
+    ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
+
+Get function which returns refractive index.
+"""
 function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
@@ -371,7 +419,12 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     end
 end
 
-"Get function which returns refractive index for gas mixture."
+"""
+    ref_index_fun(gases, P, T=roomtemp; lookup=nothing)
+
+Get function which returns refractive index for gas mixture. `gases` is a `Tuple` of gas
+identifiers (`Symbol`s) and `P` is a `Tuple` of equal length containing pressures.
+"""
 function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
     ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
         function ngas(λ)
@@ -385,7 +438,11 @@ function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtem
     return ngas
 end
 
-"Get function which returns ref index for mixture as function of wavelength and densities."
+"""
+    ref_index_fun(gases, T=roomtemp)
+
+Get function which returns ref index for mixture as function of wavelength and densities.
+"""
 function ref_index_fun(gases::NTuple{N, Symbol}, T=roomtemp) where N
     let γs=[sellmeier_gas(gi) for gi in gases]
         function ngas(λ, densities::Vector{<:Number})
@@ -440,7 +497,11 @@ function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothi
     return dispersion_func(order, material, P, T; lookup=lookup).(λ)
 end
 
-"Get reflection coefficients"
+"""
+    fresnel(n2, θi; n1=1.0)
+
+Calcualte reflection coefficients from Fresnel's equations.
+"""
 function fresnel(n2, θi; n1=1.0)
     θt = asin(n1*sin(θi)/n2)
     rs = (n1*cos(θi) - n2*cos(θt))/(n1*cos(θi) + n2*cos(θt))
@@ -449,15 +510,14 @@ function fresnel(n2, θi; n1=1.0)
 end
 
 
-"Nonlinear coefficients"
+"""
+    γ3_gas(material::Symbol; source=nothing)
 
-"Calculate single-molecule third-order hyperpolarisability of a gas
-at given wavelength(s) and at room temperature.
-If source == :Bishop:
-Uses reference values to calculate γ
-If source == :Lehmeier (default):
-Uses scaling factors to calculate χ3 at 1 bar and scales by density
-to get to a single molecule i.e. the hyperpolarisability
+Calculate single-molecule third-order hyperpolarisability of a gas at given wavelength(s)
+and at room temperature.
+If `source` == `:Bishop`: Uses reference values to calculate γ
+If `source` == `:Lehmeier` (default): Uses scaling factors to calculate χ3 at 1 bar and
+scales by density to get to a single molecule i.e. the hyperpolarisability
 
 References:
 [1] Journal of Chemical Physics, AIP, 91, 3549-3551 (1989)
@@ -465,14 +525,9 @@ References:
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
 [5] Optics Letters Vol. 40, No. 24 (2015))
-
-TODO: More Bishop/Shelton; Wahlstrand updated values.
-
-"
-function γ3(material::Symbol; source=nothing)
-    if material in glass
-        return χ3(material)
-    end
+"""
+function γ3_gas(material::Symbol; source=nothing)
+    # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
@@ -559,17 +614,34 @@ function density(material::Symbol, P=1.0, T=roomtemp)
     P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[material])*N_A
 end
 
+"""
+    pressure(gas, density, T=roomtemp)
+
+Calculate the pressure in bar of the `gas` at number density `density` and temperature `T`.
+"""
 function pressure(gas, density, T=roomtemp)
     density == 0 ? zero(density) :
                    CoolProp.PropsSI("P", "T", T, "DMOLAR", density/N_A, gas_str[gas])/bar
 end
 
+"""
+    densityspline(gas; Pmax, Pmin=0, N=2^10, T=roomtemp)
+
+Create a `CSpline` interpolant for the density of the `gas` between pressures `Pmin` and
+`Pmax` at temperature `T`. The spline is created using `N` samples.
+"""
 function densityspline(gas::Symbol; Pmax, Pmin=0, N=2^10, T=roomtemp)
     P = collect(range(Pmin, Pmax, length=N))
     ρ = density.(gas, P, T)
     Maths.CSpline(P, ρ)
 end
 
+"""
+    ionisation_potential(material; unit=:SI)
+
+Return the first ionisation potential of the `material` in a specific unit (default: SI).
+Possible units are `:SI`, `:atomic` and `:eV`.
+"""
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeJ)
         Ip = 0.9036
@@ -604,6 +676,11 @@ function ionisation_potential(material; unit=:SI)
     end
 end
 
+"""
+    quantum_numbers(material)
+
+Return the quantum numbers of the `material` for use in the PPT ionisation rate.
+"""
 function quantum_numbers(material)
     # Returns n, l, ion Z
     if material == :Ar
@@ -625,6 +702,11 @@ function quantum_numbers(material)
     end
 end
 
+"""
+    lookup_glass(material::Symbol)
+
+Create a `CSpline` interpolant for look-up-table values of the refractive index.
+"""
 function lookup_glass(material::Symbol)
     if material == :SiO2
         data = data_glass(:SiO2)
@@ -635,8 +717,11 @@ function lookup_glass(material::Symbol)
     return spl
 end
 
-"Returns function of wavelength in μm which in turn
- returns the refractive index directly"
+"""
+    lookup_metal(material::Symbol)
+
+Create a `CSpline` interpolant for look-up-table values of the refractive index.
+"""
 function lookup_metal(material::Symbol)
     data = data_metal(material)::Array{Float64,2}
     nspl = Maths.BSpline(data[:,1], data[:,2] .+ im.*data[:,3])
@@ -644,6 +729,8 @@ function lookup_metal(material::Symbol)
 end
 
 """
+    raman_parameters(material)
+
 Get the Raman parameters for `material`.
 
 # Fields
@@ -657,16 +744,26 @@ If `kind == :molecular` then the following must also be specified:
 If `rotation == :nonrigid` then the following must also be specified:
 - `B::Real`: the rotational constant [1/m]
 - `Δα::Real`: molecular polarizability anisotropy [m^3]
-- `τ2r::Real`: coherence time [s]
 - `qJodd::Integer`: nuclear spin parameter for odd `J`
 - `qJeven::Integer`: nuclear spin parameter for even `J`
 - `D::Real=0.0`: centrifugal constant [1/m]
+Along with one of:
+- `τ2r::Real`: coherence time [s]
+- `Bρr::Real` : density dependent broadening coefficient [Hz/amagat]
+If both `τ2r` and `Bρr` are specified, then `Bρr` takes precedence.
+If `Bρr` is specified then we also need:
+- `Aρr::Real` : self diffusion coefficient [Hz amagat]
 
 If `vibration == :sdo` then the following must also be specified:
 - `Ωv::Real`: vibrational frequency [rad/s]
 - `dαdQ::Real`: isotropic averaged polarizability derivative [m^2]
 - `μ::Real`: reduced molecular mass [kg]
+Along with one of:
 - `τ2v::Real`: coherence time [s]
+- `Bρv::Real` : density dependent broadening coefficient [Hz/amagat]
+If both `τ2v` and `Bρv` are specified, then `Bρv` takes precedence.
+If `Bρv` is specified then we also need:
+- `Aρv::Real` : self diffusion coefficient [Hz amagat]
 
 If `kind == :intermediate` then the following must be specified
 - `ωi::Vector{Real}` [rad/s], central angular freqencies
@@ -682,7 +779,10 @@ If `kind == :intermediate` then the following must be specified
 [5] J. Phys. Chem., 91, 41 (1987)
 [6] Applied Spectroscopy 23, 211 (1969)
 [7] Phys. Rev. A, 34, 3, 1944 (1986)
-[8] Hollenbeck and Cantrell, "Multiple-vibrational-mode model for fiber-optic Raman gain
+[8] Can. J. Phys., 44, 4, 797 (1966)
+[9] G. V. MIKHAtLOV, SOVIET PHYSICS JETP, vol. 36, no. 9, (1959).
+[10] Phys. Rev. A, 33, 5, 3113 (1986)
+[11] Hollenbeck and Cantrell, "Multiple-vibrational-mode model for fiber-optic Raman gain
 spectrum and response function", J. Opt. Soc. Am. B/Vol. 19, No. 12/December 2002.
 """
 function raman_parameters(material)
@@ -695,11 +795,23 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 2,
               Δα = 6.7e-31, # [2]
-              τ2r = 2e-12, # [7] TODO pressure dependence
+              # Bρr has a moderate dependence on J, which we ignore for now, taking J=8
+              # [8] measured Bρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
+              # which is translated to Hz/amg via
+              # 80e-3*29979245800.0/(density(:N2, atm/bar)/amg)
+              # giving ~2.6e9 Hz/amagat.
+              # [7] gives ~3.3e9 Hz/amagat (measured at lower pressures), but they claim
+              # their results are more accurate (of course!)
+              Bρr = 3.3e9, # [7]
+              Aρr = 0.0, # [7]
               dαdQ = 1.75e-20, # [6]
               Ωv = 2*π*2330.0*100.0*c, # [4]
               μ = 1.16e-26,
-              τ2v = 8.8e-12, # [5] TODO pressure dependence
+              # For τ2v, [9] suggests pressure dependence is extremely weak up to 120 bar
+              # [9] gives ~ 1.8 cm^-1, whereas Fig. 1 in [5] suggests something similar.
+              # 1.8 cm^-1 = 0.054 THz
+              # This gives a τ2v = 1/πΔν ~ 6 ps
+              τ2v = 6e-12, # [5,9]
               )
     elseif material == :H2
         rp = (kind = :molecular,
@@ -710,11 +822,13 @@ function raman_parameters(material)
               qJodd = 3,
               qJeven = 1,
               Δα = 3e-31, # [3]
-              τ2r = 280e-12, # at 10 bar, TODO pressure dependence
+              Bρr = 114e6, # [7]
+              Aρr = 6.15e6, # [7]
               dαdQ = 1.3e-20, # [3]
               Ωv = 2*π*124.5669e12,
               μ = 8.369e-28,
-              τ2v = 578e-12, # at 10 bar, TODO pressure dependence
+              Bρv = 52.2e6, # [10]
+              Aρv = 309e6, # [10]
               )
     elseif material == :D2
         rp = (kind = :molecular,
@@ -761,7 +875,7 @@ function raman_parameters(material)
               # TODO μ = 
               # TODO τ2v = 
              )
-    elseif material == :SiO2 # [8]
+    elseif material == :SiO2 # [11]
         rp = (kind = :intermediate,
               K = 1.0,
               Ω = 1.0/12.2e-15,
@@ -777,6 +891,11 @@ function raman_parameters(material)
     rp
 end
 
+"""
+    lookup_mirror(type)
+
+Create a `CSpline` interpolant for the complex-valued reflectivity of a mirror of `type`.
+"""
 function lookup_mirror(type)
     if type == :PC70
         # λ (nm), R(5deg) (%), R(19deg) (%)
@@ -799,6 +918,54 @@ function lookup_mirror(type)
         ϕspl = Maths.BSpline(λGDD*1e-9, ϕ)
         return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
             λ, 400e-9, 450e-9, 1200e-9, 1300e-9)
+    elseif type == :HD59
+        dat = readdlm(joinpath(Utils.datadir(), "HD59_GDD.dat"); skipstart=2)
+        λ = dat[:, 1] * 1e-9
+        ω = wlfreq.(λ)
+        GDD = dat[:, 2] .* 1e-30
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λ, ϕ)
+        return λ -> exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 993e-9, 1000e-9, 1060e-9, 1075e-9)
+    elseif type == :PC147
+        dat = readdlm(joinpath(Utils.datadir(), "PC147.txt"); skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] # average reflectivity per mirror (complementary pair)
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30 # average GDD per mirror (complementary pair)
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 640e-9, 650e-9, 1350e-9, 1360e-9)
+    elseif type == :HD120
+        dat = readdlm(joinpath(Utils.datadir(), "HD120.csv"), ','; skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] # reflectivity per mirror 
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30 # GDD per mirror
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 880e-9, 900e-9, 1200e-9, 1220e-9)
     elseif type == :ThorlabsUMC
         # λ (nm), R(p) (%), R(s) (%)
         Rdat = CSV.File(joinpath(Utils.datadir(), "UCxx-15FS_R.csv"))
