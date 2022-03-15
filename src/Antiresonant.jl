@@ -1,7 +1,7 @@
 module Antiresonant
 using Reexport
 import Luna: Capillary
-import Luna.PhysData: c
+import Luna.PhysData: c, wlfreq
 @reexport using Luna.Modes
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
 
@@ -90,4 +90,94 @@ __neff(A, B, C, D, σ, nco, loss::Val{true}) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4
 __neff(A, B, C, D, σ, nco, loss::Val{false}) = real(nco*(1 - A*σ^2 - B*σ^3 - C*σ^4))
 __neff(A, B, C, D, σ, nco, loss::Number) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss*D*σ^4)
 
+
+struct VincettiMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
+    m::mT
+    t::Float64 # tube wall thickness
+    r_ext::Float64 # tube radius
+    cladn::Float64 # cladding refractive index (constant, defaults to 1.45)
+    Nterms::Int # number of terms (cladding modes) to include in the sum
+    loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
 end
+
+"""
+    VincettiMode(args...; wallthickness, tube_radius, loss=true, kwargs...)
+
+[1] L. Vincetti
+Empirical formulas for calculating loss in hollow core tube lattice fibers, 
+Opt. Express, OE, vol. 24, no. 10, pp. 10313-10325, May 2016, doi: 10.1364/OE.24.010313.
+
+[2] L. Vincetti and L. Rosa
+A simple analytical model for confinement loss estimation in hollow-core Tube Lattice Fibers
+Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.005230.
+    
+"""
+function VincettiMode(args...; wallthickness, tube_radius, cladn=1.45, Nterms=8, loss=true, kwargs...)
+    return VincettiMode(Capillary.MarcatiliMode(args...; kwargs...),
+                          wallthickness, tube_radius, cladn, Nterms, wraptype(loss))
+end
+
+α(m::VincettiMode, ω; z=0) = log(10)/10 * CL(m::VincettiMode, ω; z)
+
+neff(m::VincettiMode, ω; z=0) = 1im * c/ω * α(m, ω; z)
+
+function CL(m::VincettiMode, ω; z=0)
+    # eq. (6) of [2]
+    # confinement loss in dB/m
+    λ = wlfreq(ω)
+    F = normfreq(λ, m.t, m.cladn)
+    pvs = p_ν_sum(F, m.m.a, m.t, m.r_ext, m.cladn, m.Nterms)
+    clm = CLmin(m.m.a, λ, m.t, m.r_ext, m.cladn)
+    return clm*pvs 
+end
+
+function FcHE(μ::Integer, ν::Integer, t, r_ext, n=1.45)
+    # eq. (4) in [2]
+    if ν == 1
+        return (abs(0.21 + 0.175μ - 0.1/(μ-0.35)^2) * (t/r_ext)^(0.55+5e-3*sqrt(n^4-1))
+                + 0.04*sqrt(μ)*t/r_ext)
+    else
+        return 0.3/n^0.3 * (2/ν)^1.2*abs(μ-0.8)*(t/r_ext) + ν - 1
+    end
+end
+
+function FcEH(μ::Integer, ν::Integer, t, r_ext, n=1.45)
+    # eq. (5) in [2]
+    if ν == 1
+        return (0.73 + 0.57*(μ^0.8 + 1.5)/4 - 0.04/(μ-0.35))*(t/r_ext)^(0.5 - (n-1)/(10*(μ+0.5)^0.1))
+    else
+        tmp = (11.5/(ν^1.2*(7.75-ν))*(0.34+μ/4*(n/1.2)^1.15)/(μ+0.2/n)^0.15
+               * (t/r_ext)^(0.75 + 0.06/n^1.15 + 0.1*sqrt(1.44/n)*(ν-2)))
+        return tmp + ν -1
+    end
+end
+
+function CLmin(Rco, λ, t, r_ext, n)
+    # eq. (3) of [1]
+    3e-4 * λ^4.5/Rco^4 * (1-t/r_ext)^-12 * sqrt(n^2-1)/(t*sqrt(r_ext)) * exp(2λ/(r_ext*(n^2-1)))
+end
+
+L(F) = 0.003^2/(0.003^2 + F^2) # eq. (2) of [2]
+
+A(μ) = 2e3 * exp(-0.05*abs(μ-1)^2.6) # eq. (3) of [2]
+
+function p_ν(F, ν, t, r_ext, n=1.45, Nterms=8)
+    # eq. (7) of [2]
+    out = A(1) * (L(F-FcHE(1, ν, t, r_ext, n)) + L(F - FcEH(1, ν, t, r_ext, n)))
+    for μ in 2:Nterms
+        out += A(μ) * (L(F-FcHE(μ, ν, t, r_ext, n)) + L(F - FcEH(μ, ν, t, r_ext, n)))
+    end
+    out
+end
+
+function p_ν_sum(F, Rco, t, r_ext, n=1.45, Nterms=8)
+    out = p_ν(F, 1, t, r_ext, n, Nterms)
+    for ν in 2:Nterms
+        out += p_ν(F, ν, t, r_ext, n, Nterms)
+    end
+    out
+end
+
+normfreq(λ, t, n) = 2t/λ*sqrt(n^2-1) # eq. (2) of [1]
+
+end # module
