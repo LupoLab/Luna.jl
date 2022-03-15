@@ -585,7 +585,7 @@ function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
         n0 = real(ref_index(material, 1030e-9))
         return 4/3 * n2 * (ε_0*c*n0^2)
     end
-    return γ3(material, source=source) .* density.(material, P, T)
+    return γ3_gas(material, source=source) .* density.(material, P, T)
 end
 
 function n2(material::Symbol, P=1.0, T=roomtemp; λ=nothing, source=nothing)
