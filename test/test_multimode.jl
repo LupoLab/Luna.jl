@@ -16,7 +16,7 @@ import Test: @test, @testset, @test_throws
 
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω, transform, FT = Luna.setup(
@@ -157,7 +157,7 @@ end
     energyfun, energyfunω = Fields.energyfuncs(grid)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
     Eω_single, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
                                 modes, :y; full=false)

@@ -22,7 +22,7 @@ end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 energyfun, energyfunω = Fields.energyfuncs(grid)
-responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 ## mode-average
 Iωavg = let
@@ -72,7 +72,7 @@ end
 dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 energyfun, energyfunω = Fields.energyfuncs(grid)
-responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
 
 ## mode-average
 Iωavg = let

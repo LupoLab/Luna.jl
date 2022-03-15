@@ -17,7 +17,7 @@ import Luna: Output
 
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     energyfun, energyfunω = Fields.energyfuncs(grid)
     modes = (
          Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),

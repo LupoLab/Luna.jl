@@ -118,7 +118,7 @@ fpath_comp = joinpath(dirpath, "test_comp.h5")
     densityfun = let dens0=PhysData.density(gas, pres)
         z -> dens0
     end
-    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
@@ -214,7 +214,7 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     energyfun, energyfunω = Fields.energyfuncs(grid)
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
-    responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),)
+    responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
     linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
     # Run with arbitrary error at 3 cm

@@ -27,7 +27,7 @@ ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 plasma = Nonlinear.PlasmaCumtrapz(grid.to, Array{Float64}(undef, length(grid.to), 2),
                                   ionrate, ionpot)
                                   
-responses = (Nonlinear.Kerr_field(PhysData.γ3(gas)),
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
 
 inputs = ((mode=1, fields=(Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy/2),)),

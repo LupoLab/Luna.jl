@@ -28,7 +28,7 @@ linop, βfun!, frame_vel, αfun = LinearOps.make_const_linop(grid, m, λ0)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3(gas),length(grid.to)),
+responses = (Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas),length(grid.to)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)

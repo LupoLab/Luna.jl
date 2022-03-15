@@ -22,7 +22,7 @@ end
 
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)

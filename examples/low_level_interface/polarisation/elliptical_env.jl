@@ -44,7 +44,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
     z -> dens0
 end
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 # dummy, we don't use these
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)

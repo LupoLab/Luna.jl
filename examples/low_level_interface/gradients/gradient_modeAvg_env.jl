@@ -23,7 +23,7 @@ energyfun, energyfunω = Fields.energyfuncs(grid)
 ionpot = PhysData.ionisation_potential(gas)
 ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
 
-responses = (Nonlinear.Kerr_env(PhysData.γ3(gas)),)
+responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 
 linop!, βfun! = LinearOps.make_linop(grid, m, λ0);
 
