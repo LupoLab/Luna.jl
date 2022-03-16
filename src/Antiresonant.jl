@@ -3,7 +3,7 @@ using Reexport
 import Luna: Capillary
 import Luna.PhysData: c, wlfreq
 @reexport using Luna.Modes
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α
 
 struct ZeisbergerMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
@@ -102,7 +102,25 @@ struct VincettiMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
 end
 
 """
-    VincettiMode(args...; wallthickness, tube_radius, loss=true, kwargs...)
+    VincettiMode(args...; wallthickness, tube_radius, Ntubes, cladn, Nterms,
+                          loss=true, kwargs...)
+
+Create a mode with Marcatili-like spatial properties but loss and dispersion given
+by the semi-empirical model developed by Vincetti et al. in refs [1-3]. Arguments are identical
+to `Capillary.MarcatiliMode` but with the following additions/changes as keyword arguments:
+
+# Mandatory keyword arguments
+- `wallthickness` : wall thickness of the resonators (cladding capillaries)
+- `tube_radius` : radius of the resonators
+- `Ntubes` : number of resonators
+
+# Optional keyword arguments
+- `cladn` : refractive index of the resonators. This must be a constant for the model.
+            Defaults to 1.45
+- `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
+- `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
+
+# References
 
 [1] L. Vincetti
 Empirical formulas for calculating loss in hollow core tube lattice fibers, 
@@ -115,8 +133,6 @@ Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.0
 [3]L. Rosa, F. Melli, and L. Vincetti
 Analytical Formulas for Dispersion and Effective Area in Hollow-Core Tube Lattice Fibers
 Fibers, vol. 9, no. 10, Art. no. 10, Oct. 2021, doi: 10.3390/fib9100058.
-
-    
 """
 function VincettiMode(args...; wallthickness, tube_radius, Ntubes,
                                cladn=1.45, Nterms=8, loss=true, kwargs...)
@@ -124,9 +140,17 @@ function VincettiMode(args...; wallthickness, tube_radius, Ntubes,
                           wallthickness, tube_radius, Ntubes, cladn, Nterms, wraptype(loss))
 end
 
+# create complex effective index
 neff(m::VincettiMode, ω; z=0) = neff_real(m, ω) + 1im*c/ω*α(m, ω; z)
 
-α(m::VincettiMode, ω; z=0) = log(10)/10 * CL(m::VincettiMode, ω; z)
+α(m::VincettiMode{mT, Val{true}}, ω; z=0) where mT = log(10)/10 * CL(m, ω; z)
+α(m::VincettiMode{mT, Val{false}}, ω; z=0) where mT = zero(ω)
+α(m::VincettiMode{mT, <:Number}, ω; z=0) where mT = m.loss * log(10)/10 * CL(m, ω; z)
+
+# All other mode properties are identical to a MarcatiliMode
+for fun in (:Aeff, :field, :N, :dimlimits)
+    @eval ($fun)(m::VincettiMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
+end
 
 function CL(m::VincettiMode, ω; z=0)
     # eq. (6) of [2]

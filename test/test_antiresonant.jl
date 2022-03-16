@@ -38,6 +38,7 @@ A simple analytical model for confinement loss estimation in hollow-core Tube La
 Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.005230.
 =#
 # F#1 from [2]
+using Luna
 import PyPlot: plt
 import DelimitedFiles: readdlm
 t = 1e-6
@@ -57,6 +58,11 @@ zm = Antiresonant.ZeisbergerMode(Rco, :Air, 0, (ω; z) -> 1.45; wallthickness=t)
 
 F = collect(range(0.4, 4.2, 2^14))
 λ = @. 2t/F*sqrt(n^2-1)
+
+scale = 0.5
+msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n,
+                                     loss=scale)
+@test Modes.α.(msc, PhysData.wlfreq.(λ)) ≈ scale*Modes.α.(m, PhysData.wlfreq.(λ))
 
 paperdata = readdlm(joinpath(
     homedir(),
