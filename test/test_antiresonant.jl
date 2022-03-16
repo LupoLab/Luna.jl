@@ -53,6 +53,7 @@ Rco = r_ext * (k/sin(π/N) - 1)
 δcalc = 2*(sin(π/N)*(Rco + r_ext)-r_ext)
 
 m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n)
+zm = Antiresonant.ZeisbergerMode(Rco, :Air, 0, (ω; z) -> 1.45; wallthickness=t)
 
 F = collect(range(0.4, 4.2, 2^14))
 λ = @. 2t/F*sqrt(n^2-1)
@@ -67,7 +68,8 @@ paperdata = readdlm(joinpath(
 
 ##
 plt.figure()
-plt.semilogy(F, Modes.dB_per_m.(m, PhysData.wlfreq.(λ)); label="Luna")
+plt.semilogy(F, Modes.dB_per_m.(m, PhysData.wlfreq.(λ)); label="Luna (Vincetti)")
+plt.semilogy(F, Modes.dB_per_m.(zm, PhysData.wlfreq.(λ)); label="Luna (Zeisberger)")
 plt.semilogy(paperdata[:, 1], paperdata[:, 2], "."; label="Paper")
 plt.xlim(extrema(F))
 plt.xlabel("Normalised frequency")
@@ -77,6 +79,7 @@ plt.legend()
 λpaper = @. 2t/paperdata[:, 1]*sqrt(n^2-1)
 plt.figure()
 plt.semilogy(λ*1e9, Modes.dB_per_m.(m, PhysData.wlfreq.(λ)); label="Luna")
+plt.semilogy(λ*1e9, Modes.dB_per_m.(zm, PhysData.wlfreq.(λ)); label="Luna (Zeisberger)")
 plt.semilogy(λpaper*1e9, paperdata[:, 2], "."; label="Paper")
 plt.xlim(extrema(λ).*1e9)
 plt.xlabel("Wavelength (nm)")
@@ -84,7 +87,22 @@ plt.ylabel("Loss (dB/m)")
 plt.legend()
 
 ##
+neffdata = readdlm(joinpath(
+    homedir(),
+    "Documents",
+    "WebPlotDigitizer",
+    "Vincetti PCF loss",
+    "neff_F#1.csv"),
+    ',')
+
 plt.figure()
-plt.plot(F, Antiresonant.neff_real.(m, PhysData.wlfreq.(λ)))
-plt.ylim(0.998, 1)
-plt.xlim(xmax=4)
+plt.plot(F, Antiresonant.neff_real.(m, PhysData.wlfreq.(λ)); label="Luna (Vincetti)")
+plt.plot(F, real(Antiresonant.neff.(zm, PhysData.wlfreq.(λ))); label="Luna (Zeisberger)")
+plt.plot(F, real(Antiresonant.neff.(m.m, PhysData.wlfreq.(λ))); label="Luna (Marcatili)")
+plt.plot(neffdata[:, 1], neffdata[:, 2], "--"; label="Paper")
+plt.ylim(0.999, 1)
+plt.xlim(extrema(F))
+plt.xlabel("Normalised frequency")
+plt.ylabel("\$n_\\mathrm{eff}\$")
+plt.legend()
+plt.tight_layout()

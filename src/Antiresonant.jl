@@ -164,7 +164,8 @@ function CLmin(Rco, λ, t, r_ext, n)
     3e-4 * λ^4.5/Rco^4 * (1-t/r_ext)^-12 * sqrt(n^2-1)/(t*sqrt(r_ext)) * exp(2λ/(r_ext*(n^2-1)))
 end
 
-L(F) = 0.003^2/(0.003^2 + F^2) # eq. (2) of [2]
+γloss = 3e-3
+L(F) = γloss^2/(γloss^2 + F^2) # eq. (2) of [2]
 
 A(μ) = 2e3 * exp(-0.05*abs(μ-1)^2.6) # eq. (3) of [2]
 
@@ -204,7 +205,8 @@ Rco_eff(m::VincettiMode, ω) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes
 
 getδ(Rco, r_ext, N) = 2*(sin(π/N)*(Rco + r_ext) - r_ext) # from eq. (1) in [1]
 
-Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (3e-3F)^2) # eq. (2) in [3]
+γdisp = 3e-2
+Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (γdisp*F)^2) # eq. (2) in [3]
 
 function νsum(F, t, r_ext, n=1.45, Nterms=8)
     # eq. (6) of [3]
@@ -227,6 +229,7 @@ end
 Δneff(m::VincettiMode, ω) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.cladn, m.Nterms)
 
 function neff_real(m::VincettiMode, ω; z=0)
+    # eq. (21) of [3]
     ng = m.m.coren(ω; z) # gas index
     return (ng
             - 1/2 * (m.m.unm*c/(ω*ng*Rco_eff(m, ω)))^2
