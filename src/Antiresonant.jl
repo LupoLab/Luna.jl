@@ -159,15 +159,17 @@ for fun in (:Aeff, :field, :N, :dimlimits)
     @eval ($fun)(m::VincettiMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
 end
 
-function CL(m::VincettiMode, ω; z=0)
+function CL(λ, Rco, t, r_ext, N; cladn=1.45, Nterms=8)
     # eq. (6) of [2]
     # confinement loss in dB/m
-    λ = wlfreq(ω)
-    F = normfreq(λ, m.t, m.cladn)
-    pvs = p_ν_sum(F, m.t, m.r_ext, m.cladn, m.Nterms)
-    clm = CLmin(m.m.a, λ, m.t, m.r_ext, m.cladn)
-    return clm*pvs 
+    F = normfreq(λ, t, cladn)
+    pvs = p_ν_sum(F, t, r_ext, cladn, Nterms)
+    clm = CLmin(Rco, λ, t, r_ext, cladn)
+    return clm*pvs
 end
+
+CL(m::VincettiMode, ω; z=0) = CL(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes;
+                                 cladn=m.cladn, Nterms=m.Nterms)
 
 function FcHE(μ::Integer, ν::Integer, t, r_ext, n=1.45)
     # eq. (4) in [2]
