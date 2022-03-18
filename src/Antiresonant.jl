@@ -1,5 +1,7 @@
 module Antiresonant
 using Reexport
+import Logging: @warn
+import Printf: @sprintf
 import Luna: Capillary
 import Luna.PhysData: c, wlfreq
 @reexport using Luna.Modes
@@ -120,6 +122,8 @@ to `Capillary.MarcatiliMode` but with the following additions/changes as keyword
 - `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
 - `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
 
+To specify the gap between resonators, calculate the core radius with [`getRco(r_ext, N, δ)`](@ref).
+
 # References
 
 [1] L. Vincetti
@@ -134,9 +138,12 @@ Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.0
 Analytical Formulas for Dispersion and Effective Area in Hollow-Core Tube Lattice Fibers
 Fibers, vol. 9, no. 10, Art. no. 10, Oct. 2021, doi: 10.3390/fib9100058.
 """
-function VincettiMode(args...; wallthickness, tube_radius, Ntubes,
+function VincettiMode(Rco, args...; wallthickness, tube_radius, Ntubes,
                                cladn=1.45, Nterms=8, loss=true, kwargs...)
-    return VincettiMode(Capillary.MarcatiliMode(args...; kwargs...),
+    if getδ(Rco, tube_radius, Ntubes) < 0
+        @warn("the given fibre parameters correspond to a negative gap between resonators")
+    end
+    return VincettiMode(Capillary.MarcatiliMode(Rco, args...; kwargs...),
                           wallthickness, tube_radius, Ntubes, cladn, Nterms, wraptype(loss))
 end
 
@@ -227,7 +234,26 @@ end
 
 Rco_eff(m::VincettiMode, ω) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, m.cladn)
 
+"""
+    getδ(Rco, r_ext, N)
+
+Calculate the gap between resonators in a single-ring antiresonant PCF with inscribed core
+radius `Rco` for `N` resonators with external radius `r_ext`.
+"""
 getδ(Rco, r_ext, N) = 2*(sin(π/N)*(Rco + r_ext) - r_ext) # from eq. (1) in [1]
+
+"""
+    getRco(r_ext, N, δ)
+
+Calculate the inscribed core radius of a single-ring antiresonant PCF with `N` resonators
+with external radius `r_ext` and a gap between resonators of `δ`. 
+"""
+function getRco(r_ext, N, δ)
+    # eq. (1) of [1]
+    k = 1 + δ/2r_ext
+    Rco = r_ext * (k/sin(π/N) - 1)
+    return Rco
+end
 
 γdisp = 3e-2
 Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (γdisp*F)^2) # eq. (2) in [3]
