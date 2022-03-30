@@ -593,8 +593,8 @@ end
 
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
-                                    text=nothing, units="fs")
-    left, right = Maths.level_xings(x, y)
+                                    text=nothing, units="fs", kwargs...)
+    left, right = Maths.level_xings(x, y; kwargs...)
     fw = abs(right - left)
     halfmax = maximum(y)/2
     arrowlength = isnothing(arrowlength) ? 2*fw : arrowlength
@@ -611,10 +611,10 @@ function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, line
                                 "linewidth" => linewidth))
 
     if text == :left
-        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
                 ha="right", color=color)
     elseif text == :right
-        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
                 color=color)
     end
 end
@@ -632,6 +632,31 @@ function add_fwhm_legends(ax, unit)
         s *= @sprintf(" [%.2f %s]", fw, unit)
         t.set_text(s)
     end
+end
+
+function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+    xpad = isnothing(xpad) ? pad : xpad
+    ypad = isnothing(ypad) ? pad : ypad
+    if corner[1] == 'u'
+        val = "top"
+        y = 1 - ypad
+    elseif corner[1] == 'l'
+        val = "bottom"
+        y = ypad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    if corner[2] == 'l'
+        hal = "left"
+        x = xpad
+    elseif [2] == 'r'
+        hal = "right"
+        x = 1 - xpad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    ax.text(x, y, text; horizontalalignment=hal, verticalalignment=val,
+                 transform=ax.transAxes, kwargs...)
 end
 
 end
