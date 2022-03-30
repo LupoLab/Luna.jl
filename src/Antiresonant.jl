@@ -257,6 +257,15 @@ function getRco(r_ext, N, δ)
     return Rco
 end
 
+"""
+    getr_ext(Rco, N, δ)
+
+Calculate the external radius of the resonators for a single-ring antiresonant PCF with
+core radius `Rco`, `N` resonators and a gap between resonators of `δ`.
+"""
+getr_ext(Rco, N, δ) = (δ/2 - Rco*sin(π/N))/(sin(π/N) - 1)
+
+
 γdisp = 3e-2
 Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (γdisp*F)^2) # eq. (2) in [3]
 
