@@ -824,4 +824,11 @@ function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
     res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
+function optfield_cep(Eω, grid; mode=1)
+    otherdims = size(Eω)[3:end] 
+    all(otherdims .== 1) || error("high-dimensional arrays for optfield_cep must have all-singleton dimensions higher than 2")
+    idcs = fill(1, otherdims)
+    φ, Eωc = optfield_cep(Eω[:, :, idcs...], grid; mode)
+    return φ, reshape(Eωc, size(Eω))
+end
 end
