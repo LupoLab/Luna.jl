@@ -749,4 +749,30 @@ macro scansave(scan, scanidx, kwargs...)
     end
     ex
 end
+
+"""
+    scansave_stats_array(stats_dict)
+
+Convert the statistics dictionary created by [`scansave`](@ref) into a dictionary containing
+arrays of arrays. This removes unused elements in the arrays and the need to use `valid_length`
+to avoid including `NaN`s.
+"""
+function scansave_stats_array(stats_dict)
+    vl = stats_dict["valid_length"]
+    scanshape = size(vl)
+    sidcs = CartesianIndices(scanshape)
+    out = Dict{String, Any}()
+    for (k, v) in stats_dict
+        if k == "valid_length"
+            continue
+        end
+        zdim = ndims(v) - length(scanshape) # find size of each statistic entry
+        a = Array{Array{eltype(v), zdim}}(undef, scanshape) # array of arrays
+        for ii in sidcs
+            a[ii] = v[fill(:, zdim-1)..., 1:vl[ii], ii]
+        end
+        out[k] = a
+    end
+    out
+end
 end
