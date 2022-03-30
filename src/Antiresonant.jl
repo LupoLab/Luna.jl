@@ -155,7 +155,7 @@ neff(m::VincettiMode, ω; z=0) = neff_real(m, ω) + 1im*c/ω*α(m, ω; z)
 α(m::VincettiMode{mT, <:Number}, ω; z=0) where mT = m.loss * log(10)/10 * CL(m, ω; z)
 
 # All other mode properties are identical to a MarcatiliMode
-for fun in (:Aeff, :field, :N, :dimlimits)
+for fun in (:field, :N, :dimlimits)
     @eval ($fun)(m::VincettiMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
 end
 
@@ -287,5 +287,7 @@ function neff_real(m::VincettiMode, ω; z=0)
             - 1/2 * (m.m.unm*c/(ω*ng*Rco_eff(m, ω)))^2
             + Δneff(m, ω))
 end
+
+Aeff(m::VincettiMode, ω; z=0) = 0.48/8π * (m.m.unm*wlfreq(ω))^2/(m.m.coren(ω; z)-neff_real(m, ω))
 
 end # module
