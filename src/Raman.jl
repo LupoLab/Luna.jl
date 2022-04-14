@@ -238,7 +238,7 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
         end
         push!(Rs, hr)
     end
-    if vibration
+    if vibration  && (rp.vibration != :none)
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end

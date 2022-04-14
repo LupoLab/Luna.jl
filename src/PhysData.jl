@@ -820,7 +820,8 @@ If `Bρv` is specified then we also need:
 [11] IEEE Journal of Quantum Electronics 1986, 22 (2), 332–336. https://doi.org/10.1109/JQE.1986.1072945.
 [12] Phys. Rev. Lett. 1998, 81 (6), 1215–1218. https://doi.org/10.1103/PhysRevLett.81.1215.
 [13] Optics Communications 1987, 64 (4), 393–397. https://doi.org/10.1016/0030-4018(87)90258-6.
-
+[14] Science Advances 2020, 6 (34), eabb5375. https://doi.org/10.1126/sciadv.abb5375.
+[15] Long, The Raman Effect; John Wiley & Sons, Ltd, 2002;
 """
 function raman_parameters(material)
     if material == :N2
@@ -829,9 +830,9 @@ function raman_parameters(material)
               vibration = :sdo,
               B = 199.0, # [4]
               D = 5.74e-4, # [4]
-              qJodd = 1,
-              qJeven = 2,
-              Δα = 6.7e-31, # [2]
+              qJodd = 1, # [14] uses 3 as does [15]
+              qJeven = 2, # [14] uses 6 as does [15]
+              Δα = 6.7e-31, # [2] # note [14] use 1.86e-30
               # Bρr has a moderate dependence on J, which we ignore for now, taking J=8
               # [8] measured Bρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
               # which is translated to Hz/amg via
@@ -900,13 +901,13 @@ function raman_parameters(material)
     elseif material == :N2O
         rp = (kind = :molecular,
               rotation = :nonrigid,
-              vibration = :sdo,
+              vibration = :none, # TODO work out correct parameters here
               B = 41.0, # [2]
               D = 0.0, # TODO
-              # TODO qJodd = 
-              # TODO qJeven = 
-              Δα = 28.1e-31, # [2]
-              # TODO τ2r = 
+              qJodd = 1, # [14]
+              qJeven = 1, # [14]
+              Δα = 28.1e-31, # [2] note that [14] uses twice this
+              τ2r = 23.8e-12, # [14]
               # TODO dαdQ =  
               Ωv = 2*π*1285*100.0*c,
               # TODO μ = 
