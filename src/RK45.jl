@@ -175,6 +175,7 @@ function step!(s)
         errest[ii] == 0 || (@. s.yerr += s.dt*s.ks[ii]*errest[ii])
     end
     s.err = s.norm(s.yerr, s.y, s.yn, s.rtol, s.atol)
+    s.err = max(s.err, 1e-3)
     s.ok = s.err <= 1
     stepcontrolPI!(s)
     if s.ok
