@@ -112,3 +112,20 @@ plt.xlabel("Normalised frequency")
 plt.ylabel("\$n_\\mathrm{eff}\$")
 plt.legend()
 plt.tight_layout()
+
+##
+β2v = Modes.dispersion.(m, 2, PhysData.wlfreq.(λ))
+β2z = Modes.dispersion.(zm, 2, PhysData.wlfreq.(λ))
+β2m = Modes.dispersion.(m.m, 2, PhysData.wlfreq.(λ))
+
+##
+plt.figure()
+plt.plot(λ*1e9, 1e28β2v; label="Luna (Vincetti)")
+plt.plot(λ*1e9, 1e28β2z; label="Luna (Zeisberger)")
+plt.plot(λ*1e9, 1e28β2m; label="Luna (Marcatili)")
+plt.ylim(-200, 100)
+plt.xlim(500, 2500)
+plt.xlabel("Wavelength (nm)")
+plt.ylabel("GVD (fs\$^{-2}\$/cm)")
+plt.legend()
+plt.tight_layout()
