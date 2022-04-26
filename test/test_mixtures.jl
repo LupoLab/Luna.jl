@@ -3,10 +3,9 @@ import LinearAlgebra: norm
 import Test: @test, @testset
 
 @testset "refractive index" begin
-allpass = true
-for gi in PhysData.gas
-    for Pi in (0.01, 0.1, 1, 10)
-        for λi in (200e-9, 400e-9, 800e-9, 1600e-9)
+@testset "$gi" for gi in PhysData.gas
+    @testset "$Pi bar" for Pi in (0.01, 0.1, 1, 10)
+        @testset "$(λi*1e9) nm" for λi in (200e-9, 400e-9, 800e-9, 1600e-9)
             for divisor in (2, 3, 4, 5)
                 divdens = PhysData.density(gi, Pi)/divisor
                 divP = PhysData.pressure(gi, divdens)
@@ -15,13 +14,12 @@ for gi in PhysData.gas
                 pt = Tuple([divP for _ in 1:divisor])
                 nm = PhysData.ref_index(gt, λi, pt)
                 nm2 = PhysData.ref_index_fun(gt)(λi, [divdens for _ = 1:divisor])
-                allpass = allpass && (nm == ns)
-                allpass = allpass && (nm2 == ns)
+                @test (nm ≈ ns)
+                @test (nm2 ≈ ns)
             end
         end
     end
 end
-@test allpass
 end
 
 @testset "propagation" begin
