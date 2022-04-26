@@ -373,7 +373,7 @@ function stepcontrolPI!(s)
     ε = 0.8
     if s.ok
         s.errlast == 0 && (s.errlast = s.err) # if last error is zero, use current error instead
-        if s.errlast == 0 || s.err == 0
+        if s.err == 0
             fac = 1.5 # zero error means no nonlinearity: increase step size by a lot 
         else
             fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
