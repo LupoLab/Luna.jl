@@ -104,10 +104,10 @@ struct VincettiMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
 end
 
 """
-    VincettiMode(args...; wallthickness, tube_radius, Ntubes, cladn, Nterms,
-                          loss=true, kwargs...)
+    VincettiMode(a, args...; wallthickness, tube_radius, Ntubes, cladn, Nterms,
+                             loss=true, kwargs...)
 
-Create a mode with Marcatili-like spatial properties but loss and dispersion given
+Create a mode with Marcatili-like mode fields but loss, dispersion and effective area given
 by the semi-empirical model developed by Vincetti et al. in refs [1-3]. Arguments are identical
 to `Capillary.MarcatiliMode` but with the following additions/changes as keyword arguments:
 
@@ -139,7 +139,7 @@ Analytical Formulas for Dispersion and Effective Area in Hollow-Core Tube Lattic
 Fibers, vol. 9, no. 10, Art. no. 10, Oct. 2021, doi: 10.3390/fib9100058.
 """
 function VincettiMode(Rco, args...; wallthickness, tube_radius, Ntubes,
-                               cladn=1.45, Nterms=8, loss=true, kwargs...)
+                                    cladn=1.45, Nterms=8, loss=true, kwargs...)
     if getδ(Rco, tube_radius, Ntubes) < 0
         @warn("the given fibre parameters correspond to a negative gap between resonators")
     end
