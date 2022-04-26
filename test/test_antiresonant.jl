@@ -2,7 +2,7 @@ import Test: @test, @testset, @test_throws
 import Luna: Antiresonant, Capillary, Modes
 import Luna.PhysData: wlfreq
 
-@testset "Antiresonant PCF" begin
+@testset "Zeisberger Model" begin
     a = 20e-6
     m = Capillary.MarcatiliMode(a, :Air, 0, (ω; z) -> 1.45)
     w = 0.7e-6
@@ -28,33 +28,20 @@ import Luna.PhysData: wlfreq
 end
 
 ##
-#= References
-[1] L. Vincetti
-Empirical formulas for calculating loss in hollow core tube lattice fibers, 
-Opt. Express, OE, vol. 24, no. 10, pp. 10313-10325, May 2016, doi: 10.1364/OE.24.010313.
-
-[2] L. Vincetti and L. Rosa
-A simple analytical model for confinement loss estimation in hollow-core Tube Lattice Fibers
-Opt. Express, OE, vol. 27, no. 4, pp. 5230-5237, Feb. 2019, doi: 10.1364/OE.27.005230.
-=#
-# F#1 from [2]
-using Luna
-import PyPlot: plt
-import DelimitedFiles: readdlm
+@testset "Vincetti Model" begin
 t = 1e-6
 r_ext = 10e-6
 δ = 5e-6 # tube spacing
 n = 1.44
 N = 8 # number of tubes
 
-# eq. (1) of [1]
-k = 1 + δ/2r_ext
-Rco = r_ext * (k/sin(π/N) - 1)
+Rco = Antiresonant.getRco(r_ext, N, δ)
 
-δcalc = 2*(sin(π/N)*(Rco + r_ext)-r_ext)
+@test Antiresonant.getδ(Rco, r_ext, N) ≈ δ
+@test Antiresonant.getr_ext(Rco, N, δ) ≈ r_ext
+
 
 m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n)
-zm = Antiresonant.ZeisbergerMode(Rco, :Air, 0, (ω; z) -> 1.45; wallthickness=t)
 
 F = collect(range(0.4, 4.2, 2^14))
 λ = @. 2t/F*sqrt(n^2-1)
@@ -62,70 +49,12 @@ F = collect(range(0.4, 4.2, 2^14))
 scale = 0.5
 msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n,
                                      loss=scale)
-@test Modes.α.(msc, PhysData.wlfreq.(λ)) ≈ scale*Modes.α.(m, PhysData.wlfreq.(λ))
+@test Modes.α.(msc, wlfreq.(λ)) ≈ scale*Modes.α.(m, wlfreq.(λ))
+m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n,
+                                     loss=false)
+@test all(Modes.α.(m0, wlfreq.(λ)) .== 0)
 
-paperdata = readdlm(joinpath(
-    homedir(),
-    "Documents",
-    "WebPlotDigitizer",
-    "Vincetti PCF loss",
-    "VincettiLoss_F#1.csv"),
-    ',')
+@test Modes.neff(m, wlfreq(1030e-9)) ≈ 0.9998598623672965 + 3.4579455755137454e-8im
 
-##
-plt.figure()
-plt.semilogy(F, Modes.dB_per_m.(m, PhysData.wlfreq.(λ)); label="Luna (Vincetti)")
-plt.semilogy(F, Modes.dB_per_m.(zm, PhysData.wlfreq.(λ)); label="Luna (Zeisberger)")
-plt.semilogy(paperdata[:, 1], paperdata[:, 2], "."; label="Paper")
-plt.xlim(extrema(F))
-plt.xlabel("Normalised frequency")
-plt.ylabel("Loss (dB/m)")
-plt.legend()
-
-λpaper = @. 2t/paperdata[:, 1]*sqrt(n^2-1)
-plt.figure()
-plt.semilogy(λ*1e9, Modes.dB_per_m.(m, PhysData.wlfreq.(λ)); label="Luna")
-plt.semilogy(λ*1e9, Modes.dB_per_m.(zm, PhysData.wlfreq.(λ)); label="Luna (Zeisberger)")
-plt.semilogy(λpaper*1e9, paperdata[:, 2], "."; label="Paper")
-plt.xlim(extrema(λ).*1e9)
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("Loss (dB/m)")
-plt.legend()
-
-##
-neffdata = readdlm(joinpath(
-    homedir(),
-    "Documents",
-    "WebPlotDigitizer",
-    "Vincetti PCF loss",
-    "neff_F#1.csv"),
-    ',')
-
-plt.figure()
-plt.plot(F, Antiresonant.neff_real.(m, PhysData.wlfreq.(λ)); label="Luna (Vincetti)")
-plt.plot(F, real(Antiresonant.neff.(zm, PhysData.wlfreq.(λ))); label="Luna (Zeisberger)")
-plt.plot(F, real(Antiresonant.neff.(m.m, PhysData.wlfreq.(λ))); label="Luna (Marcatili)")
-plt.plot(neffdata[:, 1], neffdata[:, 2], "--"; label="Paper")
-plt.ylim(0.999, 1)
-plt.xlim(extrema(F))
-plt.xlabel("Normalised frequency")
-plt.ylabel("\$n_\\mathrm{eff}\$")
-plt.legend()
-plt.tight_layout()
-
-##
-β2v = Modes.dispersion.(m, 2, PhysData.wlfreq.(λ))
-β2z = Modes.dispersion.(zm, 2, PhysData.wlfreq.(λ))
-β2m = Modes.dispersion.(m.m, 2, PhysData.wlfreq.(λ))
-
-##
-plt.figure()
-plt.plot(λ*1e9, 1e28β2v; label="Luna (Vincetti)")
-plt.plot(λ*1e9, 1e28β2z; label="Luna (Zeisberger)")
-plt.plot(λ*1e9, 1e28β2m; label="Luna (Marcatili)")
-plt.ylim(-200, 100)
-plt.xlim(500, 2500)
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("GVD (fs\$^{-2}\$/cm)")
-plt.legend()
-plt.tight_layout()
+@test Modes.dimlimits(m) == Modes.dimlimits(m.m)
+end
