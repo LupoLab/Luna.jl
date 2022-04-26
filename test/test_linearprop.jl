@@ -13,10 +13,10 @@ energy = 60e-6 # energy in the pump pulse
 
 τ0 = Tools.τfw_to_τ0(τfwhm, :gauss)
 
-duv = prop_capillary(radius, flength, gas, pressure; λ0, τfwhm, energy,
-                     modes=:HE11, trange=400e-15, λlims=(150e-9, 4e-6), kerr=false, plasma=false)
+out = prop_capillary(radius, flength, gas, pressure; λ0, τfwhm, energy,
+                     modes=:HE11, trange=1000e-15, λlims=(150e-9, 4e-6), kerr=false, plasma=false)
 
-t, Et = Processing.getEt(duv)
+t, Et = Processing.getEt(out)
 Ptend = abs2.(Et[:, end]) # pulse profile at end
 
 fwend = Maths.fwhm(t, Ptend; method=:spline) # FWHM duration at end
@@ -30,6 +30,6 @@ GDD = β2*flength # total GDD accumulated
 
 @test isapprox(τ0calc, τ0end; rtol=1e-2)
 
-energy_calc = Capillary.transmission(radius, λ0, flength)*energy
-@test isapprox(energy_calc, Processing.energy(duv)[end]; rtol=1e-2)
+energy_calc = Capillary.transmission(radius, λ0, flength)*energy # calculated energy at end
+@test isapprox(energy_calc, Processing.energy(out)[end]; rtol=1e-2)
 
