@@ -147,5 +147,10 @@ end
     include(joinpath(testdir, "test_interface.jl"))
 end
 
+@testset "Linear propagation" begin
+    @info("================= test_linearprop.jl")
+    include(joinpath(testdir, "test_linearprop.jl"))
+end
+
 
 end
