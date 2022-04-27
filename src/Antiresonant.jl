@@ -122,7 +122,8 @@ to `Capillary.MarcatiliMode` but with the following additions/changes as keyword
 - `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
 - `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
 
-To specify the gap between resonators, calculate the core radius with [`getRco(r_ext, N, δ)`](@ref).
+To specify the gap between resonators, calculate the core radius with [`getRco(r_ext, N, δ)`](@ref)
+or calculate the external radius of the resonators with [`getr_ext(Rco, N, δ)`](@ref).
 
 # References
 
