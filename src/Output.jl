@@ -1,5 +1,6 @@
 module Output
 import HDF5
+using H5Zblosc
 import Logging
 import Base: getindex, show, haskey
 using EllipsisNotation
