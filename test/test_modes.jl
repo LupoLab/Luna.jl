@@ -3,7 +3,8 @@ import GSL: sf_bessel_zero_Jnu
 import SpecialFunctions: besselj
 import LinearAlgebra: norm
 import FFTW
-import Luna: Modes, Maths, Capillary, Grid, PhysData, Hankel, NonlinearRHS, Fields
+using Luna
+import Luna: Hankel
 import Luna.PhysData: wlfreq
 
 
@@ -241,3 +242,100 @@ m2 = Capillary.MarcatiliMode(a; ϕ=π/2)
 m2 = Capillary.MarcatiliMode(2a; ϕ=π/2)
 @test_throws ErrorException Modes.overlap(m1, m2)
 end
+
+@testset "makemodes" begin
+@testset "$Nmodes HE modes" for Nmodes in 1:8
+a = 100e-6
+gas = :Ar
+pressure = 1.5
+kwargs = (:λlims => (400e-9, 4e-6), :trange => 500e-15, :plasma => false, :kerr => false)
+output = prop_capillary(a, 1, gas, pressure;
+                        λ0=800e-9, τfwhm=10e-15, energy=1e-9, modes=Nmodes, kwargs...)
+
+modes_actual = [Capillary.MarcatiliMode(a, gas, pressure; m=m) for m in 1:Nmodes]
+
+modes = Processing.makemodes(output)
+
+grid = Processing.makegrid(output)
+
+for (m, ma) in zip(modes, modes_actual)
+    @test m.a == ma.a
+    @test m.n == ma.n
+    @test m.m == ma.m
+    @test m.coren.(grid.ω[grid.sidx]; z=0) == ma.coren.(grid.ω[grid.sidx]; z=0)
+    @test m.cladn.(grid.ω[grid.sidx]; z=0) == ma.cladn.(grid.ω[grid.sidx]; z=0)
+    @test Modes.neff.(m, grid.ω[grid.sidx]) == Modes.neff.(ma, grid.ω[grid.sidx])
+    @test Modes.Aeff(m) == Modes.Aeff(ma)
+    @test Modes.N(m) == Modes.N(ma)
+end
+end
+
+
+@testset "non-HE modes" begin
+a = 100e-6
+gas = :Ar
+pressure = 1.5
+kwargs = (:λlims => (400e-9, 4e-6), :trange => 500e-15, :plasma => false, :kerr => false)
+modes = (:TM01, :TM02, :TM03, :TM04)
+output = prop_capillary(a, 1, gas, pressure;
+                        λ0=800e-9, τfwhm=10e-15, energy=1e-9, modes=modes, kwargs...)
+
+modes_actual = [Capillary.MarcatiliMode(a, gas, pressure; kind=:TM, n=0, m=m) for m in 1:4]
+
+modes = Processing.makemodes(output)
+
+grid = Processing.makegrid(output)
+
+for (m, ma) in zip(modes, modes_actual)
+    @test m.a == ma.a
+    @test m.n == ma.n
+    @test m.m == ma.m
+    @test m.coren.(grid.ω[grid.sidx]; z=0) == ma.coren.(grid.ω[grid.sidx]; z=0)
+    @test m.cladn.(grid.ω[grid.sidx]; z=0) == ma.cladn.(grid.ω[grid.sidx]; z=0)
+    @test Modes.neff.(m, grid.ω[grid.sidx]) == Modes.neff.(ma, grid.ω[grid.sidx])
+    @test Modes.Aeff(m) == Modes.Aeff(ma)
+    @test Modes.N(m) == Modes.N(ma)
+end
+end
+
+
+@testset "low-level interface" begin
+a = 100e-6
+gas = :Ar
+pressure = 1.5
+τ = 30e-15
+λ0 = 800e-9
+grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
+modes = (
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+    )
+energyfun, energyfunω = Fields.energyfuncs(grid)
+
+dens0 = PhysData.density(gas, pressure)
+densityfun(z) = dens0
+responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
+inputs = Fields.GaussField(λ0=λ0, τfwhm=τ, energy=1e-6)
+Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs,
+                            modes, :y; full=false)
+linop = LinearOps.make_const_linop(grid, modes, λ0)
+statsfun = Stats.default(grid, Eω, modes, linop, transform)
+output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
+Luna.run(Eω, grid, linop, transform, FT, output, status_period=10)
+
+modesr = Processing.makemodes(output)
+
+for (m, mr) in zip(modes, modesr)
+    @test m.a == mr.a
+    @test m.n == mr.n
+    @test m.m == mr.m
+    @test m.cladn.(grid.ω[grid.sidx]; z=0) == mr.cladn.(grid.ω[grid.sidx]; z=0)
+    @test Modes.Aeff(m) == Modes.Aeff(mr)
+    @test Modes.N(m) == Modes.N(mr)
+end
+
+end
+
+end # testset "makemodes"
