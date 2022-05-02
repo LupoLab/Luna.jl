@@ -352,7 +352,8 @@ end
 "Simple proportional error controller, see e.g. Hairer eq. (4.13)."
 function stepcontrolP!(s)
     if s.ok
-        s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
+        # if error is zero, there is no nonlinearity: increase step size by a lot
+        s.dtn = s.err == 0 ? 1.5*s.dt : s.dt * min(5, s.safety*(s.err)^(-1/5))
     else
         if !isfinite(s.err) # check for NaN or Inf
             s.dtn = s.dt/2  # if we have one then we're in big trouble so halve the step size
@@ -371,14 +372,18 @@ function stepcontrolPI!(s)
     β2 = -1/5 / 5
     ε = 0.8
     if s.ok
-        s.errlast == 0 && (s.errlast = s.err)
-        fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
+        s.errlast == 0 && (s.errlast = s.err) # if last error is zero, use current error instead
+        if s.err == 0
+            fac = 1.5 # zero error means no nonlinearity: increase step size by a lot 
+        else
+            fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
+        end
         # (0.99 <= fac <= 1.01) && (fac = 1.0)
         s.dtn = fac * s.dt
         s.errlast = s.err
     else
         if !isfinite(s.err) # check for NaN or Inf
-            s.dtn = s.dt/2  # if we have one then we're in bug trouble so halve the step size
+            s.dtn = s.dt/2  # if we have one then we're in big trouble so halve the step size
         else
             s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
         end
