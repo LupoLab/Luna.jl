@@ -298,6 +298,35 @@ for (m, ma) in zip(modes, modes_actual)
 end
 end
 
+@testset "circular polarisation" begin
+a = 100e-6
+gas = :Ar
+pressure = 1.5
+kwargs = (:λlims => (400e-9, 4e-6), :trange => 500e-15, :plasma => false, :kerr => false)
+Nmodes = 4
+output = prop_capillary(a, 1, gas, pressure;
+                        λ0=800e-9, τfwhm=10e-15, energy=1e-9, modes=Nmodes, polarisation=:circular,
+                        kwargs...)
+
+modes_y = [Capillary.MarcatiliMode(a, gas, pressure; m=m) for m in 1:Nmodes]
+modes_x = [Capillary.MarcatiliMode(a, gas, pressure; m=m, ϕ=π/2) for m in 1:Nmodes]
+modes_actual = []
+for ii in eachindex(modes_y)
+    push!(modes_actual, modes_y[ii])
+    push!(modes_actual, modes_x[ii])
+end
+
+modes = Processing.makemodes(output)
+for (m, ma) in zip(modes, modes_actual)
+    @test m.a == ma.a
+    @test m.n == ma.n
+    @test m.m == ma.m
+    @test Modes.Aeff(m) == Modes.Aeff(ma)
+    @test Modes.N(m) == Modes.N(ma)
+    @test ma.ϕ == m.ϕ
+    @test Modes.field(m, (0, 0)) == Modes.field(ma, (0, 0))
+end
+end
 
 @testset "low-level interface" begin
 a = 100e-6
