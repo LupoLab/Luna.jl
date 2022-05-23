@@ -699,7 +699,7 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5
     elseif material == :N2
         Ip = 0.5726
-    elseif material in (:H2, :D2)
+    elseif material == :H2
         Ip = 0.5669
     elseif material == :O2
         Ip = 0.443553
@@ -709,6 +709,8 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.474
     elseif material == :SF6
         Ip = 0.5
+    elseif material == :D2
+        Ip = 0.5684 # from NIST Chemistry WebBook
     else
         throw(DomainError(material, "Unknown material $material"))
     end
