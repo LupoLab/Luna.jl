@@ -812,6 +812,8 @@ Along with one of:
 If both `τ2v` and `Bρv` are specified, then `Bρv` takes precedence.
 If `Bρv` is specified then we also need:
 - `Aρv::Real` : self diffusion coefficient [Hz amagat]
+And can also add (if necessary) a constant offset:
+- `Cv::Real` : constant linewidth offset [Hz]
 
 # References
 [1] Phys. Rev. A, 94, 023816 (2016)
@@ -931,10 +933,9 @@ function raman_parameters(material)
               dαdQ = 1.04e-20, # [6]
               Ωv = 2*π*2914*100.0*c, # [6]
               μ = (1.00784*m_u)/4, #(m_u*12.0107*m_u*1.00784)/(m_u*12.0107 + m_u*1.00784),
-              # TODO USE: (1) Taira, Y.; Ide, K.; Takuma, H. Accurate Measurement of the Pressure Broadening of the Ν1 Raman Line of CH4 in the 1–50 Atm Region by Inverse Raman Spectroscopy. Chemical Physics Letters 1982, 91 (4), 299–302. https://doi.org/10.1016/0009-2614(82)80160-7.
-              #Bρv = X, # []
-              #Aρv = X, # []
-              τ2v = 28e-12, # [13]
+              Bρv = 384e6, # [16]
+              Aρv = 0.0, # [16]
+              Cv = 8220e6 # [16]
              )    
     elseif material == :SF6
         rp = (kind = :molecular,
