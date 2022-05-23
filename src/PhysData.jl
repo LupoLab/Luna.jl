@@ -887,7 +887,7 @@ function raman_parameters(material)
               qJeven = 2,
               Δα = 3e-31, # [3]
               Bρr = 4e-3*100.0*c, # converted from [17], for J=0.
-              Aρr = 0.0 # no data for this
+              Aρr = 0.0, # no data for this
               dαdQ = 1.4e-20, # [3]
               Ωv = 2*π*2987*100.0*c, # [11]
               μ = (m_u*2.014)^2/(2*m_u*2.014),
