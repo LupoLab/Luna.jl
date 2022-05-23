@@ -509,6 +509,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     makeplasma!(out, grid, gas, plasma, pol)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
+        @info("Including the Raman response (due to molecular gas choice).")
     end
     if raman
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
@@ -525,7 +526,10 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol)
     # simple true/false => default to PPT
     model = :PPT
     if gas in (:H2, :D2, :N2O, :CH4, :SF6)
+        @info("Using ADK ionisation rate (due to molecular gas choice).")
         model = :ADK
+    else
+        @info("Using PPT ionisation rate.")
     end
     plasma && makeplasma!(out, grid, gas, model, pol)
 end
