@@ -605,7 +605,7 @@ function γ3_gas(material::Symbol; source=nothing)
         # ref [4], we use Table 1 to simply scale from
         # the paired gas (for which we use Lehmeier)
         # e.g. He for H2, N2 for CH4 or SF6
-        # for D2 we know from [7] that is basically the same as :H2.
+        # for D2 we know from [7] that it is basically the same as :H2.
         if material in (:H2, :D2)
             return 15.77*γ3_gas(:He)
         elseif material == :CH4
