@@ -99,7 +99,7 @@ function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=noth
     else
         !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
         isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
-        let Bρ=Bρ, Aρ=Aρ, Cv=Cv
+        let Bρ=Bρ, Aρ=Aρ, C=C
             ρ -> 1/(pi*(C + Aρ/(ρ/amg) + Bρ*ρ/amg))
         end
     end
