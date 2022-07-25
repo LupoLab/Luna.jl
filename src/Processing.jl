@@ -882,17 +882,17 @@ time-dependent field `Etm`.
 `xs` should be a 2-Tuple of coordinates, either `(r, θ)` for polar coordinates or `(x, y)`
 in Cartesian coordinates, depending on the coordinate system of the `modes`.
 """
-function getEtxy(output, xs, z)
+function getEtxy(output, xs, z; kwargs...)
     modes = makemodes(output; warn_dispersion=false)
     pol = polarisation_components(output)
-    t, Etm = getEt(output, z; oversampling=1) # (Nt, Nm, Nz)
-    getEtxy(Etm, modes, xs, z; components=pol)
+    t, Etm = getEt(output, z; kwargs...) # (Nt, Nm, Nz)
+    t, getEtxy(Etm, modes, xs, z; components=pol)
 end
 
 function getEtxy(Etm, modes, xs, z; components=:xy)
     tospace = Modes.ToSpace(modes; components)
-    Etxy = zeros(Float64, (size(Etm, 1), tospace.npol))
-    Modes.to_space!(Etxy, Etm, xs, tospace; z)
+    Etxy = zeros(eltype(Etm), (size(Etm, 1), tospace.npol))
+    Modes.to_space!(Etxy, Etm[.., 1], xs, tospace; z)
     Etxy
 end
 
