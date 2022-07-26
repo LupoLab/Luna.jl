@@ -48,7 +48,7 @@ end
 
 α(m::SimpleMode, ω; z=0.0) = m.α
 
-neff(m::SimpleMode, ω; z=0) = c/ω*β(m, ω, z=z)
+neff(m::SimpleMode, ω; z=0) = c/ω * (β(m, ω, z=z) + 0.5im*α(m, ω, z=z))
 
 Aeff(m::SimpleMode; z=0.0) = m.Aeff
 
