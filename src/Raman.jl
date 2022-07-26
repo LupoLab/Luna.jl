@@ -67,38 +67,48 @@ hrdamp(R::RamanRespSingleDampedOscillator, ρ) = R.τ2ρ(ρ)
 
 
 """
-    RamanRespIntermediateBroadening(ωi, Ai, Γi, γi)
+    RamanRespIntermediateBroadening(ωi, Ai, Γi, γi, scale)
 
 Construct an intermediate broadened model with component positions `ωi` [rad/s], amplitudes `Ai`,
-Gaussian widths `Γi` [rad/s] and Lorentzian widths `γi` [rad/s]. Based on Hollenbeck and Cantrell,
+Gaussian widths `Γi` [rad/s] and Lorentzian widths `γi` [rad/s]. The overall response is scaled by `scale`.
+Based on Hollenbeck and Cantrell,
 "Multiple-vibrational-mode model for fiber-optic Raman gain spectrum and response function",
 J. Opt. Soc. Am. B/Vol. 19, No. 12/December 2002.
 
 """
 struct RamanRespIntermediateBroadening
+    t::Vector{Float64} # time grid
     ωi::Vector{Float64} # central angular freqency
     Ai::Vector{Float64} # component amplitudes
     Γi::Vector{Float64} # Gaussian widths
     γi::Vector{Float64} # Lorentzian widths
     scale::Float64
-    function RamanRespIntermediateBroadening(ωi::AbstractVector, Ai::AbstractVector, Γi::AbstractVector, γi::AbstractVector, scale)
+    function RamanRespIntermediateBroadening(t::AbstractVector, ωi::AbstractVector, Ai::AbstractVector, Γi::AbstractVector, γi::AbstractVector, scale)
         n = length(ωi)
         if (length(Ai) != n) || (length(Γi) != n) || (length(γi) != n)
-            error("all compoenent vectors must have smae length")
+            error("all component vectors must have same length")
         end
-        hrtemp = new(ωi, Ai, Γi, γi, 1.0)
+        hrtemp = new(t, ωi, Ai, Γi, γi, 1.0)
         scale *= 1.0/hquadrature(x->hrtemp(x), 0.0, 1e-9)[1]
-        new(ωi, Ai, Γi, γi, scale)
+        tt = collect(0:(length(t) - 1)) .* (t[2] - t[1])
+        new(tt, ωi, Ai, Γi, γi, scale)
     end
 end
 
-"Get the response function at time `t`."
-function (R::RamanRespIntermediateBroadening)(t)
-    h = 0.0
-    if t > 0.0
+function (R::RamanRespIntermediateBroadening)(ht::AbstractVector, ρ)
+    fill!(ht, 0.0)
+    for (idx, t) in enumerate(R.t)
         for i = eachindex(R.ωi)
-            h += R.scale*R.Ai[i]*exp(-R.γi[i]*t)*exp(-R.Γi[i]^2*t^2/4)*sin(R.ωi[i]*t)
+            ht[idx] += R.scale*R.Ai[i]*exp(-R.γi[i]*t)*exp(-R.Γi[i]^2*t^2/4)*sin(R.ωi[i]*t)
         end
+    end
+    return ht
+end
+
+function (R::RamanRespIntermediateBroadening)(t::Number)
+    h = 0.0
+    for i = eachindex(R.ωi)
+        h += R.scale*R.Ai[i]*exp(-R.γi[i]*t)*exp(-R.Γi[i]^2*t^2/4)*sin(R.ωi[i]*t)
     end
     return h
 end
@@ -292,13 +302,13 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
 end
 
 """
-    raman_response(material; kwargs...)
+    raman_response(t, material; kwargs...)
 
-Get the Raman response function for `material`.
+Get the Raman response function for time grid `t` and the `material`.
 
 For details on the keyword arguments see [`molecular_raman_response`](@ref).
 """
-function raman_response(t, material; kwargs...)
+function raman_response(t, material, scale=1; kwargs...)
     rp = raman_parameters(material)
     if rp.kind == :molecular
         return molecular_raman_response(t, rp; kwargs...)
@@ -306,7 +316,7 @@ function raman_response(t, material; kwargs...)
         return CombinedRamanResponse(t, [RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)])
     elseif rp.kind == :intermediate
         # TODO: scale argument is hardcoded to 1.0 here!
-        return RamanRespIntermediateBroadening(rp.ωi, rp.Ai, rp.Γi, rp.γi, 1.0)
+        return RamanRespIntermediateBroadening(t, rp.ωi, rp.Ai, rp.Γi, rp.γi, scale)
     else
         throw(DomainError(rp.kind, "Unknown Raman model $(rp.kind)"))
     end

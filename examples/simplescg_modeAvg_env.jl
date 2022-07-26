@@ -2,6 +2,7 @@
 # Fig.3 of Dudley et. al, RMP 78 1135 (2006)
 
 using Luna
+Luna.set_fftw_mode(:estimate)
 
 βs =  [0.0, 0.0, -1.1830e-26, 8.1038e-41, -9.5205e-56,  2.0737e-70, -5.3943e-85,  1.3486e-99, -2.5495e-114,  3.0524e-129, -1.7140e-144]
 γ = 0.11
@@ -23,7 +24,7 @@ k0 = 2π/λ0
 n2 = γ/k0*aeff(0.0)
 χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c)
 responses = (Nonlinear.Kerr_env((1 - fr)*χ3),
-             Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(:SiO2, fr*χ3*PhysData.ε_0)))
+             Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2, fr*χ3*PhysData.ε_0)))
 
 inputs = (Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy), Fields.ShotNoise())
 norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff)
