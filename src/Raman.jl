@@ -264,7 +264,7 @@ Get the Raman response function for the Raman parameters in named tuple `rp`.
 """
 function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
     Rs = []
-    if rotation
+    if rotation && (rp.rotation != :none)
         if rp.rotation != :nonrigid
             throw(DomainError(rp.rotation, "Unknown Rotational Raman model $(rp.rotation)"))
         end
@@ -277,7 +277,7 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
         end
         push!(Rs, hr)
     end
-    if vibration
+    if vibration  && (rp.vibration != :none)
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end

@@ -42,8 +42,10 @@ const roomtemp = 293.15
 const N_A = ustrip(CODATA2014.N_A)
 "Amagat (Loschmidt constant)"
 const amg = atm/(k_B*273.15)
+"Atomic mass unit"
+const m_u = ustrip(CODATA2014.m_u)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -54,7 +56,10 @@ const gas_str = Dict(
     :Air => "Air",
     :N2 => "Nitrogen",
     :H2 => "Hydrogen",
-    :O2 => "Oxygen"
+    :O2 => "Oxygen",
+    :CH4 => "Methane",
+    :SF6 => "SulfurHexafluoride",
+    :N2O => "NitrousOxide"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
@@ -115,6 +120,17 @@ Sellmeier expansion for Oxygen from Applied Optics 50, 35, 6484 (2011)
 """
 function γ_Zhang(A, B, C, dens)
     return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
+end
+
+"""
+    γ_QuanfuHe(A, B, C, dens)
+
+Sellmeier expansion for CH4, SF6 and N2O from Atmospheric Chemistry and Physics 2021, 21 (19), 14927–14940.
+https://doi.org/10.5194/acp-21-14927-2021.
+
+"""
+function γ_QuanfuHe(A, B, C, dens)
+    return μm -> ((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
 end
 
 """
@@ -187,6 +203,24 @@ function sellmeier_gas(material::Symbol)
         B = 9.708931e-3
         C = 75.4
         return γ_Zhang(A, B, C, density(material, atm/bar, roomtemp))
+    elseif material == :CH4
+        # Atmospheric Chemistry and Physics 2021, 21 (19), 14927–14940.
+        A = 3603.09
+        B = 4.40362e14
+        C = 1.1741e10
+        return  γ_QuanfuHe(A, B, C, density(material, atm/bar, 288.15))
+    elseif material == :N2O
+        # Atmospheric Chemistry and Physics 2021, 21 (19), 14927–14940.
+        A = 22095.0
+        B = 1.66291e14
+        C = 6.75226e9
+        return  γ_QuanfuHe(A, B, C, density(material, atm/bar, 288.15))
+    elseif material == :SF6
+        # Atmospheric Chemistry and Physics 2021, 21 (19), 14927–14940.
+        A = 18997.7
+        B = 8.27663e14
+        C = 1.56833e10
+        return  γ_QuanfuHe(A, B, C, density(material, atm/bar, 288.15))
     else
         throw(DomainError(material, "Unknown gas $material"))
     end
@@ -525,16 +559,19 @@ References:
 [3] Optics Communications, 56(1), 67–72 (1985)
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
 [5] Optics Letters Vol. 40, No. 24 (2015))
+[6] Phys. Rev. A 2012, 85 (4), 043820. https://doi.org/10.1103/PhysRevA.85.043820.
 """
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
-        elseif material in (:H2,)
+        elseif material in (:H2, :CH4, :SF6)
             source = :Shelton
         elseif material in (:O2,)
             source = :Zahedpour
+        elseif material in (:N2O,)
+            source = :Wahlstrand
         else
             error("no default γ3 source for material: $material")
         end
@@ -559,9 +596,15 @@ function γ3_gas(material::Symbol; source=nothing)
         end
         return 4*fac*3.43e-28 / dens
     elseif source == :Shelton
-        # ref [4]
+        # ref [4], we use Table 1 to simply scale from
+        # the paired gas (for which we use Lehmeier)
+        # e.g. He for H2, N2 for CH4 or SF6
         if material == :H2
-            return 2.2060999099841444e-26 / dens # TODO: check this carefully
+            return 15.77*γ3_gas(:He)
+        elseif material == :CH4
+            return 2.931*γ3_gas(:N2)
+        elseif material == :SF6
+            return 1.53*γ3_gas(:N2)
         else
             throw(DomainError(material, "Shelton model does not include $material"))
         end
@@ -573,6 +616,15 @@ function γ3_gas(material::Symbol; source=nothing)
             return 4/3*ε_0*c*n0^2/ρ * n2
         else
             throw(DomainError(material, "Zahedpour model does not include $material"))
+        end
+    elseif source == :Wahlstrand
+        if material == :N2O
+            n0 = ref_index(:N2O, 800e-9, atm/bar, roomtemp)
+            ρ = density(:N2O, atm/bar, roomtemp)
+            n2 = 17.2e-24 # Table 1 in [6]
+            return 4/3*ε_0*c*n0^2/ρ * n2
+        else
+            throw(DomainError(material, "Wahlstrand model does not include $material"))
         end
     else
         throw(DomainError(source, "Unkown γ3 model $source"))
@@ -661,6 +713,12 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.5669
     elseif material == :O2
         Ip = 0.443553
+    elseif material == :CH4
+        Ip = 0.4636
+    elseif material == :N2O
+        Ip = 0.474
+    elseif material == :SF6
+        Ip = 0.5
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -782,7 +840,12 @@ If `kind == :intermediate` then the following must be specified
 [8] Can. J. Phys., 44, 4, 797 (1966)
 [9] G. V. MIKHAtLOV, SOVIET PHYSICS JETP, vol. 36, no. 9, (1959).
 [10] Phys. Rev. A, 33, 5, 3113 (1986)
-[11] Hollenbeck and Cantrell, "Multiple-vibrational-mode model for fiber-optic Raman gain
+[11] IEEE Journal of Quantum Electronics 1986, 22 (2), 332–336. https://doi.org/10.1109/JQE.1986.1072945.
+[12] Phys. Rev. Lett. 1998, 81 (6), 1215–1218. https://doi.org/10.1103/PhysRevLett.81.1215.
+[13] Optics Communications 1987, 64 (4), 393–397. https://doi.org/10.1016/0030-4018(87)90258-6.
+[14] Science Advances 2020, 6 (34), eabb5375. https://doi.org/10.1126/sciadv.abb5375.
+[15] Long, The Raman Effect; John Wiley & Sons, Ltd, 2002;
+[16] Hollenbeck and Cantrell, "Multiple-vibrational-mode model for fiber-optic Raman gain
 spectrum and response function", J. Opt. Soc. Am. B/Vol. 19, No. 12/December 2002.
 """
 function raman_parameters(material)
@@ -792,9 +855,9 @@ function raman_parameters(material)
               vibration = :sdo,
               B = 199.0, # [4]
               D = 5.74e-4, # [4]
-              qJodd = 1,
-              qJeven = 2,
-              Δα = 6.7e-31, # [2]
+              qJodd = 1, # [14] uses 3 as does [15]
+              qJeven = 2, # [14] uses 6 as does [15]
+              Δα = 6.7e-31, # [2] # note [14] use 1.86e-30
               # Bρr has a moderate dependence on J, which we ignore for now, taking J=8
               # [8] measured Bρr from 7 to 43 atm to be ~80e-3 cm^-1/atm,
               # which is translated to Hz/amg via
@@ -806,7 +869,7 @@ function raman_parameters(material)
               Aρr = 0.0, # [7]
               dαdQ = 1.75e-20, # [6]
               Ωv = 2*π*2330.0*100.0*c, # [4]
-              μ = 1.16e-26,
+              μ = (m_u*14.0067)^2/(2*m_u*14.0067),
               # For τ2v, [9] suggests pressure dependence is extremely weak up to 120 bar
               # [9] gives ~ 1.8 cm^-1, whereas Fig. 1 in [5] suggests something similar.
               # 1.8 cm^-1 = 0.054 THz
@@ -826,7 +889,7 @@ function raman_parameters(material)
               Aρr = 6.15e6, # [7]
               dαdQ = 1.3e-20, # [3]
               Ωv = 2*π*124.5669e12,
-              μ = 8.369e-28,
+              μ = (m_u*1.00784)^2/(2*m_u*1.00784),
               Bρv = 52.2e6, # [10]
               Aρv = 309e6, # [10]
               )
@@ -863,19 +926,19 @@ function raman_parameters(material)
     elseif material == :N2O
         rp = (kind = :molecular,
               rotation = :nonrigid,
-              vibration = :sdo,
+              vibration = :none, # TODO work out correct parameters here
               B = 41.0, # [2]
               D = 0.0, # TODO
-              # TODO qJodd = 
-              # TODO qJeven = 
-              Δα = 28.1e-31, # [2]
-              # TODO τ2r = 
+              qJodd = 1, # [14]
+              qJeven = 1, # [14]
+              Δα = 28.1e-31, # [2] note that [14] uses twice this
+              τ2r = 23.8e-12, # [14]
               # TODO dαdQ =  
-              # TODO Ωv =  
+              Ωv = 2*π*1285*100.0*c,
               # TODO μ = 
               # TODO τ2v = 
              )
-    elseif material == :SiO2 # [11]
+    elseif material == :SiO2 # [16]
         rp = (kind = :intermediate,
               K = 1.0,
               Ω = 1.0/12.2e-15,
@@ -885,6 +948,27 @@ function raman_parameters(material)
               Γi = 100 .*π.*c.*[52.10, 110.42, 175.00, 162.50, 135.33, 24.50, 41.50, 155.0, 59.50, 64.30, 150.00, 91.00, 160.00],
               γi = 100 .*π.*c.*[17.37, 38.81, 58.33, 54.17, 45.11, 8.17, 13.83, 51.67, 19.83, 21.43, 50.00, 30.33, 53.33],
              )
+    elseif material == :CH4
+        rp = (kind = :molecular,
+              rotation = :none,
+              vibration = :sdo,
+              dαdQ = 1.04e-20, # [6]
+              Ωv = 2*π*2914*100.0*c, # [6]
+              μ = (1.00784*m_u)/4, #(m_u*12.0107*m_u*1.00784)/(m_u*12.0107 + m_u*1.00784),
+              # TODO USE: (1) Taira, Y.; Ide, K.; Takuma, H. Accurate Measurement of the Pressure Broadening of the Ν1 Raman Line of CH4 in the 1–50 Atm Region by Inverse Raman Spectroscopy. Chemical Physics Letters 1982, 91 (4), 299–302. https://doi.org/10.1016/0009-2614(82)80160-7.
+              #Bρv = X, # []
+              #Aρv = X, # []
+              τ2v = 28e-12, # [13]
+             )    
+    elseif material == :SF6
+        rp = (kind = :molecular,
+                rotation = :none,
+                vibration = :sdo,
+                dαdQ = 1.23e-20, # [6]
+                Ωv = 2*π*775*100.0*c, # [6]
+                μ = (18.998403*m_u)/6,
+                τ2v = 6.6e-12, # [13]
+                )      
     else
         throw(DomainError(material, "Unknown material $material"))
     end
