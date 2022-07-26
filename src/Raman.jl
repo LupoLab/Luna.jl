@@ -131,10 +131,13 @@ Only one of `τ2` or `Bρ` should be specified.
 If `Bρ` is specified then `Aρ` must be too.
 
 # References
-- Full model description: To be published, Yingying paper.
-- We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
-  But note that that paper uses weird units, and we converted it to SI for
-  the above reference. 
+- Full model description:
+    S-.F. Gao, Y-Y. Wang, F. Belli, C. Brahms, P. Wang and J.C. Travers,
+    Laser & Photonics Reviews 16, 2100426 (2022)
+- We followed closely:
+    Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
+    But note that that paper uses weird units, and we converted it to SI for
+    the above reference. 
 """
 function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
