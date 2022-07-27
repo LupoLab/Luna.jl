@@ -45,7 +45,7 @@ const amg = atm/(k_B*273.15)
 "Atomic mass unit"
 const m_u = ustrip(CODATA2014.m_u)
 
-const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O)
+const gas = (:Air, :He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeJ => "He",
@@ -59,7 +59,8 @@ const gas_str = Dict(
     :O2 => "Oxygen",
     :CH4 => "Methane",
     :SF6 => "SulfurHexafluoride",
-    :N2O => "NitrousOxide"
+    :N2O => "NitrousOxide",
+    :D2 => "Deuterium"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
 const metal = (:Ag,:Al)
@@ -191,7 +192,10 @@ function sellmeier_gas(material::Symbol)
         B2 = 18806.48e-8
         C2 = 13.476e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
-    elseif material == :H2
+    elseif material in (:H2, :D2)
+        # for D2 it is essentially the same as H2 according to:
+        # Orr, W. J. C. "The refractive index of deuterium."
+        # Transactions of the Faraday Society 32 (1936): 1556-1559.
         B1 = 14895.6e-6
         C1 = 180.7
         B2 = 4903.7e-6
@@ -560,13 +564,15 @@ References:
 [4] Phys. Rev. A, vol. 42, 2578 (1990)
 [5] Optics Letters Vol. 40, No. 24 (2015))
 [6] Phys. Rev. A 2012, 85 (4), 043820. https://doi.org/10.1103/PhysRevA.85.043820.
+[7] Phys. Rev. A, 32, no. 6, 3454, (1985), doi: 10.1103/PhysRevA.32.3454.
+
 """
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
         if material in (:He, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
-        elseif material in (:H2, :CH4, :SF6)
+        elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
         elseif material in (:O2,)
             source = :Zahedpour
@@ -599,7 +605,8 @@ function γ3_gas(material::Symbol; source=nothing)
         # ref [4], we use Table 1 to simply scale from
         # the paired gas (for which we use Lehmeier)
         # e.g. He for H2, N2 for CH4 or SF6
-        if material == :H2
+        # for D2 we know from [7] that it is basically the same as :H2.
+        if material in (:H2, :D2)
             return 15.77*γ3_gas(:He)
         elseif material == :CH4
             return 2.931*γ3_gas(:N2)
@@ -702,6 +709,8 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.474
     elseif material == :SF6
         Ip = 0.5
+    elseif material == :D2
+        Ip = 0.5684 # from NIST Chemistry WebBook
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -805,6 +814,8 @@ Along with one of:
 If both `τ2v` and `Bρv` are specified, then `Bρv` takes precedence.
 If `Bρv` is specified then we also need:
 - `Aρv::Real` : self diffusion coefficient [Hz amagat]
+And can also add (if necessary) a constant offset:
+- `Cv::Real` : constant linewidth offset [Hz]
 
 # References
 [1] Phys. Rev. A, 94, 023816 (2016)
@@ -822,6 +833,8 @@ If `Bρv` is specified then we also need:
 [13] Optics Communications 1987, 64 (4), 393–397. https://doi.org/10.1016/0030-4018(87)90258-6.
 [14] Science Advances 2020, 6 (34), eabb5375. https://doi.org/10.1126/sciadv.abb5375.
 [15] Long, The Raman Effect; John Wiley & Sons, Ltd, 2002;
+[16] IEEE Journal of Quantum Electronics, vol. 24, no. 10, pp. 2076–2080, Oct. 1988, doi: 10.1109/3.8545.
+[17] Journal of Raman Spectroscopy, vol. 22, no. 11, pp. 607–611, 1991, doi: 10.1002/jrs.1250221103.
 """
 function raman_parameters(material)
     if material == :N2
@@ -877,11 +890,13 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 2,
               Δα = 3e-31, # [3]
-              # TODO τ2r = 
+              Bρr = 4e-3*100.0*c, # converted from [17], for J=0.
+              Aρr = 0.0, # no data for this
               dαdQ = 1.4e-20, # [3]
-              # TODO Ωv = 
-              # TODO μ = 
-              # TODO τ2v = 
+              Ωv = 2*π*2987*100.0*c, # [11]
+              μ = (m_u*2.014)^2/(2*m_u*2.014),
+              Bρv = 120e6, # [16]
+              Aρv = 101e6, # [16]
               )
     elseif material == :O2
         rp = (kind = :molecular,
@@ -920,10 +935,9 @@ function raman_parameters(material)
               dαdQ = 1.04e-20, # [6]
               Ωv = 2*π*2914*100.0*c, # [6]
               μ = (1.00784*m_u)/4, #(m_u*12.0107*m_u*1.00784)/(m_u*12.0107 + m_u*1.00784),
-              # TODO USE: (1) Taira, Y.; Ide, K.; Takuma, H. Accurate Measurement of the Pressure Broadening of the Ν1 Raman Line of CH4 in the 1–50 Atm Region by Inverse Raman Spectroscopy. Chemical Physics Letters 1982, 91 (4), 299–302. https://doi.org/10.1016/0009-2614(82)80160-7.
-              #Bρv = X, # []
-              #Aρv = X, # []
-              τ2v = 28e-12, # [13]
+              Bρv = 384e6, # [16]
+              Aρv = 0.0, # [16]
+              Cv = 8220e6 # [16]
              )    
     elseif material == :SF6
         rp = (kind = :molecular,

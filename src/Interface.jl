@@ -344,7 +344,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
-                        raman=false, kerr=true, plasma=nothing,
+                        raman=nothing, kerr=true, plasma=nothing,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -507,6 +507,10 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
         end
     end
     makeplasma!(out, grid, gas, plasma, pol)
+    if isnothing(raman)
+        raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
+        @info("Including the Raman response (due to molecular gas choice).")
+    end
     if raman
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         if thg
@@ -520,7 +524,14 @@ end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol)
     # simple true/false => default to PPT
-    plasma && makeplasma!(out, grid, gas, :PPT, pol)
+    model = :PPT
+    if gas in (:H2, :D2, :N2O, :CH4, :SF6)
+        @info("Using ADK ionisation rate (due to molecular gas choice).")
+        model = :ADK
+    else
+        @info("Using PPT ionisation rate.")
+    end
+    plasma && makeplasma!(out, grid, gas, model, pol)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol)
