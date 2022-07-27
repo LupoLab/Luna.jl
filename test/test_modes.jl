@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws
 import GSL: sf_bessel_zero_Jnu
 import SpecialFunctions: besselj
+import HCubature: hquadrature
 import LinearAlgebra: norm
 import FFTW
 using Luna
@@ -368,3 +369,37 @@ end
 end
 
 end # testset "makemodes"
+
+@testset "spatial field and fluence" begin
+    a = 100e-6
+    flength = 0.1
+    gas = :He
+    pressure = 1
+    λ0 = 800e-9
+    τfwhm = 30e-15
+    energy = 100e-6
+
+    trange = 500e-15
+    λlims = (500e-9, 1500e-9)
+
+    out = prop_capillary(a, flength, gas, pressure;
+                         λ0, τfwhm, energy, λlims, trange, plasma=false, kerr=false, loss=false, modes=4)
+
+    x = [0.0] # calculate fluence at x = y = 0
+    y = copy(x)
+    beam = Processing.beam(out, x, y, flength)
+
+    # Calculate fluence by normalising Bessel mode to the correct energy
+    u11 = sf_bessel_zero_Jnu(0, 1)
+    mode(r) = besselj(0, u11/a*r)^2
+    N, _ = hquadrature(r -> r*mode(r), 0, a)
+    N *= 2π # azimuthal integral
+    # mode(0) = 1.0, so peak fluence is just energy/N
+    @test isapprox(beam[1], energy/N, rtol=1e-6)
+
+    grid = Processing.makegrid(out)
+    t, Et0 = Processing.getEtxy(out, (0, 0), flength; oversampling=1) # electric field (V/m)
+    et, _ = Fields.energyfuncs(grid)
+    # integrate intensity over time -> fluence, compare to peak fluence
+    @test isapprox(PhysData.ε_0*PhysData.c/2 * et(real(Et0[:, 1])), energy/N, rtol=1e-6)
+end # testset "beam profile"
