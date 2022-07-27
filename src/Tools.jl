@@ -47,7 +47,7 @@ end
 "Get linear and nonlinear refractive index and gas number density"
 function getN0n0n2(ω, material; P=1.0, T=PhysData.roomtemp)
     N0 = PhysData.density(material, P, T)
-    χ3 = PhysData.γ3_gas(material)*N0
+    χ3 = PhysData.χ3(material, P, T)
     n0 = real(PhysData.ref_index(material, 2π*PhysData.c/ω, P, T))
     N0, n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
 end
