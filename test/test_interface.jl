@@ -190,4 +190,19 @@ end
 end
 
 ##
+@testset "Defaults" begin
+@testset "Defaults for $gas" for gas in PhysData.gas
+    # Check that prop_capillary has working defaults for all gases
+    gas == :Air && continue
+    a = 100e-6
+    flength = 0.1
+    pressure = 1
+    kwargs = (λ0=800e-9, energy=1e-12, τfwhm=10e-15, shotnoise=false, trange=250e-15,
+              λlims=(200e-9, 4e-6), saveN=51)
+    prop_capillary(a, flength, gas, pressure; kwargs...)
+    @test true
+end
+end
+
+##
 Logging.global_logger(old_logger)
