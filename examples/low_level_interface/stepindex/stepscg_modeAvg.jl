@@ -21,7 +21,7 @@ densityfun = z -> 1.0
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, m, λ0)
 
 responses = (Nonlinear.Kerr_field((1 - fr)*PhysData.χ3(:SiO2)),
-             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(:SiO2, fr*PhysData.ε_0*PhysData.χ3(:SiO2))))
+             Nonlinear.RamanPolarField(grid.to, Raman.raman_response(grid.to, :SiO2, fr*PhysData.ε_0*PhysData.χ3(:SiO2))))
 
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, βfun!, aeff)
