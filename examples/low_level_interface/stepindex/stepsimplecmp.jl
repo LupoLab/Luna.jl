@@ -54,7 +54,7 @@ aeff = z -> 1.0
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, s, λ0)
 k0 = 2π/λ0
 n2 = γ/k0*aeff(0.0)
-n0 = real(PhysData.ref_index(:SiO2, 1030e-9))
+n0 = real(PhysData.ref_index(:SiO2, λ0))
 χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c) * n0 * n0 / Modes.neff(m, ω0)
 responses = (Nonlinear.Kerr_env((1 - fr)*χ3),
              Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2, fr*χ3*PhysData.ε_0)))
