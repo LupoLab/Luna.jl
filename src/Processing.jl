@@ -873,7 +873,7 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
 end
 
 """
-    getEtxy(output, xs, z)
+    getEtxy(output, xs, z; kwargs...)
     getEtxy(Etm, modes, xs, z; components=:xy)
 
 Calculate the time-dependent electric field at transverse position `xs` for the modal
@@ -881,6 +881,8 @@ time-dependent field `Etm`.
 
 `xs` should be a 2-Tuple of coordinates, either `(r, θ)` for polar coordinates or `(x, y)`
 in Cartesian coordinates, depending on the coordinate system of the `modes`.
+
+Additional keyword arguments to `getEtxy(output, ...)` are passed through to `Processing.getEt`
 """
 function getEtxy(output, xs, z; kwargs...)
     modes = makemodes(output; warn_dispersion=false)
