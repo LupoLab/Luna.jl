@@ -876,11 +876,13 @@ end
     getEtxy(output, xs, z; kwargs...)
     getEtxy(Etm, modes, xs, z; components=:xy)
 
-Calculate the time-dependent electric field at transverse position `xs` for the modal
-time-dependent field `Etm`.
+Calculate the time-dependent electric field at transverse position `xs` and longitudinal position `z`
+from either the modal time-dependent field `Etm` or the given `output`.
 
-`xs` should be a 2-Tuple of coordinates, either `(r, θ)` for polar coordinates or `(x, y)`
-in Cartesian coordinates, depending on the coordinate system of the `modes`.
+`xs` should be a 2-Tuple of coordinates--either `(r, θ)` for polar coordinates or `(x, y)`
+in Cartesian coordinates, depending on the coordinate system of the `modes`--or a 2-Tuple of vectors
+containing the coordinates. If vectors are given, the output contains values of Etxy at all combinations of
+the coordinates.
 
 Additional keyword arguments to `getEtxy(output, ...)` are passed through to `Processing.getEt`
 """
@@ -891,11 +893,23 @@ function getEtxy(output, xs, z; kwargs...)
     t, getEtxy(Etm, modes, xs, z; components=pol)
 end
 
-function getEtxy(Etm, modes, xs, z; components=:xy)
+function getEtxy(Etm, modes, xs::Tuple{<:Number, <:Number}, z; components=:xy)
     tospace = Modes.ToSpace(modes; components)
     Etxy = zeros(eltype(Etm), (size(Etm, 1), tospace.npol))
     Modes.to_space!(Etxy, Etm[.., 1], xs, tospace; z)
     Etxy
+end
+
+function getEtxy(Etm, modes, xs::Tuple{AbstractVector, AbstractVector}, z; components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    x1, x2 = xs
+    Etxy = zeros(eltype(Etm), (size(Etm, 1), length(x1), length(x2), tospace.npol))
+    for (x2idx, x2i) in enumerate(x2)
+        for (x1idx, x1i) in enumerate(x1)
+            @views Modes.to_space!(Etxy[:, x1idx, x2idx, :], Etm[.., 1], (x1i, x2i), tospace; z)
+        end
+    end
+    Etxy    
 end
 
 function polarisation_components(output)

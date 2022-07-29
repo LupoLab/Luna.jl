@@ -370,6 +370,7 @@ end
 
 end # testset "makemodes"
 
+##
 @testset "spatial field and fluence" begin
     a = 100e-6
     flength = 0.1
@@ -402,4 +403,16 @@ end # testset "makemodes"
     et, _ = Fields.energyfuncs(grid)
     # integrate intensity over time -> fluence, compare to peak fluence
     @test isapprox(PhysData.ε_0*PhysData.c/2 * et(real(Et0[:, 1])), energy/N, rtol=1e-6)
-end # testset "beam profile"
+
+    _, Eto = Processing.getEtxy(out, (0, 0), flength; oversampling=8)
+    intensity = PhysData.ε_0*PhysData.c/2 * abs2.(Eto[:, 1])
+    @test isapprox(maximum(intensity), energy/N/Maths.gaussnorm(;fwhm=τfwhm); rtol=1e-5) # check peak intensity
+
+    # check that Etxy gives the same results when called with vectors and single points
+    xs = (collect(range(0, a, 16)), collect(range(0, 2π, 8)))
+    t, Etxy_grid = Processing.getEtxy(out, xs, flength; oversampling=1)
+    @testset "comparing at $x1, $x2" for (x1idx, x1) in enumerate(xs[1]), (x2idx, x2) in enumerate(xs[2])
+        _, Etthis = Processing.getEtxy(out, (x1, x2), flength; oversampling=1)
+        @test Etthis ≈ Etxy_grid[:, x1idx, x2idx, :]
+    end
+end # testset "spatial field and fluence"
