@@ -509,7 +509,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     makeplasma!(out, grid, gas, plasma, pol)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
-        @info("Including the Raman response (due to molecular gas choice).")
+        raman && @info("Including the Raman response (due to molecular gas choice).")
     end
     if raman
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
