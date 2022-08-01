@@ -427,7 +427,7 @@ function gauss_beam(k, ω0; z=0.0, pol=:y)
 end
 
 function int2D(field1, field2, lowerlim, upperlim)
-    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
+    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(field1(xs), field2(xs))*xs[1]
     rval, _ = hcubature(lowerlim, upperlim) do xs
         real(Ifunc(xs))
     end
