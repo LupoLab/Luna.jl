@@ -413,10 +413,9 @@ function gauss_beam(k, ω0; z=0.0, pol=:y)
             r = xs[1]
             zr = k*ω0^2/2
             ω = ω0*sqrt(1 + (z/zr)^2)
-            R1 = z/(z^2 + zr^2)
+            R1 = z/(z^2 + zr^2) # 1/R
             ψ = atan(z/zr)
-            curv = abs(R1) > 0 ? k*r^2/R1/2 : 0
-            phase = exp(-1im * (k*z + curv - ψ))
+            phase = exp(-1im * (k*z + k*r^2*R1/2 - ψ))
             E = ω0/ω * exp(-r^2/ω^2) * phase
             if pol==:x
                 return SVector(E, 0.0)
