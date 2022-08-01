@@ -459,7 +459,7 @@ initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with 
 same keyword arguments.
 """
 function coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
-    ei = energy * Modes.overlap(mode, E)^2
+    ei = energy * abs2(Modes.overlap(mode, E))
     (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
 end
 
