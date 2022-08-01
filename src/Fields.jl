@@ -410,12 +410,14 @@ one of `:x` or `:y`.
 function gauss_beam(k, ω0; z=0.0, pol=:y)
     let k=k, ω0=ω0, z=z, pol=pol
         function fieldfunc(xs)
+            r = xs[1]
             zr = k*ω0^2/2
             ω = ω0*sqrt(1 + (z/zr)^2)
             R1 = z/(z^2 + zr^2)
             ψ = atan(z/zr)
-            phase = exp(-1im * (k*z + k*xs[1]^2*R1/2 - ψ))
-            E = ω0/ω * exp(-xs[1]^2/ω^2) * phase
+            curv = abs(R1) > 0 ? k*r^2/R1/2 : 0
+            phase = exp(-1im * (k*z + curv - ψ))
+            E = ω0/ω * exp(-r^2/ω^2) * phase
             if pol==:x
                 return SVector(E, 0.0)
             else
