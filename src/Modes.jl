@@ -322,11 +322,13 @@ coordinates `xs = (r,θ)`.
 """
 function overlap(m::AbstractMode, E)
     dl = dimlimits(m)
-    function f(xs)
-        0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1]
+    rval, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
+        real(0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1])
     end
-    val, err = hcubature(f, dl[2], dl[3]; maxevals=1000)
-    abs(val)
+    ival, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
+        imag(0.5*sqrt(ε_0/μ_0)*dot(conj(Exy(m, xs)), E(xs))*xs[1])
+    end
+    rval + 1im*ival
 end
 
 """

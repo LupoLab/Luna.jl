@@ -429,17 +429,27 @@ end
 
 function int2D(field1, field2, lowerlim, upperlim)
     Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
-    abs(hcubature(Ifunc, lowerlim, upperlim)[1])
+    rval, _ = hcubature(lowerlim, upperlim) do xs
+        real(Ifunc(xs))
+    end
+    ival, _ = hcubature(lowerlim, upperlim) do xs
+        imag(Ifunc(xs))
+    end
+    abs(rval + 1im*ival)
 end
     
 function normalised_field(fieldfunc, rmax)
-    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0,0.0), (rmax, 2π)))
+    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0, 0.0), (rmax, 2π)))
     return let scale=scale, fieldfunc=fieldfunc
         (xs) -> fieldfunc(xs) .* scale
     end
 end
 
-normalised_gauss_beam(k, ω0; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), 6*ω0)
+function normalised_gauss_beam(k, ω0; z=0.0, pol=:y)
+    zr = k*ω0^2/2
+    ω = ω0*sqrt(1 + (z/zr)^2)
+    normalised_field(gauss_beam(k, ω0; z, pol), 6*ω)
+end
 
 """
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
