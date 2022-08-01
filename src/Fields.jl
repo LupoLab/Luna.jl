@@ -417,7 +417,7 @@ function gauss_beam(k, ω0; z=0.0, pol=:y)
             ψ = atan(z/zr)
             phase = exp(-1im * (k*z + k*r^2*R1/2 - ψ))
             E = ω0/ω * exp(-r^2/ω^2) * phase
-            if pol==:x
+            if pol == :x
                 return SVector(E, 0.0)
             else
                 return SVector(0.0, E)
