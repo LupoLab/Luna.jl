@@ -523,15 +523,18 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
 end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol)
-    # simple true/false => default to PPT
-    model = :PPT
+    # simple true/false => default to PPT for atoms, ADK for molecules
+    if ~plasma
+        return
+    end
     if gas in (:H2, :D2, :N2O, :CH4, :SF6)
         @info("Using ADK ionisation rate (due to molecular gas choice).")
         model = :ADK
     else
         @info("Using PPT ionisation rate.")
+        model = :PPT
     end
-    plasma && makeplasma!(out, grid, gas, model, pol)
+    makeplasma!(out, grid, gas, model, pol)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol)
