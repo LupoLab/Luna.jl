@@ -509,9 +509,9 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     makeplasma!(out, grid, gas, plasma, pol)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
-        raman && @info("Including the Raman response (due to molecular gas choice).")
     end
     if raman
+        @info("Including the Raman response (due to molecular gas choice).")
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         if thg
             push!(out, Nonlinear.RamanPolarField(grid.to, rr))
@@ -564,7 +564,11 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
+    if isnothing(raman)
+        raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
+    end
     if raman
+        @info("Including the Raman response (due to molecular gas choice).")
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
     end
