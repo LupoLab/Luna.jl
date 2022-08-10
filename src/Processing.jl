@@ -262,6 +262,7 @@ fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 
 """
     peakpower(grid, Eω; bandpass=nothing, oversampling=1)
+    peakpower(output; bandpass=nothing, oversampling=1)
 
 Extract the peak power. If `bandpass` is given, bandpass the field according to
 [`window_maybe`](@ref).
@@ -271,9 +272,15 @@ function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
     dropdims(maximum(abs2.(Eto); dims=1); dims=1)
 end
 
+function peakpower(output; kwargs...)
+    grid = makegrid(output)
+    peakpower(grid, output["Eω"]; kwargs...)
+end
+
 
 """
     energy(grid, Eω; bandpass=nothing)
+    energy(output; bandpass=nothing)
 
 Extract energy. If `bandpass` is given, bandpass the field according to
 [`window_maybe`](@ref).
