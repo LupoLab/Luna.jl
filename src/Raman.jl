@@ -321,7 +321,6 @@ function raman_response(t, material, scale=1; kwargs...)
     elseif rp.kind == :normedsdo
         return CombinedRamanResponse(t, [RamanRespNormedSingleDampedOscillator(rp.K, rp.Ω, rp.τ2)])
     elseif rp.kind == :intermediate
-        # TODO: scale argument is hardcoded to 1.0 here!
         return RamanRespIntermediateBroadening(t, rp.ωi, rp.Ai, rp.Γi, rp.γi, scale)
     else
         throw(DomainError(rp.kind, "Unknown Raman model $(rp.kind)"))
