@@ -233,7 +233,7 @@ the sum of all modes.
 function prop_2D(output, specaxis=:f;
                  trange=(-50e-15, 50e-15), bandpass=nothing,
                  λrange=(150e-9, 2000e-9), dBmin=-60,
-                 resolution=nothing, modes=nothing,
+                 resolution=nothing, modes=nothing, oversampling=4,
                  kwargs...)
     z = output["z"]*1e2
     if specaxis == :λ
@@ -242,7 +242,7 @@ function prop_2D(output, specaxis=:f;
             specx, Iω = getIω(output, specaxis, resolution=resolution)
     end
 
-    t, Et = getEt(output, trange=trange, bandpass=bandpass)
+    t, Et = getEt(output; trange, bandpass, oversampling)
     It = abs2.(Et)
 
     speclims, speclabel, specxfac = getspeclims(λrange, specaxis)
