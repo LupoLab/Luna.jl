@@ -11,7 +11,7 @@ flength = 15e-2
 λ0 = 835e-9
 energy = 568e-12
 
-output = prop_gnlse(γ, flength, βs; λ0, τfwhm, energy, λlims=(400e-9, 1400e-9), trange=10e-12)
+output = prop_gnlse(γ, flength, βs; λ0, τfwhm, energy, λlims=(400e-9, 1400e-9), trange=10e-12, ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15)
 
 ##
 Plotting.pygui(true)

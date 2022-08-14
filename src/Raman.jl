@@ -32,7 +32,7 @@ Get the full response function at time `t` and density `̢ρ`.
 
 """
 function (R::AbstractRamanResponse)(t, ρ)
-    hrpre(R, t) * exp(-t/hrdamp(R, ρ))
+    @. hrpre(R, t) * exp(-t/hrdamp(R, ρ))
 end
 
 

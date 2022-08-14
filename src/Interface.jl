@@ -807,10 +807,14 @@ Note that the current GNLSE model is single mode only.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
 # GNLSE options
-- `raman`: Whether to include the Raman effect. Defaults to `true`. In which case a silica
-    Raman model is included.
+- `raman`: Whether to include the Raman effect. Defaults to `true`.
+- `ramanmodel`; which Raman model to use, defaults to `:SiO2` which uses the model
+    of Hollenbeck and Cantrell. This can also be `:sdo` for a simple damped oscillator model,
+    in which case you must also specify `τ1` and `τ2`.
 - `loss`: the power loss [dB/m]. Defaults to 0.
 - `fr`: fractional Raman contribution to `γ`. Defaults to `fr = 0.18`.
+- `τ1`: the Raman oscillator period.
+- `τ2`: the Raman damping time.
 
 # Output options
 - `saveN::Integer`: Number of points along z at which to save the field.
@@ -848,6 +852,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         pulses=nothing,
                         shotnoise=true,
                         loss=0.0, raman=true, fr=0.18,
+                        ramanmodel=:SiO2, τ1=nothing, τ2=nothing,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
     envelope = true
@@ -863,8 +868,18 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c)
     resp = Any[Nonlinear.Kerr_env((1 - fr)*χ3)]
     if raman
-        push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
-                                                                    fr*χ3*PhysData.ε_0)))
+        if ramanmodel == :SiO2
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
+                                                                        fr*χ3*PhysData.ε_0)))
+        elseif ramanmodel == :sdo
+            if isnothing(τ1) || isnothing(τ2)
+                error("for :sdo ramanmodel you must specify τ1 and τ2")
+            end
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to,
+                Raman.RamanRespNormedSingleDampedOscillator(fr*χ3*PhysData.ε_0, 1/τ1, τ2)))    
+        else
+            error("unrecognised value for ramanmodel")
+        end
     end
     resp = Tuple(resp)
 
