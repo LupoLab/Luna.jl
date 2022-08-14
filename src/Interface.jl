@@ -814,7 +814,8 @@ Note that the current GNLSE model is single mode only.
 - `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
 
 # GNLSE options
-- `raman`: Whether to include the Raman effect. Defaults to `true`.
+- `shock::Bool`: Whether to include the shock derivative term. Default is `true`.
+- `raman::Bool`: Whether to include the Raman effect. Defaults to `true`.
 - `ramanmodel`; which Raman model to use, defaults to `:SiO2` which uses the model
     of Hollenbeck and Cantrell. This can also be `:sdo` for a simple damped oscillator model,
     in which case you must also specify `τ1` and `τ2`.
@@ -857,7 +858,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         power=nothing, energy=nothing,
                         pulseshape=:gauss, propagator=nothing,
                         pulses=nothing,
-                        shotnoise=true,
+                        shotnoise=true, shock=true,
                         loss=0.0, raman=true, fr=0.18,
                         ramanmodel=:SiO2, τ1=nothing, τ2=nothing,
                         saveN=201, filepath=nothing,
@@ -895,14 +896,14 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
 
-    norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff)
+    norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff; shock)
     Eω, transform, FT = Luna.setup(grid, density, resp, inputs, βfun!, aeff, norm! = norm!)
     stats = Stats.default(grid, Eω, mode_s, linop, transform)
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
+        shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
 end
