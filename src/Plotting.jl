@@ -90,7 +90,12 @@ function get_modes(output)
     endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
     mlines = lines[modeline+1 : endline-1]
     labels = [match(r"{([^,]*),", li).captures[1] for li in mlines]
-    angles = parse.(Float64, [match(r"ϕ=(-?[0-9]+.[0-9]+)π", li).captures[1] for li in mlines])
+    angles = zeros(length(mlines))
+    for (ii, li) in enumerate(mlines)
+        m = match(r"ϕ=(-?[0-9]+.[0-9]+)π", li)
+        isnothing(m) && continue # no angle information in mode label)
+        angles[ii] = parse(Float64, m.captures[1])
+    end
     if !all(angles .== 0)
         for i in eachindex(labels)
             if startswith(labels[i], "HE")

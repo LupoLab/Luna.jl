@@ -5,6 +5,7 @@ using Reexport
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
+import Base: show
 
 export RectMode, dimlimits, neff, field, N, Aeff
 
