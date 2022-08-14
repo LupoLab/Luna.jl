@@ -779,7 +779,6 @@ Simulate pulse propagation using the GNLSE.
     power of 2, the actual grid used is usually bigger.
 
 # Grid options
-- `envelope::Bool`: Whether to use envelope fields for the simulation. Defaults to `true`.
 - `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
     this is determined by the wavelength grid. If `δt` is given **and smaller** than the
     required value, it is used instead.
