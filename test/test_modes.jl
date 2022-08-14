@@ -144,26 +144,6 @@ Emn2 = Eωm2/norm(Eωm2)
 end
 
 ##
-@testset "overlap with Gaussian beam (function)" begin
-    a = 100e-6
-    w0 = 0.64a
-
-    λ = 800e-9
-    k = 2π/λ
-
-    zr = π*w0^2/λ
-
-    mode = Capillary.MarcatiliMode(a)
-    beam = Fields.normalised_gauss_beam(k, w0)
-    @test abs2.(Modes.overlap(mode, beam)) ≈ 0.9807131210817726
-    # test diverged beams
-    beam2 = Fields.normalised_gauss_beam(k, w0; z=zr)
-    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
-    beam2 = Fields.normalised_gauss_beam(k, w0; z=-zr)
-    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
-end
-
-##
 @testset "overlap with interpolation" begin
 #= Here we test the complete decomposition of a field into two modes while also re-gridding
     onto a new time grid. We create two pulses in different spatial modes with different
