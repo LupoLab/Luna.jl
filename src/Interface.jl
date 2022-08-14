@@ -876,7 +876,8 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                 error("for :sdo ramanmodel you must specify τ1 and τ2")
             end
             push!(resp, Nonlinear.RamanPolarEnv(grid.to,
-                Raman.RamanRespNormedSingleDampedOscillator(fr*χ3*PhysData.ε_0, 1/τ1, τ2)))    
+                Raman.CombinedRamanResponse(grid.to,
+                    [Raman.RamanRespNormedSingleDampedOscillator(fr*χ3*PhysData.ε_0, 1/τ1, τ2)])))
         else
             error("unrecognised value for ramanmodel")
         end
@@ -894,7 +895,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
 
     saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, loss, raman, fr, saveN, filepath, filename)
+        shotnoise, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
 end
