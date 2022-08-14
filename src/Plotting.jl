@@ -284,7 +284,8 @@ end
 
 # single-mode 2D propagation plots
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
-    num = "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    id = "($(string(hash(gensym()); base=16)[1:4])) "
+    num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
