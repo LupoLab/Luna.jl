@@ -28,28 +28,31 @@ Plotting.prop_2D(outputm, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(
 
 ##
 # Approximate step-index mode with β coefficients
+λmin = 400e-9
+λmax = 1400e-9
+order = 11
+ωs = range(PhysData.wlfreq(λmax), PhysData.wlfreq(λmin), length=512)
 ω0 = PhysData.wlfreq(λ0)
+βs = Modes.β.(m, ωs)
+# help the fit by scaling frequency down to around unity
+p = Polynomials.fit(1e-15*(ωs .- ω0), βs, order)
+# each term n=0...order is scaled by 1e15ⁿ by scaling of ω - undo that
+# also need to multiply by n! to match the form of β expansion, which is:
+# β(ω) ≈ ∑₀ⁿ βₙ(ω-ω₀)/n! with βₙ = ∂β/∂ω at ω0
+βcoeffs = p.coeffs .* 1e-15 .^ (collect(0:order)) .* factorial.(0:order)
 
-βcoeffs = Modes.dispersion.(m, collect(0:9), ω0) # dispersion coefficients
-
-N0, n0, n2 = Tools.getN0n0n2(ω0, :SiO2)
-γ = Tools.getγ(ω0, m, n2)
-
-βcoeffs_plot = copy(βcoeffs)
-βcoeffs_plot[1:2] .= 0 # remove constant and linear term
-p = Polynomials.Polynomial(βcoeffs_plot ./ factorial.((1:length(βcoeffs)) .- 1))
-ωs = range(PhysData.wlfreq(1400e-9), PhysData.wlfreq(400e-9), length=300)
-βs = Modes.β_ret.(m, ωs; λ0) # β with constant and linear term removed
+s = SimpleFibre.SimpleMode(ω0, βcoeffs)
 plt.figure()
-plt.plot(ωs .- ω0, βs, label="Full")
-plt.plot(ωs .- ω0, p.(ωs .- ω0), label="Taylor expansion")
+plt.plot(ωs .- ω0, Modes.β_ret.(m, ωs; λ0), label="Full")
+plt.plot(ωs .- ω0, Modes.β_ret(s, ωs; λ0), "--", label="Polynomial fit")
 plt.legend()
 plt.xlabel("ω-ω0 (rad/s)")
 plt.ylabel("β (1/m)")
 
+N0, n0, n2 = Tools.getN0n0n2(ω0, :SiO2)
+γ = Tools.getγ(ω0, m, n2)
 
 ##
-s = SimpleFibre.SimpleMode(ω0, βcoeffs)
 aeff = z -> 1.0
 linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, s, λ0)
 k0 = 2π/λ0
