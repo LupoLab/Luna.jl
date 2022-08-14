@@ -2,7 +2,7 @@ module Fields
 import Luna: Grid, Maths, PhysData, Modes
 import Luna.PhysData: wlfreq, ε_0, μ_0
 import StaticArrays: SVector
-import Cubature: hcubature
+import HCubature: hcubature
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
@@ -428,13 +428,10 @@ end
 
 function int2D(field1, field2, lowerlim, upperlim)
     Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(field1(xs), field2(xs))*xs[1]
-    rval, _ = hcubature(lowerlim, upperlim) do xs
+    val, _ = hcubature(lowerlim, upperlim) do xs
         real(Ifunc(xs))
     end
-    ival, _ = hcubature(lowerlim, upperlim) do xs
-        imag(Ifunc(xs))
-    end
-    abs(rval + 1im*ival)
+    val
 end
     
 function normalised_field(fieldfunc, rmax)

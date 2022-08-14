@@ -1,6 +1,6 @@
 module Modes
 import Roots: find_zero, Order2
-import Cubature: hcubature, hquadrature
+import HCubature: hcubature, hquadrature
 import LinearAlgebra: dot, norm
 import NumericalIntegration: integrate, Trapezoidal
 import Luna: Maths, Grid
@@ -322,13 +322,10 @@ coordinates `xs = (r,θ)`.
 """
 function overlap(m::AbstractMode, E)
     dl = dimlimits(m)
-    rval, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
-        real(0.5*sqrt(ε_0/μ_0)*dot(Exy(m, xs), E(xs))*xs[1])
+    val, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
+        0.5*sqrt(ε_0/μ_0)*dot(Exy(m, xs), E(xs))*xs[1]
     end
-    ival, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
-        imag(0.5*sqrt(ε_0/μ_0)*dot(Exy(m, xs), E(xs))*xs[1])
-    end
-    rval + 1im*ival
+    val
 end
 
 """
