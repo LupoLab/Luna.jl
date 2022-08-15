@@ -2,7 +2,7 @@ module Output
 import HDF5
 using H5Zblosc
 import Logging
-import Base: getindex, show
+import Base: getindex, show, haskey
 using EllipsisNotation
 import EllipsisNotation: Ellipsis
 import Printf: @sprintf
@@ -51,6 +51,8 @@ getindex(o::MemoryOutput, ds::AbstractString) = o.data[ds]
 getindex(o::MemoryOutput, ds::AbstractString, I...) = o.data[ds][I...]
 
 show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))")
+
+haskey(o::MemoryOutput, key) = haskey(o.data, key)
 
 """Calling the output handler saves data in the arrays
     Arguments:
@@ -286,6 +288,16 @@ function show(io::IO, o::HDF5Output)
         print(io, "HDF5Output$(fields)")
     else
         print(io, "HDF5Output[FILE DELETED]")
+    end
+end
+
+function haskey(o::HDF5Output, key)
+    if isfile(o.fpath)
+        return @hlock HDF5.h5open(o.fpath) do file
+            haskey(file, key)
+        end
+    else
+        return false
     end
 end
 
