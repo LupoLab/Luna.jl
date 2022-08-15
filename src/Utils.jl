@@ -12,6 +12,9 @@ subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
 subscript(num::AbstractString) = prod([subscript(chi) for chi in num])
 subscript(num::Int) = subscript(string(num))
 
+unsubscript(digit::Char) = string(codepoint(digit)-codepoint(subzero))
+unsubscript(num::AbstractString) = prod([unsubscript(chi) for chi in num])
+
 function git_commit()
     try
         repo = LibGit2.GitRepo(lunadir())
