@@ -640,6 +640,17 @@ function add_fwhm_legends(ax, unit)
     end
 end
 
+"""
+    cornertext(ax, text;
+               corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+
+Place a `text` in the axes `ax` in the corner defined by `corner`. Padding can be
+defined for `x` and `y` together via `pad` or separately via `xpad` and `ypad`. Further
+keyword arguments are passed to `plt.text`. 
+
+Possible values for `corner` are `ul`, `ur`, `ll`, `lr` where the first letter
+defines upper/lower and the second defines left/right.
+"""
 function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
     xpad = isnothing(xpad) ? pad : xpad
     ypad = isnothing(ypad) ? pad : ypad
