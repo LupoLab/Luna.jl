@@ -144,9 +144,11 @@ intensity_to_field(I) = sqrt(2I/PhysData.ε_0/PhysData.c)
 
 """
     λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
+    λRDW(mRDW::Modes.AbstractMode, mS::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
 
 Calculate the phase-matching wavelength for resonant dispersive wave (RDW) emission in the
-mode `m` when pumping at `λ0`. 
+mode `m` when pumping at `λ0`. If the dispersive-wave mode `mRDW` and soliton mode `mS` are
+given separately, calculate phase-matching for RDW in mode `mRDW` when pumping in mode `mS`.
 
 This neglects the nonlinear contribution to the phase mismatch.
 """
@@ -155,6 +157,19 @@ function λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
     β1 = Modes.dispersion(m, 1, ω0; z=z)
     β0 = Modes.β(m, ω0; z=z)
     Δβ(ω) = Modes.β(m, ω; z=z) - β1*(ω.-ω0) - β0
+    try
+        ωRDW = find_zero(Δβ, extrema(wlfreq.(λlims)))
+        wlfreq(ωRDW)
+    catch
+        missing
+    end
+end
+
+function λRDW(mRDW::Modes.AbstractMode, mS::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
+    ω0 = wlfreq(λ0)
+    β1 = Modes.dispersion(mS, 1, ω0; z=z)
+    β0 = Modes.β(mS, ω0; z=z)
+    Δβ(ω) = Modes.β(mRDW, ω; z=z) - β1*(ω.-ω0) - β0
     try
         ωRDW = find_zero(Δβ, extrema(wlfreq.(λlims)))
         wlfreq(ωRDW)
@@ -199,6 +214,21 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
 
     try
         find_zero(Δβ, (1e-6, Pmax))
+    catch
+        missing
+    end
+end
+
+function pressureZDW(a::Number, gas::Symbol, λzd; Pmax=100, clad=:SiO2, kwargs...)
+    rfc = PhysData.ref_index_fun(clad)
+    cladn = (ω; z) -> rfc(wlfreq(ω))
+    ωzd = wlfreq(λzd)
+
+    try
+        find_zero((1e-6, Pmax)) do P
+            m = Capillary.MarcatiliMode(a, gas, P, cladn; kwargs...)
+            Modes.dispersion(m, 2, ωzd)
+        end
     catch
         missing
     end

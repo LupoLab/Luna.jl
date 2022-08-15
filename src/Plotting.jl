@@ -92,7 +92,7 @@ function get_modes(output)
     labels = [match(r"{([^,]*),", li).captures[1] for li in mlines]
     angles = zeros(length(mlines))
     for (ii, li) in enumerate(mlines)
-        m = match(r"ϕ=([0-9]+.[0-9]+)π", li)
+        m = match(r"ϕ=(-?[0-9]+.[0-9]+)π", li)
         isnothing(m) && continue # no angle information in mode label)
         angles[ii] = parse(Float64, m.captures[1])
     end
@@ -100,9 +100,9 @@ function get_modes(output)
         for i in eachindex(labels)
             if startswith(labels[i], "HE")
                 if angles[i] == 0
-                    θs = "y"
-                elseif angles[i] == 0.5
                     θs = "x"
+                elseif angles[i] == 0.5
+                    θs = "y"
                 else
                     θs = "$(angles[i])π"
                 end
