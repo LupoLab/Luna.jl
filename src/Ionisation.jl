@@ -223,10 +223,13 @@ The function `rate` should have the signature `rate!(out, E)` and place its resu
 `out`, like the functions returned by e.g. `ionrate_fun!_ADK` or `ionrate_fun!_PPTcached`.
 """
 function ionfrac(rate, E, δt)
-    r = similar(E)
     frac = similar(E)
-    rate(r, E)
-    Maths.cumtrapz!(frac, r, δt)
+    ionfrac!(frac, rate, E, δt)
+end
+
+function ionfrac!(frac, rate, E, δt)
+    rate(frac, E)
+    Maths.cumtrapz!(frac, δt)
     @. frac = 1 - exp(-frac)
 end
 
