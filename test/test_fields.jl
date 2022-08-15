@@ -563,6 +563,23 @@ end
     @test inputs[6].fields[1].energy/energy < 2e-20
     @test inputs[7].fields[1].energy/energy < 1e-20
     @test inputs[8].fields[1].energy/energy < 1e-20
+
+    # Now test that overlap integrals also work for diverging beams and produce 
+    # sensible results
+    a = 100e-6
+    w0 = 0.64a
+    λ = 800e-9
+    k = 2π/λ
+    zr = π*w0^2/λ
+
+    mode = Capillary.MarcatiliMode(a)
+    beam = Fields.normalised_gauss_beam(k, w0)
+    @test abs2.(Modes.overlap(mode, beam)) ≈ 0.9807131210817726
+    # test diverged beams
+    beam2 = Fields.normalised_gauss_beam(k, w0; z=zr)
+    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
+    beam2 = Fields.normalised_gauss_beam(k, w0; z=-zr)
+    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
 end
 
 @testset "DataField" begin

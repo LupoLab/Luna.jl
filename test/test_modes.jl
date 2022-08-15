@@ -145,6 +145,7 @@ Emn2 = Eωm2/norm(Eωm2)
 @test all(isapprox.(En2, Emn2, atol=1e-3*maximum(abs.(Emn2))))
 end
 
+##
 @testset "overlap with interpolation" begin
 #= Here we test the complete decomposition of a field into two modes while also re-gridding
     onto a new time grid. We create two pulses in different spatial modes with different
