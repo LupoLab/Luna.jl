@@ -6,6 +6,7 @@ import LibGit2
 import Pidfile: mkpidlock
 import HDF5
 import Luna: @hlock, settings
+import Printf: @sprintf
 
 subzero = '\u2080'
 subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
@@ -172,6 +173,24 @@ function load_dict_h5(fpath)
     d = @hlock HDF5.h5open(fpath) do file
         h52dict(file)
     end
+end
+
+function format_elapsed(ms::Dates.Millisecond)
+    stot = Dates.value(ms)/1000 # total seconds
+    seconds = stot % 60
+    stot -= seconds
+    mtot = stot ÷ 60
+    minutes = mtot % 60
+    mtot -= minutes
+    hours = mtot ÷ 60
+    out = @sprintf("%.3f seconds", seconds)
+    if minutes > 0
+        out = @sprintf("%d minutes, ", minutes) * out
+    end
+    if hours > 0
+        out = @sprintf("%d hours, ", hours) * out
+    end
+    out
 end
 
 end
