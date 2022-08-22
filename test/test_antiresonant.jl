@@ -29,34 +29,34 @@ end
 
 ##
 @testset "Vincetti Model" begin
-t = 1e-6
-r_ext = 10e-6
-δ = 5e-6 # tube spacing
-n = 1.44
-N = 8 # number of tubes
+    t = 1e-6
+    r_ext = 10e-6
+    δ = 5e-6 # tube spacing
+    n = 1.44
+    N = 8 # number of tubes
 
-Rco = Antiresonant.getRco(r_ext, N, δ)
+    Rco = Antiresonant.getRco(r_ext, N, δ)
 
-@test Antiresonant.getδ(Rco, r_ext, N) ≈ δ
-@test Antiresonant.getr_ext(Rco, N, δ) ≈ r_ext
+    @test Antiresonant.getδ(Rco, r_ext, N) ≈ δ
+    @test Antiresonant.getr_ext(Rco, N, δ) ≈ r_ext
 
-cladn  = (ω; z) -> 1.44
+    cladn  = (ω; z) -> 1.44
 
 
-m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn)
+    m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn)
 
-F = collect(range(0.4, 4.2, 2^14))
-λ = @. 2t/F*sqrt(n^2-1)
+    F = collect(range(0.4, 4.2, 2^14))
+    λ = @. 2t/F*sqrt(n^2-1)
 
-scale = 0.5
-msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
-                                     loss=scale)
-@test Modes.α.(msc, wlfreq.(λ)) ≈ scale*Modes.α.(m, wlfreq.(λ))
-m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
-                                     loss=false)
-@test all(Modes.α.(m0, wlfreq.(λ)) .== 0)
+    scale = 0.5
+    msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
+                                        loss=scale)
+    @test Modes.α.(msc, wlfreq.(λ)) ≈ scale*Modes.α.(m, wlfreq.(λ))
+    m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
+                                        loss=false)
+    @test all(Modes.α.(m0, wlfreq.(λ)) .== 0)
 
-@test Modes.neff(m, wlfreq(1030e-9)) ≈ 0.9998598623672965 + 3.4579455755137454e-8im
+    @test Modes.neff(m, wlfreq(1030e-9)) ≈ 0.9998598623672965 + 3.4579455755137454e-8im
 
-@test Modes.dimlimits(m) == Modes.dimlimits(m.m)
+    @test Modes.dimlimits(m) == Modes.dimlimits(m.m)
 end
