@@ -40,17 +40,19 @@ Rco = Antiresonant.getRco(r_ext, N, δ)
 @test Antiresonant.getδ(Rco, r_ext, N) ≈ δ
 @test Antiresonant.getr_ext(Rco, N, δ) ≈ r_ext
 
+cladn  = (ω; z) -> 1.44
 
-m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n)
+
+m = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn)
 
 F = collect(range(0.4, 4.2, 2^14))
 λ = @. 2t/F*sqrt(n^2-1)
 
 scale = 0.5
-msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n,
+msc = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
                                      loss=scale)
 @test Modes.α.(msc, wlfreq.(λ)) ≈ scale*Modes.α.(m, wlfreq.(λ))
-m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn=n,
+m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
                                      loss=false)
 @test all(Modes.α.(m0, wlfreq.(λ)) .== 0)
 
