@@ -5,7 +5,7 @@ import Printf: @sprintf
 import Luna: Capillary
 import Luna.PhysData: c, wlfreq, ref_index_fun
 @reexport using Luna.Modes
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α, chkzkwarg
 
 struct ZeisbergerMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
@@ -117,8 +117,8 @@ to `Capillary.MarcatiliMode` but with the following additions/changes as keyword
 - `Ntubes` : number of resonators
 
 # Optional keyword arguments
-- `cladn` : refractive index of the resonators. This must be a constant for the model.
-            Defaults to 1.45
+- `cladn` : refractive index of the resonators as a function of (ω; z). Defaults
+            to the refractive index of silica (SiO2).
 - `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
 - `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
 
@@ -149,7 +149,7 @@ function VincettiMode(Rco, args...; wallthickness, tube_radius, Ntubes,
         cladn = (ω; z) -> rfs(wlfreq(ω))
     end
     return VincettiMode(Capillary.MarcatiliMode(Rco, args...; kwargs...),
-                          wallthickness, tube_radius, Ntubes, cladn, Nterms, wraptype(loss))
+                          wallthickness, tube_radius, Ntubes, chkzkwarg(cladn), Nterms, wraptype(loss))
 end
 
 # create complex effective index
