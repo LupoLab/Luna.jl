@@ -153,7 +153,7 @@ function VincettiMode(Rco, args...; wallthickness, tube_radius, Ntubes,
 end
 
 # create complex effective index
-neff(m::VincettiMode, ω; z=0) = neff_real(m, ω) + 1im*c/ω*α(m, ω; z)
+neff(m::VincettiMode, ω; z=0) = neff_real(m, ω; z) + 1im*c/ω*α(m, ω; z)
 
 α(m::VincettiMode{mT, cT, Val{true}}, ω; z=0) where {mT, cT} = log(10)/10 * CL(m, ω; z)
 α(m::VincettiMode{mT, cT, Val{false}}, ω; z=0) where {mT, cT} = zero(ω)
