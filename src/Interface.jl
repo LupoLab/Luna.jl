@@ -878,14 +878,14 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     if raman
         if ramanmodel == :SiO2
             push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
-                                                                        fr*χ3*PhysData.ε_0)))
+                                                                        3.0/2.0*fr*χ3*PhysData.ε_0)))
         elseif ramanmodel == :sdo
             if isnothing(τ1) || isnothing(τ2)
                 error("for :sdo ramanmodel you must specify τ1 and τ2")
             end
             push!(resp, Nonlinear.RamanPolarEnv(grid.to,
                 Raman.CombinedRamanResponse(grid.to,
-                    [Raman.RamanRespNormedSingleDampedOscillator(fr*χ3*PhysData.ε_0, 1/τ1, τ2)])))
+                    [Raman.RamanRespNormedSingleDampedOscillator(3.0/2.0*fr*χ3*PhysData.ε_0, 1/τ1, τ2)])))
         else
             error("unrecognised value for ramanmodel")
         end
