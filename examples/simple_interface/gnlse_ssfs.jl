@@ -13,7 +13,9 @@ flength = pi/2*τ0^2/abs(β2)*90
 λlims = [450e-9, 8000e-9]
 trange = 12e-12
 
-output = prop_gnlse(γ, flength, βs; λ0, τfwhm=1.763*τ0, power=P0, pulseshape=:sech, λlims, trange, raman=true, shock=false, fr, shotnoise=false, ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15)
+output = prop_gnlse(γ, flength, βs; λ0, τfwhm=1.763*τ0, power=P0, pulseshape=:sech, λlims, trange,
+                    raman=true, shock=false, fr, shotnoise=false, ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
+                    saveN=601)
 
 ##
 Plotting.pygui(true)
