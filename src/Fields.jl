@@ -820,7 +820,7 @@ function optfield_cep(Eω::AbstractVector, grid)
         1/maximum(Et)
     end
 
-    res.minimizer, Eω*exp(1im*ϕ)
+    res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
 function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
@@ -832,4 +832,15 @@ function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
     res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
+function optfield_cep(Eω, grid; mode=1)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    ϕout = zeros(size(cidcs))
+    for ci in cidcs
+        ϕi, Eωi = optfield_cep(Eω[:, :, ci], grid; mode)
+        out[:, :, ci] .= Eωi
+        ϕout[ci] = ϕi
+    end
+    ϕout, out
+end
 end

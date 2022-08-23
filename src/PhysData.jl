@@ -141,7 +141,7 @@ Return function for linear polarisability γ, i.e. susceptibility of a single pa
 calculated from Sellmeier expansions.
 """
 function sellmeier_gas(material::Symbol)
-    dens = density(material, 1.0, 273.15)
+    dens = dens_1bar_0degC[material]
     if material == :He
         B1 = 4977.77e-8
         C1 = 28.54e-6
@@ -582,8 +582,8 @@ function γ3_gas(material::Symbol; source=nothing)
             error("no default γ3 source for material: $material")
         end
     end
-    dens = density(material, atm/bar, 273.15)
     if source == :Lehmeier
+        dens = dens_1atm_0degC[material]
         # Table 1 in [3]
         if material in (:He, :HeJ)
             fac = 1
@@ -655,6 +655,9 @@ Number density of `gas` [m^-3] at pressure `P` [bar] and temperature `T` [K].
 function density(gas::Symbol, P, T=roomtemp)
     P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
 end
+
+dens_1bar_0degC = Dict(gi => density(gi, 1.0, 273.15) for gi in gas)
+dens_1atm_0degC = Dict(gi => density(gi, atm/bar, 273.15) for gi in gas)
 
 """
     pressure(gas, density, T=roomtemp)

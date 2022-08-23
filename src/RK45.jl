@@ -2,6 +2,7 @@ module RK45
 import Dates
 import Logging
 import Printf: @sprintf
+import Luna.Utils: format_elapsed
 
 #Get Butcher tableau etc from separate file (for convenience of changing if wanted)
 include("dopri.jl")
@@ -74,8 +75,10 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
             end
         end
     end
-    Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
-                           Dates.value(Dates.now()-start)/1000, steps)
+    totaltime = Dates.now()-start
+    dtstring = format_elapsed(totaltime)
+    Logging.@info @sprintf("Propagation finished in %s, %d steps",
+                           dtstring, steps)
 
     if output
         return collect(tout), yout, steps

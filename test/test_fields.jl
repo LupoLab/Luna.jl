@@ -614,3 +614,43 @@ end
     @test isapprox(Maths.fwhm(t, abs2.(Et)), τfwhm, rtol=1e-5)
     @test isapprox(Maths.moment(t, abs2.(Et)), τ0, rtol=1e-5)
 end
+
+@testset "CEP optimisation" begin
+    τfwhm = 3e-15
+    λ0 = 800e-9
+    energy = 1e-6
+    grid = Grid.RealGrid(1.0, λ0, (100e-9, 3000e-9), 500e-15)
+    δt = grid.t[2] - grid.t[1]
+    ϕCEO = δt*PhysData.wlfreq(λ0)
+    energy_t = Fields.energyfuncs(grid)[1]
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
+    Eω = input(grid, FT)
+    ϕopt, Eωopt = Fields.optfield_cep(Eω, grid)
+    Et = FT \ Eωopt
+    It = abs2.(Maths.hilbert(Et))
+    # check that the optimisation has found the correct value
+    @test isapprox(ϕopt, ϕCEO, rtol=1e-6)
+    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), 0.0, rtol=1e-15, atol=1e-15)
+
+    Eωm = [Eω zero(Eω)]
+    ϕoptm, Eωopt = Fields.optfield_cep(Eωm, grid)
+    @test size(Eωopt) == size(Eωm)
+    @test ϕoptm == ϕopt
+    nCEO = 4
+    Eωmm = zeros(ComplexF64, (length(grid.ω), 2, nCEO))
+    for ii in 1:nCEO
+        ϕCEO = δt*PhysData.wlfreq(λ0)*ii
+        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
+        Eω = input(grid, FT)
+        Eωmm[:, 1, ii] .= Eω
+    end
+    ϕoptmm, Eωoptmm = Fields.optfield_cep(Eωmm, grid)
+    @test size(Eωoptmm) == size(Eωmm)
+    for ii in 1:nCEO
+        ϕCEO = δt*PhysData.wlfreq(λ0)*ii
+        @test isapprox(ϕoptmm[ii], ϕCEO, rtol=1e-6)
+    end
+end
