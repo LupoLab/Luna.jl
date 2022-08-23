@@ -2,7 +2,7 @@ module Fields
 import Luna: Grid, Maths, PhysData, Modes
 import Luna.PhysData: wlfreq, ε_0, μ_0
 import StaticArrays: SVector
-import Cubature: hcubature
+import HCubature: hcubature
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
@@ -410,13 +410,14 @@ one of `:x` or `:y`.
 function gauss_beam(k, ω0; z=0.0, pol=:y)
     let k=k, ω0=ω0, z=z, pol=pol
         function fieldfunc(xs)
+            r = xs[1]
             zr = k*ω0^2/2
             ω = ω0*sqrt(1 + (z/zr)^2)
-            R1 = z/(z^2 + zr^2)
+            R1 = z/(z^2 + zr^2) # 1/R
             ψ = atan(z/zr)
-            phase = exp(-1im * (k*z + k*xs[1]^2*R1/2 - ψ))
-            E = ω0/ω * exp(-xs[1]^2/ω^2) * phase
-            if pol==:x
+            phase = exp(-1im * (k*z + k*r^2*R1/2 - ψ))
+            E = ω0/ω * exp(-r^2/ω^2) * phase
+            if pol == :x
                 return SVector(E, 0.0)
             else
                 return SVector(0.0, E)
@@ -426,18 +427,25 @@ function gauss_beam(k, ω0; z=0.0, pol=:y)
 end
 
 function int2D(field1, field2, lowerlim, upperlim)
-    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
-    abs(hcubature(Ifunc, lowerlim, upperlim)[1])
+    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(field1(xs), field2(xs))*xs[1]
+    val, _ = hcubature(lowerlim, upperlim) do xs
+        real(Ifunc(xs))
+    end
+    val
 end
     
 function normalised_field(fieldfunc, rmax)
-    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0,0.0), (rmax, 2π)))
+    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0, 0.0), (rmax, 2π)))
     return let scale=scale, fieldfunc=fieldfunc
         (xs) -> fieldfunc(xs) .* scale
     end
 end
 
-normalised_gauss_beam(k, ω0; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), 6*ω0)
+function normalised_gauss_beam(k, ω0; z=0.0, pol=:y)
+    zr = k*ω0^2/2
+    ω = ω0*sqrt(1 + (z/zr)^2)
+    normalised_field(gauss_beam(k, ω0; z, pol), 6*ω)
+end
 
 """
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
@@ -448,7 +456,7 @@ initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with 
 same keyword arguments.
 """
 function coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
-    ei = energy * Modes.overlap(mode, E)^2
+    ei = energy * abs2(Modes.overlap(mode, E))
     (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
 end
 
@@ -812,7 +820,7 @@ function optfield_cep(Eω::AbstractVector, grid)
         1/maximum(Et)
     end
 
-    res.minimizer, Eω*exp(1im*ϕ)
+    res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
 function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
@@ -824,4 +832,15 @@ function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
     res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
+function optfield_cep(Eω, grid; mode=1)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    ϕout = zeros(size(cidcs))
+    for ci in cidcs
+        ϕi, Eωi = optfield_cep(Eω[:, :, ci], grid; mode)
+        out[:, :, ci] .= Eωi
+        ϕout[ci] = ϕi
+    end
+    ϕout, out
+end
 end
