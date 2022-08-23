@@ -184,11 +184,13 @@ function format_elapsed(ms::Dates.Millisecond)
     mtot -= minutes
     hours = mtot ÷ 60
     out = @sprintf("%.3f seconds", seconds)
-    if minutes > 0
-        out = @sprintf("%d minutes, ", minutes) * out
-    end
-    if hours > 0
-        out = @sprintf("%d hours, ", hours) * out
+    minstr = abs(minutes) == 1 ? "minute" : "minutes"
+    hrstr = abs(hours) == 1 ? "hour" : "hours"
+    if abs(hours) > 0
+        out = @sprintf("%d %s, ", minutes, minstr) * out
+        out = @sprintf("%d %s, ", hours, hrstr) * out
+    elseif abs(minutes) > 0
+        out = @sprintf("%d %s, ", minutes, minstr) * out
     end
     out
 end
