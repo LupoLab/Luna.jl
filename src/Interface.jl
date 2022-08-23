@@ -816,9 +816,10 @@ Note that the current GNLSE model is single mode only.
 # GNLSE options
 - `shock::Bool`: Whether to include the shock derivative term. Default is `true`.
 - `raman::Bool`: Whether to include the Raman effect. Defaults to `true`.
-- `ramanmodel`; which Raman model to use, defaults to `:SiO2` which uses the model
-    of Hollenbeck and Cantrell. This can also be `:sdo` for a simple damped oscillator model,
-    in which case you must also specify `τ1` and `τ2`.
+- `ramanmodel`; which Raman model to use, defaults to `:sdo` which uses a simple
+   damped oscillator model, defined `τ1` and `τ2` (which default to values commonly
+   used for silica). `ramanmodel` can also be set to `:SiO2` which uses the more
+   advanced model of Hollenbeck and Cantrell.
 - `loss`: the power loss [dB/m]. Defaults to 0.
 - `fr`: fractional Raman contribution to `γ`. Defaults to `fr = 0.18`.
 - `τ1`: the Raman oscillator period.
@@ -860,7 +861,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         pulses=nothing,
                         shotnoise=true, shock=true,
                         loss=0.0, raman=true, fr=0.18,
-                        ramanmodel=:SiO2, τ1=nothing, τ2=nothing,
+                        ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
     envelope = true
