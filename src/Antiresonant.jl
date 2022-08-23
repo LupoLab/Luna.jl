@@ -3,9 +3,9 @@ using Reexport
 import Logging: @warn
 import Printf: @sprintf
 import Luna: Capillary
-import Luna.PhysData: c, wlfreq
+import Luna.PhysData: c, wlfreq, ref_index_fun
 @reexport using Luna.Modes
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α, chkzkwarg
 
 struct ZeisbergerMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
@@ -93,12 +93,12 @@ __neff(A, B, C, D, σ, nco, loss::Val{false}) = real(nco*(1 - A*σ^2 - B*σ^3 - 
 __neff(A, B, C, D, σ, nco, loss::Number) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss*D*σ^4)
 
 
-struct VincettiMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
+struct VincettiMode{mT<:Capillary.MarcatiliMode, Tclad, LT} <: AbstractMode
     m::mT
     t::Float64 # tube wall thickness
     r_ext::Float64 # tube radius
     Ntubes::Int # number of tubes
-    cladn::Float64 # cladding refractive index (constant, defaults to 1.45)
+    cladn::Tclad # cladding refractive index (constant, defaults to 1.45)
     Nterms::Int # number of terms (cladding modes) to include in the sum
     loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
 end
@@ -117,8 +117,8 @@ to `Capillary.MarcatiliMode` but with the following additions/changes as keyword
 - `Ntubes` : number of resonators
 
 # Optional keyword arguments
-- `cladn` : refractive index of the resonators. This must be a constant for the model.
-            Defaults to 1.45
+- `cladn` : refractive index of the resonators as a function of (ω; z). Defaults
+            to the refractive index of silica (SiO2).
 - `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
 - `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
 
@@ -140,27 +140,31 @@ Analytical Formulas for Dispersion and Effective Area in Hollow-Core Tube Lattic
 Fibers, vol. 9, no. 10, Art. no. 10, Oct. 2021, doi: 10.3390/fib9100058.
 """
 function VincettiMode(Rco, args...; wallthickness, tube_radius, Ntubes,
-                                    cladn=1.45, Nterms=8, loss=true, kwargs...)
+                                    cladn=nothing, Nterms=8, loss=true, kwargs...)
     if getδ(Rco, tube_radius, Ntubes) < 0
         @warn("the given fibre parameters correspond to a negative gap between resonators")
     end
+    if isnothing(cladn)
+        rfs = ref_index_fun(:SiO2)
+        cladn = (ω; z) -> rfs(wlfreq(ω))
+    end
     return VincettiMode(Capillary.MarcatiliMode(Rco, args...; kwargs...),
-                          wallthickness, tube_radius, Ntubes, cladn, Nterms, wraptype(loss))
+                          wallthickness, tube_radius, Ntubes, chkzkwarg(cladn), Nterms, wraptype(loss))
 end
 
 # create complex effective index
-neff(m::VincettiMode, ω; z=0) = neff_real(m, ω) + 1im*c/ω*α(m, ω; z)
+neff(m::VincettiMode, ω; z=0) = neff_real(m, ω; z) + 1im*c/ω*α(m, ω; z)
 
-α(m::VincettiMode{mT, Val{true}}, ω; z=0) where mT = log(10)/10 * CL(m, ω; z)
-α(m::VincettiMode{mT, Val{false}}, ω; z=0) where mT = zero(ω)
-α(m::VincettiMode{mT, <:Number}, ω; z=0) where mT = m.loss * log(10)/10 * CL(m, ω; z)
+α(m::VincettiMode{mT, cT, Val{true}}, ω; z=0) where {mT, cT} = log(10)/10 * CL(m, ω; z)
+α(m::VincettiMode{mT, cT, Val{false}}, ω; z=0) where {mT, cT} = zero(ω)
+α(m::VincettiMode{mT, cT, <:Number}, ω; z=0) where {mT, cT} = m.loss * log(10)/10 * CL(m, ω; z)
 
 # All other mode properties are identical to a MarcatiliMode
 for fun in (:field, :N, :dimlimits)
     @eval ($fun)(m::VincettiMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
 end
 
-function CL(λ, Rco, t, r_ext, N; cladn=1.45, Nterms=8)
+function CL(λ, Rco, t, r_ext, N; cladn, Nterms=8)
     # eq. (6) of [2]
     # confinement loss in dB/m
     F = normfreq(λ, t, cladn)
@@ -170,9 +174,9 @@ function CL(λ, Rco, t, r_ext, N; cladn=1.45, Nterms=8)
 end
 
 CL(m::VincettiMode, ω; z=0) = CL(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes;
-                                 cladn=m.cladn, Nterms=m.Nterms)
+                                 cladn=m.cladn(ω; z), Nterms=m.Nterms)
 
-function FcHE(μ::Integer, ν::Integer, t, r_ext, n=1.45)
+function FcHE(μ::Integer, ν::Integer, t, r_ext, n)
     # eq. (4) in [2]
     if ν == 1
         return (abs(0.21 + 0.175μ - 0.1/(μ-0.35)^2) * (t/r_ext)^(0.55+5e-3*sqrt(n^4-1))
@@ -182,7 +186,7 @@ function FcHE(μ::Integer, ν::Integer, t, r_ext, n=1.45)
     end
 end
 
-function FcEH(μ::Integer, ν::Integer, t, r_ext, n=1.45)
+function FcEH(μ::Integer, ν::Integer, t, r_ext, n)
     # eq. (5) in [2]
     if ν == 1
         return (0.73 + 0.57*(μ^0.8 + 1.5)/4 - 0.04/(μ-0.35))*(t/r_ext)^(0.5 - (n-1)/(10*(μ+0.5)^0.1))
@@ -203,7 +207,7 @@ L(F) = γloss^2/(γloss^2 + F^2) # eq. (2) of [2]
 
 A(μ) = 2e3 * exp(-0.05*abs(μ-1)^2.6) # eq. (3) of [2]
 
-function p_ν(F, ν, t, r_ext, n=1.45, Nterms=8)
+function p_ν(F, ν, t, r_ext, n, Nterms=8)
     # eq. (7) of [2]
     out = A(1) * (L(F-FcHE(1, ν, t, r_ext, n)) + L(F - FcEH(1, ν, t, r_ext, n)))
     for μ in 2:Nterms
@@ -212,7 +216,7 @@ function p_ν(F, ν, t, r_ext, n=1.45, Nterms=8)
     out
 end
 
-function p_ν_sum(F, t, r_ext, n=1.45, Nterms=8)
+function p_ν_sum(F, t, r_ext, n, Nterms=8)
     out = p_ν(F, 1, t, r_ext, n, Nterms)
     for ν in 2:Nterms
         out += p_ν(F, ν, t, r_ext, n, Nterms)
@@ -222,7 +226,7 @@ end
 
 normfreq(λ, t, n, nco=1) = 2t/λ*sqrt(n^2-nco) # eq. (2) of [1]
 
-function Rco_eff(λ, Rco, t, r_ext, N, n=1.45)
+function Rco_eff(λ, Rco, t, r_ext, N, n)
     # eq. (10) in [3]
     δ = getδ(Rco, r_ext, N)
     F = normfreq(λ, t, n)
@@ -235,7 +239,7 @@ function Rco_eff(λ, Rco, t, r_ext, N, n=1.45)
     return t1*t2
 end
 
-Rco_eff(m::VincettiMode, ω) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, m.cladn)
+Rco_eff(m::VincettiMode, ω; z=0) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, m.cladn(ω; z))
 
 """
     getδ(Rco, r_ext, N)
@@ -270,7 +274,7 @@ getr_ext(Rco, N, δ) = (δ/2 - Rco*sin(π/N))/(sin(π/N) - 1)
 γdisp = 3e-2
 Li(F, F_0) = (F_0^2 - F^2)/((F^2 - F_0^2)^2 + (γdisp*F)^2) # eq. (2) in [3]
 
-function νsum(F, t, r_ext, n=1.45, Nterms=8)
+function νsum(F, t, r_ext, n, Nterms=8)
     # eq. (6) of [3]
     # here only μ=1 is considered
     # ν=1 term:
@@ -281,21 +285,21 @@ function νsum(F, t, r_ext, n=1.45, Nterms=8)
     return out * A(1)
 end
 
-function Δneff(λ, Rco, t, r_ext, n=1.45, Nterms=8)
+function Δneff(λ, Rco, t, r_ext, n, Nterms=8)
     # eq. (6) of [3]
     F = normfreq(λ, t, n)
     ρ = 1 - t/r_ext
     return 4.5e-7/ρ^4 * (λ/Rco)^2 * νsum(F, t, r_ext, n, Nterms)
 end
 
-Δneff(m::VincettiMode, ω) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.cladn, m.Nterms)
+Δneff(m::VincettiMode, ω; z=0) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.cladn(ω; z), m.Nterms)
 
 function neff_real(m::VincettiMode, ω; z=0)
     # eq. (21) of [3]
     ng = m.m.coren(ω; z) # gas index
     return (ng
-            - 1/2 * (m.m.unm*c/(ω*ng*Rco_eff(m, ω)))^2
-            + Δneff(m, ω))
+            - 1/2 * (m.m.unm*c/(ω*ng*Rco_eff(m, ω; z)))^2
+            + Δneff(m, ω; z))
 end
 
 Aeff(m::VincettiMode, ω; z=0) = 0.48/8π * (m.m.unm*wlfreq(ω))^2/(m.m.coren(ω; z)-neff_real(m, ω))
