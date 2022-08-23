@@ -90,14 +90,19 @@ function get_modes(output)
     endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
     mlines = lines[modeline+1 : endline-1]
     labels = [match(r"{([^,]*),", li).captures[1] for li in mlines]
-    angles = parse.(Float64, [match(r"ϕ=([0-9]+.[0-9]+)π", li).captures[1] for li in mlines])
+    angles = zeros(length(mlines))
+    for (ii, li) in enumerate(mlines)
+        m = match(r"ϕ=(-?[0-9]+.[0-9]+)π", li)
+        isnothing(m) && continue # no angle information in mode label)
+        angles[ii] = parse(Float64, m.captures[1])
+    end
     if !all(angles .== 0)
         for i in eachindex(labels)
             if startswith(labels[i], "HE")
                 if angles[i] == 0
-                    θs = "y"
-                elseif angles[i] == 0.5
                     θs = "x"
+                elseif angles[i] == 0.5
+                    θs = "y"
                 else
                     θs = "$(angles[i])π"
                 end
@@ -284,7 +289,8 @@ end
 
 # single-mode 2D propagation plots
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
-    num = "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
+    id = "($(string(hash(gensym()); base=16)[1:4])) "
+    num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = plt.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
@@ -593,8 +599,8 @@ end
 
 
 function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
-                                    text=nothing, units="fs")
-    left, right = Maths.level_xings(x, y)
+                                    text=nothing, units="fs", kwargs...)
+    left, right = Maths.level_xings(x, y; kwargs...)
     fw = abs(right - left)
     halfmax = maximum(y)/2
     arrowlength = isnothing(arrowlength) ? 2*fw : arrowlength
@@ -611,10 +617,10 @@ function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, line
                                 "linewidth" => linewidth))
 
     if text == :left
-        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
                 ha="right", color=color)
     elseif text == :right
-        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.1f %s", fw, units),
+        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
                 color=color)
     end
 end
@@ -632,6 +638,42 @@ function add_fwhm_legends(ax, unit)
         s *= @sprintf(" [%.2f %s]", fw, unit)
         t.set_text(s)
     end
+end
+
+"""
+    cornertext(ax, text;
+               corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+
+Place a `text` in the axes `ax` in the corner defined by `corner`. Padding can be
+defined for `x` and `y` together via `pad` or separately via `xpad` and `ypad`. Further
+keyword arguments are passed to `plt.text`. 
+
+Possible values for `corner` are `ul`, `ur`, `ll`, `lr` where the first letter
+defines upper/lower and the second defines left/right.
+"""
+function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+    xpad = isnothing(xpad) ? pad : xpad
+    ypad = isnothing(ypad) ? pad : ypad
+    if corner[1] == 'u'
+        val = "top"
+        y = 1 - ypad
+    elseif corner[1] == 'l'
+        val = "bottom"
+        y = ypad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    if corner[2] == 'l'
+        hal = "left"
+        x = xpad
+    elseif [2] == 'r'
+        hal = "right"
+        x = 1 - xpad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    ax.text(x, y, text; horizontalalignment=hal, verticalalignment=val,
+                 transform=ax.transAxes, kwargs...)
 end
 
 end

@@ -344,7 +344,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
-                        raman=false, kerr=true, plasma=nothing,
+                        raman=nothing, kerr=true, plasma=nothing,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -507,7 +507,11 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
         end
     end
     makeplasma!(out, grid, gas, plasma, pol)
+    if isnothing(raman)
+        raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
+    end
     if raman
+        @info("Including the Raman response (due to molecular gas choice).")
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         if thg
             push!(out, Nonlinear.RamanPolarField(grid.to, rr))
@@ -519,8 +523,18 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
 end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol)
-    # simple true/false => default to PPT
-    plasma && makeplasma!(out, grid, gas, :PPT, pol)
+    # simple true/false => default to PPT for atoms, ADK for molecules
+    if ~plasma
+        return
+    end
+    if gas in (:H2, :D2, :N2O, :CH4, :SF6)
+        @info("Using ADK ionisation rate (due to molecular gas choice).")
+        model = :ADK
+    else
+        @info("Using PPT ionisation rate.")
+        model = :PPT
+    end
+    makeplasma!(out, grid, gas, model, pol)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol)
@@ -550,7 +564,11 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_env(PhysData.γ3_gas(gas)))
         end
     end
+    if isnothing(raman)
+        raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
+    end
     if raman
+        @info("Including the Raman response (due to molecular gas choice).")
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
     end

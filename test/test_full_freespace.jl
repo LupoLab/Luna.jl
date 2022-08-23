@@ -10,17 +10,17 @@ import LinearAlgebra: norm
 gas = :Ar
 pres = 1
 
-τ = 30e-15
+τ = 10e-15
 λ0 = 800e-9
 
 w0 = 500e-6
-energy = 1e-9
+energy = 1e-12
 L = 2
 
 R = 4e-3
 N = 128
 
-grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 80e-15)
 xygrid = Grid.FreeGrid(R, N)
 
 x = xygrid.x
