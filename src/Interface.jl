@@ -873,19 +873,24 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, mode_s, λ0)
     k0 = 2π/λ0
     n2 = γ/k0*aeff(0.0)
-    χ3 = 4/3 * n2 * (PhysData.ε_0*PhysData.c)
-    resp = Any[Nonlinear.Kerr_env((1 - fr)*χ3)]
+    # factor of 4/3 below compensates for teh factor of 3/4 in Nonlinear.jl, as
+    # n2 and γ are usually defined for the envelope case already
+    χ3 = 4/3 * (1 - fr) * n2 * (PhysData.ε_0*PhysData.c)
+    resp = Any[Nonlinear.Kerr_env(χ3)]
     if raman
+        # factor of 2 here compensates for factor 1/2 in Nonlinear.jl as fr is
+        # defined for the envelope case already
+        χ3R = 2 * fr * n2 * (PhysData.ε_0*PhysData.c)
         if ramanmodel == :SiO2
             push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
-                                                                        3.0/2.0*fr*χ3*PhysData.ε_0)))
+                                                                              χ3R * PhysData.ε_0)))
         elseif ramanmodel == :sdo
             if isnothing(τ1) || isnothing(τ2)
                 error("for :sdo ramanmodel you must specify τ1 and τ2")
             end
             push!(resp, Nonlinear.RamanPolarEnv(grid.to,
                 Raman.CombinedRamanResponse(grid.to,
-                    [Raman.RamanRespNormedSingleDampedOscillator(3.0/2.0*fr*χ3*PhysData.ε_0, 1/τ1, τ2)])))
+                    [Raman.RamanRespNormedSingleDampedOscillator(χ3R * PhysData.ε_0, 1/τ1, τ2)])))
         else
             error("unrecognised value for ramanmodel")
         end
