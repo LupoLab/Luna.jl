@@ -15,9 +15,10 @@ import Luna: @hlock
 
 Return a closure `ionrate!(out, E)` which calculates the ADK ionisation rate for the electric
 field `E` and places the result in `out`. If `threshold` is true, use [`ADK_threshold`](@ref)
-to avoid calculation below floating-point precision.
+to avoid calculation below floating-point precision. If `cycle_average` is `true`, calculate
+the cycle-averaged ADK ionisation rate instead.
 """
-function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
+function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
     nstar = sqrt(0.5/(ionpot/au_energy))
     cn_sq = 2^(2*nstar)/(nstar*gamma(nstar+1)*gamma(nstar))
     ω_p = ionpot/ħ
@@ -29,14 +30,27 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true)
         thr = 0
     end
 
+    # Zenghu Chang: Fundamentals of Attosecond Optics (2011) p. 184
+    # Section 4.2.3.1 Cycle-Averaged Rate
+    # ̄w_ADK(Fₐ) = √(3/π) √(Fₐ/F₀) w_ADK(Fₐ) where Fₐ is the field amplitude 
+    Ip_au = ionpot / au_energy
+    F0_au = (2Ip_au)^(3/2)
+    F0 = F0_au*au_Efield
+    avfac = sqrt.(3/(π*F0))
+
+
     ionrate! = let nstar=nstar, cn_sq=cn_sq, ω_p=ω_p, ω_t_prefac=ω_t_prefac, thr=thr
         function ir(E)
             if abs(E) >= thr
-                (ω_p*cn_sq*
-                (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
-                *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
+                r = (ω_p*cn_sq*
+                    (4*ω_p/(ω_t_prefac*abs(E)))^(2*nstar-1)
+                    *exp(-4/3*ω_p/(ω_t_prefac*abs(E))))
+                if cycle_average
+                    r *= avfac*sqrt(abs(E))
+                end
+                return r
             else
-                zero(E)
+                return zero(E)
             end
         end
         function ionrate!(out, E)
@@ -119,9 +133,9 @@ function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-4, rcycle=true, N=2^16, Emax=nothing,
+                                sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing,
                                 cachedir=joinpath(homedir(), ".luna", "pptcache"))
-    h = hash((ionpot, λ0, Z, l, sum_tol, rcycle, N, Emax))
+    h = hash((ionpot, λ0, Z, l, sum_tol, cycle_average, N, Emax))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
@@ -134,7 +148,7 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
         return rate
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
-                               sum_tol=sum_tol, rcycle=rcycle, N=N, Emax=Emax)
+                               sum_tol=sum_tol, cycle_average, N=N, Emax=Emax)
         @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
         pidlock = mkpidlock(lockpath)
         if isfile(fpath) # makePPTcache takes a while - has another process saved first?
@@ -160,7 +174,7 @@ function loadPPTaccel(fpath)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
-                      sum_tol=1e-4, rcycle=true, N=2^16, Emax=nothing)
+                      sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -169,7 +183,7 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, rcycle=rcycle);
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, cycle_average);
     @info "PPT pre-calcuation done"
     return E, rate
 end
@@ -209,10 +223,13 @@ The function `rate` should have the signature `rate!(out, E)` and place its resu
 `out`, like the functions returned by e.g. `ionrate_fun!_ADK` or `ionrate_fun!_PPTcached`.
 """
 function ionfrac(rate, E, δt)
-    r = similar(E)
     frac = similar(E)
-    rate(r, E)
-    Maths.cumtrapz!(frac, r, δt)
+    ionfrac!(frac, rate, E, δt)
+end
+
+function ionfrac!(frac, rate, E, δt)
+    rate(frac, E)
+    Maths.cumtrapz!(frac, δt)
     @. frac = 1 - exp(-frac)
 end
 
@@ -235,13 +252,13 @@ function ionrate_fun!_PPT(args...)
 end
 
 """
-    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
 
 Create closure to calculate PPT ionisation rate.
 
 # Keyword arguments
 - `sum_tol::Number`: Relative tolerance used to truncate the infinite sum.
-- `rcycle::Bool`: If `true` (default), remove the cycle-average factor.
+- `cycle_average::Bool`: If `false` (default), calculate the cycle-averaged rate
 
 # References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
@@ -254,7 +271,7 @@ Ultrashort filaments of light in weakly ionized, optically transparent
 media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 (Appendix A)
 """
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2Ip_au)
     ls = ns-1
@@ -294,7 +311,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, rcycle=true)
                 lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
                 lret *= Ip_au * γ2/(1+γ2)
                 # Remove cycle average factor, see eq. (2) of [1]
-                if rcycle
+                if !cycle_average
                     lret *= sqrt(π*E0_au/(3E_au))
                 end
                 k = ceil(v)

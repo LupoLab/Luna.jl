@@ -212,6 +212,23 @@ function level_xings(x::AbstractVector, y::AbstractVector;
     end
 end
 
+function level_xings(x, y::AbstractArray; dim=1, kwargs...)
+    idxlo = CartesianIndices(size(y)[1:dim-1])
+    idxhi = CartesianIndices(size(y)[dim+1:end])
+    outshape = collect(size(y))
+    outshape[dim] = 1
+    left = zeros(eltype(y), Tuple(outshape))
+    right = zeros(eltype(y), Tuple(outshape))
+    for hi in idxhi
+        for lo in idxlo
+            l, r = level_xings(x, y[lo, :, hi]; kwargs...)
+            left[lo, 1, hi] = l
+            right[lo, 1, hi] = r
+        end
+    end
+    left, right
+end
+
 """
     linterpx(x1, x2, y1, y2, val)
 

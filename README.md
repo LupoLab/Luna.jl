@@ -2,33 +2,49 @@
 
 
 [![DOI](https://zenodo.org/badge/190623784.svg)](https://zenodo.org/badge/latestdoi/190623784)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](http://lupo-lab.com/Luna.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://lupo-lab.com/Luna.jl)
 
 
-Luna solves the unidirectional pulse propagation equation (UPPE) for problems in gas-based nonlinear optics. It flexibly supports a variety of propagation geometries and modal expansions (mode-averaged/single-mode guided propagation and multi-mode guided propagation as well as radially symmetric and full 3D free-space propagation). Luna is designed to be extensible: adding e.g. a new type of waveguide or a new nonlinear effect is straightforward, even without editing the main source code.
+Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics—both in waveguides (such as optical fibres) and free-space geometries—using the unidirectional pulse propagation equation (UPPE). Some of the key features of Luna:
+- A variety of propagation geometries treated in a unified way:
+    - Single-mode (mode-averaged) propagation in waveguides
+    - Multi-mode propagation in waveguides with arbitrary (including non-symmetric) mode-shapes, full polarisation resolution, and intermodal coupling for arbitrary nonlinear polarisation terms
+    - Waveguides with arbitrarily varying material properties and cross-sections (e.g. tapered fibres)
+    - Free-space propagation with radial symmetry
+    - Full (3+1)-dimensional free-space propagation
+- Both field-resolved and envelope propagation equations
+- A range of linear and nonlinear optical effects:
+    - Modal dispersion and loss in waveguides
+    - Optical Kerr effect (third-order nonlinearity)
+    - Raman scattering in molecular gases
+    - Strong-field photoionisation and plasma dynamics
+- A built-in interface for the running and processing of multi-dimensional [parameter scans](#running-parameter-scans) in serial or parallel
+- A standard library of [plotting](#plotting-results) and [processing](#output-processing) functions, including calculation of spectrograms and beam properties
+
+Luna is designed to be extensible: adding e.g. a new type of waveguide or a new nonlinear effect is straightforward, even without editing the main source code.
+
+Luna was originally developed for modelling ultrafast pulse propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres. Therefore such simulations have particularly good support.
 
 Luna is written in the [Julia programming language](https://julialang.org/), chosen for its unique combination of readability, ease of use, and speed. If you want to use Luna but are new to Julia, see [the relevant section of this README](#new-to-julia).
 
 There are two ways of using Luna:
-1. A very simple high-level interface for the most heavily developed application of Luna--propagation in hollow capillary fibres and hollow-core photonic crystal fibres--consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
+1. A very simple high-level interface for the most heavily optimised application of Luna—propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres—consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
-## Installation
-Luna currently only runs with Julia 1.5, which can be obtained from [here](https://julialang.org/downloads/oldreleases/). More recent versions of Julia trigger an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
+For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
-Once Julia is installed, open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
+## Installation
+Luna requires Julia v1.7, which can be obtained from [here](https://julialang.org/downloads/). Once Julia is installed, open a new Julia terminal and install Luna:
 
 ```julia
 ]
-add https://github.com//CoolProp/CoolProp.jl
 add https://github.com/LupoLab/Luna
 ```
 or using `Pkg`
 
 ```julia
 using Pkg
-Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"))
-Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master")
+Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master"))
 ```
 
 ## Quickstart
@@ -133,6 +149,9 @@ Luna is being actively developed on this GitHub repository. To contribute a bugf
 
 ## Credits
 Luna is jointly developed by Chris Brahms ([@chrisbrahms](https://github.com/chrisbrahms)) and John Travers ([@jtravs](https://github.com/jtravs)). Chris started the project and leads the development, while John has made multiple major contributions, and much of Luna is based on John's earlier propagation code.
+
+## Funding
+The early development of Luna was supported by funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation program: Starting Grant agreement HISOL, No. 679649.
 
 ## References
 1. Kolesik, M., Moloney, J.V., 2004. Nonlinear optical pulse propagation simulation: From Maxwell’s to unidirectional equations. Physical Review E - Statistical, Nonlinear, and Soft Matter Physics 70. https://doi.org/10.1103/PhysRevE.70.036604

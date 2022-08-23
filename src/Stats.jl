@@ -272,7 +272,7 @@ If oversampling > 1, the field is oversampled before the calculation
 """
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
                          modes::Modes.ModeCollection;
-                         components=:y, oversampling=1) where N
+                         components=:y, oversampling=1)
     to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
     δt = to[2] - to[1]
     # ionfrac! stores the time-dependent ionisation fraction in out and returns the max

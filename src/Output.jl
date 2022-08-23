@@ -1,7 +1,8 @@
 module Output
 import HDF5
+using H5Zblosc
 import Logging
-import Base: getindex, show
+import Base: getindex, show, haskey
 using EllipsisNotation
 import EllipsisNotation: Ellipsis
 import Printf: @sprintf
@@ -50,6 +51,8 @@ getindex(o::MemoryOutput, ds::AbstractString) = o.data[ds]
 getindex(o::MemoryOutput, ds::AbstractString, I...) = o.data[ds][I...]
 
 show(io::IO, o::MemoryOutput) = print(io, "MemoryOutput$(collect(keys(o.data)))")
+
+haskey(o::MemoryOutput, key) = haskey(o.data, key)
 
 """Calling the output handler saves data in the arrays
     Arguments:
@@ -285,6 +288,16 @@ function show(io::IO, o::HDF5Output)
         print(io, "HDF5Output$(fields)")
     else
         print(io, "HDF5Output[FILE DELETED]")
+    end
+end
+
+function haskey(o::HDF5Output, key)
+    if isfile(o.fpath)
+        return @hlock HDF5.h5open(o.fpath) do file
+            haskey(file, key)
+        end
+    else
+        return false
     end
 end
 
@@ -748,5 +761,31 @@ macro scansave(scan, scanidx, kwargs...)
         end
     end
     ex
+end
+
+"""
+    scansave_stats_array(stats_dict)
+
+Convert the statistics dictionary created by [`scansave`](@ref) into a dictionary containing
+arrays of arrays. This removes unused elements in the arrays and the need to use `valid_length`
+to avoid including `NaN`s.
+"""
+function scansave_stats_array(stats_dict)
+    vl = stats_dict["valid_length"]
+    scanshape = size(vl)
+    sidcs = CartesianIndices(scanshape)
+    out = Dict{String, Any}()
+    for (k, v) in stats_dict
+        if k == "valid_length"
+            continue
+        end
+        zdim = ndims(v) - length(scanshape) # find size of each statistic entry
+        a = Array{Array{eltype(v), zdim}}(undef, scanshape) # array of arrays
+        for ii in sidcs
+            a[ii] = v[fill(:, zdim-1)..., 1:vl[ii], ii]
+        end
+        out[k] = a
+    end
+    out
 end
 end

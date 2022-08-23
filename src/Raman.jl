@@ -77,17 +77,19 @@ Construct a molecular vibrational Raman model (single damped oscillator).
 - `τ2::Real=nothing`: coherence time [s]
 - `Bρ::Real=nothing` : density dependent broadening coefficient [Hz/amagat]
 - `Aρ::Real=nothing` : self diffusion coefficient [Hz amagat]
+- `C::Real=0` : constant linewidth [Hz]
 
 Only one of `τ2` or `Bρ` should be specified.
 If `Bρ` is specified then `Aρ` must be too.
 
 # References
-- Full model description: To be published, Yingying paper.
+- Full model description: Laser & Photonics Reviews, 16, p. 2100426, (2022)
+  doi: 10.1002/lpor.202100426.
 - We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
   But note that that paper uses weird units, and we converted it to SI for
   the above reference. 
 """
-function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing)
+function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=nothing, C=0.0)
     K = (4π*ε_0)^2*dαdQ^2/(4μ*Ωv)
     τ2ρ = if isnothing(Bρ)
         isnothing(τ2) && error("one of `τ2` or `Bρ` must be specified")
@@ -97,8 +99,8 @@ function RamanRespVibrational(Ωv, dαdQ, μ; τ2=nothing, Bρ=nothing, Aρ=noth
     else
         !isnothing(τ2) && error("only one of `τ2` or `Bρ` must be specified")
         isnothing(Aρ) && error("if `Bρ` is specified you must also specify `Aρ`")
-        let Bρ=Bρ, Aρ=Aρ
-            ρ -> 1/(pi*(Aρ/(ρ/amg) + Bρ*ρ/amg))
+        let Bρ=Bρ, Aρ=Aρ, C=C
+            ρ -> 1/(pi*(C + Aρ/(ρ/amg) + Bρ*ρ/amg))
         end
     end
     RamanRespSingleDampedOscillator(K, Ωv, τ2ρ)
@@ -135,7 +137,8 @@ Only one of `τ2` or `Bρ` should be specified.
 If `Bρ` is specified then `Aρ` must be too.
 
 # References
-- Full model description: To be published, Yingying paper.
+- Full model description: Laser & Photonics Reviews, 16, p. 2100426, (2022)
+  doi: 10.1002/lpor.202100426.
 - We followed closely: Phys. Rev. A, vol. 92, no. 6, p. 063828, Dec. 2015,
   But note that that paper uses weird units, and we converted it to SI for
   the above reference. 
@@ -225,7 +228,7 @@ Get the Raman response function for the Raman parameters in named tuple `rp`.
 """
 function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, maxJ=50, temp=roomtemp)
     Rs = []
-    if rotation
+    if rotation && (rp.rotation != :none)
         if rp.rotation != :nonrigid
             throw(DomainError(rp.rotation, "Unknown Rotational Raman model $(rp.rotation)"))
         end
@@ -238,12 +241,13 @@ function molecular_raman_response(t, rp; rotation=true, vibration=true, minJ=0, 
         end
         push!(Rs, hr)
     end
-    if vibration
+    if vibration  && (rp.vibration != :none)
         if rp.vibration != :sdo
             throw(DomainError(rp.rotation, "Unknown Vibrational Raman model $(rp.vibration)"))
         end
         if haskey(rp, :Bρv)
-            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, Bρ=rp.Bρv, Aρ=rp.Aρv)
+            Cv = haskey(rp, :Cv) ? rp.Cv : 0.0
+            hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, Bρ=rp.Bρv, Aρ=rp.Aρv, C=Cv)
         else
             hv = RamanRespVibrational(rp.Ωv, rp.dαdQ, rp.μ, τ2=rp.τ2v)
         end

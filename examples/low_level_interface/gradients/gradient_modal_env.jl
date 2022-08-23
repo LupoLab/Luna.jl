@@ -12,8 +12,8 @@ energy = 1e-6
 coren, densityfun = Capillary.gradient(gas, L, pres, 0);
 
 modes = (
-    Capillary.MarcatilliMode(a, coren, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
-    Capillary.MarcatilliMode(a, coren, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
+    Capillary.MarcatiliMode(a, coren, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+    Capillary.MarcatiliMode(a, coren, n=1, m=2, kind=:HE, ϕ=0.0, loss=false)
 )
 nmodes = length(modes)
 
