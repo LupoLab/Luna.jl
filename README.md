@@ -127,7 +127,7 @@ The `Processing` module contains many useful functions for more detailed process
 - g₁₂ coherence between multiple fields (`Processing.coherence`)
 
 ## GNLSE propagation
-To run a simple simulation of nonlinear pulse propagation in an optical fibre using the generalised nonlinear Schrödinger equation (GNLSE), you can use `prop_gnlse`. As an example, we can model supercontinuum generation in a solid-core photonic crystal fibre for parameters corresponding to the simulations in Fig.3 of Dudley et. al, RMP 78 1135 (2006).
+To run a simple simulation of nonlinear pulse propagation in an optical fibre using the generalised nonlinear Schrödinger equation (GNLSE), you can use `prop_gnlse`. As an example, we can model supercontinuum generation in a solid-core photonic crystal fibre for parameters corresponding to the simulations in Fig. 3 of Dudley et. al, RMP 78 1135 (2006).
 ```julia
 julia> using Luna
 julia> γ = 0.11
