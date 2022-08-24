@@ -87,6 +87,8 @@ include("LinearOps.jl")
 include("Capillary.jl")
 include("Antiresonant.jl")
 include("RectModes.jl")
+include("StepIndexFibre.jl")
+include("SimpleFibre.jl")
 include("Nonlinear.jl")
 include("Ionisation.jl")
 include("NonlinearRHS.jl")
@@ -100,6 +102,7 @@ include("SFA.jl")
 include("Interface.jl")
 
 prop_capillary = Interface.prop_capillary
+prop_gnlse = Interface.prop_gnlse
 Pulses = Interface.Pulses
 
 Scan = Scans.Scan
@@ -110,7 +113,8 @@ addvariable! = Scans.addvariable!
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
        Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface, SFA,
-       prop_capillary, Pulses, Scan, runscan, makefilename, addvariable!
+       prop_capillary, prop_gnlse, Pulses, Scan, runscan, makefilename, addvariable!,
+       StepIndexFibre, SimpleFibre
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)

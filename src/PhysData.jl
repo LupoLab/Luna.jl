@@ -638,22 +638,39 @@ function γ3_gas(material::Symbol; source=nothing)
     end
 end
 
-function χ3_gas(material::Symbol, P, T=roomtemp; source=nothing)
+function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
+    if material in glass
+        n2 = n2_glass(material, λ=1030e-9)
+        n0 = real(ref_index(material, 1030e-9))
+        return 4/3 * n2 * (ε_0*c*n0^2)
+    end
     return γ3_gas(material, source=source) .* density.(material, P, T)
 end
 
-function n2_gas(material::Symbol, P, T=roomtemp, λ=800e-9; source=nothing)
+function n2(material::Symbol, P=1.0, T=roomtemp; λ=nothing, source=nothing)
+    material in glass && return n2_glass(material::Symbol, λ=λ)
+    λ = isnothing(λ) ? 800e-9 : λ
     n0 = ref_index(material, λ, P, T)
-    return @. 3/4 * χ3_gas(material, P, T, source=source) / (ε_0*c*n0^2)
+    return @. 3/4 * χ3(material, P, T, source=source) / (ε_0*c*n0^2)
+end
+
+function n2_glass(material::Symbol; λ=nothing)
+    if material == :SiO2
+        return 2.7e-20
+    else
+        throw(DomainError(source, "Unkown glass $material"))
+    end
 end
 
 """
-    density(gas::Symbol, P, T=roomtemp)
+    density(material::Symbol, P=1.0, T=roomtemp)
 
-Number density of `gas` [m^-3] at pressure `P` [bar] and temperature `T` [K].
+For a gas `material`, return the number density [m^-3] at pressure `P` [bar] and temperature `T` [K].
+For a glass, this simply returns 1.0.
 """
-function density(gas::Symbol, P, T=roomtemp)
-    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[gas])*N_A
+function density(material::Symbol, P=1.0, T=roomtemp)
+    material in glass && return 1.0
+    P == 0 ? zero(P) : CoolProp.PropsSI("DMOLAR", "T", T, "P", bar*P, gas_str[material])*N_A
 end
 
 dens_1bar_0degC = Dict(gi => density(gi, 1.0, 273.15) for gi in gas)
@@ -788,7 +805,7 @@ Get the Raman parameters for `material`.
 
 # Fields
 Fields in the returned named tuple must include:
-- `kind::Symbol`: one of `:molecular` or ...
+- `kind::Symbol`: one of `:molecular` or `:intermediate` or `:normedsdo`
 
 If `kind == :molecular` then the following must also be specified:
 - `rotation::Symbol`: only `:nonrigid` or `:none` supported at present.
@@ -820,6 +837,12 @@ If `Bρv` is specified then we also need:
 And can also add (if necessary) a constant offset:
 - `Cv::Real` : constant linewidth offset [Hz]
 
+If `kind == :intermediate` then the following must be specified
+- `ωi::Vector{Real}` [rad/s], central angular freqencies
+- `Ai::Vector{Real}`, amplitudes
+- `Γi::Vector{Real}` [rad/s], Gaussian widths
+- `γi::Vector{Real}` [rad/s], Lorentzian widths
+
 # References
 [1] Phys. Rev. A, 94, 023816 (2016)
 [2] Phys. Rev. A, 85, 043820 (2012)
@@ -838,6 +861,7 @@ And can also add (if necessary) a constant offset:
 [15] Long, The Raman Effect; John Wiley & Sons, Ltd, 2002;
 [16] IEEE Journal of Quantum Electronics, vol. 24, no. 10, pp. 2076–2080, Oct. 1988, doi: 10.1109/3.8545.
 [17] Journal of Raman Spectroscopy, vol. 22, no. 11, pp. 607–611, 1991, doi: 10.1002/jrs.1250221103.
+[18] Hollenbeck and Cantrell, JOSA B 19, 2886-2892 (2002). https://doi.org/10.1364/JOSAB.19.002886
 """
 function raman_parameters(material)
     if material == :N2
@@ -930,6 +954,16 @@ function raman_parameters(material)
               Ωv = 2*π*1285*100.0*c,
               # TODO μ = 
               # TODO τ2v = 
+             )
+    elseif material == :SiO2 # [18]
+        rp = (kind = :intermediate,
+              K = 1.0,
+              Ω = 1.0/12.2e-15,
+              τ2 = 32e-15,
+              ωi = 200 .*π.*c.*[56.25, 100.0, 231.25, 362.50, 463.00, 497.00, 611.50, 691.67, 793.67, 835.50, 930.0, 1080.00, 1215.00],
+              Ai = [1.0, 11.40, 36.67, 67.67, 74.00, 4.50, 6.80, 4.60, 4.20, 4.50, 2.70, 3.10, 3.00],
+              Γi = 100 .*π.*c.*[52.10, 110.42, 175.00, 162.50, 135.33, 24.50, 41.50, 155.0, 59.50, 64.30, 150.00, 91.00, 160.00],
+              γi = 100 .*π.*c.*[17.37, 38.81, 58.33, 54.17, 45.11, 8.17, 13.83, 51.67, 19.83, 21.43, 50.00, 30.33, 53.33],
              )
     elseif material == :CH4
         rp = (kind = :molecular,
