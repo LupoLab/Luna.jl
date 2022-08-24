@@ -874,7 +874,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, mode_s, λ0)
     k0 = 2π/λ0
     n2 = γ/k0*aeff(0.0)
-    # factor of 4/3 below compensates for teh factor of 3/4 in Nonlinear.jl, as
+    # factor of 4/3 below compensates for the factor of 3/4 in Nonlinear.jl, as
     # n2 and γ are usually defined for the envelope case already
     χ3 = 4/3 * (1 - fr) * n2 * (PhysData.ε_0*PhysData.c)
     resp = Any[Nonlinear.Kerr_env(χ3)]
