@@ -174,7 +174,7 @@ function CL(λ, Rco, t, r_ext, N; cladn, Nterms=8)
 end
 
 CL(m::VincettiMode, ω; z=0) = CL(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes;
-                                 cladn=m.cladn(ω; z), Nterms=m.Nterms)
+                                 cladn=real(m.cladn(ω; z)), Nterms=m.Nterms)
 
 function FcHE(μ::Integer, ν::Integer, t, r_ext, n)
     # eq. (4) in [2]
@@ -239,7 +239,7 @@ function Rco_eff(λ, Rco, t, r_ext, N, n)
     return t1*t2
 end
 
-Rco_eff(m::VincettiMode, ω; z=0) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, m.cladn(ω; z))
+Rco_eff(m::VincettiMode, ω; z=0) = Rco_eff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.Ntubes, real(m.cladn(ω; z)))
 
 """
     getδ(Rco, r_ext, N)
@@ -292,7 +292,7 @@ function Δneff(λ, Rco, t, r_ext, n, Nterms=8)
     return 4.5e-7/ρ^4 * (λ/Rco)^2 * νsum(F, t, r_ext, n, Nterms)
 end
 
-Δneff(m::VincettiMode, ω; z=0) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, m.cladn(ω; z), m.Nterms)
+Δneff(m::VincettiMode, ω; z=0) = Δneff(wlfreq(ω), m.m.a, m.t, m.r_ext, real(m.cladn(ω; z)), m.Nterms)
 
 function neff_real(m::VincettiMode, ω; z=0)
     # eq. (21) of [3]

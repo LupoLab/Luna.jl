@@ -59,4 +59,16 @@ end
     @test Modes.neff(m, wlfreq(1030e-9)) ≈ 0.9998598623672965 + 3.4579455755137454e-8im
 
     @test Modes.dimlimits(m) == Modes.dimlimits(m.m)
+
+    # make sure loss values are real - see https://github.com/LupoLab/Luna.jl/issues/288
+    t = 148e-9
+    N = 6
+    r_ext = 1.5e-6
+    Rco = 3e-6
+    δ = Antiresonant.getδ(Rco, r_ext, N)
+    gas = :Ar
+    pres = 80.0
+    m = Antiresonant.VincettiMode(Rco, gas, pres; wallthickness=t, tube_radius=r_ext, Ntubes=N)
+    println(Modes.dB_per_m(m, wlfreq(515e-9)))
+    @test isreal(Modes.dB_per_m(m, wlfreq(515e-9)))
 end
