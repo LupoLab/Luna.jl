@@ -34,18 +34,13 @@ There are two ways of using Luna:
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) or [GNLSE](#gnlse) sections below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna requires Julia v1.7, which can be obtained from [here](https://julialang.org/downloads/). Once Julia is installed, open a new Julia terminal and install Luna:
+Luna requires Julia v1.7 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
 
 ```julia
 ]
-add https://github.com/LupoLab/Luna
+add Luna
 ```
-or using `Pkg`
-
-```julia
-using Pkg
-Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master"))
-```
+This will install and precompile Luna and all its dependencies.
 
 ## Quickstart
 To run a simple simulation of ultrafast pulse propagation in a gas-filled hollow capillary fibre, you can use `prop_capillary`. As an example, take a 3-metre length of HCF with 125 μm core radius, filled with 1 bar of helium gas, and driving pulses centred at 800 nm wavelength with 120 μJ of energy and 10 fs duration. We consider a frequency grid which spans from 120 nm to 4 μm and a time window of 1 ps.
