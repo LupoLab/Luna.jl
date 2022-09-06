@@ -152,5 +152,9 @@ end
     include(joinpath(testdir, "test_linearprop.jl"))
 end
 
+@testset "GNLSE interface" begin
+    @info("================= test_gnlse.jl")
+    include(joinpath(testdir, "test_gnlse.jl"))
+end
 
 end

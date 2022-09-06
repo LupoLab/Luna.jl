@@ -770,4 +770,148 @@ function makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
                           fdir=filepath, fname=filename)
 end
 
+"""
+    prop_gnlse(γ, flength, βs; λ0, λlims, trange, kwargs...)
+
+Simulate pulse propagation using the GNLSE.
+
+# Mandatory arguments
+- `γ::Number`: The nonlinear coefficient.
+- `flength::Number`: Length of the fibre.
+- `βs`: The Taylor expansion of the propagation constant about `λ0`.
+- `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
+    single-pulse inputs, this is also the central wavelength of the input pulse.
+- `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
+- `trange::Number`: The total width of the time grid. To make the number of samples a
+    power of 2, the actual grid used is usually bigger.
+
+# Grid options
+- `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
+    this is determined by the wavelength grid. If `δt` is given **and smaller** than the
+    required value, it is used instead.
+
+# Input pulse options
+A single pulse can be specified by the keyword arguments below.
+More complex inputs can be defined by a single `AbstractPulse` or a `Vector{AbstractPulse}`.
+In this case, all keyword arguments except for `λ0` are ignored.
+Note that the current GNLSE model is single mode only.
+
+- `λ0`: Central wavelength
+- `τfwhm`: The pulse duration as defined by the full width at half maximum.
+- `τw`: The "natural" pulse duration. Only available if pulseshape is `sech`.
+- `ϕ`: Spectral phases to be applied to the transform-limited pulse. Elements are
+    the usual polynomial phases ϕ₀ (CEP), ϕ₁ (group delay), ϕ₂ (GDD), ϕ₃ (TOD), etc.
+- `energy`: Pulse energy.
+- `power`: Peak power **after any spectral phases are added**.
+- `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
+    or `:sech` for a sech² pulse.
+- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
+    or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
+    ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
+    elliptical polarisation is always the y-axis.
+- `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
+                apply an arbitrary propagation to the pulse before the simulation starts.
+- `shotnoise`:  If `true` (default), one-photon-per-mode quantum noise is included.
+
+# GNLSE options
+- `shock::Bool`: Whether to include the shock derivative term. Default is `true`.
+- `raman::Bool`: Whether to include the Raman effect. Defaults to `true`.
+- `ramanmodel`; which Raman model to use, defaults to `:sdo` which uses a simple
+   damped oscillator model, defined `τ1` and `τ2` (which default to values commonly
+   used for silica). `ramanmodel` can also be set to `:SiO2` which uses the more
+   advanced model of Hollenbeck and Cantrell.
+- `loss`: the power loss [dB/m]. Defaults to 0.
+- `fr`: fractional Raman contribution to `γ`. Defaults to `fr = 0.18`.
+- `τ1`: the Raman oscillator period.
+- `τ2`: the Raman damping time.
+
+# Output options
+- `saveN::Integer`: Number of points along z at which to save the field.
+- `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
+    only in the working memory. If not `nothing`, should be a file path as a `String`,
+    and the results are saved in a file at this location. If `scan` is passed, `filepath`
+    determines the output **directory** for the scan instead.
+- `scan`: A `Scan` instance defining a parameter scan. If `scan` is given`, a
+    `Output.ScanHDF5Output` is used to automatically name and populate output files of
+    the scan. `scanidx` must also be given.
+- `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
+- `filename`: Can be used to to overwrite the scan name when running a parameter scan.
+    The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
+- `status_period::Number`: Interval (in seconds) between printed status updates.
+"""
+function prop_gnlse(args...; status_period=5, kwargs...)
+    Eω, grid, linop, transform, FT, output = prop_gnlse_args(args...; kwargs...)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    output
+end
+
+"""
+    prop_gnlse_args(γ, flength, βs; λ0, λlims, trange, kwargs...)
+
+Prepare to simulate pulse propagation using the GNLSE. This
+function takes the same arguments as `prop_gnlse` but instead or running the
+simulation and returning the output, it returns the required arguments for `Luna.run`,
+which is useful for repeated simulations in an indentical fibre with different initial
+conditions.
+"""
+function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
+                        δt=1, τfwhm=nothing, τw=nothing, ϕ=Float64[],
+                        power=nothing, energy=nothing,
+                        pulseshape=:gauss, propagator=nothing,
+                        pulses=nothing,
+                        shotnoise=true, shock=true,
+                        loss=0.0, raman=true, fr=0.18,
+                        ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
+                        saveN=201, filepath=nothing,
+                        scan=nothing, scanidx=nothing, filename=nothing)
+    envelope = true
+    thg = false
+    polarisation=:linear
+    grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
+    mode_s = SimpleFibre.SimpleMode(PhysData.wlfreq(λ0), βs; loss)
+    aeff = z -> 1.0
+    density = z -> 1.0
+    linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, mode_s, λ0)
+    k0 = 2π/λ0
+    n2 = γ/k0*aeff(0.0)
+    # factor of 4/3 below compensates for the factor of 3/4 in Nonlinear.jl, as
+    # n2 and γ are usually defined for the envelope case already
+    χ3 = 4/3 * (1 - fr) * n2 * (PhysData.ε_0*PhysData.c)
+    resp = Any[Nonlinear.Kerr_env(χ3)]
+    if raman
+        # factor of 2 here compensates for factor 1/2 in Nonlinear.jl as fr is
+        # defined for the envelope case already
+        χ3R = 2 * fr * n2 * (PhysData.ε_0*PhysData.c)
+        if ramanmodel == :SiO2
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
+                                                                              χ3R * PhysData.ε_0)))
+        elseif ramanmodel == :sdo
+            if isnothing(τ1) || isnothing(τ2)
+                error("for :sdo ramanmodel you must specify τ1 and τ2")
+            end
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to,
+                Raman.CombinedRamanResponse(grid.to,
+                    [Raman.RamanRespNormedSingleDampedOscillator(χ3R * PhysData.ε_0, 1/τ1, τ2)])))
+        else
+            error("unrecognised value for ramanmodel")
+        end
+    end
+    resp = Tuple(resp)
+
+    inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
+                        power, energy, pulseshape, polarisation, propagator)
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
+
+    norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff; shock)
+    Eω, transform, FT = Luna.setup(grid, density, resp, inputs, βfun!, aeff, norm! = norm!)
+    stats = Stats.default(grid, Eω, mode_s, linop, transform)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
+
+    saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
+        shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
+
+    return Eω, grid, linop, transform, FT, output
+end
+
 end
