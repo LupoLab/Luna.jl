@@ -72,6 +72,7 @@ function P0_to_I(P0, m)
 end
 
 function Pcr(ω, n0, n2)
+    # G. Fibich and A. L. Gaeta, Optics Letters, 25, 5, 335, 2000, doi: 10.1364/OL.25.000335.
     1.86225*(2π*PhysData.c/ω)^2/(4π*n0*n2)
 end
 
