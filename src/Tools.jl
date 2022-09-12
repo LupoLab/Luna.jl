@@ -72,7 +72,7 @@ function P0_to_I(P0, m)
 end
 
 function Pcr(ω, n0, n2)
-    1.8962*(2π*PhysData.c/ω)^2/(4π*n0*n2)
+    1.86225*(2π*PhysData.c/ω)^2/(4π*n0*n2)
 end
 
 paramfields = (:E, :τfw, :τ0, :ω, :λ, :material, :P, :T, :shape,:P0, :β2, :N0, :n0, :n2,
