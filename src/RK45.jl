@@ -2,6 +2,7 @@ module RK45
 import Dates
 import Logging
 import Printf: @sprintf
+import Luna.Utils: format_elapsed
 
 #Get Butcher tableau etc from separate file (for convenience of changing if wanted)
 include("dopri.jl")
@@ -74,8 +75,10 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
             end
         end
     end
-    Logging.@info @sprintf("Propagation finished in %.3f seconds, %d steps",
-                           Dates.value(Dates.now()-start)/1000, steps)
+    totaltime = Dates.now()-start
+    dtstring = format_elapsed(totaltime)
+    Logging.@info @sprintf("Propagation finished in %s, %d steps",
+                           dtstring, steps)
 
     if output
         return collect(tout), yout, steps
@@ -352,7 +355,8 @@ end
 "Simple proportional error controller, see e.g. Hairer eq. (4.13)."
 function stepcontrolP!(s)
     if s.ok
-        s.dtn = s.dt * min(5, s.safety*(s.err)^(-1/5))
+        # if error is zero, there is no nonlinearity: increase step size by a lot
+        s.dtn = s.err == 0 ? 1.5*s.dt : s.dt * min(5, s.safety*(s.err)^(-1/5))
     else
         if !isfinite(s.err) # check for NaN or Inf
             s.dtn = s.dt/2  # if we have one then we're in big trouble so halve the step size
@@ -371,14 +375,18 @@ function stepcontrolPI!(s)
     β2 = -1/5 / 5
     ε = 0.8
     if s.ok
-        s.errlast == 0 && (s.errlast = s.err)
-        fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
+        s.errlast == 0 && (s.errlast = s.err) # if last error is zero, use current error instead
+        if s.err == 0
+            fac = 1.5 # zero error means no nonlinearity: increase step size by a lot 
+        else
+            fac = s.safety * (ε/s.err)^β1 * (ε/s.errlast)^β2
+        end
         # (0.99 <= fac <= 1.01) && (fac = 1.0)
         s.dtn = fac * s.dt
         s.errlast = s.err
     else
         if !isfinite(s.err) # check for NaN or Inf
-            s.dtn = s.dt/2  # if we have one then we're in bug trouble so halve the step size
+            s.dtn = s.dt/2  # if we have one then we're in big trouble so halve the step size
         else
             s.dtn = s.dt * max(0.1, s.safety*(s.err)^(-1/5))
         end

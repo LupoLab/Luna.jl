@@ -2,10 +2,13 @@ module Processing
 import FFTW
 using EllipsisNotation
 import Glob: glob
-import Luna: Maths, Fields, PhysData
+using Luna
 import Luna.PhysData: wlfreq, c
 import Luna.Grid: AbstractGrid, RealGrid, EnvGrid, from_dict
 import Luna.Output: AbstractOutput, HDF5Output
+import Cubature: hcubature
+import ProgressLogging: @progress
+import Logging: @warn
 
 """
     Common(val)
@@ -67,22 +70,35 @@ end
 function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
     local scanidcs, arrays
     scanfiles = sort(scanfiles)
-    for (idx, fi) in enumerate(scanfiles)
-        o = HDF5Output(fi)
-        ret = f(o)
-        if idx == 1 # initialise arrays
-            isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
-            scanidcs = CartesianIndices(shape)
-            arrays = _arrays(ret, shape)
-        end
-        for (ridx, ri) in enumerate(ret)
-            _addret!(arrays[ridx], scanidcs[idx], ri)
+    @progress for (idx, fi) in enumerate(scanfiles)
+        try
+            o = HDF5Output(fi)
+            # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
+            ret = wraptuple(f(o))
+            if idx == 1 # initialise arrays
+                isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
+                scanidcs = CartesianIndices(shape)
+                arrays = _arrays(ret, shape)
+            end
+            for (ridx, ri) in enumerate(ret)
+                _addret!(arrays[ridx], scanidcs[idx], ri)
+            end
+        catch e
+            bt = catch_backtrace()
+            msg = "scanproc failed for file: $fi:\n"*sprint(showerror, e, bt)
+            @warn msg
         end
     end
-    arrays
+    unwraptuple(arrays) # if f only returns one thing, we also only return one array
 end
 
-function _addret!(array, aidcs, ri::Number)
+wraptuple(x::Tuple) = x
+wraptuple(x) = (x,)
+
+unwraptuple(x::Tuple{<:Any}) = x[1] # single-element Tuple
+unwraptuple(x) = x
+
+function _addret!(array, aidcs, ri)
     array[aidcs] = ri
 end
 
@@ -107,9 +123,9 @@ function scanproc(f, directory::AbstractString=pwd(), pattern::AbstractString=de
 end
 
 # Make array(s) with correct size to hold processing results
-_arrays(ret::Number, shape) = zeros(typeof(ret), shape)
+_arrays(ret, shape) = Array{typeof(ret)}(undef, shape)
 _arrays(ret::AbstractArray, shape) = zeros(eltype(ret), (size(ret)..., shape...))
-_arrays(ret::Tuple, shape) = [_arrays(ri, shape) for ri in ret]
+_arrays(ret::Tuple, shape) = Tuple([_arrays(ri, shape) for ri in ret])
 _arrays(com::Common, shape) = com.data
 _arrays(vl::VarLength, shape) = Array{typeof(vl.data), length(shape)}(undef, shape)
 
@@ -255,6 +271,7 @@ fwhm(x::Vector, I::Vector) = Maths.fwhm(x, I)
 
 """
     peakpower(grid, Eω; bandpass=nothing, oversampling=1)
+    peakpower(output; bandpass=nothing, oversampling=1)
 
 Extract the peak power. If `bandpass` is given, bandpass the field according to
 [`window_maybe`](@ref).
@@ -264,9 +281,15 @@ function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
     dropdims(maximum(abs2.(Eto); dims=1); dims=1)
 end
 
+function peakpower(output; kwargs...)
+    grid = makegrid(output)
+    peakpower(grid, output["Eω"]; kwargs...)
+end
+
 
 """
     energy(grid, Eω; bandpass=nothing)
+    energy(output; bandpass=nothing)
 
 Extract energy. If `bandpass` is given, bandpass the field according to
 [`window_maybe`](@ref).
@@ -282,7 +305,7 @@ function energy(output::AbstractOutput; bandpass=nothing)
     energy(grid, output["Eω"]; bandpass=bandpass)
 end
 
-_energy(Eω::Vector, energyω) = energyω(Eω)
+_energy(Eω::AbstractVector, energyω) = energyω(Eω)
 
 function _energy(Eω, energyω)
     out = Array{Float64, ndims(Eω)-1}(undef, size(Eω)[2:end])
@@ -600,7 +623,6 @@ getEt(grid::AbstractGrid, output::AbstractOutput; kwargs...) = getEt(grid, outpu
 
 function getEt(grid::AbstractGrid, output::AbstractOutput, zslice;
                kwargs...)
-    t = grid.t
     zidx = nearest_z(output, zslice)
     to, Eto = getEt(grid, output["Eω", .., zidx]; kwargs...)
     return to, Eto, output["z"][zidx]
@@ -726,6 +748,249 @@ function makegrid(output)
         from_dict(EnvGrid, output["grid"])
     end
 end
+
+"""
+    makemodes(output)
+
+Create the modes used in a simulation using `MarcatiliMode`s. If `output` was created by
+[`Interface.prop_capillary_args`](@ref) and hence has a field `prop_capillary_args`, this is
+used to match the gas fill from the simulation. Otherwise, the modes are created without gas
+fill.
+"""
+function makemodes(output; warn_dispersion=true)
+    mlines = modelines(output["simulation_type"]["transform"])
+    if haskey(output, "prop_capillary_args")
+        gas = Symbol(output["prop_capillary_args"]["gas"])
+        flength = parse(Float64, output["prop_capillary_args"]["flength"])
+        return [makemode(l, gas, output["prop_capillary_args"]["pressure"], flength) for l in mlines]
+    else
+        if warn_dispersion
+            @warn("Gas fill not available when creating modes. Dispersion will not be correct.")
+        end
+        return [makemode(l) for l in mlines]
+    end
+end
+
+function makemodes(output, gas, pressure, flength=nothing)
+    mlines = modelines(output["simulation_type"]["transform"])
+    return [makemode(l, gas, pressure, flength) for l in mlines]
+end
+
+function modelines(transform_text)
+    startswith(transform_text, "TransModal") || error("makemodes only works for multi-mode simulations")
+    lines = split(transform_text, "\n")
+    modeline = findfirst(li -> startswith(li, "  modes:"), lines)
+    endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
+    lines[modeline+1 : endline-1]
+end
+    
+
+function modeargs(line)
+    sidx = nextind(line, findfirst('{', line))
+    eidx = prevind(line, findfirst('}', line))
+    line = line[sidx:eidx]
+    kindnm, radius, loss, model, angle = split(line, ",")
+    kind = Symbol(kindnm[1:2])
+    n = parse(Int, Utils.unsubscript(kindnm[3]))
+    m = parse(Int, Utils.unsubscript(kindnm[nextind(kindnm, 3)]))
+    a = parse(Float64, split(radius, "=")[2])
+    loss = parse(Bool, split(loss, "=")[2])
+    model = Symbol(split(model, "=")[2])
+    ϕ = parse(Float64, split(angle, "=")[2][1:end-1])*π
+    a, kind, n, m, loss, model, ϕ
+end
+
+function makemode(line)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Capillary.MarcatiliMode(a; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure::AbstractString, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    if occursin("(", pressure)
+        if occursin("[", pressure)
+            error("TODO: Z, P type inputs")
+        else
+            pin, pout = split(pressure, ",")
+            pin = parse(Float64, strip(pin, '('))
+            pout = parse(Float64, strip(pout, ')'))
+            coren, _ = Capillary.gradient(gas, flength, pin, pout)
+            return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+        end
+    else
+        p = parse(Float64, pressure)
+        return Capillary.MarcatiliMode(a, gas, p; kind, n, m, loss, model, ϕ)
+    end
+end
+
+function makemode(line, gas, pressure::Number, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Capillary.MarcatiliMode(a, gas, pressure; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure::Tuple, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    isnothing(flength) && error("To make two-point gradient, fibre length must be given")
+    coren, _ = Capillary.gradient(gas, flength, pressure...)
+    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+end
+
+function makemode(line, gas, pressure::AbstractArray, flength)
+    a, kind, n, m, loss, model, ϕ = modeargs(line)
+    Z, P = pressure
+    coren, _ = Capillary.gradient(gas, Z, P)
+    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+end
+
+"""
+    beam(grid, Eωm, modes, x, y; z=0, components=:xy)
+    beam(output, x, y, zslice; bandpass=nothing)
+
+Calculate the beam profile of the multi-mode field `Eωm` on the grid given by spatial
+coordinates `x` and `y`. If `output` is given, create the `modes` from that and take the
+field nearest propagation slice `zslice`.
+"""
+function beam(output, x, y, zslice; bandpass=nothing)
+    modes = makemodes(output; warn_dispersion=false)
+    pol = polarisation_components(output)
+    zidx = nearest_z(output, zslice)
+    grid = makegrid(output)
+    Eωm = output["Eω", .., zidx]
+    Eωm = dropdims(Eωm; dims=3)
+    Eωm = window_maybe(grid.ω, Eωm, bandpass)
+    beam(grid, Eωm, modes, x, y; z=zslice, components=pol)
+end
+
+function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    fluence = zeros(length(y), length(x))
+    _, energy_ω = Fields.energyfuncs(grid) # energyfuncs include correct FFT normalisation
+    Eωxy = zeros(ComplexF64, (length(grid.ω), tospace.npol))
+    coords = Modes.dimlimits(modes[1])[1]
+    for (yidx, yi) in enumerate(y)
+        for (xidx, xi) in enumerate(x)
+            xs = coords == :polar ? xs = (hypot(xi, yi), atan(yi, xi)) : (xi, yi)
+            Modes.to_space!(Eωxy, Eωm, xs, tospace; z)
+            # integrate over time/frequency and multiply by ε₀c/2 -> fluence
+            fluence[yidx, xidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
+        end
+    end
+    fluence
+end
+
+"""
+    getEtxy(output, xs, z; kwargs...)
+    getEtxy(Etm, modes, xs, z; components=:xy)
+
+Calculate the time-dependent electric field at transverse position `xs` and longitudinal position `z`
+from either the modal time-dependent field `Etm` or the given `output`.
+
+`xs` should be a 2-Tuple of coordinates--either `(r, θ)` for polar coordinates or `(x, y)`
+in Cartesian coordinates, depending on the coordinate system of the `modes`--or a 2-Tuple of vectors
+containing the coordinates. If vectors are given, the output contains values of Etxy at all combinations of
+the coordinates.
+
+Additional keyword arguments to `getEtxy(output, ...)` are passed through to `Processing.getEt`
+"""
+function getEtxy(output, xs, z; kwargs...)
+    modes = makemodes(output; warn_dispersion=false)
+    pol = polarisation_components(output)
+    t, Etm = getEt(output, z; kwargs...) # (Nt, Nm, Nz)
+    t, getEtxy(Etm, modes, xs, z; components=pol)
+end
+
+function getEtxy(Etm, modes, xs::Tuple{<:Number, <:Number}, z; components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    Etxy = zeros(eltype(Etm), (size(Etm, 1), tospace.npol))
+    Modes.to_space!(Etxy, Etm[.., 1], xs, tospace; z)
+    Etxy
+end
+
+function getEtxy(Etm, modes, xs::Tuple{AbstractVector, AbstractVector}, z; components=:xy)
+    tospace = Modes.ToSpace(modes; components)
+    x1, x2 = xs
+    Etxy = zeros(eltype(Etm), (size(Etm, 1), length(x1), length(x2), tospace.npol))
+    for (x2idx, x2i) in enumerate(x2)
+        for (x1idx, x1i) in enumerate(x1)
+            @views Modes.to_space!(Etxy[:, x1idx, x2idx, :], Etm[.., 1], (x1i, x2i), tospace; z)
+        end
+    end
+    Etxy    
+end
+
+function polarisation_components(output)
+    t = output["simulation_type"]["transform"]
+    startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
+    lines = split(t, "\n")
+    lidx = findfirst(lines) do line
+        occursin("polarisation:", line)
+    end
+    pl = lines[lidx]
+    if occursin("x,y", pl)
+        return :xy
+    else
+        return Symbol(pl[end])
+    end
+end
+
+"""
+    ionisation_fraction(output, xs; ratefun, oversampling=1)
+    ionisation_fraction(output; ratefun, oversampling=1, maxevals=1000)
+
+Calculate the ionisation fraction at transverse coordinates `xs` using the ionisation-rate
+function `ratefun`. If `xs` is not given, calculate the average ionisation fraction across
+the waveguide core. In this case, `maxevals` determines the maximum number of function
+evaluations for the integral.
+
+!!! warning
+    Calculating the average ionisation fraction is **much** slower than calculating it at
+    a single point
+"""
+function ionisation_fraction(output, xs; ratefun, oversampling=1)
+    modes = makemodes(output; warn_dispersion=false)
+    pol = polarisation_components(output)
+    tospace = Modes.ToSpace(modes; components=pol)
+    t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
+    δt = t[2]-t[1]
+    z = output["z"]
+    ionf = zero(z)
+    Etxy = zeros(Float64, (length(t), tospace.npol))
+    for ii in eachindex(ionf)
+        Modes.to_space!(Etxy, real(Et[:, :, ii]), xs, tospace; z=z[ii])
+        absEt = tospace.npol > 1 ? hypot.(Etxy[:, 1], Etxy[:, 2]) : Etxy
+        ionf[ii] = Ionisation.ionfrac(ratefun, absEt, δt)[end]
+    end
+    ionf
+end
+
+function ionisation_fraction(output; ratefun, oversampling=1, maxevals=1000)
+    modes = makemodes(output; warn_dispersion=false)
+    pol = polarisation_components(output)
+    tospace = Modes.ToSpace(modes; components=pol)
+    t, Et = getEt(output; oversampling) # (Nt, Nm, Nz)
+    Et = real(Et)
+    δt = t[2]-t[1]
+    z = output["z"]
+    frac_temp = zero(t)
+    ionf = zero(z)
+    dl = Modes.dimlimits(modes[1])
+    Etxy = zeros(Float64, (length(t), tospace.npol))
+    for ii in eachindex(ionf)
+        Et_this = Et[:, :, ii]
+        val, _ = hcubature(dl[2], dl[3]; maxevals) do xs
+            Modes.to_space!(Etxy, Et_this, xs, tospace; z=z[ii])
+            absEt = tospace.npol > 1 ? hypot.(Etxy[:, 1], Etxy[:, 2]) : Etxy
+            Ionisation.ionfrac!(frac_temp, ratefun, absEt, δt)
+            dl[1] == :polar ? xs[1]*frac_temp[end] : frac_temp[end]
+        end
+        ionf[ii] = val
+    end
+    area, _ = hcubature(dl[2], dl[3]) do xs
+        dl[1] == :polar ? xs[1] : one(xs[1])
+    end
+    ionf./area
+end
+
 
 """
     nearest_z(output, z)
