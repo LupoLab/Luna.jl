@@ -657,8 +657,11 @@ end
 function n2_glass(material::Symbol; λ=nothing)
     if material == :SiO2
         return 2.7e-20
+    elseif material == :MgF2
+        # R. DeSalvo et al., IEEE J. Q. Elec. 32, 10 (1996).
+        return 5.79e-21
     else
-        throw(DomainError(source, "Unkown glass $material"))
+        error("Unkown glass $material")
     end
 end
 
