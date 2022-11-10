@@ -1092,6 +1092,25 @@ function lookup_mirror(type)
     end
 end
 
+"""
+    process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; fitorder=5, windowwidth=20e-9)
+
+Process reflectivity and group-delay dispersion data for a mirror and create a transfer function for
+a frequency-domain electric field representing the mirror.
+
+# Arguments:
+- `λR`: wavelength samples for reflectivity in SI units (m)
+- `R`: mirror reflectivity (between 0 and 1)
+- `λGDD`: wavelength samples for GDD in SI units (m)
+- `GDD`: GDD in SI units (s²)
+- `λ0`: central wavelength (used to remove any overall group delay)
+- `λmin`, `λmax`: bounds of the wavelength region to apply the transfer function over
+
+# Keyword arguments
+- `fitorder`: order of polynomial fit to use in removing overall group delay (default: 5)
+- `windowwidth`: wavelength width of the smoothing region outside `(λmin, λmax)`
+                for the window in SI units (default: 20e-9, i.e. 20 nm)
+"""
 function process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; fitorder=5, windowwidth=20e-9)
     r = sqrt.(R)
     rspl = Maths.BSpline(λR, r)

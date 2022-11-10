@@ -669,7 +669,8 @@ function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
 end
 
 """
-    prop_mirror!(Eω, ω, mirror, reflections)
+    prop_mirror!(Eω, ω, reflections, mirror)
+    prop_mirror!(Eω, grid, reflections, mirror)
 
 Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
 """
@@ -678,11 +679,38 @@ prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, mirror::Symbol) = pro
 
 Base.@deprecate prop_mirror!(Eω, ω, mirror, reflections) prop_mirror!(Eω, ω, reflections, mirror)
 
+"""
+    prop_mirror!(Eω, ω, reflections, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    prop_mirror!(Eω, grid, reflections, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from a mirror whose tabulated reflectivity
+and group-delay dispersion per reflection is given by:
+
+- `λR`: wavelength samples for reflectivity in SI units (m)
+- `R`: mirror reflectivity (between 0 and 1)
+- `λGDD`: wavelength samples for GDD in SI units (m)
+- `GDD`: GDD in SI units (s²)
+- `λ0`: central wavelength (used to remove any overall group delay)
+- `λmin`, `λmax`: bounds of the wavelength region to apply the transfer function over
+
+Additional keyword arguments are passed to `PhysData.process_mirror_data`:
+- `fitorder`: order of polynomial fit to use in removing overall group delay (default: 5)
+- `windowwidth`: wavelength width of the smoothing region outside `(λmin, λmax)`
+                for the window in SI units (default: 20e-9, i.e. 20 nm)
+"""
 function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
     transferfunction = PhysData.process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
     prop_mirror!(Eω, ω, transferfunction, reflections)
 end
 
+"""
+    prop_mirror!(Eω, ω, reflections, transferfunction)
+    prop_mirror!(Eω, grid, reflections, transferfunction)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from a mirror with a
+given transfer function. `transferfunction` should take a single argument `λ`, wavelength in SI units (m),
+and return the complex frequency-domain response of the mirror (amplitude and phase).
+"""
 function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, transferfunction)
     λ = wlfreq.(ω)
     t = transferfunction.(λ) # transfer function
