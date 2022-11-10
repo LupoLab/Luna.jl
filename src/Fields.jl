@@ -724,6 +724,12 @@ end
 
 prop_mirror!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_mirror!(Eω, grid.ω, args...; kwargs...)
 
+"""
+    prop_mirror(Eω, ω, args...; kwargs...)
+    prop_mirror(Eω, grid, args...; kwargs...)
+
+Return a copy of the field `Eω` after reflection off of mirrors. For other arguments see [`prop_mirror!`](@ref)
+"""
 prop_mirror(Eω, args...; kwargs...) = prop_mirror!(copy(Eω), args...; kwargs...)
 
 """
