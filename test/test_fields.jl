@@ -404,7 +404,7 @@ end
     # test diversity of power fluctuations
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
-##
+
 @testset "Propagation" begin
     λ0 = 800e-9
     τfwhm = 2.5e-15
@@ -505,7 +505,7 @@ end
         @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
     end
 end
-##
+
 @testset "Compression" begin
 # Short pulse with 100 fs^2
 λ0 = 800e-9
