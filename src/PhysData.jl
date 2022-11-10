@@ -1092,4 +1092,19 @@ function lookup_mirror(type)
     end
 end
 
+function process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; fitorder=5, windowwidth=20e-9)
+    r = sqrt.(R)
+    rspl = Maths.BSpline(λR, r)
+    ω = wlfreq.(λGDD)
+    ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+    ωfs = ω*1e-15
+    ωfs0 = wlfreq(λ0)*1e-15
+    p = Polynomials.fit(ωfs .- ωfs0, ϕ, fitorder)
+    p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+    ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+    ϕspl = Maths.BSpline(λGDD, ϕ)
+    return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+        λ, λmin-windowwidth, λmin, λmax, λmax+windowwidth)
+end
+
 end

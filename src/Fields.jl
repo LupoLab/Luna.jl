@@ -673,9 +673,19 @@ end
 
 Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
 """
-function prop_mirror!(Eω, ω, mirror, reflections)
+prop_mirror!(Eω, ω::AbstractArray, mirror::Symbol, reflections::Integer) = prop_mirror!(Eω, ω, reflections, PhysData.lookup_mirror(mirror))
+prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, mirror::Symbol) = prop_mirror!(Eω, ω, reflections, PhysData.lookup_mirror(mirror))
+
+Base.@deprecate prop_mirror!(Eω, ω, mirror, reflections) prop_mirror!(Eω, ω, reflections, mirror)
+
+function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    transferfunction = PhysData.process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    prop_mirror!(Eω, ω, transferfunction, reflections)
+end
+
+function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, transferfunction)
     λ = wlfreq.(ω)
-    t = PhysData.lookup_mirror(mirror).(λ) # transfer function
+    t = transferfunction.(λ) # transfer function
     tn = t.^reflections
     tn[.!isfinite.(tn)] .= 0
     if reflections < 0
@@ -684,9 +694,9 @@ function prop_mirror!(Eω, ω, mirror, reflections)
     Eω .*= tn
 end
 
-prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)
+prop_mirror!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_mirror!(Eω, grid.ω, args...; kwargs...)
 
-prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
+prop_mirror(Eω, args...; kwargs...) = prop_mirror!(copy(Eω), args...; kwargs...)
 
 """
     prop_mode!(Eω, ω, mode, distance, λ0=nothing)
