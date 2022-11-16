@@ -405,6 +405,7 @@ end
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
 
+##
 @testset "Propagation" begin
     λ0 = 800e-9
     τfwhm = 2.5e-15
@@ -491,21 +492,52 @@ end
     end
 
     λ0 = 1030e-9
-    τfwhm = 3.5e-15
-    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 500e-15)
+    τfwhm = 15e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
     input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
     x = Array{Float64}(undef, length(grid.t))
     FT = FFTW.plan_rfft(x, 1)
     Eω = input(grid, FT)
-    for mirror in (:PC147, :HD120, :HD59)
-        Eωmirr = Fields.prop_mirror(Eω, grid, 2, mirror) # one pair
+    mirrors = Dict(
+        :PC147 => -60e-30,
+        :PC1611 => -150e-30,
+        :PC1821 => -120e-30
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
         Et = FT \ Eωmirr
         gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
         ω0 = Maths.moment(grid.ω, abs2.(gab))
         @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
+    end
+
+    # Strong chirped mirrors: longer pulses
+    λ0 = 1030e-9
+    τfwhm = 50e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    mirrors = Dict(
+        :HD120 => -200e-30,
+        :HD59 => -500e-30,
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
     end
 end
-
+##
 @testset "Compression" begin
 # Short pulse with 100 fs^2
 λ0 = 800e-9
