@@ -1052,6 +1052,40 @@ function lookup_mirror(type)
         ϕspl = Maths.BSpline(λGDD, ϕ)
         return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
             λ, 640e-9, 650e-9, 1350e-9, 1360e-9)
+    elseif type == :PC1611
+        dat = readdlm(joinpath(Utils.datadir(), "PC1611.txt"); skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] 
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 850e-9, 855e-9, 1195e-9, 1200e-9)
+    elseif type == :PC1821
+        dat = readdlm(joinpath(Utils.datadir(), "PC1821.txt"); skipstart=1)
+        λR = dat[:, 1] * 1e-9
+        R = dat[:, 2] 
+        rspl = Maths.BSpline(λR, sqrt.(R/100))
+        λGDD = dat[:, 3] * 1e-9
+        ω = wlfreq.(λGDD)
+        GDD = dat[:, 4] .* 1e-30
+        ϕ = Maths.cumtrapz(Maths.cumtrapz(GDD, ω), ω)
+        ωfs = ω*1e-15
+        ωfs0 = wlfreq(1030e-9)*1e-15
+        p = Polynomials.fit(ωfs .- ωfs0, ϕ, 5)
+        p[2:end] = 0 # polynomials use 0-based indexing - only use constant and linear term
+        ϕ .-= p.(ωfs .- ωfs0) # subtract linear part
+        ϕspl = Maths.BSpline(λGDD, ϕ)
+        return λ -> rspl(λ) * exp(-1im*ϕspl(λ)) * Maths.planck_taper(
+            λ, 800e-9, 805e-9, 1345e-9, 1350e-9)
     elseif type == :HD120
         dat = readdlm(joinpath(Utils.datadir(), "HD120.csv"), ','; skipstart=1)
         λR = dat[:, 1] * 1e-9
