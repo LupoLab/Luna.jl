@@ -405,7 +405,6 @@ end
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
 
-##
 @testset "Propagation" begin
     λ0 = 800e-9
     τfwhm = 2.5e-15
@@ -537,7 +536,7 @@ end
         @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
     end
 end
-##
+
 @testset "Compression" begin
 # Short pulse with 100 fs^2
 λ0 = 800e-9
