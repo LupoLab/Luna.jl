@@ -466,11 +466,74 @@ end
 
     # Test sign of dispersion for chirped mirrors
     for mirror in (:PC70, :ThorlabsUMC)
-        Eωmirr = Fields.prop_mirror(Eω, grid, mirror, 2) # one pair
+        Eωmirr = Fields.prop_mirror(Eω, grid, 2, mirror) # one pair
         Et = FT \ Eωmirr
         gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
         ω0 = Maths.moment(grid.ω, abs2.(gab))
         @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+    end
+
+    # custom chirped mirrors
+    gdd = -50e-30 # -50 fs² per mirror exactly
+    λGDD = collect(range(600e-9, 1000e-9, 256))
+    GDD = ones(size(λGDD)) .* gdd
+    λR = collect(range(500e-9, 1200e-9, 256))
+    R = Maths.planck_taper.(λR, 500e-9, 520e-9, 1180e-9, 1200e-9)
+    @testset for reflections in 1:10
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, λR, R, λGDD, GDD, λ0, 600e-9, 1000e-9)
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        # check that this can be compressed by exactly removing the mirror chirp
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=1e-4)
+    end
+
+    λ0 = 1030e-9
+    τfwhm = 15e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    mirrors = Dict(
+        :PC147 => -60e-30,
+        :PC1611 => -150e-30,
+        :PC1821 => -120e-30
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
+    end
+
+    # Strong chirped mirrors: longer pulses
+    λ0 = 1030e-9
+    τfwhm = 50e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    mirrors = Dict(
+        :HD120 => -200e-30,
+        :HD59 => -500e-30,
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
     end
 end
 
