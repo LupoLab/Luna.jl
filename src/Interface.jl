@@ -6,7 +6,7 @@ import Logging: @info, @debug
 
 module Pulses
 
-import Luna: Fields, Output
+import Luna: Fields, Output, Processing, Capillary
 
 export AbstractPulse, CustomPulse, GaussPulse, SechPulse, DataPulse, LunaPulse
 
@@ -173,10 +173,6 @@ function DataPulse(fpath;
               Fields.PropagatedField(propagator, Fields.DataField(fpath; kwargs...)))
 end
 
-# Select fundamental mode from multi-mode sim or take just the single mode
-modeslice(Eω::Array{ComplexF64, 2}) = Eω[:, end]
-modeslice(Eω::Array{ComplexF64, 3}) = Eω[:, 1, end]
-
 """
     LunaPulse(output; energy, λ0=NaN, mode=:lowest, polarisation=:linear, propagator=nothing)
 
@@ -189,27 +185,41 @@ For multi-mode simulations, only the lowest-order modes is transferred.
 - `output::AbstractOutput`: output from a previous `Luna` simulation.
 
 # Keyword arguments
-- `energy::Number`: the pulse energy
+- `energy::Number`: the pulse energy. When transferring multi-mode simulations this defines the **total** energy.
+- `scale_energy`: if given instead of `energy`, scale the field from `output` by this number. Defaults to 1, so giving `energy` is **not** required. For multi-mode simulations, this can also be a `Vector` with the same number of elements as the number of modes, in which case the energy of each mode is scaled by the corresponding number.
 - `λ0::Number`: the central wavelength (optional; defaults to the centre of mass of the
                 given spectral energy density).
 - `ϕ::Vector{Number}`: spectral phases (CEP, group delay, GDD, TOD, ...) to be applied to the
                        pulse (in addition to any phase already present in the data).
-- `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
-                  lowest-order mode in the simulation, or a mode designation
-                  (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
-                  where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
-                  and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
                 apply an arbitrary propagation to the pulse before the simulation starts.
 """
-function LunaPulse(o::Output.AbstractOutput; kwargs...)
+function LunaPulse(o::Output.AbstractOutput; energy=nothing, scale_energy=nothing, kwargs...)
     ω = o["grid"]["ω"]
     t = o["grid"]["t"]
     τ = length(t) * (t[2] - t[1])/2 # middle of old time window
-    Eωm1 = modeslice(o["Eω"]) # either mode-averaged field or first mode
-    DataPulse(ω, Eωm1 .* exp.(1im .* ω .* τ); kwargs...)
+    Eω = o["Eω"]
+    if ndims(Eω) == 2
+        # mode-averaged
+        Eωm = Eω[:, end]
+        eout = Processing.energy(o)[end]
+        e = make_energies(energy, scale_energy, eout)
+        return DataPulse(ω, Eωm .* exp.(1im .* ω .* τ); energy=e, kwargs...)
+    elseif ndims(Eω) == 3
+        # multi-mode
+        modes = Processing.makemodes(o; warn_dispersion=false)
+        symbols = makesymbol.(modes)
+        eout = Processing.energy(o)[:, end]
+        es = make_energies(energy, scale_energy, eout)
+        return [DataPulse(ω, Eω[:, ii, end] .* exp.(1im .* ω .* τ); mode=symbols[ii], energy=es[ii], kwargs...) for ii in eachindex(modes)]
+    end
 end
+
+makesymbol(mode::Capillary.MarcatiliMode) = Symbol("$(mode.kind)$(mode.n)$(mode.m)")
+
+make_energies(energy::Number, scale_energy::Nothing, eout) = eout ./ sum(eout) .* energy
+make_energies(energy::Nothing, scale_energy, eout) = eout .* scale_energy
+make_energies(energy::Nothing, scale_energy::Nothing, eout) = eout
 
 struct GaussBeamPulse{pT} <: AbstractPulse
     waist::Float64
@@ -659,7 +669,7 @@ function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     end
 end
 
-function makeinputs(mode_s, λ0, pulses::Vector{<:Pulses.AbstractPulse})
+function makeinputs(mode_s, λ0, pulses::AbstractVector)
     i = Tuple(collect(Iterators.flatten([makeinputs(mode_s, λ0, pii) for pii in pulses])))
     @debug join(string.(i), "\n")
     return i

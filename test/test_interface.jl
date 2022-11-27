@@ -207,4 +207,88 @@ end
 end
 
 ##
+@testset "LunaPulse" begin
+    # single-mode
+    args = (100e-6, 0.1, :He, 1)
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(200e-9, 4e-6), shotnoise=false, modes=:HE11)
+    e1 = 10e-9
+    o1 = prop_capillary(args...; energy=e1, kwargs...)
+    eo1 = Processing.energy(o1)[end]
+
+    # change wavelength limits to force re-gridding
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=:HE11)
+
+    # Defining nothing
+    p = Pulses.LunaPulse(o1)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # energy should be the same as out of stage 1
+    ei2 = Processing.energy(o2)[1]
+    @test ei2 ≈ eo1
+
+    # Defining the overall energy
+    e2 = 5e-9
+    p = Pulses.LunaPulse(o1; energy=e2)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # energy should be e2 as defined
+    ei2 = Processing.energy(o2)[1]
+    @test ei2 ≈ e2
+
+    # Defining the energy 
+    es = 0.5
+    p = Pulses.LunaPulse(o1; scale_energy=es)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # total energy should be es times output energy
+    ei2 = Processing.energy(o2)[1]
+    @test ei2 ≈ eo1*es
+
+
+    # multi-mode
+    args = (100e-6, 0.1, :He, 1)
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(200e-9, 4e-6), shotnoise=false, modes=4)
+    e1 = 10e-9
+    o1 = prop_capillary(args...; energy=e1, kwargs...)
+    eo1 = Processing.energy(o1)[:, end]
+
+    # change wavelength limits to force re-gridding
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=4)
+
+    # Defining nothing
+    p = Pulses.LunaPulse(o1;)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # total energy should be the same as out of stage 1
+    ei2 = Processing.energy(o2)[:, 1]
+    @test sum(ei2) ≈ sum(eo1)
+    # relative energy in each mode should be the same
+    @test ei2 ./ sum(ei2) ≈ eo1 ./ sum(eo1)
+
+    # Defining the overall energy
+    e2 = 5e-9
+    p = Pulses.LunaPulse(o1; energy=e2)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # total energy should be e2 as defined
+    ei2 = Processing.energy(o2)[:, 1]
+    @test sum(ei2) ≈ e2
+    # relative energy in each mode should be the same
+    @test ei2 ./ sum(ei2) ≈ eo1 ./ sum(eo1)
+
+    # Defining the overall energy scale
+    es = 0.5
+    p = Pulses.LunaPulse(o1; scale_energy=es)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # total energy should be es times output energy
+    ei2 = Processing.energy(o2)[:, 1]
+    @test ei2 ≈ eo1*es
+    # relative energy in each mode should be the same
+    @test ei2 ./ sum(ei2) ≈ eo1 ./ sum(eo1)
+
+    # Defining mode dependent energy scale
+    es = [1, 0.75, 0.5, 0.25]
+    p = Pulses.LunaPulse(o1; scale_energy=es)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
+    # total energy should be weighted sum from before
+    ei2 = Processing.energy(o2)[:, 1]
+    @test ei2 ≈ eo1 .* es
+end
+
+##
 Logging.global_logger(old_logger)
