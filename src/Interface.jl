@@ -699,21 +699,23 @@ nmult(x::Nothing, fac) = x
 nmult(x, fac) = x*fac
 
 function ellfields(pulse::Union{Pulses.CustomPulse, Pulses.GaussPulse, Pulses.SechPulse})
-    f = pulse.field
+    f = pulse.field.field
+    pf = pulse.field
     py, px = ellfac(pulse.polarisation)
     f1 = Fields.PulseField(f.λ0, nmult(f.energy, py), nmult(f.power, py), f.ϕ, f.Itshape)
     f2 = Fields.PulseField(f.λ0, nmult(f.energy, px), nmult(f.power, px),
                            ellphase(f.ϕ, pulse.polarisation), f.Itshape)
-    f1, f2
+    Fields.PropagatedField(pf.propagator!, f1), Fields.PropagatedField(pf.propagator!, f2)
 end
 
 function ellfields(pulse::Pulses.DataPulse)
-    f = pulse.field
+    f = pulse.field.field
+    pf = pulse.field
     py, px = ellfac(pulse.polarisation)
     f1 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, py), f.ϕ, f.λ0)
     f2 = Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, px),
                           ellphase(f.ϕ, pulse.polarisation), f.λ0)
-    f1, f2
+    Fields.PropagatedField(pf.propagator!, f1), Fields.PropagatedField(pf.propagator!, f2)
 end
 
 function shotnoise_maybe(inputs, mode::Modes.AbstractMode, shotnoise::Bool)
