@@ -288,6 +288,24 @@ end
     # total energy should be weighted sum from before
     ei2 = Processing.energy(o2)[:, 1]
     @test ei2 ≈ eo1 .* es
+
+    # make sure coupling to fewer modes throws an error
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=2)
+    p = Pulses.LunaPulse(o1;)
+    @test_throws ErrorException o2 = prop_capillary(args...; pulses=p, kwargs...)
+
+    # make sure coupling to *different* modes throws an error
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=(:HE21, :HE22, :HE23, :HE24))
+    p = Pulses.LunaPulse(o1;)
+    @test_throws ErrorException o2 = prop_capillary(args...; pulses=p, kwargs...)
+
+    # coupling to more modes should work fine
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=6)
+    p = Pulses.LunaPulse(o1;)
+    ei2 = Processing.energy(o2)[:, 1]
+    prop_capillary(args...; pulses=p, kwargs...)
+    @test sum(ei2) ≈ sum(eo1)
+    @test all(ei2[5:end] .== 0)
 end
 
 ##
