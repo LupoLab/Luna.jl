@@ -415,6 +415,7 @@ function needpol(pol)
 end
 needpol(pol::Number) = true
 needpol(pulse::Pulses.AbstractPulse) = needpol(pulse.polarisation)
+needpol(pulses::Vector{<:Pulses.AbstractPulse}) = any(needpol, pulses)
 
 needpol(pol, pulses::Nothing) = needpol(pol)
 needpol(pol, pulse::Pulses.AbstractPulse) = needpol(pulse)

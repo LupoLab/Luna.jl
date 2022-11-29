@@ -302,10 +302,44 @@ end
     # coupling to more modes should work fine
     kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=6)
     p = Pulses.LunaPulse(o1;)
+    o2 = prop_capillary(args...; pulses=p, kwargs...)
     ei2 = Processing.energy(o2)[:, 1]
-    prop_capillary(args...; pulses=p, kwargs...)
     @test sum(ei2) ≈ sum(eo1)
     @test all(ei2[5:end] .== 0)
+
+    # check that adding a LunaPulse with additional inputs works
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=4)
+    e2 = 1e-9
+    p = Pulses.LunaPulse(o1;)
+    p2 = Pulses.GaussPulse(;λ0=400e-9, τfwhm=30e-15, energy=e2)
+    o2 = prop_capillary(args...; pulses=[p, p2], kwargs...)
+    ei2 = Processing.energy(o2)[:, 1]
+    @test sum(ei2) ≈ sum(eo1) + e2
+
+    # check that adding a LunaPulse with additional multi-mode input works
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=8)
+    e2 = 1e-9
+    p = Pulses.LunaPulse(o1;)
+    p2 = Pulses.GaussPulse(;λ0=400e-9, τfwhm=30e-15, energy=e2)
+    gp2 = Pulses.GaussBeamPulse(0.64*args[1], p2)
+    o2 = prop_capillary(args...; pulses=[p, gp2], kwargs...)
+    ei2 = Processing.energy(o2)[:, 1]
+    # need higher tolerance here since the gaussian beam overlap introduces a bit of error
+    @test isapprox(sum(ei2), sum(eo1) + e2, rtol=1e-3)
+
+    # two LunaPulses
+    kwargs2 = (λ0=400e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=4)
+    o12 = prop_capillary(args...; energy=e1, kwargs2...)
+    eo12 = Processing.energy(o12)[:, end]
+    kwargs = (λ0=800e-9, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6), shotnoise=false, modes=8)
+    e2 = 1e-9
+    p = Pulses.LunaPulse(o1)
+    p2 = Pulses.LunaPulse(o12)
+    o2 = prop_capillary(args...; pulses=[p, p2], kwargs...)
+    ei2 = Processing.energy(o2)[:, 1]
+    # need higher tolerance here since the gaussian beam overlap introduces a bit of error
+    @test sum(ei2) ≈ sum(eo1) + sum(eo12)
+
 end
 
 ##
