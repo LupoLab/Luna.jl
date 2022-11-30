@@ -606,7 +606,7 @@ function getEt(grid::AbstractGrid, Eω::AbstractArray;
     Eω = window_maybe(grid.ω, Eω, bandpass)
     if FTL
         τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
-        Eω .= abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+        Eω = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     end
     Eω = prop_maybe(grid, Eω, propagate)
     Etout = envelope(grid, Eω)
