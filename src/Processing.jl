@@ -9,6 +9,7 @@ import Luna.Output: AbstractOutput, HDF5Output
 import Cubature: hcubature
 import ProgressLogging: @progress
 import Logging: @warn
+import DSP: unwrap
 
 """
     Common(val)
@@ -576,6 +577,27 @@ end
 
 fftnorm(grid::RealGrid) = Maths.rfftnorm(grid.t[2] - grid.t[1])
 fftnorm(grid::EnvGrid) = Maths.fftnorm(grid.t[2] - grid.t[1])
+
+function getφ(grid::AbstractGrid, Eω)
+    ω, Eω = getEω(output)
+    t = grid.t
+    τ = length(t) * (t[2] - t[1])/2 # middle of time window
+    φ = unwrap(angle.(Eω); dims=1)
+    φ .- ω*τ
+end
+
+function getφ(ω::AbstractVector, Eω, τ)
+    φ = unwrap(angle.(Eω); dims=1)
+    φ .- ω*τ
+end
+
+function getφ(output, args...)
+    ω, Eω = getEω(output, args...)
+    grid = makegrid(output)
+    t = grid.t
+    τ = length(t) * (t[2] - t[1])/2 # middle of time window
+    getφ(ω, Eω, τ)
+end
 
 """
     getEt(output[, zslice]; kwargs...)
