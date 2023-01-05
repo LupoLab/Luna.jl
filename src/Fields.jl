@@ -333,6 +333,7 @@ struct SpatioTemporalField{iT} <: AbstractField
     τ0::Float64
     Ishape::iT
     propz::Float64
+    θ::Float64
 end
 
 "Gaussian temporal-spatial field defined radially"
@@ -353,10 +354,10 @@ superGaussian parameter `m=1` and Gaussian shaped spatial profile with waist `w0
 propagation distance from the waist of `propz`,
 and other parameters as defined for [`TimeField`](@ref).
 """
-function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0.0)
+function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0.0, θ=0.0)
     SpatioTemporalField(λ0, energy, ϕ, τ0,
                         (t, xs) -> GaussGauss(t, xs, τfwhm, m, w0),
-                        propz)
+                        propz, θ)
 end
 
 function make_Etr(s::SpatioTemporalField, grid::Grid.RealGrid, spacegrid)
@@ -385,6 +386,10 @@ function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Etr = make_Etr(s, grid, spacegrid)
     energy_t = Fields.energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
+    Etr = permutedims(
+        cat(Etr .* sin(s.θ), Etr .* cos(s.θ); dims=3),
+        (1, 3, 2)
+    )
     Eωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
         prop!(Eωk, s.propz, grid, spacegrid)
