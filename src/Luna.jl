@@ -264,14 +264,16 @@ end
 function setup(grid::Grid.EnvGrid, q::Hankel.QDHT,
                densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
-    xt = zeros(ComplexF64, length(grid.t), length(q.r))
+    shape = size(normfun(0))
+    xt = zeros(ComplexF64, shape)
     FT = FFTW.plan_fft(xt, 1, flags=settings["fftw_flag"])
-    Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
+    Eω = zeros(ComplexF64, shape)
     Eωk = q * Eω
     doinputs_fs!(Eωk, grid, q, FT, inputs)
-    xo = Array{ComplexF64}(undef, length(grid.to), length(q.r))
+    oshape = shape[2:end]
+    xo = Array{ComplexF64}(undef, length(grid.to), oshape...)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun, true)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()

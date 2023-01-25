@@ -7,6 +7,7 @@ import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
+using EllipsisNotation
 
 """
     to_time!(Ato, Aω, Aωo, IFTplan)
@@ -136,7 +137,7 @@ end
 
 function Et_to_Pt!(Pt, Et, responses, density, idcs)
     for i in idcs
-        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses, density)
+        Et_to_Pt!(view(Pt, .., i), view(Et, .., i), responses, density)
     end
 end
 
@@ -404,10 +405,10 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
     densityfun::dT # callable which returns density
-    Pto::Array{TT,2} # Buffer array for NL polarisation on oversampled time grid
-    Eto::Array{TT,2} # Buffer array for field on oversampled time grid
-    Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
-    Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
+    Pto::Array{TT, 3} # Buffer array for NL polarisation on oversampled time grid
+    Eto::Array{TT, 3} # Buffer array for field on oversampled time grid
+    Eωo::Array{ComplexF64, 3} # Buffer array for field on oversampled frequency grid
+    Pωo::Array{ComplexF64, 3} # Buffer array for NL polarisation on oversampled frequency grid
     idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
 end
 
@@ -421,12 +422,13 @@ function show(io::IO, t::TransRadial)
     print(io, out)
 end
 
-function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), HT.N))
-    Eto = zeros(TT, (length(grid.to), HT.N))
+function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun, pol=false)
+    shape = (length(grid.ωo), pol ? 2 : 1, HT.N)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, HT.N))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, HT.N))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    idcs = CartesianIndices(size(Pto)[2:end])
+    idcs = CartesianIndices(size(Pto)[3:end])
     TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
 end
 
@@ -493,23 +495,24 @@ Make function to return normalisation factor for radial symmetry.
 """
 function norm_radial(grid, q, nfun)
     ω = grid.ω
-    out = zeros(Float64, (length(ω), q.N))
+    out = zeros(Float64, (length(ω), 2, q.N))
     kr2 = q.k.^2
-    k2 = zeros(Float64, length(ω))
     function norm(z)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         for ir = 1:q.N
             for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ir] = 1.0
+                if ω[iω] == 0 || ~grid.sidx[iω]
+                    out[iω, :, ir] .= 1.0
                     continue
                 end
-                βsq = k2[iω] - kr2[ir]
-                if βsq <= 0
-                    out[iω, ir] = 1.0
-                    continue
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    k2 = (n*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kr2[ir]
+                    if βsq <= 0
+                        out[iω, ip, ir] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
                 end
-                out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
             end
         end
         return out

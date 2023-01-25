@@ -144,20 +144,24 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
-    n = zero(grid.ω)
-    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
-    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    n = zeros(Float64, (length(grid.ω), 2))
+    for (ii, si) in enumerate(grid.sidx)
+        if si
+            n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
+        end
+    end
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
     if thg
         β0const = 0.0
     else
-        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)
+        β0const = grid.ω0/PhysData.c * nfun(2π*PhysData.c./grid.ω0)[1]
     end
     make_const_linop(grid, q, n, β1, β0const; thg=thg)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
-                          n::AbstractArray, β1::Number, β0ref::Number; thg=false)
-    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+                          n::AbstractMatrix, β1::Number, β0ref::Number; thg=false)
+    out = Array{ComplexF64}(undef, (length(grid.ω), 2, q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
     _fill_linop_r!(out, grid, β1, k2, kr2, q.N, β0ref, thg)
@@ -220,6 +224,25 @@ function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
             end
             if !thg
                 out[iω, ir] -= -im*βref
+            end
+        end
+    end
+end
+
+function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2::AbstractMatrix, kr2, Nr, βref, thg)
+    for ir = 1:Nr
+        for ip = 1:2
+            for iω = 1:length(grid.ω)
+                βsq = k2[iω, ip] - kr2[ir]
+                if βsq < 0
+                    # negative βsq -> evanescent fields -> attenuation
+                    out[iω, ip, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+                else
+                    out[iω, ip, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+                end
+                if !thg
+                    out[iω, ip, ir] -= -im*βref
+                end
             end
         end
     end
