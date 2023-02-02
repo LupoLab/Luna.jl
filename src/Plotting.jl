@@ -3,7 +3,7 @@ import Luna: Grid, Maths, PhysData, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
-import PyPlot: ColorMap, plt, pygui, Figure
+import PythonPlot: ColorMap, pygui, Figure, pyplot
 import FFTW
 import Printf: @sprintf
 import Base: display
@@ -14,8 +14,8 @@ import Base: display
 `display` all currently open PyPlot figures.
 """
 function displayall()
-    for fign in plt.get_fignums()
-        fig = plt.figure(fign)
+    for fign in pyplot.get_fignums()
+        fig = pyplot.figure(fign)
         display(fig)
     end
 
@@ -65,7 +65,7 @@ function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     cols = ceil(Int, sqrt(N))
     rows = ceil(Int, N/cols)
     portrait && ((rows, cols) = (cols, rows))
-    fig, axs = plt.subplots(rows, cols, num=title)
+    fig, axs = pyplot.subplots(rows, cols, num=title)
     ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
     if cols*rows > N
         for axi in axs[N+1:end]
@@ -116,7 +116,7 @@ end
 """
     stats(output; kwargs...)
 
-Plot all statistics available in `output`. Additional `kwargs` are passed onto `plt.plot()`
+Plot all statistics available in `output`. Additional `kwargs` are passed onto `pyplot.plot()`
 """
 function stats(output; kwargs...)
     stats = output["stats"]
@@ -291,7 +291,7 @@ end
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
+    pfig, axs = pyplot.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
     _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
@@ -310,7 +310,7 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-        pfig, axs = plt.subplots(1, 2, num=num)
+        pfig, axs = pyplot.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
         _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
 
@@ -319,7 +319,7 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
     end
 
     num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
+    pfig, axs = pyplot.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
     _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
@@ -336,7 +336,7 @@ end
 function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
     im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); shading="auto", kwargs...)
     im.set_clim(dBmin, 0)
-    cb = plt.colorbar(im, ax=ax)
+    cb = pyplot.colorbar(im, ax=ax)
     cb.set_label("SED (dB)")
     ax.set_ylabel("Distance (cm)")
     ax.set_xlabel(speclabel)
@@ -347,7 +347,7 @@ end
 function _time2D(ax, t, z, I, trange; kwargs...)
     Pfac, unit = power_unit(I)
     im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); shading="auto", kwargs...)
-    cb = plt.colorbar(im, ax=ax)
+    cb = pyplot.colorbar(im, ax=ax)
     cb.set_label("Power ($unit)")
     ax.set_xlim(trange.*1e15)
     ax.set_xlabel("Time (fs)")
@@ -367,7 +367,7 @@ a single index, a `range` or `:sum`. In the latter case, the sum of modes is plo
 
 The keyword argument `oversampling` determines the amount of oversampling done before plotting.
 
-Other `kwargs` are passed onto `plt.plot`.
+Other `kwargs` are passed onto `pyplot.plot`.
 """
 function time_1D(output, zslice=maximum(output["z"]);
                 y=:Pt, modes=nothing,
@@ -403,23 +403,23 @@ function time_1D(output, zslice=maximum(output["z"]);
 
     yfac, unit = power_unit(abs2.(Et), y)
 
-    sfig = plt.figure()
+    sfig = pyplot.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
+        _plot_slice_mm(pyplot.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
     else
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
         for iz in eachindex(zactual)
-            plt.plot(t*1e15, yfac*yt[:, iz]; label=label[iz], kwargs...)
+            pyplot.plot(t*1e15, yfac*yt[:, iz]; label=label[iz], kwargs...)
         end
     end
-    plt.legend(frameon=false)
-    add_fwhm_legends(plt.gca(), "fs")
-    plt.xlabel("Time (fs)")
-    plt.xlim(1e15.*trange)
+    pyplot.legend(frameon=false)
+    add_fwhm_legends(pyplot.gca(), "fs")
+    pyplot.xlabel("Time (fs)")
+    pyplot.xlim(1e15.*trange)
     ylab = y == :Et ?  "Field ($unit)" : "Power ($unit)"
-    plt.ylabel(ylab)
-    y == :Et || plt.ylim(ymin=0)
+    pyplot.ylabel(ylab)
+    y == :Et || pyplot.ylim(ymin=0)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
     sfig
@@ -450,7 +450,7 @@ If `log10` is true, plot on a logarithmic scale, with a y-axis range of `log10mi
 The keyword argument `modes` selects which modes (if present) are to be plotted, and can be
 a single index, a `range` or `:sum`. In the latter case, the sum of modes is plotted.
 
-Other `kwargs` are passed onto `plt.plot`.
+Other `kwargs` are passed onto `pyplot.plot`.
 """
 function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
                  modes=nothing, λrange=(150e-9, 1200e-9),
@@ -479,21 +479,21 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
 
     specx .*= specxfac
 
-    sfig = plt.figure()
+    sfig = pyplot.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
+        _plot_slice_mm(pyplot.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
     else
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
         for iz in eachindex(zactual)
-            (log10 ? plt.semilogy : plt.plot)(specx, Iω[:, iz]; label=label[iz], kwargs...)
+            (log10 ? pyplot.semilogy : pyplot.plot)(specx, Iω[:, iz]; label=label[iz], kwargs...)
         end
     end
-    plt.legend(frameon=false)
-    plt.xlabel(speclabel)
-    plt.ylabel("Spectral energy density")
-    log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
-    plt.xlim(speclims...)
+    pyplot.legend(frameon=false)
+    pyplot.xlabel(speclabel)
+    pyplot.ylabel("Spectral energy density")
+    log10 && pyplot.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
+    pyplot.xlim(speclims...)
     sfig.set_size_inches(8.5, 5)
     sfig.tight_layout()
     sfig
@@ -547,13 +547,13 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
 
     log && (Ig = 10*log10.(Maths.normbymax(Ig)))
 
-    fig = plt.figure()
-    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; shading="auto", kwargs...)
-    plt.ylim(speclims...)
-    plt.ylabel(speclabel)
-    plt.xlabel("Time (fs)")
-    log && plt.clim(dBmin, 0)
-    plt.colorbar()
+    fig = pyplot.figure()
+    pyplot.pcolormesh(tg.*1e15, specyfac*specy, Ig; shading="auto", kwargs...)
+    pyplot.ylim(speclims...)
+    pyplot.ylabel(speclabel)
+    pyplot.xlabel("Time (fs)")
+    log && pyplot.clim(dBmin, 0)
+    pyplot.colorbar()
     fig
 end
 
@@ -581,8 +581,8 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
 
     z = output["z"]*100
 
-    fig = plt.figure()
-    ax = plt.axes()
+    fig = pyplot.figure()
+    ax = pyplot.axes()
     ax.plot(z, 1e6*e')
     ax.set_xlim(extrema(z)...)
     ax.set_ylim(ymin=0)
@@ -646,7 +646,7 @@ end
 
 Place a `text` in the axes `ax` in the corner defined by `corner`. Padding can be
 defined for `x` and `y` together via `pad` or separately via `xpad` and `ypad`. Further
-keyword arguments are passed to `plt.text`. 
+keyword arguments are passed to `pyplot.text`. 
 
 Possible values for `corner` are `ul`, `ur`, `ll`, `lr` where the first letter
 defines upper/lower and the second defines left/right.
