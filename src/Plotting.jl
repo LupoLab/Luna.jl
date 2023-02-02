@@ -4,6 +4,7 @@ import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
 import PythonPlot: ColorMap, pygui, Figure, pyplot
+import PythonCall: pyconvert
 import FFTW
 import Printf: @sprintf
 import Base: display
@@ -66,9 +67,10 @@ function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     rows = ceil(Int, N/cols)
     portrait && ((rows, cols) = (cols, rows))
     fig, axs = pyplot.subplots(rows, cols, num=title)
+    axs = pyconvert(Any, axs)
     ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
     if cols*rows > N
-        for axi in axs[N+1:end]
+        for axi in axs[N:end]
             axi.remove()
         end
     end
@@ -169,7 +171,7 @@ function stats(output; kwargs...)
     if Npl > 0
         pfig, axs = subplotgrid(Npl, title="Pulse stats")
         for n in 1:Npl
-            ax = axs[n-1]
+            ax = axs[n]
             data, label = pstats[n]
             multimode && (ndims(data) > 1) && (data = data')
             ax.plot(z, data; kwargs...)
@@ -185,7 +187,7 @@ function stats(output; kwargs...)
     if Npl > 0
         ffig, axs = subplotgrid(Npl, title="Other stats")
         for n in 1:Npl
-            ax = axs[n-1]
+            ax = axs[n]
             data, label = fstats[n]
             multimode && (ndims(data) > 1) && (data = data')
             ax.plot(z, data; kwargs...)
