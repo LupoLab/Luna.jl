@@ -169,7 +169,7 @@ function stats(output; kwargs...)
     if Npl > 0
         pfig, axs = subplotgrid(Npl, title="Pulse stats")
         for n in 1:Npl
-            ax = axs[n]
+            ax = axs[n-1]
             data, label = pstats[n]
             multimode && (ndims(data) > 1) && (data = data')
             ax.plot(z, data; kwargs...)
@@ -185,7 +185,7 @@ function stats(output; kwargs...)
     if Npl > 0
         ffig, axs = subplotgrid(Npl, title="Other stats")
         for n in 1:Npl
-            ax = axs[n]
+            ax = axs[n-1]
             data, label = fstats[n]
             multimode && (ndims(data) > 1) && (data = data')
             ax.plot(z, data; kwargs...)
@@ -294,9 +294,9 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
     pfig, axs = pyplot.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
-    _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
+    _spec2D_log(axs[0], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
 
-    _time2D(axs[2], t, z, It, trange; kwargs...)
+    _time2D(axs[1], t, z, It, trange; kwargs...)
     pfig.tight_layout()
     return pfig
 end
@@ -312,9 +312,9 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = pyplot.subplots(1, 2, num=num)
         pfig.set_size_inches(12, 4)
-        _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
+        _spec2D_log(axs[0], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
 
-        _time2D(axs[2], t, z, It[:, mi, :], trange; kwargs...)
+        _time2D(axs[1], t, z, It[:, mi, :], trange; kwargs...)
         push!(pfigs, pfig)
     end
 
@@ -322,10 +322,10 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
     pfig, axs = pyplot.subplots(1, 2, num=num)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
-    _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
+    _spec2D_log(axs[0], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
 
     Itall = dropdims(sum(It, dims=2), dims=2)
-    _time2D(axs[2], t, z, Itall, trange; kwargs...)
+    _time2D(axs[1], t, z, Itall, trange; kwargs...)
     pfig.tight_layout()
     push!(pfigs, pfig)
 
