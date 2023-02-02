@@ -639,8 +639,8 @@ function add_fwhm_legends(ax, unit)
         xy = line.get_xydata()
         xy = pyconvert(Any, xy)
         fw = Maths.fwhm(xy[:, 1], xy[:, 2])
-        t = texts[ii]
-        s = t.get_text()
+        t = texts[ii-1]
+        s = pyconvert(Any, t.get_text())
         s *= @sprintf(" [%.2f %s]", fw, unit)
         t.set_text(s)
     end
