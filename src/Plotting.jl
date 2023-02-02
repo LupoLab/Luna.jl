@@ -70,7 +70,7 @@ function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     axs = pyconvert(Any, axs)
     ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
     if cols*rows > N
-        for axi in axs[N:end]
+        for axi in axs[N+1:end]
             axi.remove()
         end
     end
