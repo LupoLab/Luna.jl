@@ -511,7 +511,7 @@ function _plot_slice_mm(ax, x, y, z, modestrs, log10=false, fwhm=false; kwargs..
     pfun = (log10 ? ax.semilogy : ax.plot)
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
-        line = pfun(x, y[:, 1, sidx]; label="$zs ($(modestrs[1]))", kwargs...)[1]
+        line = pfun(x, y[:, 1, sidx]; label="$zs ($(modestrs[1]))", kwargs...)[0]
         for midx = 2:size(y, 2) # iterate over modes
             pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
                  label="$zs ($(modestrs[midx]))"; kwargs...)
@@ -631,7 +631,7 @@ function add_fwhm_legends(ax, unit)
     leg = ax.get_legend()
     texts = leg.get_texts()
     handles, labels = ax.get_legend_handles_labels()
-    
+    handles = pyconvert(Any, handles)
     for (ii, line) in enumerate(handles)
         xy = line.get_xydata()
         fw = Maths.fwhm(xy[:, 1], xy[:, 2])
