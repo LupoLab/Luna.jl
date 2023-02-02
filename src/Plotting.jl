@@ -307,7 +307,7 @@ end
 function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
                     speclabel, speclims, trange, dBmin, bpstr;
                     kwargs...)
-    pfigs = Figure[]
+    pfigs = []
     Iω = Maths.normbymax(Iω)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
