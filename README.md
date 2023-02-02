@@ -5,7 +5,7 @@
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://lupo-lab.com/Luna.jl)
 
 
-Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics—both in waveguides (such as optical fibres) and free-space geometries—using the unidirectional pulse propagation equation (UPPE). Some of the key features of Luna:
+Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics—both in waveguides (such as optical fibres) and free-space geometries—using the unidirectional pulse propagation equation (UPPE) and its approximate forms, such as the commonly used generalised nonlinear Schrödinger equation (GNLSE). Some of the key features of Luna:
 - A variety of propagation geometries treated in a unified way:
     - Single-mode (mode-averaged) propagation in waveguides
     - Multi-mode propagation in waveguides with arbitrary (including non-symmetric) mode-shapes, full polarisation resolution, and intermodal coupling for arbitrary nonlinear polarisation terms
@@ -16,40 +16,31 @@ Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics�
 - A range of linear and nonlinear optical effects:
     - Modal dispersion and loss in waveguides
     - Optical Kerr effect (third-order nonlinearity)
-    - Raman scattering in molecular gases
+    - Raman scattering in molecular gases or glasses
     - Strong-field photoionisation and plasma dynamics
 - A built-in interface for the running and processing of multi-dimensional [parameter scans](#running-parameter-scans) in serial or parallel
 - A standard library of [plotting](#plotting-results) and [processing](#output-processing) functions, including calculation of spectrograms and beam properties
 
 Luna is designed to be extensible: adding e.g. a new type of waveguide or a new nonlinear effect is straightforward, even without editing the main source code.
 
-Luna was originally developed for modelling ultrafast pulse propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres. Therefore such simulations have particularly good support.
+Luna was originally developed for modelling ultrafast pulse propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres. Therefore, such simulations have particularly good support. It is also excellent for modelling propagation in solid-core fibres.
 
 Luna is written in the [Julia programming language](https://julialang.org/), chosen for its unique combination of readability, ease of use, and speed. If you want to use Luna but are new to Julia, see [the relevant section of this README](#new-to-julia).
 
 There are two ways of using Luna:
-1. A very simple high-level interface for the most heavily optimised application of Luna—propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres—consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses.
+1. A very simple high-level interface for the most heavily optimised applications of Luna: propagation in gas-filled hollow capillary fibres and hollow-core photonic crystal fibres (consisting of the function [`prop_capillary`](#quickstart) and some helper functions to create input pulses); or propagation of simple GNLSE simulations (consisting of the function [`prop_gnlse`](#gnlse)).
 2. A low-level interface which allows for full control and customisation of the simulation parameters, the use of custom waveguide modes and gas fills (including gas mixtures), and free-space propagation simulations.
 
-For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) section below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
+For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) or [GNLSE](#gnlse) sections below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna currently only runs with Julia v1.7, which can be obtained from [here](https://julialang.org/downloads/#upcoming_release). Earlier versions lack some required features, and Julia v1.6 triggers an [unresolved bug](https://github.com/LupoLab/Luna/issues/212).
-
-Once Julia is installed, open a new Julia terminal, and install the [CoolProp](https://github.com//CoolProp/CoolProp.jl) Julia package, then Luna:
+Luna requires Julia v1.7 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
 
 ```julia
 ]
-add https://github.com//CoolProp/CoolProp.jl
-add https://github.com/LupoLab/Luna
+add Luna
 ```
-or using `Pkg`
-
-```julia
-using Pkg
-Pkg.add(PackageSpec(url="https://github.com/CoolProp/CoolProp.jl", rev="master"))
-Pkg.add(PackageSpec(url="https://github.com/LupoLab/Luna", rev="master")
-```
+This will install and precompile Luna and all its dependencies.
 
 ## Quickstart
 To run a simple simulation of ultrafast pulse propagation in a gas-filled hollow capillary fibre, you can use `prop_capillary`. As an example, take a 3-metre length of HCF with 125 μm core radius, filled with 1 bar of helium gas, and driving pulses centred at 800 nm wavelength with 120 μJ of energy and 10 fs duration. We consider a frequency grid which spans from 120 nm to 4 μm and a time window of 1 ps.
@@ -129,6 +120,24 @@ The `Processing` module contains many useful functions for more detailed process
 - Energy (`Processing.energy`) and peak power (`Processing.peakpower`) including after frequency bandpass
 - FWHM widths in frequency (`Processing.fwhm_f`) and time (`Processing.fwhm_t`) as well as time-bandwidth product (`Processing.time_bandwidth`)
 - g₁₂ coherence between multiple fields (`Processing.coherence`)
+
+## GNLSE propagation
+To run a simple simulation of nonlinear pulse propagation in an optical fibre using the generalised nonlinear Schrödinger equation (GNLSE), you can use `prop_gnlse`. As an example, we can model supercontinuum generation in a solid-core photonic crystal fibre for parameters corresponding to the simulations in Fig. 3 of Dudley et. al, RMP 78 1135 (2006).
+```julia
+julia> using Luna
+julia> γ = 0.11
+julia> flength = 15e-2
+julia> βs = [0.0, 0.0, -1.1830e-26, 8.1038e-41, -9.5205e-56,  2.0737e-70, -5.3943e-85,  1.3486e-99, -2.5495e-114,  3.0524e-129, -1.7140e-144]
+julia> output = prop_gnlse(γ, flength, βs; λ0=835e-9, τfwhm=50e-15, power=10e3, pulseshape=:sech, λlims=(400e-9, 2400e-9), trange=12.5e-12)
+```
+After this has run, you can visualise the output, with e.g.
+```julia
+julia> Plotting.prop_2D(output, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
+PyPlot.Figure(PyObject <Figure size 2400x800 with 4 Axes>)
+```
+This should show a plot like this:
+![GNLSE propagation example](assets/readme_gnlse_scg.png)
+
 
 ## Examples
 The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the [low-level interface](examples/low_level_interface). Some of the simple interface examples require the `PyPlot` package to be present, and many of the low-level examples require other packages as well--you can install these by simply typing `] add PyPlot` at the Julia REPL or the equivalent for other packages.

@@ -2,7 +2,7 @@ module Fields
 import Luna: Grid, Maths, PhysData, Modes
 import Luna.PhysData: wlfreq, ε_0, μ_0
 import StaticArrays: SVector
-import Cubature: hcubature
+import HCubature: hcubature
 import NumericalIntegration: integrate, SimpsonEven
 import Random: AbstractRNG, GLOBAL_RNG
 import Statistics: mean
@@ -410,13 +410,14 @@ one of `:x` or `:y`.
 function gauss_beam(k, ω0; z=0.0, pol=:y)
     let k=k, ω0=ω0, z=z, pol=pol
         function fieldfunc(xs)
+            r = xs[1]
             zr = k*ω0^2/2
             ω = ω0*sqrt(1 + (z/zr)^2)
-            R1 = z/(z^2 + zr^2)
+            R1 = z/(z^2 + zr^2) # 1/R
             ψ = atan(z/zr)
-            phase = exp(-1im * (k*z + k*xs[1]^2*R1/2 - ψ))
-            E = ω0/ω * exp(-xs[1]^2/ω^2) * phase
-            if pol==:x
+            phase = exp(-1im * (k*z + k*r^2*R1/2 - ψ))
+            E = ω0/ω * exp(-r^2/ω^2) * phase
+            if pol == :x
                 return SVector(E, 0.0)
             else
                 return SVector(0.0, E)
@@ -426,18 +427,25 @@ function gauss_beam(k, ω0; z=0.0, pol=:y)
 end
 
 function int2D(field1, field2, lowerlim, upperlim)
-    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(conj(field1(xs)), field2(xs))*xs[1]
-    abs(hcubature(Ifunc, lowerlim, upperlim)[1])
+    Ifunc(xs) = 0.5*sqrt(ε_0/μ_0)*dot(field1(xs), field2(xs))*xs[1]
+    val, _ = hcubature(lowerlim, upperlim) do xs
+        real(Ifunc(xs))
+    end
+    val
 end
     
 function normalised_field(fieldfunc, rmax)
-    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0,0.0), (rmax, 2π)))
+    scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0, 0.0), (rmax, 2π)))
     return let scale=scale, fieldfunc=fieldfunc
         (xs) -> fieldfunc(xs) .* scale
     end
 end
 
-normalised_gauss_beam(k, ω0; pol=:y) = normalised_field(gauss_beam(k, ω0, pol=pol), 6*ω0)
+function normalised_gauss_beam(k, ω0; z=0.0, pol=:y)
+    zr = k*ω0^2/2
+    ω = ω0*sqrt(1 + (z/zr)^2)
+    normalised_field(gauss_beam(k, ω0; z, pol), 6*ω)
+end
 
 """
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
@@ -448,7 +456,7 @@ initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with 
 same keyword arguments.
 """
 function coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
-    ei = energy * Modes.overlap(mode, E)^2
+    ei = energy * abs2(Modes.overlap(mode, E))
     (mode=i, fields=(fieldfunc(;energy=ei, kwargs...),))
 end
 
@@ -661,13 +669,51 @@ function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
 end
 
 """
-    prop_mirror!(Eω, ω, mirror, reflections)
+    prop_mirror!(Eω, ω, reflections, mirror)
+    prop_mirror!(Eω, grid, reflections, mirror)
 
 Propagate the field `Eω` linearly by adding a number of `reflections` from the `mirror` type.
 """
-function prop_mirror!(Eω, ω, mirror, reflections)
+prop_mirror!(Eω, ω::AbstractArray, mirror::Symbol, reflections::Integer) = prop_mirror!(Eω, ω, reflections, PhysData.lookup_mirror(mirror))
+prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, mirror::Symbol) = prop_mirror!(Eω, ω, reflections, PhysData.lookup_mirror(mirror))
+
+Base.@deprecate prop_mirror!(Eω, ω, mirror, reflections) prop_mirror!(Eω, ω, reflections, mirror)
+
+"""
+    prop_mirror!(Eω, ω, reflections, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    prop_mirror!(Eω, grid, reflections, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from a mirror whose tabulated reflectivity
+and group-delay dispersion per reflection is given by:
+
+- `λR`: wavelength samples for reflectivity in SI units (m)
+- `R`: mirror reflectivity (between 0 and 1)
+- `λGDD`: wavelength samples for GDD in SI units (m)
+- `GDD`: GDD in SI units (s²)
+- `λ0`: central wavelength (used to remove any overall group delay)
+- `λmin`, `λmax`: bounds of the wavelength region to apply the transfer function over
+
+Additional keyword arguments are passed to `PhysData.process_mirror_data`:
+- `fitorder`: order of polynomial fit to use in removing overall group delay (default: 5)
+- `windowwidth`: wavelength width of the smoothing region outside `(λmin, λmax)`
+                for the window in SI units (default: 20e-9, i.e. 20 nm)
+"""
+function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    transferfunction = PhysData.process_mirror_data(λR, R, λGDD, GDD, λ0, λmin, λmax; kwargs...)
+    prop_mirror!(Eω, ω, transferfunction, reflections)
+end
+
+"""
+    prop_mirror!(Eω, ω, reflections, transferfunction)
+    prop_mirror!(Eω, grid, reflections, transferfunction)
+
+Propagate the field `Eω` linearly by adding a number of `reflections` from a mirror with a
+given transfer function. `transferfunction` should take a single argument `λ`, wavelength in SI units (m),
+and return the complex frequency-domain response of the mirror (amplitude and phase).
+"""
+function prop_mirror!(Eω, ω::AbstractArray, reflections::Integer, transferfunction)
     λ = wlfreq.(ω)
-    t = PhysData.lookup_mirror(mirror).(λ) # transfer function
+    t = transferfunction.(λ) # transfer function
     tn = t.^reflections
     tn[.!isfinite.(tn)] .= 0
     if reflections < 0
@@ -676,9 +722,15 @@ function prop_mirror!(Eω, ω, mirror, reflections)
     Eω .*= tn
 end
 
-prop_mirror!(Eω, grid::Grid.AbstractGrid, args...) = prop_mirror!(Eω, grid.ω, args...)
+prop_mirror!(Eω, grid::Grid.AbstractGrid, args...; kwargs...) = prop_mirror!(Eω, grid.ω, args...; kwargs...)
 
-prop_mirror(Eω, args...) = prop_mirror!(copy(Eω), args...)
+"""
+    prop_mirror(Eω, ω, args...; kwargs...)
+    prop_mirror(Eω, grid, args...; kwargs...)
+
+Return a copy of the field `Eω` after reflection off of mirrors. For other arguments see [`prop_mirror!`](@ref)
+"""
+prop_mirror(Eω, args...; kwargs...) = prop_mirror!(copy(Eω), args...; kwargs...)
 
 """
     prop_mode!(Eω, ω, mode, distance, λ0=nothing)
@@ -812,7 +864,7 @@ function optfield_cep(Eω::AbstractVector, grid)
         1/maximum(Et)
     end
 
-    res.minimizer, Eω*exp(1im*ϕ)
+    res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
 function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
@@ -824,4 +876,15 @@ function optfield_cep(Eω::AbstractMatrix, grid; mode=1)
     res.minimizer, Eω*exp(1im*res.minimizer)
 end
 
+function optfield_cep(Eω, grid; mode=1)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    ϕout = zeros(size(cidcs))
+    for ci in cidcs
+        ϕi, Eωi = optfield_cep(Eω[:, :, ci], grid; mode)
+        out[:, :, ci] .= Eωi
+        ϕout[ci] = ϕi
+    end
+    ϕout, out
+end
 end

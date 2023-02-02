@@ -466,11 +466,74 @@ end
 
     # Test sign of dispersion for chirped mirrors
     for mirror in (:PC70, :ThorlabsUMC)
-        Eωmirr = Fields.prop_mirror(Eω, grid, mirror, 2) # one pair
+        Eωmirr = Fields.prop_mirror(Eω, grid, 2, mirror) # one pair
         Et = FT \ Eωmirr
         gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
         ω0 = Maths.moment(grid.ω, abs2.(gab))
         @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+    end
+
+    # custom chirped mirrors
+    gdd = -50e-30 # -50 fs² per mirror exactly
+    λGDD = collect(range(600e-9, 1000e-9, 256))
+    GDD = ones(size(λGDD)) .* gdd
+    λR = collect(range(500e-9, 1200e-9, 256))
+    R = Maths.planck_taper.(λR, 500e-9, 520e-9, 1180e-9, 1200e-9)
+    @testset for reflections in 1:10
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, λR, R, λGDD, GDD, λ0, 600e-9, 1000e-9)
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        # check that this can be compressed by exactly removing the mirror chirp
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=1e-4)
+    end
+
+    λ0 = 1030e-9
+    τfwhm = 15e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    mirrors = Dict(
+        :PC147 => -60e-30,
+        :PC1611 => -150e-30,
+        :PC1821 => -120e-30
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
+    end
+
+    # Strong chirped mirrors: longer pulses
+    λ0 = 1030e-9
+    τfwhm = 50e-15
+    grid = Grid.RealGrid(1, λ0, (400e-9, 1500e-9), 2e-12)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    mirrors = Dict(
+        :HD120 => -200e-30,
+        :HD59 => -500e-30,
+    )
+    reflections = 1
+    @testset for (mirror, gdd) in pairs(mirrors)
+        Eωmirr = Fields.prop_mirror(Eω, grid, reflections, mirror) # one pair
+        Et = FT \ Eωmirr
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2] # negative chirp, so frequency should go down with time
+        ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
+        @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
     end
 end
 
@@ -563,6 +626,23 @@ end
     @test inputs[6].fields[1].energy/energy < 2e-20
     @test inputs[7].fields[1].energy/energy < 1e-20
     @test inputs[8].fields[1].energy/energy < 1e-20
+
+    # Now test that overlap integrals also work for diverging beams and produce 
+    # sensible results
+    a = 100e-6
+    w0 = 0.64a
+    λ = 800e-9
+    k = 2π/λ
+    zr = π*w0^2/λ
+
+    mode = Capillary.MarcatiliMode(a)
+    beam = Fields.normalised_gauss_beam(k, w0)
+    @test abs2.(Modes.overlap(mode, beam)) ≈ 0.9807131210817726
+    # test diverged beams
+    beam2 = Fields.normalised_gauss_beam(k, w0; z=zr)
+    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
+    beam2 = Fields.normalised_gauss_beam(k, w0; z=-zr)
+    @test abs2.(Modes.overlap(mode, beam2)) < abs2.(Modes.overlap(mode, beam))
 end
 
 @testset "DataField" begin
@@ -596,4 +676,44 @@ end
     t, Et = Processing.getEt(grid, Eω)
     @test isapprox(Maths.fwhm(t, abs2.(Et)), τfwhm, rtol=1e-5)
     @test isapprox(Maths.moment(t, abs2.(Et)), τ0, rtol=1e-5)
+end
+
+@testset "CEP optimisation" begin
+    τfwhm = 3e-15
+    λ0 = 800e-9
+    energy = 1e-6
+    grid = Grid.RealGrid(1.0, λ0, (100e-9, 3000e-9), 500e-15)
+    δt = grid.t[2] - grid.t[1]
+    ϕCEO = δt*PhysData.wlfreq(λ0)
+    energy_t = Fields.energyfuncs(grid)[1]
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
+    Eω = input(grid, FT)
+    ϕopt, Eωopt = Fields.optfield_cep(Eω, grid)
+    Et = FT \ Eωopt
+    It = abs2.(Maths.hilbert(Et))
+    # check that the optimisation has found the correct value
+    @test isapprox(ϕopt, ϕCEO, rtol=1e-6)
+    @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), 0.0, rtol=1e-15, atol=1e-15)
+
+    Eωm = [Eω zero(Eω)]
+    ϕoptm, Eωopt = Fields.optfield_cep(Eωm, grid)
+    @test size(Eωopt) == size(Eωm)
+    @test ϕoptm == ϕopt
+    nCEO = 4
+    Eωmm = zeros(ComplexF64, (length(grid.ω), 2, nCEO))
+    for ii in 1:nCEO
+        ϕCEO = δt*PhysData.wlfreq(λ0)*ii
+        input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
+        Eω = input(grid, FT)
+        Eωmm[:, 1, ii] .= Eω
+    end
+    ϕoptmm, Eωoptmm = Fields.optfield_cep(Eωmm, grid)
+    @test size(Eωoptmm) == size(Eωmm)
+    for ii in 1:nCEO
+        ϕCEO = δt*PhysData.wlfreq(λ0)*ii
+        @test isapprox(ϕoptmm[ii], ϕCEO, rtol=1e-6)
+    end
 end

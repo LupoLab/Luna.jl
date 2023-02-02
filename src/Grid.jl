@@ -227,7 +227,7 @@ function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
 
     xwin = Maths.planck_taper(x, -Rxw, -Rx, Rx, Rxw)
     ywin = Maths.planck_taper(y, -Ryw, -Ry, Ry, Ryw)
-    xywin = reshape(xwin, (1, length(xwin))) .* reshape(xwin, (1, 1, length(xwin)))
+    xywin = reshape(ywin, (1, length(ywin))) .* reshape(xwin, (1, 1, length(xwin)))
 
     FreeGrid(x, y, kx, ky, r, xywin)
 end

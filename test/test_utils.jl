@@ -1,6 +1,7 @@
 import Test: @test, @testset, @test_throws
 import Luna: Utils, @hlock
 import HDF5
+import Dates
 
 @testset "Utils" begin
 
@@ -42,6 +43,48 @@ end
 
 @test Utils.subscript(123456789) == Utils.subscript("123456789") == "₁₂₃₄₅₆₇₈₉"
 @test Utils.subscript("0123456789") == "₀₁₂₃₄₅₆₇₈₉"
+end
+
+
+@testset "date formatting" begin
+    start = Dates.now()
+    sleep(2)
+    finish = Dates.now()
+    st = Utils.format_elapsed(finish-start)
+    @test ~isnothing(match(r"2.[0-9]{3} seconds", st))
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 01, 01, 0, 1, 0)
+    @test Utils.format_elapsed(finish-start) == "1 minute, 0.000 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 01, 01, 1, 0, 0)
+    @test Utils.format_elapsed(finish-start) == "1 hour, 0 minutes, 0.000 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 01, 01, 2, 0, 0)
+    @test Utils.format_elapsed(finish-start) == "2 hours, 0 minutes, 0.000 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 01, 01, 1, 15, 32)
+    @test Utils.format_elapsed(finish-start) == "1 hour, 15 minutes, 32.000 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 01, 01, 1, 15, 32, 123)
+    @test Utils.format_elapsed(finish-start) == "1 hour, 15 minutes, 32.123 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2022, 02, 01, 0, 15, 32, 123)
+    @test Utils.format_elapsed(finish-start) == "744 hours, 15 minutes, 32.123 seconds"
+
+    start = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    finish = Dates.DateTime(2023, 01, 01, 0, 0, 0)
+    @test Utils.format_elapsed(finish-start) == "8760 hours, 0 minutes, 0.000 seconds"
+
+    finish = Dates.DateTime(2022, 01, 01, 0, 0, 0)
+    start = Dates.DateTime(2022, 01, 01, 1, 15, 32)
+    @test Utils.format_elapsed(finish-start) == "-1 hour, -15 minutes, -32.000 seconds"
+
 end
 
 end

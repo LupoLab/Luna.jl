@@ -47,8 +47,8 @@ end
 "Get linear and nonlinear refractive index and gas number density"
 function getN0n0n2(ω, material; P=1.0, T=PhysData.roomtemp)
     N0 = PhysData.density(material, P, T)
-    χ3 = PhysData.γ3_gas(material)*N0
-    n0 = PhysData.ref_index(material, 2π*PhysData.c/ω, P, T)
+    χ3 = PhysData.χ3(material, P, T)
+    n0 = real(PhysData.ref_index(material, 2π*PhysData.c/ω, P, T))
     N0, n0, 3*χ3/(4*n0^2*PhysData.ε_0*PhysData.c)
 end
 
@@ -72,7 +72,8 @@ function P0_to_I(P0, m)
 end
 
 function Pcr(ω, n0, n2)
-    1.8962*(2π*PhysData.c/ω)^2/(4π*n0*n2)
+    # G. Fibich and A. L. Gaeta, Optics Letters, 25, 5, 335, 2000, doi: 10.1364/OL.25.000335.
+    1.86225*(2π*PhysData.c/ω)^2/(4π*n0*n2)
 end
 
 paramfields = (:E, :τfw, :τ0, :ω, :λ, :material, :P, :T, :shape,:P0, :β2, :N0, :n0, :n2,
@@ -134,7 +135,7 @@ function rectangular_params(E, τfw, λ, a, b, material;
 end
 
 function gas_ratio(gas1, gas2, λ)
-    χ3r = PhysData.χ3_gas(gas1, 1) / PhysData.χ3_gas(gas2, 1)
+    χ3r = PhysData.χ3(gas1, 1) / PhysData.χ3(gas2, 1)
     β2r = PhysData.dispersion(2, gas1, λ) / PhysData.dispersion(2, gas2, λ)
     β2r, χ3r
 end
@@ -144,9 +145,11 @@ intensity_to_field(I) = sqrt(2I/PhysData.ε_0/PhysData.c)
 
 """
     λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
+    λRDW(mRDW::Modes.AbstractMode, mS::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
 
 Calculate the phase-matching wavelength for resonant dispersive wave (RDW) emission in the
-mode `m` when pumping at `λ0`. 
+mode `m` when pumping at `λ0`. If the dispersive-wave mode `mRDW` and soliton mode `mS` are
+given separately, calculate phase-matching for RDW in mode `mRDW` when pumping in mode `mS`.
 
 This neglects the nonlinear contribution to the phase mismatch.
 """
@@ -155,6 +158,19 @@ function λRDW(m::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
     β1 = Modes.dispersion(m, 1, ω0; z=z)
     β0 = Modes.β(m, ω0; z=z)
     Δβ(ω) = Modes.β(m, ω; z=z) - β1*(ω.-ω0) - β0
+    try
+        ωRDW = find_zero(Δβ, extrema(wlfreq.(λlims)))
+        wlfreq(ωRDW)
+    catch
+        missing
+    end
+end
+
+function λRDW(mRDW::Modes.AbstractMode, mS::Modes.AbstractMode, λ0; z=0, λlims=(100e-9, 0.9λ0))
+    ω0 = wlfreq(λ0)
+    β1 = Modes.dispersion(mS, 1, ω0; z=z)
+    β0 = Modes.β(mS, ω0; z=z)
+    Δβ(ω) = Modes.β(mRDW, ω; z=z) - β1*(ω.-ω0) - β0
     try
         ωRDW = find_zero(Δβ, extrema(wlfreq.(λlims)))
         wlfreq(ωRDW)
@@ -199,6 +215,21 @@ function pressureRDW(a::Number, gas::Symbol, λ_target, λ0; Pmax=100, clad=:SiO
 
     try
         find_zero(Δβ, (1e-6, Pmax))
+    catch
+        missing
+    end
+end
+
+function pressureZDW(a::Number, gas::Symbol, λzd; Pmax=100, clad=:SiO2, kwargs...)
+    rfc = PhysData.ref_index_fun(clad)
+    cladn = (ω; z) -> rfc(wlfreq(ω))
+    ωzd = wlfreq(λzd)
+
+    try
+        find_zero((1e-6, Pmax)) do P
+            m = Capillary.MarcatiliMode(a, gas, P, cladn; kwargs...)
+            Modes.dispersion(m, 2, ωzd)
+        end
     catch
         missing
     end
