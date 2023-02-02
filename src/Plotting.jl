@@ -294,11 +294,12 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = pyplot.subplots(1, 2, num=num)
+    axs = pyconvert(Any, axs)
     pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
-    _spec2D_log(axs[0], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
+    _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
 
-    _time2D(axs[1], t, z, It, trange; kwargs...)
+    _time2D(axs[2], t, z, It, trange; kwargs...)
     pfig.tight_layout()
     return pfig
 end
@@ -313,21 +314,23 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
     for mi in modes
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
         pfig, axs = pyplot.subplots(1, 2, num=num)
+        axs = pyconvert(Any, axs)
         pfig.set_size_inches(12, 4)
-        _spec2D_log(axs[0], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
+        _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
 
-        _time2D(axs[1], t, z, It[:, mi, :], trange; kwargs...)
+        _time2D(axs[2], t, z, It[:, mi, :], trange; kwargs...)
         push!(pfigs, pfig)
     end
 
     num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     pfig, axs = pyplot.subplots(1, 2, num=num)
+    axs = pyconvert(Any, axs)
     pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
-    _spec2D_log(axs[0], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
+    _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
 
     Itall = dropdims(sum(It, dims=2), dims=2)
-    _time2D(axs[1], t, z, Itall, trange; kwargs...)
+    _time2D(axs[2], t, z, Itall, trange; kwargs...)
     pfig.tight_layout()
     push!(pfigs, pfig)
 
@@ -634,6 +637,7 @@ function add_fwhm_legends(ax, unit)
     handles = pyconvert(Any, handles)
     for (ii, line) in enumerate(handles)
         xy = line.get_xydata()
+        xy = pyconvert(Any, xy)
         fw = Maths.fwhm(xy[:, 1], xy[:, 2])
         t = texts[ii]
         s = t.get_text()
