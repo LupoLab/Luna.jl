@@ -1,5 +1,5 @@
 using Luna
-import PyPlot: plt
+import PythonPlot: pyplot
 
 # Fixed parameters:
 a = 125e-6
@@ -39,7 +39,7 @@ end
     Processing.Common(λ), Iλ[:, end], zstat, edens, max_peakpower
 end
 
-fig, axs = plt.subplots(1, length(pressures))
+fig, axs = pyplot.subplots(1, length(pressures))
 fig.set_size_inches(8, 2)
 for (pidx, pressure) in enumerate(pressures)
     ax = axs[pidx]
@@ -50,9 +50,9 @@ for (pidx, pressure) in enumerate(pressures)
     ax.set_title("Pressure: $pressure bar")
     ax.set_xlim(100, 1200)
 end
-plt.colorbar(img, ax=axs, label="Energy density (dB)")
+pyplot.colorbar(img, ax=axs, label="Energy density (dB)")
 
-fig, axs = plt.subplots(1, length(pressures))
+fig, axs = pyplot.subplots(1, length(pressures))
 fig.set_size_inches(8, 2)
 cols = Plotting.cmap_colours(length(energies))
 edmax = maximum(maximum.(edens))
@@ -69,12 +69,12 @@ for (pidx, pressure) in enumerate(pressures)
     ax.set_title("Pressure: $pressure bar")
 end
 
-fig = plt.figure()
+fig = pyplot.figure()
 for (pidx, pressure) in enumerate(pressures)
-    plt.plot(energies*1e6, max_peakpower[:, pidx], label="$pressure bar")
+    pyplot.plot(energies*1e6, max_peakpower[:, pidx], label="$pressure bar")
 end
-plt.xlim(1e6.*extrema(energies))
-plt.ylim_ymin=0
-plt.xlabel("Energy (μJ)")
-plt.ylabel("Maximum peak power (W)")
-plt.legend()
+pyplot.xlim(1e6.*extrema(energies))
+pyplot.ylim_ymin=0
+pyplot.xlabel("Energy (μJ)")
+pyplot.ylabel("Maximum peak power (W)")
+pyplot.legend()

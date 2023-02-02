@@ -1,5 +1,5 @@
 using Luna
-import PyPlot: plt
+import PythonPlot: pyplot
 
 #= In this example we simulate the effect of pump pulse dispersion on soliton self-compression
 and RDW emission. To do this we use the "ϕ" and "propagator" keyword arguments to
@@ -31,12 +31,12 @@ outputs = [prop_capillary(a, flength, gas, pressure; trange=1e-12, λlims=(150e-
 λ, _ = Processing.getIω(outputs[1], :λ)
 Iλs = [Processing.getIω(oi, :λ)[2] for oi in outputs]
 
-plt.figure()
+pyplot.figure()
 for (d, Iλ) in zip(thicknesses, Iλs)
-    plt.semilogy(λ*1e9, 1e-3*Iλ[:, end], label="$(d*1e3) mm")
+    pyplot.semilogy(λ*1e9, 1e-3*Iλ[:, end], label="$(d*1e3) mm")
 end
-plt.xlim(130, 1100)
-plt.ylim(1e-5, 10)
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("Spectral energy density (μJ/nm)")
-plt.legend()
+pyplot.xlim(130, 1100)
+pyplot.ylim(1e-5, 10)
+pyplot.xlabel("Wavelength (nm)")
+pyplot.ylabel("Spectral energy density (μJ/nm)")
+pyplot.legend()

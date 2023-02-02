@@ -77,7 +77,7 @@ end
 ##
 # this_folder = dirname(@__FILE__)
 # import CSV
-# import PyPlot: plt, pygui
+# import PythonPlot: pyplot, pygui
 # pygui(true)
 # #### Ilkov et al
 # k = collect(range(8, stop=12, length=200))
@@ -89,14 +89,14 @@ end
 # dat = CSV.read(joinpath(this_folder, "Ilkov_PPT_He.csv"))
 # dat = convert(Matrix, dat) # ionrate [1/s] vs field [V/cm]
 
-# plt.figure()
-# plt.loglog(E, ppt, label="PPT")
-# plt.loglog(E, ppt_cycavg, label="PPT cycle averaged")
-# plt.loglog(E, adk, label="ADK")
-# plt.loglog(dat[:, 1].*100, dat[:, 2], label="Ilkov et al. PPT")
-# plt.xlim(1e9, 1e12)
-# plt.ylim(1, 1e18)
-# plt.legend()
+# pyplot.figure()
+# pyplot.loglog(E, ppt, label="PPT")
+# pyplot.loglog(E, ppt_cycavg, label="PPT cycle averaged")
+# pyplot.loglog(E, adk, label="ADK")
+# pyplot.loglog(dat[:, 1].*100, dat[:, 2], label="Ilkov et al. PPT")
+# pyplot.xlim(1e9, 1e12)
+# pyplot.ylim(1, 1e18)
+# pyplot.legend()
 
 # ### Chang, Fundamentals of Attosecond Optics
 # dat = CSV.read(joinpath(this_folder, "Chang_PPT.csv"))
@@ -109,16 +109,16 @@ end
 
 # s = sortperm(dat[:, 1])
 
-# plt.figure()
-# plt.loglog(intensity*1e-18, ppt*1e-15, label="PPT")
-# plt.loglog(intensity*1e-18, adk*1e-15, label="ADK")
-# plt.loglog(intensity*1e-18, ppt_cycavg*1e-15, label="PPT cycle averaged")
-# plt.loglog(dat[s, 1], dat[s, 2], label="Chang PPT")
-# plt.ylim(1e-14, 1)
-# plt.xlim(extrema(intensity.*1e-18))
-# plt.legend()
-# plt.xlabel("Intensity (10\$^{14}\$ W/cm\$^2\$)")
-# plt.ylabel("Ionisation rate (1/fs)")
+# pyplot.figure()
+# pyplot.loglog(intensity*1e-18, ppt*1e-15, label="PPT")
+# pyplot.loglog(intensity*1e-18, adk*1e-15, label="ADK")
+# pyplot.loglog(intensity*1e-18, ppt_cycavg*1e-15, label="PPT cycle averaged")
+# pyplot.loglog(dat[s, 1], dat[s, 2], label="Chang PPT")
+# pyplot.ylim(1e-14, 1)
+# pyplot.xlim(extrema(intensity.*1e-18))
+# pyplot.legend()
+# pyplot.xlabel("Intensity (10\$^{14}\$ W/cm\$^2\$)")
+# pyplot.ylabel("Ionisation rate (1/fs)")
 
 ### Couairon
 # Ip = 12.063 * PhysData.electron
@@ -133,14 +133,14 @@ end
 
 # s = sortperm(dat[:, 1])
 
-# plt.figure()
-# plt.loglog(intensity*1e-4, ppt, label="PPT")
-# plt.loglog(intensity*1e-4, adk, label="ADK")
-# plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged")
-# plt.loglog(dat[s, 1], dat[s, 2], label="Couairon PPT")
-# plt.ylim(1, 1e17)
-# plt.xlim(extrema(intensity.*1e-4))
-# plt.legend()
-# plt.xlabel("Intensity (W/cm\$^2\$)")
-# plt.ylabel("Ionisation rate (1/s)")
-# plt.title("O\$_2\$ ionisation at 800 nm")
+# pyplot.figure()
+# pyplot.loglog(intensity*1e-4, ppt, label="PPT")
+# pyplot.loglog(intensity*1e-4, adk, label="ADK")
+# pyplot.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged")
+# pyplot.loglog(dat[s, 1], dat[s, 2], label="Couairon PPT")
+# pyplot.ylim(1, 1e17)
+# pyplot.xlim(extrema(intensity.*1e-4))
+# pyplot.legend()
+# pyplot.xlabel("Intensity (W/cm\$^2\$)")
+# pyplot.ylabel("Ionisation rate (1/s)")
+# pyplot.title("O\$_2\$ ionisation at 800 nm")

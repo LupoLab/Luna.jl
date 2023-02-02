@@ -6,7 +6,7 @@ import NumericalIntegration: integrate, SimpsonEven
 import LinearAlgebra: mul!, ldiv!
 Logging.disable_logging(Logging.BelowMinLevel)
 
-import PyPlot:pygui, plt
+import PythonPlot: pygui, pyplot
 
 a = 225e-6
 gas = :Ar
@@ -86,21 +86,21 @@ Eoutp = Array{ComplexF64,2}(undef, Eoutd[1], Eoutd[2])
 permutedims!(Eoutp, Ewp, [2, 1])
 
 pygui(true)
-plt.figure()
-plt.plot(ω./2π.*1e-15, log10.(abs2.(Eout[:,:,end])))
-plt.plot(ω./2π.*1e-15, log10.(abs2.(Eoutp)))
-#plt.ylim(-6, 0)
-plt.xlim(0,2.0)
+pyplot.figure()
+pyplot.plot(ω./2π.*1e-15, log10.(abs2.(Eout[:,:,end])))
+pyplot.plot(ω./2π.*1e-15, log10.(abs2.(Eoutp)))
+#pyplot.ylim(-6, 0)
+pyplot.xlim(0,2.0)
 
 ##
-plt.figure()
+pyplot.figure()
 It = abs2.(Maths.hilbert(FFTW.irfft(Eout[:,:,end], length(grid.t), 1)))
-plt.plot(t/1e-15, It[:,1]./maximum(It[:,1]))
-plt.plot(t/1e-15, It[:,2]./maximum(It[:,2]))
+pyplot.plot(t/1e-15, It[:,1]./maximum(It[:,1]))
+pyplot.plot(t/1e-15, It[:,2]./maximum(It[:,2]))
 Itp = abs2.(Maths.hilbert(FFTW.irfft(Eoutp, length(grid.t), 1)))
-plt.plot(t/1e-15, Itp[:,1]./maximum(Itp[:,1]))
-plt.plot(t/1e-15, Itp[:,2]./maximum(Itp[:,2]))
-plt.xlim(-50.0,50.0)
+pyplot.plot(t/1e-15, Itp[:,1]./maximum(Itp[:,1]))
+pyplot.plot(t/1e-15, Itp[:,2]./maximum(Itp[:,2]))
+pyplot.xlim(-50.0,50.0)
 
 println("$(sum(Itp)/sum(It))")
 ##
@@ -108,16 +108,16 @@ Etout = FFTW.irfft(Eout, length(grid.t), 1)
 It = Maths.normbymax(abs2.(Maths.hilbert(Etout)))
 Ilog = log10.(Maths.normbymax(abs2.(Eout)))
 for i = 1:nmodes
-    plt.figure()
-    plt.subplot(121)
-    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
-    plt.clim(-6, 0)
-    plt.xlim(0,2.0)
-    plt.colorbar()
-    plt.subplot(122)
-    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
-    plt.xlim(-30.0,100.0)
-    plt.colorbar()
+    pyplot.figure()
+    pyplot.subplot(121)
+    pyplot.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
+    pyplot.clim(-6, 0)
+    pyplot.xlim(0,2.0)
+    pyplot.colorbar()
+    pyplot.subplot(122)
+    pyplot.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
+    pyplot.xlim(-30.0,100.0)
+    pyplot.colorbar()
 end
 
 S = Array{Float64,3}(undef, 4, Eoutd[1], Eoutd[3])
@@ -130,17 +130,17 @@ for i = 1:Eoutd[3]
     end
 end
 
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, S[3,:,:]./S[1,:,:])
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, S[3,:,:]./S[1,:,:])
+pyplot.colorbar()
 
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, S[2,:,:]./S[1,:,:])
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, S[2,:,:]./S[1,:,:])
+pyplot.colorbar()
 
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, elip)
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, elip)
+pyplot.colorbar()
 
 Eenvo = Maths.hilbert(Etout)
 Etoutd = size(Eenvo)
@@ -162,12 +162,12 @@ for i = 1:Etoutd[3]
     Elipt[i] = elipt[k,i]
 end
 
-plt.figure()
-plt.plot(zout, Ss[1,:], label="S1")
-plt.plot(zout, Ss[2,:], label="S2")
-plt.plot(zout, Ss[3,:], label="S3")
-plt.plot(zout, Ss[4,:], label="S4")
-plt.plot(zout, Elipt, label="ε")
-plt.legend()
+pyplot.figure()
+pyplot.plot(zout, Ss[1,:], label="S1")
+pyplot.plot(zout, Ss[2,:], label="S2")
+pyplot.plot(zout, Ss[3,:], label="S3")
+pyplot.plot(zout, Ss[4,:], label="S4")
+pyplot.plot(zout, Elipt, label="ε")
+pyplot.legend()
 
 
