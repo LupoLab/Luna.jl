@@ -371,4 +371,11 @@ function run(Eω, grid,
         status_period=status_period)
 end
 
+# run some code for precompilation
+Logging.with_logger(Logging.NullLogger()) do
+    output = prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=120e-6,
+                        τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12)
+    p = Tools.capillary_params(120e-6, 10e-15, 800e-9, 125e-6, :He, P=1.0)
+end
+
 end # module
