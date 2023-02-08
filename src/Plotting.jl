@@ -282,68 +282,50 @@ end
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
-    pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
-    _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
-
-    _time2D(axs[2], t, z, It, trange; kwargs...)
-    pfig.tight_layout()
-    return pfig
+    _prop2D_fig(num, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
 end
 
 # multi-mode 2D propagation plots
 function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
                     speclabel, speclims, trange, dBmin, bpstr;
                     kwargs...)
-    pfigs = Figure[]
+    pfigs = []
     Iω = Maths.normbymax(Iω)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-        pfig, axs = plt.subplots(1, 2, num=num)
-        pfig.set_size_inches(12, 4)
-        _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
-
-        _time2D(axs[2], t, z, It[:, mi, :], trange; kwargs...)
+        pfig = _prop2D_fig(num, specx, z, Iω[:, mi, :], dBmin, speclabel, speclims, t, It[:, mi, :], trange)
         push!(pfigs, pfig)
     end
 
     num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
-    pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
-    _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
-
     Itall = dropdims(sum(It, dims=2), dims=2)
-    _time2D(axs[2], t, z, Itall, trange; kwargs...)
-    pfig.tight_layout()
+    pfig = _prop2D_fig(num, specx, z, Iωall, dBmin, speclabel, speclims, t, Itall, trange)
     push!(pfigs, pfig)
-
     return pfigs
 end
 
-# a single logarithmic colour-scale spectral domain plot
-function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
-    im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); shading="auto", kwargs...)
-    im.set_clim(dBmin, 0)
-    cb = plt.colorbar(im, ax=ax)
-    cb.set_label("SED (dB)")
-    ax.set_ylabel("Distance (cm)")
-    ax.set_xlabel(speclabel)
-    ax.set_xlim(speclims...)
+function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
+    pfig = newfig()
+    ax, hm = GLMakie.heatmap(pfig[1,1], specx, z, 10*log10.(Iω),
+                             colorrange=(dBmin,0), interpolate=true,
+                             lowclip=:white,
+                             axis=(; xlabel=speclabel, ylabel="Distance (cm)"))
+    GLMakie.xlims!(ax, speclims)
+    cb = GLMakie.Colorbar(pfig[1, 2], hm, label="SED (dB)")
+
+    Pfac, unit = power_unit(It)
+    ax, hm = GLMakie.heatmap(pfig[1,3], t*1e15, z, Pfac .* It,
+                             interpolate=true,
+                             lowclip=:white,
+                             axis=(; xlabel="Time (fs)", ylabel="Distance (cm)"))
+    GLMakie.xlims!(ax, trange.*1e15)
+    cb = GLMakie.Colorbar(pfig[1, 4], hm, label="Power ($unit)")
+    pfig
 end
 
-# a single time-domain propagation plot
-function _time2D(ax, t, z, I, trange; kwargs...)
-    Pfac, unit = power_unit(I)
-    im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); shading="auto", kwargs...)
-    cb = plt.colorbar(im, ax=ax)
-    cb.set_label("Power ($unit)")
-    ax.set_xlim(trange.*1e15)
-    ax.set_xlabel("Time (fs)")
-    ax.set_ylabel("Distance (cm)")
-end
 
 """
     time_1D(output, zslice, y=:Pt, kwargs...)
