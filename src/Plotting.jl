@@ -377,26 +377,26 @@ function time_1D(output, zslice=maximum(output["z"]);
 
     yfac, unit = power_unit(abs2.(Et), y)
 
-    sfig = plt.figure()
+    xlabel = "Time (fs)"
+    ylabel = y == :Et ?  "Field ($unit)" : "Power ($unit)"
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
+       sfig = _plot_slice_mm(t*1e15, yfac*yt, zactual, modestrs, xlabel, ylabel, fwlabel=true)
     else
+        sfig = newfig()
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
+        GLMakie.Axis(sfig[1, 1]; xlabel, ylabel)
         for iz in eachindex(zactual)
-            plt.plot(t*1e15, yfac*yt[:, iz]; label=label[iz], kwargs...)
+            fw = Maths.fwhm(t*1e15, yfac*yt[:, iz])
+            label=(label[iz] * @sprintf(" [%.2f %s]", fw, "fs"))
+            GLMakie.lines!(t*1e15, yfac*yt[:, iz]; label)
         end
     end
-    plt.legend(frameon=false)
-    add_fwhm_legends(plt.gca(), "fs")
-    plt.xlabel("Time (fs)")
-    plt.xlim(1e15.*trange)
-    ylab = y == :Et ?  "Field ($unit)" : "Power ($unit)"
-    plt.ylabel(ylab)
-    y == :Et || plt.ylim(ymin=0)
-    sfig.set_size_inches(8.5, 5)
-    sfig.tight_layout()
-    sfig
+    GLMakie.axislegend(framevisible=false)
+    GLMakie.xlims!((1e15.*trange)...)
+    y == :Et || GLMakie.ylims!(low=0)
+    GLMakie.DataInspector()
+    sfig  
 end
 
 # Automatically find power unit depending on scale of electric field.
@@ -454,7 +454,7 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     specx .*= specxfac
 
     if multimode && nmodes > 1
-        sfig = _plot_slice_mm(specx, Iω, zactual, modestrs, speclabel, log10)
+        sfig = _plot_slice_mm(specx, Iω, zactual, modestrs, speclabel, "Spectral energy density", log10)
     else
         sfig = newfig()
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
@@ -474,15 +474,25 @@ end
 
 dashes = [:dash, :dot, :dashdot, :dashdotdot, [0.5, 1.0, 1.5, 2.5]]
 
-function _plot_slice_mm(x, y, z, modestrs, speclabel, log10=false, fwhm=false)
+function _plot_slice_mm(x, y, z, modestrs, xlabel, ylabel, log10=false; fwlabel=false)
     pfig = newfig()
-    scale = (log10 ? Base.log10 : :identity)
-    GLMakie.Axis(pfig[1, 1], yscale = scale, xlabel=speclabel, ylabel="Spectral energy density")
+    scale = (log10 ? Base.log10 : identity)
+    GLMakie.Axis(pfig[1, 1], yscale = scale, xlabel=xlabel, ylabel=ylabel)
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
-        line = GLMakie.lines!(x, y[:, 1, sidx], label="$zs ($(modestrs[1]))")
+        label = "$zs ($(modestrs[1]))"
+        if fwlabel
+            fw = Maths.fwhm(x, y[:, 1, sidx])
+            label *= @sprintf(" [%.2f %s]", fw, "fs")
+        end
+        line = GLMakie.lines!(x, y[:, 1, sidx]; label)
         for midx = 2:size(y, 2) # iterate over modes
-            GLMakie.lines!(x, y[:, midx, sidx], label="$zs ($(modestrs[midx]))",
+            label = "$zs ($(modestrs[midx]))"
+            if fwlabel
+                fw = Maths.fwhm(x, y[:, midx, sidx])
+                label *= @sprintf(" [%.2f %s]", fw, "fs")
+            end
+            GLMakie.lines!(x, y[:, midx, sidx]; label,
                    color=line[:color], linestyle=dashes[midx])
         end
     end
@@ -597,20 +607,6 @@ function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, line
     end
 end
 
-function add_fwhm_legends(ax, unit)
-    leg = ax.get_legend()
-    texts = leg.get_texts()
-    handles, labels = ax.get_legend_handles_labels()
-    
-    for (ii, line) in enumerate(handles)
-        xy = line.get_xydata()
-        fw = Maths.fwhm(xy[:, 1], xy[:, 2])
-        t = texts[ii]
-        s = t.get_text()
-        s *= @sprintf(" [%.2f %s]", fw, unit)
-        t.set_text(s)
-    end
-end
 
 """
     cornertext(ax, text;
