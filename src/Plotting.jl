@@ -323,6 +323,7 @@ function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, tra
                              axis=(; xlabel="Time (fs)", ylabel="Distance (cm)"))
     GLMakie.xlims!(ax, trange.*1e15)
     cb = GLMakie.Colorbar(pfig[1, 4], hm, label="Power ($unit)")
+    GLMakie.DataInspector()
     pfig
 end
 
@@ -452,42 +453,40 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
 
     specx .*= specxfac
 
-    sfig = plt.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
+        sfig = _plot_slice_mm(specx, Iω, zactual, modestrs, speclabel, log10)
     else
+        sfig = newfig()
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
+        scale = (log10 ? Base.log10 : :identity)
+        GLMakie.Axis(sfig[1, 1], yscale = scale, xlabel=speclabel, ylabel="Spectral energy density")
         for iz in eachindex(zactual)
-            (log10 ? plt.semilogy : plt.plot)(specx, Iω[:, iz]; label=label[iz], kwargs...)
+            GLMakie.lines!(specx, Iω[:, iz], label=label[iz])
         end
     end
-    plt.legend(frameon=false)
-    plt.xlabel(speclabel)
-    plt.ylabel("Spectral energy density")
-    log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
-    plt.xlim(speclims...)
-    sfig.set_size_inches(8.5, 5)
-    sfig.tight_layout()
+    GLMakie.axislegend(framevisible=false)
+    log10 && GLMakie.ylims!(3*maximum(Iω)*log10min, 3*maximum(Iω))
+    GLMakie.xlims!(speclims...)
+    GLMakie.DataInspector()
     sfig
 end
 
-dashes = [(0, (10, 1)),
-          (0, (5, 1)),
-          (0, (1, 0.5)),
-          (0, (1, 0.5, 1, 0.5, 3, 1)),
-          (0, (5, 1, 1, 1))]
+dashes = [:dash, :dot, :dashdot, :dashdotdot, [0.5, 1.0, 1.5, 2.5]]
 
-function _plot_slice_mm(ax, x, y, z, modestrs, log10=false, fwhm=false; kwargs...)
-    pfun = (log10 ? ax.semilogy : ax.plot)
+function _plot_slice_mm(x, y, z, modestrs, speclabel, log10=false, fwhm=false)
+    pfig = newfig()
+    scale = (log10 ? Base.log10 : :identity)
+    GLMakie.Axis(pfig[1, 1], yscale = scale, xlabel=speclabel, ylabel="Spectral energy density")
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
-        line = pfun(x, y[:, 1, sidx]; label="$zs ($(modestrs[1]))", kwargs...)[1]
+        line = GLMakie.lines!(x, y[:, 1, sidx], label="$zs ($(modestrs[1]))")
         for midx = 2:size(y, 2) # iterate over modes
-            pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
-                 label="$zs ($(modestrs[midx]))"; kwargs...)
+            GLMakie.lines!(x, y[:, midx, sidx], label="$zs ($(modestrs[midx]))",
+                   color=line[:color], linestyle=dashes[midx])
         end
     end
+    pfig
 end
 
 spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
