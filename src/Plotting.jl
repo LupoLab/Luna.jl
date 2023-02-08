@@ -3,25 +3,16 @@ import Luna: Grid, Maths, PhysData, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
-import PyPlot: ColorMap, plt, pygui, Figure
+import GLMakie
 import FFTW
 import Printf: @sprintf
 import Base: display
 
-"""
-    displayall()
-
-`display` all currently open PyPlot figures.
-"""
-function displayall()
-    for fign in plt.get_fignums()
-        fig = plt.figure(fign)
-        display(fig)
-    end
-
+function newfig()
+    f = GLMakie.Figure(resolution = (1600, 1200))
+    display(GLMakie.Screen(), f)
+    f
 end
-
-display(figs::AbstractArray{Figure, N}) where N = [display(fig) for fig in figs]
 
 """
     cmap_white(cmap, N=512, n=8)
