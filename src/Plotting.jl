@@ -531,7 +531,7 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     clims = (log ? (dBmin, 0) : extrema(Ig))
 
     fig = newfig()
-    ax, hm = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig,
+    ax, hm = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig',
                              colorrange=clims, interpolate=true,
                              axis=(; xlabel="Time (fs)", ylabel=speclabel))
     GLMakie.ylims!(ax, speclims)
