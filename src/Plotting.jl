@@ -123,7 +123,7 @@ function stats(output; kwargs...)
         push!(pstats, (Pfac*stats["peakpower"], "Peak power ($unit)"))
     end
     haskey(stats, "peakintensity") && push!(
-        pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm\$^2\$)"))
+        pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm²)"))
     haskey(stats, "fwhm_t_min") && push!(pstats, (1e15*stats["fwhm_t_min"], "min FWHM (fs)"))
     haskey(stats, "fwhm_t_max") && push!(pstats, (1e15*stats["fwhm_t_max"], "max FWHM (fs)"))
     haskey(stats, "fwhm_r") && push!(pstats, (1e6*stats["fwhm_r"], "Radial FWHM (μm)"))
@@ -131,14 +131,14 @@ function stats(output; kwargs...)
 
     fstats = [] # fibre/waveguide/propagation statistics
     if haskey(stats, "electrondensity")
-        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm⁻³)"))
         if haskey(stats, "density")
             push!(fstats,
                  (100*stats["electrondensity"]./stats["density"], "Ionisation fraction (%)"))
         end
     end
     haskey(stats, "density") && push!(
-        fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
+        fstats, (1e-6*stats["density"], "Density (cm⁻³)"))
     haskey(stats, "pressure") && push!(
         fstats, (stats["pressure"], "Pressure (bar)"))
     haskey(stats, "dz") && push!(fstats, (1e6*stats["dz"], "Stepsize (μm)"))
