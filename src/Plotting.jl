@@ -517,6 +517,7 @@ end
 
 function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
                      trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
+                     surface3d=false,
                      kwargs...)
     ω = Maths.rfftfreq(t)[2:end]
     tmin, tmax = extrema(trange)
@@ -524,18 +525,35 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     g = Maths.gabor(t, real(Et), tg, fw)
     g = g[2:end, :]
 
-    specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis)
     speclims, speclabel, specyfac = getspeclims(λrange, specaxis)
+    specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis,
+                      specrange=speclims./specyfac)
+    
     Ig = Maths.normbymax(Ig)
     log && (Ig = 10*log10.(Ig))
     clims = (log ? (dBmin, 0) : extrema(Ig))
 
     fig = newfig()
-    ax, hm = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig',
-                             colorrange=clims, interpolate=true,
-                             axis=(; xlabel="Time (fs)", ylabel=speclabel))
-    GLMakie.ylims!(ax, speclims)
-    GLMakie.Colorbar(fig[1, 2], hm)
+    if surface3d
+        ax, pl = GLMakie.surface(fig[1,1], tg.*1e15, specyfac*specy, Ig',
+                         colorrange=clims, colormap=:turbo,
+                         axis=(;type=GLMakie.Axis3, azimuth = pi/4, elevation=pi/4,
+                         protrusions=75, perspectiveness=0.0, viewmode=:stretch,
+                         xlabel="Time (fs)", ylabel=speclabel, ylabeloffset=80,
+                         xlabeloffset=80, zgridvisible=false, zlabelvisible=false,
+                         zticksvisible=false, zticklabelsvisible=false,
+                         yzpanelvisible=false, xzpanelvisible=false,
+                         ygridvisible=false, xgridvisible=false,
+                         zspinesvisible=false, zautolimitmargin=(0,0),
+                         xautolimitmargin=(0.0,0.0), yautolimitmargin=(0,0),
+                         xspinesvisible=false, yspinesvisible=false))
+    else
+        ax, pl = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig',
+                                colorrange=clims, interpolate=true,
+                                axis=(; xlabel="Time (fs)", ylabel=speclabel))
+        GLMakie.ylims!(ax, speclims)
+    end
+    GLMakie.Colorbar(fig[1, 2], pl)
     GLMakie.DataInspector()
     fig
 end
