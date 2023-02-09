@@ -8,6 +8,8 @@ import FFTW
 import Printf: @sprintf
 import Base: display
 
+GLMakie.set_theme!(GLMakie.Theme(fontsize = 20))
+
 function newfig()
     f = GLMakie.Figure(resolution = (1600, 1200))
     display(GLMakie.Screen(), f)
