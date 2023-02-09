@@ -526,16 +526,17 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
 
     specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis)
     speclims, speclabel, specyfac = getspeclims(λrange, specaxis)
+    Ig = Maths.normbymax(Ig)
+    log && (Ig = 10*log10.(Ig))
+    clims = (log ? (dBmin, 0) : extrema(Ig))
 
-    log && (Ig = 10*log10.(Maths.normbymax(Ig)))
-
-    fig = plt.figure()
-    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; shading="auto", kwargs...)
-    plt.ylim(speclims...)
-    plt.ylabel(speclabel)
-    plt.xlabel("Time (fs)")
-    log && plt.clim(dBmin, 0)
-    plt.colorbar()
+    fig = newfig()
+    ax, hm = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig,
+                             colorrange=clims, interpolate=true,
+                             axis=(; xlabel="Time (fs)", ylabel=speclabel))
+    GLMakie.ylims!(ax, speclims)
+    GLMakie.Colorbar(fig[1, 2], hm)
+    GLMakie.DataInspector()
     fig
 end
 
@@ -562,86 +563,23 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
     end
 
     z = output["z"]*100
+    println("$(size(e'))")
 
-    fig = plt.figure()
-    ax = plt.axes()
-    ax.plot(z, 1e6*e')
-    ax.set_xlim(extrema(z)...)
-    ax.set_ylim(ymin=0)
-    ax.set_xlabel("Distance (cm)")
-    ax.set_ylabel("Energy (μJ)")
-    rax = ax.twinx()
-    rax.plot(z, 100*(e/e0)', linewidth=0)
-    lims = ax.get_ylim()
-    rax.set_ylim(100/(1e6*e0).*lims)
-    rax.set_ylabel("Conversion efficiency (%)")
-    fig.set_size_inches(figsize...)
+    fig = newfig()
+    ax = GLMakie.Axis(fig[1, 1], xlabel="Distance (cm)", ylabel="Energy (μJ)")
+    rax = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel="Conversion efficiency (%)")
+    GLMakie.hidespines!(rax)
+    GLMakie.hidexdecorations!(rax)
+    for i in 1:size(e')[1]
+        GLMakie.lines!(ax, z, 1e6*e'[i,:])
+    end
+    maxe = maximum(1e6*e)
+    GLMakie.xlims!(ax, extrema(z)...)
+    GLMakie.ylims!(ax, 0, maxe)
+    GLMakie.ylims!(rax, 0, 100*maxe/1e6/e0)
+    GLMakie.xlims!(rax, extrema(z)...)
+    GLMakie.DataInspector()
     fig
-end
-
-
-function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
-                                    text=nothing, units="fs", kwargs...)
-    left, right = Maths.level_xings(x, y; kwargs...)
-    fw = abs(right - left)
-    halfmax = maximum(y)/2
-    arrowlength = isnothing(arrowlength) ? 2*fw : arrowlength
-
-    ax.annotate("", xy=(left-hpad, halfmax),
-                xytext=(left-hpad-arrowlength, halfmax),
-                arrowprops=Dict("arrowstyle" => "->",
-                                "color" => color,
-                                "linewidth" => linewidth))
-    ax.annotate("", xy=(right+hpad, halfmax),
-                xytext=(right+hpad+arrowlength, halfmax),
-                arrowprops=Dict("arrowstyle" => "->",
-                                "color" => color,
-                                "linewidth" => linewidth))
-
-    if text == :left
-        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
-                ha="right", color=color)
-    elseif text == :right
-        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
-                color=color)
-    end
-end
-
-
-"""
-    cornertext(ax, text;
-               corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
-
-Place a `text` in the axes `ax` in the corner defined by `corner`. Padding can be
-defined for `x` and `y` together via `pad` or separately via `xpad` and `ypad`. Further
-keyword arguments are passed to `plt.text`. 
-
-Possible values for `corner` are `ul`, `ur`, `ll`, `lr` where the first letter
-defines upper/lower and the second defines left/right.
-"""
-function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
-    xpad = isnothing(xpad) ? pad : xpad
-    ypad = isnothing(ypad) ? pad : ypad
-    if corner[1] == 'u'
-        val = "top"
-        y = 1 - ypad
-    elseif corner[1] == 'l'
-        val = "bottom"
-        y = ypad
-    else
-        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
-    end
-    if corner[2] == 'l'
-        hal = "left"
-        x = xpad
-    elseif [2] == 'r'
-        hal = "right"
-        x = 1 - xpad
-    else
-        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
-    end
-    ax.text(x, y, text; horizontalalignment=hal, verticalalignment=val,
-                 transform=ax.transAxes, kwargs...)
 end
 
 end
