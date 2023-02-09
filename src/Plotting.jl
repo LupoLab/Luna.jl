@@ -8,7 +8,7 @@ import FFTW
 import Printf: @sprintf
 import Base: display
 
-GLMakie.set_theme!(GLMakie.Theme(fontsize = 20))
+GLMakie.set_theme!(GLMakie.Theme(fontsize = 40))
 
 function newfig()
     f = GLMakie.Figure(resolution = (1600, 1200))
@@ -57,16 +57,7 @@ otherwise landscape (wider than tall).
 function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
     cols = ceil(Int, sqrt(N))
     rows = ceil(Int, N/cols)
-    portrait && ((rows, cols) = (cols, rows))
-    fig, axs = plt.subplots(rows, cols, num=title)
-    ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
-    if cols*rows > N
-        for axi in axs[N+1:end]
-            axi.remove()
-        end
-    end
-    fig.set_size_inches(cols*colw, rows*rowh)
-    fig, N > 1 ? axs : [axs]
+    collect(Iterators.product(1:rows,1:cols))
 end
 
 """
@@ -157,37 +148,40 @@ function stats(output; kwargs...)
     z = stats["z"]*1e2
 
     multimode, modes = get_modes(output)
+    modes = isnothing(modes) ? [""] : modes
 
     Npl = length(pstats)
     if Npl > 0
-        pfig, axs = subplotgrid(Npl, title="Pulse stats")
+        pfig = newfig()
+        idcs = subplotgrid(Npl)
         for n in 1:Npl
-            ax = axs[n]
-            data, label = pstats[n]
-            multimode && (ndims(data) > 1) && (data = data')
-            ax.plot(z, data; kwargs...)
-            ax.set_xlabel("Distance (cm)")
-            ax.set_ylabel(label)
-            multimode && (ndims(data) > 1) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
+            data, ylabel = pstats[n]
+            data = data'
+            scale = (multimode ? log10 : identity)
+            ax = GLMakie.Axis(pfig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
+            for i in 1:size(data,1)
+                GLMakie.lines!(z, data[i,:], label=modes[i])
+            end
+            multimode && (ndims(data) > 1) && GLMakie.axislegend(framevisible=false)
         end
-        pfig.tight_layout()
+        GLMakie.DataInspector()
     end
     
     Npl = length(fstats)
     if Npl > 0
-        ffig, axs = subplotgrid(Npl, title="Other stats")
+        ffig = newfig()
+        idcs = subplotgrid(Npl)
         for n in 1:Npl
-            ax = axs[n]
-            data, label = fstats[n]
-            multimode && (ndims(data) > 1) && (data = data')
-            ax.plot(z, data; kwargs...)
-            ax.set_xlabel("Distance (cm)")
-            ax.set_ylabel(label)
-            multimode && (ndims(data) > 1) && should_log10(data) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
+            data, ylabel = fstats[n]
+            data = data'
+            scale = ((multimode && should_log10(data)) ? log10 : identity)
+            ax = GLMakie.Axis(ffig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
+            for i in 1:size(data,1)
+                GLMakie.lines!(z, data[i,:], label=modes[i])
+            end
+            multimode && (ndims(data) > 1) && GLMakie.axislegend(framevisible=false)
         end
-        ffig.tight_layout()
+        GLMakie.DataInspector()
     end
     [pfig, ffig]
 end
