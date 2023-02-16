@@ -92,6 +92,43 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
     unwraptuple(arrays) # if f only returns one thing, we also only return one array
 end
 
+"""
+    scanproc(f, outputs; shape=nothing)
+
+Iterate over the scan outputs, apply the processing function `f(o::AbstractOutput)`,
+and collect the results in arrays.
+
+If the `outputs` are `MemoryOutput`s which do not contain the scan metadata,
+the `shape` of the scan must be given explicitly (e.g. via `size(scan)`).
+
+`f` can return a single value, an array, or a tuple/array of arrays/numbers. Arrays returned
+by `f` must either be of the same size for each processed output, or wrapped in a `VarLength`.
+Values returned by `f` which are guaranteed to be identical for each processed output can be
+wrapped in a `Common`, and `scanproc` only returns these once.
+"""
+function scanproc(f, outputs; shape=nothing)
+    local scanidcs, arrays
+    @progress for (idx, o) in enumerate(outputs)
+        try
+            # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
+            ret = wraptuple(f(o))
+            if idx == 1 # initialise arrays
+                isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
+                scanidcs = CartesianIndices(shape)
+                arrays = _arrays(ret, shape)
+            end
+            for (ridx, ri) in enumerate(ret)
+                _addret!(arrays[ridx], scanidcs[idx], ri)
+            end
+        catch e
+            bt = catch_backtrace()
+            msg = "scanproc failed at index $idx: \n"*sprint(showerror, e, bt)
+            @warn msg
+        end
+    end
+    unwraptuple(arrays) # if f only returns one thing, we also only return one array
+end
+
 wraptuple(x::Tuple) = x
 wraptuple(x) = (x,)
 
@@ -1000,7 +1037,7 @@ end
 Return the index of saved z-position(s) closest to the position(s) `z`. Output is always
 an array, even if `z` is a number.
 """
-nearest_z(output, z::Number) = [argmin(abs.(output["z"] .- z))]
-nearest_z(output, z) = [argmin(abs.(output["z"] .- zi)) for zi in z]
+nearest_z(output, z::Number) = z < 0 ? [length(output["z"])] : [argmin(abs.(output["z"] .- z))]
+nearest_z(output, z) = [nearest_z(output, zi)[1] for zi in z]
 
 end
