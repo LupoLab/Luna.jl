@@ -271,17 +271,19 @@ function runscan(f, scan::Scan{LocalExec})
 end
 
 function runscan(f, scan::Scan{RangeExec})
+    out = Any[]
     combos = vec(collect(Iterators.product(scan.arrays...)))
     for (scanidx, args) in enumerate(combos[scan.exec.r])
         logiter(scan, scanidx, args)
         try
-            f(scanidx, args...)
+            push!(out, f(scanidx, args...))
         catch e
             bt = catch_backtrace()
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
     end
+    out
 end
 
 """
