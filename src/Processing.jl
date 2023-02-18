@@ -1035,9 +1035,10 @@ end
     nearest_z(output, z)
 
 Return the index of saved z-position(s) closest to the position(s) `z`. Output is always
-an array, even if `z` is a number.
+an array, even if `z` is a number. If `z` is negative, its absolute value is taken as the fraction
+of the total propagation distance.
 """
-nearest_z(output, z::Number) = z < 0 ? [length(output["z"])] : [argmin(abs.(output["z"] .- z))]
+nearest_z(output, z::Number) = z < 0 ? [round(Int, min(abs(z), 1)*length(output["z"]))] : [argmin(abs.(output["z"] .- z))]
 nearest_z(output, z) = [nearest_z(output, zi)[1] for zi in z]
 
 end
