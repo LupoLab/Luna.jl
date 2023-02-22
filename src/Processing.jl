@@ -68,14 +68,15 @@ end
 ```
 """
 function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
-    local scanidcs, arrays
+    local scanidcs = nothing
+    local arrays = nothing
     scanfiles = sort(scanfiles)
     @progress for (idx, fi) in enumerate(scanfiles)
         try
             o = HDF5Output(fi)
             # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
             ret = wraptuple(f(o))
-            if idx == 1 # initialise arrays
+            if isnothing(scanidcs) # initialise arrays
                 isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
                 scanidcs = CartesianIndices(shape)
                 arrays = _arrays(ret, shape)
@@ -107,12 +108,13 @@ Values returned by `f` which are guaranteed to be identical for each processed o
 wrapped in a `Common`, and `scanproc` only returns these once.
 """
 function scanproc(f, outputs; shape=nothing)
-    local scanidcs, arrays
+    local scanidcs = nothing
+    local arrays = nothing
     @progress for (idx, o) in enumerate(outputs)
         try
             # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
             ret = wraptuple(f(o))
-            if idx == 1 # initialise arrays
+            if isnothing(scanidcs) # initialise arrays
                 isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
                 scanidcs = CartesianIndices(shape)
                 arrays = _arrays(ret, shape)
