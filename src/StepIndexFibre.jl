@@ -202,6 +202,10 @@ end
 function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
     char = make_char(radius, k0, ncore, nclad, n, mode)
     roots = find_zeros(char, nclad, ncore, no_pts=pts)
+    r=[nclad;roots]
+	t1=char.(roots-diff(r)/3*2)
+	t2=char.(roots-diff(r)/3)
+	roots=roots[abs.(t2).<abs.(t1)]
     roots[end - (m - 1)]
 end
 
