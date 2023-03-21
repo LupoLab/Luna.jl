@@ -163,11 +163,11 @@ function char_HE(radius, k0, ncore, nclad, n, neff)
     char_LHS(n, u) - char_RHS(ncore, nclad, n, w) + R(ncore, nclad, n, u, w, neff)
 end
 
-function char_TE(radius, k0, ncore, nclad, neff)
+function char_TM(radius, k0, ncore, nclad, neff)
     char_HE(radius, k0, ncore, nclad, 0, neff)
 end
 
-function char_TM(radius, k0, ncore, nclad, neff)
+function char_TE(radius, k0, ncore, nclad, neff)
     char_EH(radius, k0, ncore, nclad, 0, neff)
 end
 
