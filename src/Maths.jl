@@ -475,6 +475,66 @@ end
 _gaborFT(x::Array{T, 2}) where T <: Real = FFTW.rfft(x, 1)
 _gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
 
+
+function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
+    # crop and/or downsample
+    log2(downsample) % 1 ≠ 0 && error("downsample factor must be a power of 2")
+    if crop > 1
+        log2(crop) % 1 ≠ 0 && error("cropping factor must be a power of 2")
+        ncrop = (length(t) - length(t) ÷ crop) ÷ 2
+        startidx = ncrop
+        endidx = length(t) - ncrop - 1
+    else
+        startidx = 1
+        endidx = length(t)
+    end
+        
+    A = A[startidx:downsample:endidx]
+    t = t[startidx:downsample:endidx]
+
+    # pad with zeros in the time domain to allow for shifting
+    l = length(t)
+    n = l ÷ 2
+    Ao = vcat(zeros(n), A, zeros(n))
+
+    # make frequency axis for expanded time axis
+    δt = t[2] - t[1]
+    Nt = collect(range(0, length=2l))
+    to = (Nt .- l) .* δt
+    ωo = fftfreq(to)
+    ωos = FFTW.fftshift(ωo)
+
+    # plan FFT
+    FT = FFTW.plan_fft(copy(Ao), 1; flags=FFTW.MEASURE)
+
+    Af = FT * Ao
+    Afs = similar(Af)
+
+    function τshift!(x, Af, τ, cc)
+        @. Afs = Af * exp.(-1im * ωos * τ)
+        ldiv!(x, FT, Afs)
+        cc && conj!(x)
+    end
+
+    Wt = zeros(ComplexF64, (length(t), length(ωo)))
+    Ats = similar(Ao)
+    Atc = similar(Ao)
+    for (idx, τi) in enumerate(t)
+        τshift!(Ats, Af, τi/2, false)
+        τshift!(Atc, Af, -τi/2, true)
+        Wt[idx, :] .= Ats .* Atc
+    end
+
+    τgrid = l*δt/2
+
+    ω = fftfreq(t)
+    Wf = FFTW.fftshift(FFTW.fft(Wt, 1) .* exp.(1im .* FFTW.fftshift(ω) .* τgrid), 1)[:, n:end-n-1]
+
+    t, -ω, real(Wf)
+end
+
+wigner(t, A::Vector{<:Real}) = wigner(t, hilbert(A))
+
 """
     hilbert(x; dim=1)
 
