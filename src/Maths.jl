@@ -533,7 +533,7 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     t, -ω, real(Wf)
 end
 
-wigner(t, A::Vector{<:Real}) = wigner(t, hilbert(A))
+wigner(t, A::Vector{<:Real}; kwargs...) = wigner(t, hilbert(A); kwargs...)
 
 """
     hilbert(x; dim=1)
