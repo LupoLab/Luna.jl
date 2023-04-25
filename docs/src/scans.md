@@ -37,7 +37,7 @@ runscan(scan) do scanidx, energy, pressure
                    λlims, trange, scan, scanidx, filepath=outputdir)
 end
 ```
-Here, `runscan` uses the [do-block syntax](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments), which wraps its body in a function. In our example this function takes three arguments: `scanidx, energy, pressure`. Generally, `scanidx` is always present and uniquely identifies a specific simulation in the scan (it simply runs from 1 to the number of simulations in the scan, `length(scan)`). The number of subsequent arguments is equal to the number of scan variables you have added to the `scan`. **Note** that the order in which you add the variables to the scan matters, and it must match the arguments in the `do` block. Alternatively, we could also have wrapped our scan in a function ourselves:
+Here, `runscan` uses the [do-block syntax](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments), which wraps its body in a function. In our example this function takes three arguments: `scanidx, energy, pressure`. Generally, `scanidx` is always present and uniquely identifies a specific simulation in the scan (it simply runs from 1 to the number of simulations in the scan, `length(scan)`). The number of subsequent arguments is equal to the number of scan variables you have added to the `scan`, **and their order must match the order in which variables were added to the scan**. Alternatively, we could also have wrapped our scan in a function ourselves:
 ```julia
 function runone(scanidx, energy, pressure)
    prop_capillary(a, flength, gas, pressure; λ0, τfwhm, energy,
@@ -46,6 +46,9 @@ end
 runscan(runone, scan)
 ```
 but the `do` block syntax is exactly equivalent to this and usually easier.
+
+!!! warning
+    The order in which you add the variables to the scan is important, and it **must** match the arguments in the `do` block. `scan = Scan("pressure_energy_example"; energy=energies, pressure=pressures)` is **not** equivalent to `scan = Scan("pressure_energy_example"; pressure=pressures, energy=energies)`.
 
 Running this script will simply run all the simulations, one after the other, in the current Julia session. To alter this behaviour, `Scan` also takes another argument, the execution mode, which has to be a subtype of `Scans.AbstractExec`. For example, to run only the first 10 items in the scan, we can use a `RangeExec`:
 ```julia
