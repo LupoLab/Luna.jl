@@ -530,17 +530,18 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     Ats = similar(Ao)
     Atc = similar(Ao)
     for (idx, τi) in enumerate(t)
-        τshift!(Ats, Af, τi/2, false)
-        τshift!(Atc, Af, -τi/2, true)
+        τshift!(Ats, Af, -τi/2, false)
+        τshift!(Atc, Af, τi/2, true)
         Wt[idx, :] .= Ats .* Atc
     end
 
+    # middle of the time window
     τgrid = l*δt/2
 
     ω = fftfreq(t)
     Wf = FFTW.fftshift(FFTW.fft(Wt, 1) .* exp.(1im .* FFTW.fftshift(ω) .* τgrid), 1)[:, n:end-n-1]
 
-    t, -ω, real(Wf)
+    t, ω, real(Wf)
 end
 
 wigner(t, A::Vector{<:Real}; kwargs...) = wigner(t, hilbert(A); kwargs...)
