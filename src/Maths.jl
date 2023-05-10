@@ -476,6 +476,15 @@ _gaborFT(x::Array{T, 2}) where T <: Real = FFTW.rfft(x, 1)
 _gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
 
 
+"""
+    wigner(t, A; downsample=1, crop=1)
+
+Compute the wigner distribution function for the field `A` sampled on time axis `t`.
+The size of `t` and `A` should be a power of 2. The size of the transform can be reduced
+(and the computation sped up) by either `downsample`, which reduces the time resolution (frequency range),
+or by `crop` which reduces the time range (frequency resolution). If given, `downsample` and `crop` must
+also be a power of 2.
+"""
 function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     # crop and/or downsample
     log2(downsample) % 1 ≠ 0 && error("downsample factor must be a power of 2")
