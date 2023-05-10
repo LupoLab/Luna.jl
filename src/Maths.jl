@@ -7,6 +7,7 @@ import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
+import Luna: settings
 import Roots: fzero
 import Dierckx
 import Peaks
@@ -514,7 +515,7 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     ωos = FFTW.fftshift(ωo)
 
     # plan FFT
-    FT = FFTW.plan_fft(copy(Ao), 1; flags=FFTW.MEASURE)
+    FT = FFTW.plan_fft(copy(Ao), 1; flags=settings["fftw_flag"])
 
     Af = FT * Ao
     Afs = similar(Af)
