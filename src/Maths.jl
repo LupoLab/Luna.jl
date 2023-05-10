@@ -485,6 +485,8 @@ The size of `t` and `A` should be a power of 2. The size of the transform can be
 (and the computation sped up) by either `downsample`, which reduces the time resolution (frequency range),
 or by `crop` which reduces the time range (frequency resolution). If given, `downsample` and `crop` must
 also be a power of 2.
+
+See also https://en.wikipedia.org/wiki/Wigner_distribution_function
 """
 function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     # crop and/or downsample
@@ -529,9 +531,9 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     Wt = zeros(ComplexF64, (length(t), length(ωo)))
     Ats = similar(Ao)
     Atc = similar(Ao)
-    for (idx, τi) in enumerate(t)
-        τshift!(Ats, Af, -τi/2, false)
-        τshift!(Atc, Af, τi/2, true)
+    for (idx, τi) in enumerate(t) # iterate over time which here turns into a delay
+        τshift!(Ats, Af, -τi/2, false) # A(t + τ/2)
+        τshift!(Atc, Af, τi/2, true) # A*(t - τ/2)
         Wt[idx, :] .= Ats .* Atc
     end
 
@@ -539,7 +541,11 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
     τgrid = l*δt/2
 
     ω = fftfreq(t)
-    Wf = FFTW.fftshift(FFTW.fft(Wt, 1) .* exp.(1im .* FFTW.fftshift(ω) .* τgrid), 1)[:, n:end-n-1]
+    # Fourier transform along the delay axis to get the Wigner distribution
+    Wf = FFTW.fftshift(
+        FFTW.fft(Wt, 1) .* exp.(1im .* FFTW.fftshift(ω) .* τgrid),
+        1
+    )[:, n:end-n-1] # crop to remove the time domain padding we added earlier
 
     t, ω, real(Wf)
 end
