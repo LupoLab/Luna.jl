@@ -8,12 +8,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['1.7', '1.8']
+        julia-version: ['1.7', '1.8', '1.9']
         julia-arch: [x64]
         os: [ubuntu-latest, windows-latest, macos-latest]
     if: github.event.pull_request.draft == false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
@@ -21,4 +21,4 @@ jobs:
       - name: Install dependencies
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
-        uses: julia-actions/julia-runtest@master
+        uses: julia-actions/julia-runtest@v1
