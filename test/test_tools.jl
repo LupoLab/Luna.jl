@@ -16,7 +16,7 @@ end
 
 @testset "RDW phasematching" begin
 a = 125e-6
-gas = :HeJ
+gas = :He
 pressure = 1
 λ0 = 800e-9
 

@@ -364,8 +364,6 @@ function prop_capillary_args(radius, flength, gas, pressure;
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
-    gas = (gas == :He) ? :HeJ : gas
-
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)

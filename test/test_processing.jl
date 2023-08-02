@@ -223,7 +223,7 @@ end
 @testset "scanproc" begin
     a = 125e-6
     flength = 0.1
-    gas = :HeJ
+    gas = :He
 
     λ0 = 800e-9
     τfwhm = 10e-15
