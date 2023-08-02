@@ -7,6 +7,7 @@ import Random: AbstractRNG, randn, GLOBAL_RNG
 import FFTW
 import Luna
 import Luna.Utils: saveFFTwisdom, loadFFTwisdom
+import Luna: settings
 import Roots: fzero
 import Dierckx
 import Peaks
@@ -474,6 +475,82 @@ end
 
 _gaborFT(x::Array{T, 2}) where T <: Real = FFTW.rfft(x, 1)
 _gaborFT(x::Array{T, 2}) where T <: Complex = FFTW.fft(x, 1)
+
+
+"""
+    wigner(t, A; downsample=1, crop=1)
+
+Compute the wigner distribution function for the field `A` sampled on time axis `t`.
+The size of `t` and `A` should be a power of 2. The size of the transform can be reduced
+(and the computation sped up) by either `downsample`, which reduces the time resolution (frequency range),
+or by `crop` which reduces the time range (frequency resolution). If given, `downsample` and `crop` must
+also be a power of 2.
+
+See also https://en.wikipedia.org/wiki/Wigner_distribution_function
+"""
+function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
+    # crop and/or downsample
+    log2(downsample) % 1 ≠ 0 && error("downsample factor must be a power of 2")
+    if crop > 1
+        log2(crop) % 1 ≠ 0 && error("cropping factor must be a power of 2")
+        ncrop = (length(t) - length(t) ÷ crop) ÷ 2
+        startidx = ncrop
+        endidx = length(t) - ncrop - 1
+    else
+        startidx = 1
+        endidx = length(t)
+    end
+        
+    A = A[startidx:downsample:endidx]
+    t = t[startidx:downsample:endidx]
+
+    # pad with zeros in the time domain to allow for shifting
+    l = length(t)
+    n = l ÷ 2
+    Ao = vcat(zeros(n), A, zeros(n))
+
+    # make frequency axis for expanded time axis
+    δt = t[2] - t[1]
+    Nt = collect(range(0, length=2l))
+    to = (Nt .- l) .* δt
+    ωo = fftfreq(to)
+    ωos = FFTW.fftshift(ωo)
+
+    # plan FFT
+    FT = FFTW.plan_fft(copy(Ao), 1; flags=settings["fftw_flag"])
+
+    Af = FT * Ao
+    Afs = similar(Af)
+
+    function τshift!(x, Af, τ, cc)
+        @. Afs = Af * exp.(-1im * ωos * τ)
+        ldiv!(x, FT, Afs)
+        cc && conj!(x)
+    end
+
+    Wt = zeros(ComplexF64, (length(t), length(ωo)))
+    Ats = similar(Ao)
+    Atc = similar(Ao)
+    for (idx, τi) in enumerate(t) # iterate over time which here turns into a delay
+        τshift!(Ats, Af, -τi/2, false) # A(t + τ/2)
+        τshift!(Atc, Af, τi/2, true) # A*(t - τ/2)
+        Wt[idx, :] .= Ats .* Atc
+    end
+
+    # middle of the time window
+    τgrid = l*δt/2
+
+    ω = fftfreq(t)
+    # Fourier transform along the delay axis to get the Wigner distribution
+    Wf = FFTW.fftshift(
+        FFTW.fft(Wt, 1) .* exp.(1im .* FFTW.fftshift(ω) .* τgrid),
+        1
+    )[:, n:end-n-1] # crop to remove the time domain padding we added earlier
+
+    t, ω, real(Wf)
+end
+
+wigner(t, A::Vector{<:Real}; kwargs...) = wigner(t, hilbert(A); kwargs...)
 
 """
     hilbert(x; dim=1)
