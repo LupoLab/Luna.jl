@@ -45,10 +45,11 @@ const amg = atm/(k_B*273.15)
 "Atomic mass unit"
 const m_u = ustrip(CODATA2014.m_u)
 
-const gas = (:Air, :He, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
+    :HeJ => "He",
     :Ar => "Ar",
     :Ne => "Neon",
     :Kr => "Krypton",
@@ -148,7 +149,7 @@ function sellmeier_gas(material::Symbol)
         B2 = 1856.94e-8
         C2 = 7.76e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
-    elseif material == :He
+    elseif material == :He || material == :HeJ
         B1 = 2.16463842e-05
         C1 = -6.80769781e-04
         B2 = 2.10561127e-07
@@ -570,7 +571,7 @@ References:
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
-        if material in (:He, :HeB, :Ne, :Ar, :Kr, :Xe, :N2)
+        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
@@ -585,7 +586,7 @@ function γ3_gas(material::Symbol; source=nothing)
     if source == :Lehmeier
         dens = dens_1atm_0degC[material]
         # Table 1 in [3]
-        if material in (:He, :HeB)
+        if material in (:He, :HeB, :HeJ)
             fac = 1
         elseif material == :Ne
             fac = 1.8
@@ -708,7 +709,7 @@ Return the first ionisation potential of the `material` in a specific unit (defa
 Possible units are `:SI`, `:atomic` and `:eV`.
 """
 function ionisation_potential(material; unit=:SI)
-    if material in (:He, :HeB)
+    if material in (:He, :HeB, :HeJ)
         Ip = 0.9036
     elseif material == :Ne
         Ip = 0.7925
@@ -764,7 +765,7 @@ function quantum_numbers(material)
         return 4, 1, 1
     elseif material == :Xe
         return 5, 1, 1
-    elseif material in (:He, :HeB)
+    elseif material in (:He, :HeB, :HeJ)
         return 1, 0, 1
     elseif material == :O2
         return 2, 0, 0.53 # https://doi.org/10.1016/S0030-4018(99)00113-3
