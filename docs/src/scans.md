@@ -8,7 +8,7 @@ import PyPlot: plt
 
 a = 125e-6
 flength = 3
-gas = :HeJ
+gas = :He
 λ0 = 800e-9
 τfwhm = 10e-15
 λlims = (100e-9, 4e-6)
