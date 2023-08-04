@@ -1,5 +1,5 @@
 import Test: @test, @testset
-import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing, Modes, Tools, Maths, Hankel
+using Luna
 import FFTW
 import Statistics: mean, std
 import Random: MersenneTwister
@@ -719,7 +719,7 @@ end
     end
 end
 
-@testset "free-space inputs" begin
+@testset "free-space inputs: radial" begin
     λ0 = 800e-9
     τfwhm = 10e-15
     energy = 1e-6
@@ -735,7 +735,6 @@ end
 
     grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
 
-    # radial symmetry
     q = Hankel.QDHT(R, N, dim=2)
 
     xt = zeros(Float64, length(grid.t), length(q.r))
@@ -751,8 +750,22 @@ end
     w1q = 2Maths.rms_width(r, Ir)
 
     @test isapprox(w1q, w1; rtol=1e-3)
+end
 
-    # 3D free space
+@testset "free-space inputs: full 3D" begin
+    λ0 = 800e-9
+    τfwhm = 10e-15
+    energy = 1e-6
+
+    w0 = 100e-6
+    propz = 1.0
+
+    zr = π*w0^2/λ0
+    w1 = w0*sqrt(1 + (propz/zr)^2)
+    
+    R = 2w1
+    N = 256
+    grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
     xygrid = Grid.FreeGrid(R, N)
 
     xr = Array{ComplexF64}(undef, length(grid.t), length(xygrid.y), length(xygrid.x))
