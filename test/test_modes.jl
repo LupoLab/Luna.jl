@@ -338,10 +338,10 @@ pressure = 1.5
 λ0 = 800e-9
 grid = Grid.RealGrid(5e-2, 800e-9, (160e-9, 3000e-9), 1e-12)
 modes = (
-         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=1, kind=:HeB, ϕ=0.0, loss=false),
-         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HeB, ϕ=0.0, loss=false),
-         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HeB, ϕ=0.0, loss=false),
-         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HeB, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
+         Capillary.MarcatiliMode(a, gas, pressure, n=1, m=4, kind=:HE, ϕ=0.0, loss=false),
     )
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
