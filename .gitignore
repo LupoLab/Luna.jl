@@ -10,4 +10,3 @@ _git2_*
 docs/build
 *.info
 .vscode/spellright.dict
-.CondaPkg
