@@ -666,7 +666,7 @@ function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing,
     if corner[2] == 'l'
         hal = "left"
         x = xpad
-    elseif [2] == 'r'
+    elseif corner[2] == 'r'
         hal = "right"
         x = 1 - xpad
     else

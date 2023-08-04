@@ -21,6 +21,15 @@ old_logger = Logging.global_logger(logger)
         o2 = prop_capillary(args...; polarisation=:linear, modes=4, kwargs...)
         @test o1["Eω"][:, 1:2:end, :] ≈ o2["Eω"][:, :, :]
     end
+    @testset "x/y" begin
+        o1 = prop_capillary(args...; polarisation=:x, modes=4, kwargs...)
+        o2 = prop_capillary(args...; polarisation=:y, modes=4, kwargs...)
+        @test o1["Eω"][:, 1:2:end, :] ≈ o2["Eω"][:, 2:2:end, :]
+        @test all(iszero, o1["Eω"][:, 2:2:end, 1])
+        @test isapprox(o1["stats"]["energy"][1, 1], kwargs.energy; rtol=1e-4)
+        @test isapprox(o2["stats"]["energy"][2, 1], kwargs.energy; rtol=1e-4)
+        @test all(iszero, o2["Eω"][:, 1:2:end, 1])
+    end
     @testset "circular, $modes" for modes in (:HE11, :HE12, 1, 2)
         o1 = prop_capillary(args...; modes, polarisation=:circular, kwargs...)
         o2 = prop_capillary(args...; modes, polarisation=1.0, kwargs...)

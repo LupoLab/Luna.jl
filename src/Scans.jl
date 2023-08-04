@@ -2,7 +2,7 @@ module Scans
 import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Logging: @info, @warn
 import Printf: @sprintf
-import Base: length
+import Base: length, size
 import Luna: @hlock, Utils
 import Pidfile: mkpidlock
 import HDF5
@@ -140,6 +140,7 @@ function Scan(name, ex::AbstractExec; kwargs...)
 end
 
 length(s::Scan) = (length(s.arrays) == 0) ? 0 : prod(length, s.arrays)
+size(s::Scan) = (length(s.arrays) == 0) ? (0,) : Tuple(length.(s.arrays))
 
 """
     addvariable!(scan, variable::Symbol, array)
@@ -170,7 +171,7 @@ Make an appropriate file name for an `HDF5Output` or `prop_capillary` output for
 ```
 scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
 runscan(scan) do scanidx, energyi
-    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi
+    prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi
                    filepath=makefilename(scan, scanidx))
 end
 ```
@@ -250,35 +251,39 @@ The exact subset and order of scan points which is run depends on `scan.exec`, s
 ```
 scan = Scan("scan_example"; energy=collect(range(5e-6, 200e-6; length=64)))
 runscan(scan) do scanidx, energyi
-    prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi)
+    prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energyi)
 end
 ```
 """
 function runscan(f, scan::Scan{LocalExec})
+    out = Any[]
     for (scanidx, args) in enumerate(Iterators.product(scan.arrays...))
         logiter(scan, scanidx, args)
         try
-            f(scanidx, args...)
+            push!(out, f(scanidx, args...))
         catch e
             bt = catch_backtrace()
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
     end
+    out
 end
 
 function runscan(f, scan::Scan{RangeExec})
+    out = Any[]
     combos = vec(collect(Iterators.product(scan.arrays...)))
     for (scanidx, args) in enumerate(combos[scan.exec.r])
         logiter(scan, scanidx, args)
         try
-            f(scanidx, args...)
+            push!(out, f(scanidx, args...))
         catch e
             bt = catch_backtrace()
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
     end
+    out
 end
 
 """
@@ -459,7 +464,7 @@ function runscan(f, scan::Scan{<:SSHExec})
         @info "Making directory \$HOME/$subdir/$folder"
         read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
         @info "Transferring file..."
-        read(`scp $script $host:\$HOME/$subdir/$folder`)
+        read(`scp $script $host:\~/$subdir/$folder`)
         @info "Running Luna script on remote host $host"
         read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
     end
