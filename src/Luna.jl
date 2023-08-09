@@ -395,7 +395,7 @@ Logging.with_logger(Logging.NullLogger()) do
     λlims = [450e-9, 8000e-9]
     trange = 4e-12
     output = prop_gnlse(γ, flength, βs; λ0, τfwhm, power=P0, pulseshape=:sech, λlims, trange,
-                        raman=false, shock=false, fr, shotnoise=false, saveN=11)
+                        raman=true, shock=true, fr, shotnoise=true, saveN=11)
 end
 
 end # module
