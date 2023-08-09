@@ -1,5 +1,6 @@
 import Test: @test, @testset
-import Luna: Fields, FFTW, Grid, Maths, PhysData, Processing, Modes, Tools, Maths
+using Luna
+import FFTW
 import Statistics: mean, std
 import Random: MersenneTwister
 
@@ -716,4 +717,72 @@ end
         ϕCEO = δt*PhysData.wlfreq(λ0)*ii
         @test isapprox(ϕoptmm[ii], ϕCEO, rtol=1e-6)
     end
+end
+
+@testset "free-space inputs: radial" begin
+    λ0 = 800e-9
+    τfwhm = 10e-15
+    energy = 1e-6
+
+    w0 = 100e-6
+    propz = 1.0
+
+    zr = π*w0^2/λ0
+    w1 = w0*sqrt(1 + (propz/zr)^2)
+    
+    R = 4w1
+    N = 1024
+
+    grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
+
+    q = Hankel.QDHT(R, N, dim=2)
+
+    xt = zeros(Float64, length(grid.t), length(q.r))
+    FT = FFTW.plan_fft(xt, 1, flags=FFTW.ESTIMATE)
+
+    Eωk = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz)(grid, q, FT)
+
+    r = Hankel.Rsymmetric(q)
+    Eωr = Hankel.symmetric(q \ Eωk, q)
+
+    Iωr = abs2.(Eωr)
+    Ir = dropdims(sum(Iωr; dims=1); dims=1)
+    w1q = 2Maths.rms_width(r, Ir)
+
+    @test isapprox(w1q, w1; rtol=1e-3)
+end
+
+@testset "free-space inputs: full 3D" begin
+    λ0 = 800e-9
+    τfwhm = 10e-15
+    energy = 1e-6
+
+    w0 = 100e-6
+    propz = 1.0
+
+    zr = π*w0^2/λ0
+    w1 = w0*sqrt(1 + (propz/zr)^2)
+    
+    R = 2w1
+    N = 256
+    grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
+    xygrid = Grid.FreeGrid(R, N)
+
+    xr = Array{ComplexF64}(undef, length(grid.t), length(xygrid.y), length(xygrid.x))
+    FT = FFTW.plan_fft(xr, (1, 2, 3), flags=FFTW.ESTIMATE)
+
+    Eωk = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz)(grid, xygrid, FT)
+
+    Etxy = FT \ Eωk
+
+    Ixy = dropdims(sum(abs2.(Etxy); dims=1); dims=1)
+
+    Ix = dropdims(sum(Ixy; dims=1); dims=1)
+    Iy = dropdims(sum(Ixy; dims=2); dims=2)
+
+    w1x = 2Maths.rms_width(xygrid.x, Ix)
+    w1y = 2Maths.rms_width(xygrid.y, Iy)
+
+    @test isapprox(w1x, w1; rtol=1e-2)
+    @test isapprox(w1y, w1; rtol=1e-2)
 end
