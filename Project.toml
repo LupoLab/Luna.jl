@@ -1,7 +1,7 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -57,6 +57,7 @@ CoolProp = "0.1"
 Cubature = "1.5.1"
 DSP = "0.7.3"
 DataStructures = "0.18.10"
+DelimitedFiles = "1"
 Dierckx = "0.5.1"
 Documenter = "0.27.5"
 EllipsisNotation = "1"

@@ -371,4 +371,31 @@ function run(Eω, grid,
         status_period=status_period)
 end
 
+# run some code for precompilation
+Logging.with_logger(Logging.NullLogger()) do
+    prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+    prop_capillary(125e-6, 0.3, :He, (1.0, 0); λ0=800e-9, energy=1e-9,
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+    prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
+                    modes=4)
+    p = Tools.capillary_params(120e-6, 10e-15, 800e-9, 125e-6, :He, P=1.0)
+
+    # gnlse_sol.jl example but with N=1 and 100th of the fibre length
+    γ = 0.1
+    β2 = -1e-26
+    τ0 = 280e-15
+    τfwhm = (2*log(1 + sqrt(2)))*τ0
+    fr = 0.18
+    P0 = abs(β2)/((1-fr)*γ*τ0^2)
+    flength = π*τ0^2/abs(β2)/100
+    βs =  [0.0, 0.0, β2]
+    λ0 = 835e-9
+    λlims = [450e-9, 8000e-9]
+    trange = 4e-12
+    output = prop_gnlse(γ, flength, βs; λ0, τfwhm, power=P0, pulseshape=:sech, λlims, trange,
+                        raman=true, shock=true, fr, shotnoise=true, saveN=11)
+end
+
 end # module

@@ -36,7 +36,7 @@ peak power specified.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -71,7 +71,7 @@ specified.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -105,7 +105,7 @@ specified, and duration given either as `τfwhm` or `τw`.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -149,7 +149,7 @@ A custom pulse defined by tabulated data to be used with `prop_capillary`.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -280,8 +280,8 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `power`: Peak power **after any spectral phases are added**.
 - `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
     or `:sech` for a sech² pulse.
-- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
-    or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
+- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:x`, `:y`,
+    `:circular`, or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
     ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -364,8 +364,6 @@ function prop_capillary_args(radius, flength, gas, pressure;
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
-    gas = (gas == :He) ? :HeJ : gas
-
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
@@ -407,12 +405,13 @@ end
 function needpol(pol)
     if pol == :linear
         return false
-    elseif pol == :circular
+    elseif pol in (:circular, :x, :y)
         return true
     else
-        error("Polarisation must be :linear, :circular, or an ellipticity, not $pol")
+        error("Polarisation must be :linear, :circular, :x/:y, or an ellipticity, not $pol")
     end
 end
+
 needpol(pol::Number) = true
 needpol(pulse::Pulses.AbstractPulse) = needpol(pulse.polarisation)
 needpol(pulses::Vector{<:Pulses.AbstractPulse}) = any(needpol, pulses)
@@ -661,8 +660,10 @@ _findmode(mode_s, md) = _findmode([mode_s], md)
 function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     idcs = findmode(mode_s, pulse)
     (length(idcs) > 0) || error("Mode $(pulse.mode) not found in mode list: $mode_s")
-    if pulse.polarisation == :linear
+    if pulse.polarisation == :linear || pulse.polarisation == :x
         ((mode=idcs[1], fields=(pulse.field,)),)
+    elseif pulse.polarisation == :y
+        ((mode=idcs[2], fields=(pulse.field,)),)
     else
         (length(idcs) == 2) || error("Modes not set up for circular/elliptical polarisation")
         f1, f2 = ellfields(pulse)
