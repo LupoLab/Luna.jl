@@ -21,4 +21,5 @@ jobs:
       - name: Install dependencies
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
+        uses: julia-actions/julia-buildpkg@v1
         uses: julia-actions/julia-runtest@v1
