@@ -19,6 +19,7 @@ jobs:
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
         uses: julia-actions/julia-buildpkg@v1
+      - name: Instantiate documentation pkg
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate();'
       - name: Build and deploy
         env:
