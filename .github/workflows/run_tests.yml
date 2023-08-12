@@ -18,8 +18,9 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
-      - name: Install dependencies
+      - name: Install dependencies and build
         env:
           PYTHON: # remove PYTHON env variable to make sure packages are installed
         uses: julia-actions/julia-buildpkg@v1
+      - name: Run tests
         uses: julia-actions/julia-runtest@v1
