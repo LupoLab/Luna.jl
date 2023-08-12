@@ -7,6 +7,8 @@ import Pidfile: mkpidlock
 import HDF5
 import Luna: @hlock, settings
 import Printf: @sprintf
+import Scratch: get_scratch!
+import Luna
 
 subzero = '\u2080'
 subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
@@ -44,7 +46,7 @@ lunadir() = dirname(srcdir())
 
 datadir() = joinpath(srcdir(), "data")
 
-cachedir() = joinpath(homedir(), ".luna")
+cachedir() = get_scratch!(Luna, "lunacache")
 
 function sourcecode()
     src = dirname(@__FILE__)
