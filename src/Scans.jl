@@ -353,11 +353,11 @@ end
 function _runscan(f, scan::Scan{QueueExec})
     if isempty(scan.exec.queuefile)
         h = string(hash(scan.name); base=16)
-        qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
+        qfile = "qfile_$h.h5"
     else
         qfile = scan.exec.queuefile
     end
-    lockpath = joinpath(Utils.cachedir(), basename(qfile)*"_lock")
+    lockpath = qfile*"_lock"
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     while true

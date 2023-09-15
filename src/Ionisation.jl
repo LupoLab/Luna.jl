@@ -234,12 +234,23 @@ function ionfrac!(frac, rate, E, δt)
 end
 
 function makePPTaccel(E, rate)
+    # Interpolating the log and re-exponentiating makes the spline more accurate
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
-    # Interpolating the log and re-exponentiating makes the spline more accurate
-    ir(E) = abs(E) <= Emin ? 0.0 : exp(cspl(abs(E)))
+    Emax = maximum(E)
     function ionrate!(out, E)
-        out .= ir.(E)
+        for ii in eachindex(out)
+            aE = abs(E[ii])
+            if aE < Emin
+                out[ii] = 0.0
+            elseif aE > Emax
+                error(
+                    "Field strength $aE V/m exceeds maximum for PPT ionisation rate ($Emax V/m)."
+                    )
+            else
+                out[ii] = exp(cspl(aE))
+            end
+        end
     end
 end
 
