@@ -17,6 +17,12 @@ import DSP: unwrap
 import Logging: @warn
 
 abstract type AbstractField end
+
+"""
+    TimeField
+
+Abstract supertype for time-domain only fields.
+"""
 abstract type TimeField <: AbstractField end
 
 """
