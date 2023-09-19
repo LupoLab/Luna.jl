@@ -34,7 +34,7 @@ There are two ways of using Luna:
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) or [GNLSE](#gnlse) sections below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna requires Julia v1.7 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
+Luna requires Julia v1.9 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
 
 ```julia
 ]
