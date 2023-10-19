@@ -7,7 +7,7 @@ import Pidfile: mkpidlock
 import HDF5
 import Luna: @hlock, settings
 import Printf: @sprintf
-import Scratch: get_scratch!
+import Scratch: get_scratch!, clear_scratchspaces!
 import Luna
 
 subzero = '\u2080'
@@ -47,6 +47,8 @@ lunadir() = dirname(srcdir())
 datadir() = joinpath(srcdir(), "data")
 
 cachedir() = get_scratch!(Luna, "lunacache")
+
+clear_cache() = clear_scratchspaces!(Luna)
 
 function sourcecode()
     src = dirname(@__FILE__)
