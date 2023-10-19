@@ -3,7 +3,7 @@ import Dates
 import FFTW
 import Logging
 import LibGit2
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 import HDF5
 import Luna: settings
 import Printf: @sprintf

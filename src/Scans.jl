@@ -4,7 +4,7 @@ import Logging: @info, @warn
 import Printf: @sprintf
 import Base: length, size
 import Luna: Utils
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 import HDF5
 import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
 import Dates

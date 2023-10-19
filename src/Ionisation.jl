@@ -2,7 +2,7 @@ module Ionisation
 import SpecialFunctions: gamma
 import GSL: hypergeom
 import HDF5
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
 import Luna.PhysData: ionisation_potential, quantum_numbers

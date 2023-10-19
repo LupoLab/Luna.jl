@@ -7,7 +7,7 @@ using EllipsisNotation
 import EllipsisNotation: Ellipsis
 import Printf: @sprintf
 import Luna: Scans, Utils
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 
 abstract type AbstractOutput end
 
