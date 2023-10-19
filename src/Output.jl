@@ -640,6 +640,10 @@ While running the given `scan`, save the variables given as keyword arguments in
 - `stats`: The statistics dictionary from a simulation is saved in scan grid and `NaN`-padded to account for variable lengths in the output arrays
 - `fpath`: Path to the file. Defaults to the scan name plus "_collected"
 - `script`: Path to the Julia scrpt file running the scan. Can be grabbed automatically using the macro [`@scansave`](@ref).
+
+Another keyword argument `lock_stale_age` sets the time in seconds after which the function ignores
+the lock on the file and writes to it anyway. Defaults to 300 s (5 min).
+(Note that if the PID of the locking process appears valid, this is automatically increased 25x.)
 """
 function scansave(scan, scanidx; stats=nothing, fpath=nothing,
                                  grid=nothing, script=nothing,
