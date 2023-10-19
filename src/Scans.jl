@@ -361,7 +361,7 @@ function _runscan(f, scan::Scan{QueueExec})
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     while true
-        mkpidlock(lockpath) do
+        mkpidlock(lockpath; stale_age=10) do
             # first process to catch the pidlock creates the queue file
             if ~isfile(qfile)
                 HDF5.h5open(qfile, "cw") do file
@@ -400,7 +400,7 @@ function _runscan(f, scan::Scan{QueueExec})
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
-        mkpidlock(lockpath) do # acquire lock on qfile again
+        mkpidlock(lockpath; stale_age=10) do # acquire lock on qfile again
             HDF5.h5open(qfile, "r+") do file
                 file["qdata"][scanidx] = code # mark as done/failed
             end
