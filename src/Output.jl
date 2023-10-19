@@ -642,11 +642,11 @@ While running the given `scan`, save the variables given as keyword arguments in
 - `script`: Path to the Julia scrpt file running the scan. Can be grabbed automatically using the macro [`@scansave`](@ref).
 """
 function scansave(scan, scanidx; stats=nothing, fpath=nothing,
-                                 grid=nothing, script=nothing, kwargs...)
+                                 grid=nothing, script=nothing,
+                                 lock_stale_age=300, kwargs...)
     fpath = isnothing(fpath) ? "$(scan.name)_collected.h5" : fpath
-    lockpath = joinpath(Utils.cachedir(), "$(basename(fpath)).scanlock")
-    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
-    pidlock = mkpidlock(lockpath)
+    lockpath = fpath*"_scanlock"
+    mkpidlock(lockpath; stale_age=lock_stale_age) do # note no indent to keep this legible
     if !isfile(fpath)
         # First save - set up file structure
         HDF5.h5open(fpath, "cw") do file
@@ -739,7 +739,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             file[string(k)][sidcs..., scanidcs...] = v
         end 
     end
-    close(pidlock)
+    end # mkpidlock do
 end
 
 """
