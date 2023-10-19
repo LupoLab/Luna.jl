@@ -7,7 +7,6 @@ import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths, Utils
-import Luna: @hlock
 import Printf: @sprintf
 
 """
@@ -169,7 +168,7 @@ end
 
 function loadPPTaccel(fpath)
     isfile(fpath) || error("PPT cache file $fpath not found!")
-    E, rate = @hlock HDF5.h5open(fpath, "r") do file
+    E, rate = HDF5.h5open(fpath, "r") do file
         (read(file["E"]), read(file["rate"]))
     end
     makePPTaccel(E, rate)
