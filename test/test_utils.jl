@@ -1,5 +1,5 @@
 import Test: @test, @testset, @test_throws
-import Luna: Utils, @hlock
+import Luna: Utils
 import HDF5
 import Dates
 
@@ -17,7 +17,7 @@ isfile(fpath) && rm(fpath)
 isdir(dirname(fpath)) || mkpath(dirname(fpath))
 Utils.save_dict_h5(fpath, d)
 @test_throws ErrorException Utils.save_dict_h5(fpath, d, force=false)
-@hlock HDF5.h5open(fpath) do file
+HDF5.h5open(fpath) do file
     for k in ["float", "float[]", "string"]
         @test d[k] == read(file[k])
     end
