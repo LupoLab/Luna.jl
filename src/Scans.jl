@@ -3,8 +3,8 @@ import ArgParse: ArgParseSettings, parse_args, parse_item, @add_arg_table!
 import Logging: @info, @warn
 import Printf: @sprintf
 import Base: length, size
-import Luna: @hlock, Utils
-import Pidfile: mkpidlock
+import Luna: Utils
+import FileWatching.Pidfile: mkpidlock
 import HDF5
 import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
 import Dates
@@ -361,15 +361,15 @@ function _runscan(f, scan::Scan{QueueExec})
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     while true
-        mkpidlock(lockpath) do
+        mkpidlock(lockpath; stale_age=10) do
             # first process to catch the pidlock creates the queue file
             if ~isfile(qfile)
-                @hlock HDF5.h5open(qfile, "cw") do file
+                HDF5.h5open(qfile, "cw") do file
                     file["qdata"] = zeros(Int, length(scan))
                 end
             end
             # read the queue data
-            global qdata = @hlock HDF5.h5open(qfile) do file
+            global qdata = HDF5.h5open(qfile) do file
                 read(file["qdata"])
             end
             # find the first index which is neither done nor in progress
@@ -378,7 +378,7 @@ function _runscan(f, scan::Scan{QueueExec})
             end
             if ~isnothing(scanidx)
                 # mark the index as in progress
-                @hlock HDF5.h5open(qfile, "r+") do file
+                HDF5.h5open(qfile, "r+") do file
                     file["qdata"][scanidx] = 1
                 end
             end
@@ -400,8 +400,8 @@ function _runscan(f, scan::Scan{QueueExec})
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
-        mkpidlock(lockpath) do # acquire lock on qfile again
-            @hlock HDF5.h5open(qfile, "r+") do file
+        mkpidlock(lockpath; stale_age=10) do # acquire lock on qfile again
+            HDF5.h5open(qfile, "r+") do file
                 file["qdata"][scanidx] = code # mark as done/failed
             end
         end

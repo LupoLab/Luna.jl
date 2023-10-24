@@ -63,7 +63,7 @@ const gas_str = Dict(
     :N2O => "NitrousOxide",
     :D2 => "Deuterium"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe, :CaCO3)
 const metal = (:Ag,:Al)
 
 """
@@ -292,6 +292,12 @@ function sellmeier_glass(material::Symbol)
             + 0.60967/(1-(0.08636/μm)^2)
             + 0.0080/(1-(18.0/μm)^2)
             + 2.14973/(1-(25.0/μm)^2)
+            ))
+    elseif material == :CaCO3
+        return μm -> @. sqrt(complex(1
+            + 0.73358749
+            + 0.96464345/(1-1.94325203e-2/μm^2)
+            + 1.82831454/(1-120/μm^2)
             ))
     elseif material == :ADPo
         return μm -> @. sqrt(complex(
@@ -661,6 +667,9 @@ function n2_glass(material::Symbol; λ=nothing)
     elseif material == :MgF2
         # R. DeSalvo et al., IEEE J. Q. Elec. 32, 10 (1996).
         return 5.79e-21
+    elseif material == :CaCO3
+        # Kabaciński et al., 10.1364/OE.27.011018
+        return 3.22e-20
     else
         error("Unkown glass $material")
     end

@@ -3,11 +3,11 @@ import Dates
 import FFTW
 import Logging
 import LibGit2
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 import HDF5
-import Luna: @hlock, settings
+import Luna: settings
 import Printf: @sprintf
-import Scratch: get_scratch!
+import Scratch: get_scratch!, clear_scratchspaces!
 import Luna
 
 subzero = '\u2080'
@@ -47,6 +47,8 @@ lunadir() = dirname(srcdir())
 datadir() = joinpath(srcdir(), "data")
 
 cachedir() = get_scratch!(Luna, "lunacache")
+
+clear_cache() = clear_scratchspaces!(Luna)
 
 function sourcecode()
     src = dirname(@__FILE__)
@@ -142,7 +144,7 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
         end
     end
     
-    @hlock HDF5.h5open(fpath, "cw") do file
+    HDF5.h5open(fpath, "cw") do file
         for (k, v) in pairs(d)
             dict2h5(k, v, file)
         end
@@ -172,7 +174,7 @@ function load_dict_h5(fpath)
         return dd
     end
 
-    d = @hlock HDF5.h5open(fpath) do file
+    d = HDF5.h5open(fpath) do file
         h52dict(file)
     end
 end

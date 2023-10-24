@@ -6,32 +6,6 @@ import LinearAlgebra: mul!, ldiv!
 Logging.disable_logging(Logging.BelowMinLevel)
 
 """
-    HDF5LOCK
-
-Lock on the HDF5 library for multi-threaded execution.
-"""
-const HDF5LOCK = ReentrantLock()
-
-"""
-    @hlock
-
-Wait for HDF5LOCK, execute the expression, and release H5DFLOCK.
-
-!!! warning
-    For thread safety, any call to functions from HDF5.jl needs to be preceeded by @hlock.
-"""
-macro hlock(expr)
-    quote
-        try
-            lock(HDF5LOCK)
-            $(esc(expr))
-        finally
-            unlock(HDF5LOCK)
-        end
-    end
-end
-
-"""
     Luna.settings
 
 Dictionary of global settings for `Luna`.

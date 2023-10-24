@@ -2,12 +2,12 @@ module Ionisation
 import SpecialFunctions: gamma
 import GSL: hypergeom
 import HDF5
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
 import Luna.PhysData: ionisation_potential, quantum_numbers
-import Luna: Maths
-import Luna: @hlock
+import Luna: Maths, Utils
+import Printf: @sprintf
 
 """
     ionrate_fun!_ADK(ionpot::Float64, threshold=true)
@@ -134,40 +134,41 @@ end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
                                 sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing,
-                                cachedir=joinpath(homedir(), ".luna", "pptcache"))
+                                cachedir=joinpath(Utils.cachedir(), "pptcache"),
+                                stale_age=60*10)
     h = hash((ionpot, λ0, Z, l, sum_tol, cycle_average, N, Emax))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
     isdir(cachedir) || mkpath(cachedir)
     if isfile(fpath)
-        @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-        pidlock = mkpidlock(lockpath)
-        rate = loadPPTaccel(fpath)
-        close(pidlock)
+        @info @sprintf("Found cached PPT rate for %.2f eV, %.1f nm", ionpot/electron, 1e9λ0)
+        rate = mkpidlock(lockpath; stale_age) do
+            loadPPTaccel(fpath)
+        end
         return rate
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
                                sum_tol=sum_tol, cycle_average, N=N, Emax=Emax)
-        @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
-        pidlock = mkpidlock(lockpath)
-        if isfile(fpath) # makePPTcache takes a while - has another process saved first?
-            rate = loadPPTaccel(fpath)
-            close(pidlock)
-            return rate
+        mkpidlock(lockpath; stale_age) do
+            if ~isfile(fpath) # makePPTcache takes a while - has another process saved first?
+                @info @sprintf(
+                    "Saving PPT rate for %.2f eV, %.1f nm in %s",
+                    ionpot/electron, 1e9λ0, cachedir
+                )
+                HDF5.h5open(fpath, "cw") do file
+                    file["E"] = E
+                    file["rate"] = rate
+                end
+            end
         end
-        @hlock HDF5.h5open(fpath, "cw") do file
-            file["E"] = E
-            file["rate"] = rate
-        end
-        close(pidlock)
         return makePPTaccel(E, rate)
     end
 end
 
 function loadPPTaccel(fpath)
     isfile(fpath) || error("PPT cache file $fpath not found!")
-    E, rate = @hlock HDF5.h5open(fpath, "r") do file
+    E, rate = HDF5.h5open(fpath, "r") do file
         (read(file["E"]), read(file["rate"]))
     end
     makePPTaccel(E, rate)
@@ -182,9 +183,9 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
     Emin = Emax/5000
 
     E = collect(range(Emin, stop=Emax, length=N));
-    @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
+    @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
     rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, cycle_average);
-    @info "PPT pre-calcuation done"
+    @info "...PPT pre-calcuation done"
     return E, rate
 end
 
