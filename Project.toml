@@ -1,7 +1,7 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -88,5 +88,6 @@ Roots = "2"
 Scratch = "1"
 SpecialFunctions = "0.10.3, 1, 2"
 StaticArrays = "1"
+Statistics = "1"
 Unitful = "1"
 julia = "1.9"
