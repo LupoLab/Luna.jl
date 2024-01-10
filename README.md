@@ -72,7 +72,9 @@ The shape of this array is `(Nω x Nz)` where `Nω` is the number of frequency s
 
 Mode-averaged propagation is activated using `modes=:HE11` (the default) or replacing the `:HE11` with a different mode designation (for mode-averaged propagation in a different mode). To run the same simulation as above with the first four modes (HE₁₁ to HE₁₄) of the capillary, set `modes` to `4` (this example also uses smaller time and frequency windows to make the simulation run a little faster):
 ```julia
-julia> prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, modes=4, energy=120e-6, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6))
+julia> output_multimode = prop_capillary(125e-6, 3, :He, 1; λ0=800e-9, modes=4, energy=120e-6, τfwhm=10e-15, trange=400e-15, λlims=(150e-9, 4e-6))
+[...]
+MemoryOutput["simulation_type", "dumps", "meta", "Eω", "prop_capillary_args", "grid", "stats", "z"]
 ```
 The propagation will take much longer, and the output field `Eω` now has shape `(Nω x Nm x Nz)` with `Nm` the number of modes:
 ```julia
@@ -85,28 +87,28 @@ julia> output_multimode["Eω"]
 More usefully, you can directly plot the propagation results using `Plotting.prop_2D()` (`Plotting` is imported at the same time as `prop_capillary` by the `using Luna` statement):
 ```julia
 julia> Plotting.prop_2D(output)
-PyPlot.Figure(PyObject <Figure size 2400x800 with 4 Axes>)
+Python Figure: <Figure size 1200x400 with 4 Axes>
 ```
 This should show a plot like this:
 ![Propagation example 1](assets/readme_modeAvgProp.png)
 You can also display the power spectrum at the input and output (and anywhere in between):
 ```julia
 julia> Plotting.spec_1D(output, [0, 1.5, 3]; log10=true)
-PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
+Python Figure: <Figure size 850x500 with 1 Axes>
 ```
 which will show this:
 ![Propagation example 2](assets/readme_modeAvgSpec.png)
 `Plotting` functions accept many additional keyword arguments to quickly display relevant information. For example, you can show the bandpass-filtered UV pulse from the simulation using the `bandpass` argument:
 ```julia
 julia> Plotting.time_1D(output, [2, 2.5, 3]; trange=(-10e-15, 30e-15), bandpass=(180e-9, 220e-9))
-PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
+Python Figure: <Figure size 850x500 with 1 Axes>
 ```
 ![Propagation example 3](assets/readme_modeAvgTime.png)
 
 For multi-mode simulations, the plotting functions will display all modes individually by default. You can display the sum over modes instead using `modes=:sum`:
 ```julia
 julia> Plotting.spec_1D(output_multimode; log10=true, modes=:sum)
-PyPlot.Figure(PyObject <Figure size 1700x1000 with 1 Axes>)
+Python Figure: <Figure size 850x500 with 1 Axes>
 ```
 ![Propagation example 4](assets/readme_multiModeSpec.png)
 (Compare this to the mode-averaged case above and note the important differences, e.g. the appearance of additional ultraviolet dispersive waves in higher-order modes.)
@@ -128,19 +130,21 @@ julia> using Luna
 julia> γ = 0.11
 julia> flength = 15e-2
 julia> βs = [0.0, 0.0, -1.1830e-26, 8.1038e-41, -9.5205e-56,  2.0737e-70, -5.3943e-85,  1.3486e-99, -2.5495e-114,  3.0524e-129, -1.7140e-144]
-julia> output = prop_gnlse(γ, flength, βs; λ0=835e-9, τfwhm=50e-15, power=10e3, pulseshape=:sech, λlims=(400e-9, 2400e-9), trange=12.5e-12)
+julia> output_gnlse = prop_gnlse(γ, flength, βs; λ0=835e-9, τfwhm=50e-15, power=10e3, pulseshape=:sech, λlims=(400e-9, 2400e-9), trange=12.5e-12)
+[...]
+MemoryOutput["simulation_type", "dumps", "meta", "Eω", "prop_capillary_args", "grid", "stats", "z"]
 ```
 After this has run, you can visualise the output, with e.g.
 ```julia
-julia> Plotting.prop_2D(output, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
-PyPlot.Figure(PyObject <Figure size 2400x800 with 4 Axes>)
+julia> Plotting.prop_2D(output_gnlse, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
+Python Figure: <Figure size 1200x400 with 4 Axes>
 ```
 This should show a plot like this:
 ![GNLSE propagation example](assets/readme_gnlse_scg.png)
 
 
 ## Examples
-The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the [low-level interface](examples/low_level_interface). Some of the simple interface examples require the `PyPlot` package to be present, and many of the low-level examples require other packages as well--you can install these by simply typing `] add PyPlot` at the Julia REPL or the equivalent for other packages.
+The [examples folder](examples/) contains complete simulation examples for a variety of scenarios, both for the [simple interface](examples/simple_interface/) and the [low-level interface](examples/low_level_interface). Some of the simple interface examples require the `PythonPlot` package to be present, and many of the low-level examples require other packages as well--you can install these by simply typing `] add PythonPlot` at the Julia REPL or the equivalent for other packages.
 
 ## The low-level interface
 At its core, Luna is extremely flexible, and the simple interface using `prop_capillary` only exposes part of what Luna can do. There are lots of examples in the [low-level interface examples folder](examples/low_level_interface). These are not actively maintained and are not guaranteed to run. As a side effect of its flexibility, it is quite easy to make mistakes when using the low-level interface. For example, changing from single-mode to multi-mode propagation in a fibre requires several concurrent changes to your code. If you have trouble with this interface, [open an issue](https://github.com/LupoLab/Luna/issues/new) with as much detail as possible and we will try to help you run it.
