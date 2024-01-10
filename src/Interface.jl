@@ -308,9 +308,9 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `plasma`: Can be one of
     - `:ADK` -- include plasma using the ADK ionisation rate.
     - `:PPT` -- include plasma using the PPT ionisation rate.
-    - `true` (default) -- same as `:PPT`.
+    - `true` -- same as `:PPT`.
     - `false` -- ignore plasma.
-    Note that plasma is only available for full-field simulations.
+    - `nothing` -- (default), implies `true` for field simulations and `false` for envelopes
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
@@ -560,9 +560,22 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
     push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
 end
 
+function makeplasma!(out, grid::Grid.EnvGrid, gas, plasma::Symbol, pol)
+    ionpot = PhysData.ionisation_potential(gas)
+    if plasma == :ADK
+        error("ADK not supported for envelopes at present")
+    elseif plasma == :PPT
+        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ, rcycle=false)
+    else
+        throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
+    end
+    pol && error("vector ionisation not suppported with envelopes at present")
+    Et = Vector{Complex{Float64}}(undef, length(grid.to))
+    push!(out, Nonlinear.PlasmaFourier(grid.ωo, Et, ionrate, ionpot, grid.to[2] - grid.to[1]))
+end
+
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
                       rotation, vibration)
-    plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
     if kerr
@@ -582,6 +595,7 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
         rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
         push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
     end
+    makeplasma!(out, grid, gas, plasma, pol)
     Tuple(out)
 end
 
