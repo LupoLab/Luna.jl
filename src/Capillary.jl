@@ -313,7 +313,7 @@ end
 Convenience function to create density and core index profiles for
 multi-point gradient fills defined by positions `Z` and pressures `P`.
 """
-function gradient(gas, Z, P)
+function gradient(gas, Z::AbstractVector, P::AbstractVector)
     γ = sellmeier_gas(gas)
     ex = extrema(P)
     dspl = densityspline(gas, Pmin=ex[1]==ex[2] ? 0 : ex[1], Pmax=ex[2])
