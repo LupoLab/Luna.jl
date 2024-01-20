@@ -166,7 +166,7 @@ function peakintensity(grid, modes::Modes.ModeCollection; components=:y)
         Modes.to_space!(Et0, Et, (0, 0), tospace; z=z)
         if npol > 1
             d["peakintensity"] = c*ε_0/2 * maximum(eachindex(grid.t)) do ii
-                sum(abs2, Et0[ii, :]; dims=2)
+                sum(abs2, Et0[ii, :])
             end
         else
             d["peakintensity"] = c*ε_0/2 * maximum(abs2, Et0)
