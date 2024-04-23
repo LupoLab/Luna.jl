@@ -405,7 +405,7 @@ end
     # test diversity of power fluctuations
     @test mean(std(Its[istart:iend,:], dims=2)[:,1]) > 10
 end
-
+##
 @testset "Propagation" begin
     λ0 = 800e-9
     τfwhm = 2.5e-15
@@ -536,8 +536,31 @@ end
         ϕs, Eωcomp = Fields.optcomp_taylor(Eωmirr, grid, λ0; order=3)
         @test isapprox(ϕs[3], -reflections*gdd, rtol=0.1)
     end
-end
 
+    # check (back-)propagation for all gases with a large grid
+    λ0 = 800e-9
+    τfwhm = 2.5e-15
+    grid = Grid.RealGrid(1, λ0, (70e-9, 4e-6), 500e-15)
+    input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+    x = Array{Float64}(undef, length(grid.t))
+    FT = FFTW.plan_rfft(x, 1)
+    Eω = input(grid, FT)
+    @testset "gas propgation: $g" for g in PhysData.gas
+        Eωgas = Fields.prop_material(Eω, grid, g, 10, λ0)
+        Et = FT \ Eωgas
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] < ω0[2]
+
+        Eωgas = Fields.prop_material(Eω, grid, g, -10, λ0)
+        Et = FT \ Eωgas
+        gab = Maths.gabor(grid.t, Et, [-10e-15, 10e-15], 3e-15)
+        ω0 = Maths.moment(grid.ω, abs2.(gab))
+        @test ω0[1] > ω0[2]
+    end
+
+end
+##
 @testset "Compression" begin
 # Short pulse with 100 fs^2
 λ0 = 800e-9
