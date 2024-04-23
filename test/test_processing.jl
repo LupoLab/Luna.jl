@@ -290,4 +290,6 @@ end
 
     @test all(isapprox.(Processing.peakpower(out)[1:2, 1], [pHE11, pHE12]; rtol=1e-4))
     @test isapprox(Processing.peakpower(out; sumdims=2)[1], pHE11+pHE12; rtol=1e-4)
+
+    @test isapprox(out["stats"]["peakpower_allmodes"][1], pHE11+pHE12; rtol=1e-4)
 end
