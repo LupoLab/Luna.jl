@@ -1,6 +1,7 @@
 import Test: @test, @testset
 import FFTW
 using Luna
+import Luna: settings
 import Luna.PhysData: wlfreq
 import NumericalIntegration: integrate
 
