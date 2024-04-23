@@ -655,6 +655,10 @@ function scalefield(f::Fields.DataField, fac)
     Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
 end
 
+function scalefield(f::Fields.PropagatedField, fac)
+    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac))
+end
+
 _findmode(mode_s, md) = _findmode([mode_s], md)
 
 function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
