@@ -4,7 +4,7 @@ Luna comes with a flexible interface to run, save and process scans over any par
 **First**, define the fixed parameters (those which are not being scanned over):
 ```julia
 using Luna
-import PyPlot: plt
+import PythonPlot: pyplot
 
 a = 125e-6
 flength = 3
@@ -99,7 +99,7 @@ julia> size(λ)
 ```
 With this data, we can now plot the energy-pressure scan:
 ```julia
-fig, axs = plt.subplots(1, length(pressures))
+fig, axs = pyplot.subplots(1, length(pressures))
 fig.set_size_inches(8, 2)
 for (pidx, pressure) in enumerate(pressures)
     ax = axs[pidx]
@@ -110,7 +110,7 @@ for (pidx, pressure) in enumerate(pressures)
     ax.set_title("Pressure: $pressure bar")
     ax.set_xlim(100, 1200)
 end
-plt.colorbar(img, ax=axs, label="Energy density (dB)")
+pyplot.colorbar(img, ax=axs, label="Energy density (dB)")
 ```
 which will produce this figure:
 ![Scan spectra](assets/scan_spectrum.png)
