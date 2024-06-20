@@ -226,7 +226,7 @@ If oversampling > 1, the field is oversampled before the calculation
     Oversampling can lead to a significant performance hit
 """
 function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling=1)
-    to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
+    to, Eto = Maths.oversample(grid.t, grid.t, factor=oversampling)
     δt = to[2] - to[1]
     # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
     # ionisation rate
@@ -243,6 +243,29 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun, aeff; oversampling
         to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
         @. Eto /= sqrt(ε_0*c*aeff(z)/2)
         ratemax = ionfrac!(frac, real(Eto))
+        d["electrondensity"] = frac[end]*dfun(z)
+        d["peak_ionisation_rate"] = ratemax
+    end
+end
+
+function electrondensity(grid::Grid.EnvGrid, ionrate!, dfun, aeff; oversampling=1)
+    to, Eto = Maths.oversample(grid.t, complex(grid.t), factor=oversampling)
+    δt = to[2] - to[1]
+    # ionfrac! stores the time-dependent ionisation fraction in out and returns the max
+    # ionisation rate
+    function ionfrac!(out, Et)
+        ionrate!(out, Et)
+        ratemax = maximum(out)
+        Maths.cumtrapz!(out, δt) # in-place cumulative integration
+        @. out = 1 - exp(-out)
+        return ratemax
+    end
+    frac = similar(to)
+    function addstat!(d, Eω, Et, z, dz)
+        # note: oversampling returns its arguments without any work done if factor==1
+        to, Eto = Maths.oversample(grid.t, Et, factor=oversampling)
+        @. Eto /= sqrt(ε_0*c*aeff(z)/2)
+        ratemax = ionfrac!(frac, abs.(Eto))
         d["electrondensity"] = frac[end]*dfun(z)
         d["peak_ionisation_rate"] = ratemax
     end
