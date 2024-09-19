@@ -3,6 +3,7 @@ import SpecialFunctions: gamma, dawson
 import HCubature: hquadrature
 import HDF5
 import FileWatching.Pidfile: mkpidlock
+import GSL: hypergeom
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
 import Luna.PhysData: ionisation_potential, quantum_numbers
@@ -133,7 +134,7 @@ function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing,
+                                sum_tol=1e-8, cycle_average=false, N=2^16, Emax=nothing,
                                 cachedir=joinpath(Utils.cachedir(), "pptcache"),
                                 stale_age=60*10)
     h = hash((ionpot, λ0, Z, l, sum_tol, cycle_average, N, Emax))
@@ -175,7 +176,7 @@ function loadPPTaccel(fpath)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
-                      sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing)
+                      sum_tol=1e-8, cycle_average=false, N=2^16, Emax=nothing)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -184,7 +185,7 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
-    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, cycle_average);
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol, cycle_average);
     @info "...PPT pre-calcuation done"
     return E, rate
 end
@@ -264,7 +265,7 @@ function ionrate_fun!_PPT(args...)
 end
 
 """
-    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-8, cycle_average=false)
 
 Create closure to calculate PPT ionisation rate.
 
@@ -288,7 +289,7 @@ media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 Physics Reports 441(2–4), 47–189 (2007).
 
 """
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false,
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average=false,
                          m_mode=:average, sum_integral=false)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2Ip_au)
@@ -375,16 +376,29 @@ are in fact identical.
 function φ(m, x)
     #= second half of [3], eq. 81
         for m = 0, φ₀(x) is just the Dawson integral so we can get this directly.
-        for m ≠ 0, we calculate it brute force. note that this form is *much* (>100x) 
-        faster than integrating the first half of eq. 81
+        for m ≠ 0, we calculate it using the hypergeometric function where possible.
+        for m ≠ 0 and large x, we need to do it brute force with BigFloats (slow)
     =#
     if m == 0
         return dawson(x)
     end
-    i, _ = hquadrature(0, x) do y
-        (x^2 - y^2)^(abs(m))*exp(y^2)
+    
+    if x <= 26
+        mabs = abs(m)
+        return (exp(-x^2)
+            * sqrt(π)
+            * x^(2mabs+1)
+            * gamma(mabs+1)
+            * hypergeom(1/2, 3/2 + mabs, x^2)
+            / (2*gamma(3/2 + mabs)))
+    else
+        x = BigFloat(x)
+        i, _ = hquadrature(0, x) do y
+            y = BigFloat(y)
+            (x^2 - y^2)^(abs(m))*exp(y^2)
+        end
+        return Float64(exp(-x^2) * i)
     end
-    exp(-x^2) * i
 end
     
 
