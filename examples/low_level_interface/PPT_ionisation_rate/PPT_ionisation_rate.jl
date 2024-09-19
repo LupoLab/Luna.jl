@@ -1,0 +1,171 @@
+using Luna
+##
+this_folder = dirname(@__FILE__)
+import DelimitedFiles: readdlm
+import PyPlot: plt, pygui
+import Printf: @sprintf
+pygui(true)
+## Ilkov et al
+k = collect(range(10, stop=12, length=50))
+E = 10 .^ k
+# ppt = Ionisation.ionrate_PPT(:He, 10.6e-6, E)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true)
+ppt_cycavg_intg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_integral=true)
+adk = Ionisation.ionrate_ADK(:He, E)
+
+dat = readdlm(joinpath(this_folder, "Ilkov_PPT_He.csv"), ',') # ionrate [1/s] vs field [V/cm]
+##
+fig = plt.figure()
+# plt.loglog(E, ppt, label="PPT")
+plt.loglog(E, ppt_cycavg, label="PPT cycle averaged")
+plt.loglog(E, ppt_cycavg_intg, label="PPT cycle averaged, integral for sum")
+# plt.loglog(E, adk, label="ADK")
+plt.loglog(dat[:, 1].*100, dat[:, 2], label="Ilkov et al. PPT")
+plt.xlim(1e10, 1e12)
+plt.ylim(0.1, 1e18)
+plt.legend()
+plt.xlabel("Field strength (V/m)")
+plt.ylabel("Ionisation rate (s⁻¹)")
+plt.title("He ionisation at 10.6 μm")
+
+
+## Chang, Fundamentals of Attosecond Optics
+dat = readdlm(joinpath(this_folder, "Chang_PPT.csv"), ',') # ionrate [1/fs] vs intensity [1e14 W/cm^2]
+intensity = range(0.1, 25; length=1000) * 1e18 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+ppt = Ionisation.ionrate_PPT(:He, 390e-9, E)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 390e-9, E, cycle_average=true)
+adk = Ionisation.ionrate_ADK(:He, E)
+
+s = sortperm(dat[:, 1])
+
+plt.figure()
+plt.loglog(intensity*1e-18, ppt*1e-15, label="PPT")
+plt.loglog(intensity*1e-18, adk*1e-15, label="ADK")
+plt.loglog(intensity*1e-18, ppt_cycavg*1e-15, label="PPT cycle averaged")
+plt.loglog(dat[s, 1], dat[s, 2], label="Chang PPT")
+plt.ylim(1e-14, 1)
+plt.xlim(extrema(intensity.*1e-18))
+plt.legend()
+plt.xlabel("Intensity (10\$^{14}\$ W/cm\$^2\$)")
+plt.ylabel("Ionisation rate (1/fs)")
+
+## Couairon
+Ip = 12.063 * PhysData.electron
+dat = readdlm(joinpath(this_folder, "Couairon_PPT.csv"), ',') # ionrate [1/s] vs intensity [W/cm^2]
+k = collect(range(12, 15, length=500))
+intensity = 10 .^ k .* 1e4 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+ppt = Ionisation.ionrate_PPT(Ip, 800e-9, 1, 0, E)
+ppt_cycavg = Ionisation.ionrate_PPT(Ip, 800e-9, 1, 0, E; cycle_average=true)
+adk = Ionisation.ionrate_ADK(Ip, E)
+
+s = sortperm(dat[:, 1])
+
+plt.figure()
+# plt.loglog(intensity*1e-4, ppt, label="PPT")
+plt.loglog(intensity*1e-4, adk, label="ADK")
+plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged")
+plt.loglog(dat[s, 1], dat[s, 2], "--", label="Couairon PPT")
+plt.ylim(1, 1e17)
+plt.xlim(extrema(intensity.*1e-4))
+plt.legend()
+plt.xlabel("Intensity (W/cm\$^2\$)")
+plt.ylabel("Ionisation rate (1/s)")
+plt.title("O\$_2\$ ionisation at 800 nm")
+
+## Gonzales et al
+dat = readdlm(joinpath(this_folder, "Gonzalez_PPT_Ar.csv"), ',') # ionrate [1/s] vs intensity [W/cm^2]
+k = collect(range(12, 16, length=500))
+intensity = 10 .^ k .* 1e4 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+λ0 = 800e-9
+gas = :Ar
+# ppt = Ionisation.ionrate_PPT(gas, λ0, E)
+ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true)
+ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum)
+ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:zero)
+ppt_cycavg_msum_intg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_integral=true)
+
+s = sortperm(dat[:, 1])
+
+plt.figure()
+# plt.loglog(intensity*1e-4, ppt, label="PPT")
+plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, average over m")
+plt.loglog(intensity*1e-4, ppt_cycavg_msum, label="PPT cycle averaged, sum over m")
+plt.loglog(intensity*1e-4, ppt_cycavg_m0, ":", label="PPT cycle averaged, m=0")
+# plt.loglog(intensity*1e-4, ppt_cycavg_msum_intg, label="PPT cycle averaged, sum over m, integral for sum")
+plt.loglog(dat[s, 1], dat[s, 2], "--", label="Gonzalez PPT")
+plt.ylim(1, 1e18)
+plt.xlim(extrema(intensity.*1e-4))
+plt.legend()
+plt.xlabel("Intensity (W/cm\$^2\$)")
+plt.ylabel("Ionisation rate (1/s)")
+plt.title("Ar ionisation at 800 nm")
+
+## Sum convergence test
+# Ip = 12.063 * PhysData.electron
+Ip = 24.588 * PhysData.electron
+k = collect(range(12, 15.8, length=500))
+intensity = 10 .^ k .* 1e4 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+sum_tol = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+ppt = zeros((length(E), length(sum_tol)))
+for (idx, sti) in enumerate(sum_tol)
+    ppt[:, idx] .= Ionisation.ionrate_PPT(Ip, 800e-9, 1, 1, E; sum_tol=sti)
+end
+##
+cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))
+plt.figure()
+for idx in eachindex(sum_tol)
+    plt.loglog(intensity*1e-4, ppt[:, idx];
+            c=cols[idx], label=@sprintf("%.0e", sum_tol[idx]))
+end
+plt.legend()
+
+## Sum convergence test
+k = collect(range(12, 15, length=500))
+intensity = 10 .^ k .* 1e4 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+sum_tol = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+ppt = zeros((length(E), length(sum_tol)))
+
+gas = :He
+λ0 = 1800e-9
+for (idx, sti) in enumerate(sum_tol)
+    ppt[:, idx] .= Ionisation.ionrate_PPT(gas, λ0, E; sum_tol=sti)
+end
+##
+cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))
+fig = plt.figure()
+for idx in eachindex(sum_tol)
+    plt.loglog(intensity*1e-4, ppt[:, idx];
+            c=cols[idx], alpha=0.8, label=@sprintf("%.0e", sum_tol[idx]))
+end
+# plt.xlim(5e14, 5e15)
+# plt.ylim(1e11, 1e16)
+plt.xlabel("Intensity (W/cm²)")
+plt.ylabel("Ionisation rate (s⁻¹)")
+plt.legend(;title="Sum convergence tolerance")
+plt.title(@sprintf("%s, %.0f nm", gas, λ0*1e9))
+
+## summing vs averaging over m
+gas = :Ar
+λ0 = 800e-9
+k = collect(range(12, 15.8, length=500))
+intensity = 10 .^ k .* 1e4 # W/m^2
+E = Tools.intensity_to_field.(intensity)
+
+avg = Ionisation.ionrate_PPT(gas, λ0, E)
+summed = Ionisation.ionrate_PPT(gas, λ0, E; m_mode=:sum)
+zero_only = Ionisation.ionrate_PPT(gas, λ0, E; m_mode=:zero)
+##
+cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))
+plt.figure()
+plt.loglog(intensity*1e-4, avg; label="averaging over m")
+plt.loglog(intensity*1e-4, summed; label="summing over m")
+plt.loglog(intensity*1e-4, zero_only; label="m=0 only", linestyle="--")
+plt.legend()
+plt.xlabel("Intensity (W/cm²)")
+plt.ylabel("Ionisation rate (s⁻¹)")
+plt.title(@sprintf("%s, %.0f nm", gas, λ0*1e9))
