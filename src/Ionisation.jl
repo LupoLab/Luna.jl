@@ -1,6 +1,6 @@
 module Ionisation
-import SpecialFunctions: gamma
-import GSL: hypergeom
+import SpecialFunctions: gamma, dawson
+import HCubature: hquadrature
 import HDF5
 import FileWatching.Pidfile: mkpidlock
 import Logging: @info
@@ -278,12 +278,18 @@ Ionization of atoms in the tunnelling regime with experimental evidence
 using Hg atoms. Journal of Physics B: Atomic, Molecular and Optical
 Physics 25, 4005–4020 (1992)
 
-[2] 1.Bergé, L., Skupin, S., Nuter, R., Kasparian, J. & Wolf, J.-P.
+[2] Bergé, L., Skupin, S., Nuter, R., Kasparian, J. & Wolf, J.-P.
 Ultrashort filaments of light in weakly ionized, optically transparent
 media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 (Appendix A)
+
+[3] A. Couairon and A. Mysyrowicz,
+"Femtosecond filamentation in transparent media,"
+Physics Reports 441(2–4), 47–189 (2007).
+
 """
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false,
+                         m_mode=:average, sum_integral=false)
     Ip_au = ionpot / au_energy
     ns = Z/sqrt(2Ip_au)
     ls = ns-1
@@ -305,7 +311,8 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average
             v = Uit_au/ω0_au
             ret = 0
             divider = 0
-            for m = -l:l
+            lrange = m_mode == :zero ? (0:0) : (-l:l)
+            for m in lrange
                 divider += 1
                 mabs = abs(m)
                 flm = ((2l + 1)*factorial(l + mabs)
@@ -336,12 +343,22 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average
                 end
                 # s, success, steps = Maths.aitken_accelerate(
                 #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
-                s, success, steps = Maths.converge_series(
-                    sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
+                if sum_integral
+                    s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
+                    *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
+                else
+                    s, success, steps = Maths.converge_series(
+                        sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
+                end
                 lret *= s
                 ret += lret
             end
-            return ret/(au_time*divider)
+            if m_mode == :average
+                return ret/(au_time*divider)
+            else
+                return ret/au_time
+            end
+
         end
     end
     return ionrate
@@ -356,14 +373,20 @@ Note that w_m(x) in [1] and φ_m(x) in [2] look slightly different but
 are in fact identical.
 """
 function φ(m, x)
-    mabs = abs(m)
-    return (exp(-x^2)
-            * sqrt(π)
-            * x^(mabs+1)
-            * gamma(mabs+1)
-            * hypergeom(1/2, 3/2 + mabs, x^2)
-            / (2*gamma(3/2 + mabs)))
+    #= second half of [3], eq. 81
+        for m = 0, φ₀(x) is just the Dawson integral so we can get this directly.
+        for m ≠ 0, we calculate it brute force. note that this form is *much* (>100x) 
+        faster than integrating the first half of eq. 81
+    =#
+    if m == 0
+        return dawson(x)
+    end
+    i, _ = hquadrature(0, x) do y
+        (x^2 - y^2)^(abs(m))*exp(y^2)
+    end
+    exp(-x^2) * i
 end
+    
 
 function ionrate_fun_PPT(material::Symbol, λ0; kwargs...)
     n, l, Z = quantum_numbers(material)
