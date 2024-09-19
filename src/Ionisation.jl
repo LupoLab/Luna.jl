@@ -392,9 +392,9 @@ function φ(m, x)
             * hypergeom(1/2, 3/2 + mabs, x^2)
             / (2*gamma(3/2 + mabs)))
     else
-        x = BigFloat(x)
         i, _ = hquadrature(0, x) do y
             y = BigFloat(y)
+            x = BigFloat(x)
             (x^2 - y^2)^(abs(m))*exp(y^2)
         end
         return Float64(exp(-x^2) * i)
