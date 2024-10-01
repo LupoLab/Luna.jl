@@ -787,13 +787,14 @@ function quantum_numbers(material)
     end
 end
 
-function polarisability_difference(material)
+function polarisability_difference(material; unit=:SI)
+    factor = unit == :SI ? au_polarisability : 1
     if material == :He
-        return (1.3207 - 0.2811)*au_polarisability
+        return (1.3207 - 0.2811)*factor
     elseif material == :Ne
-        return (2.376 - 1.2417)*au_polarisability
+        return (2.376 - 1.2417)*factor
     elseif material == :Ar
-        return (10.762 - 6.807)*au_polarisability
+        return (10.762 - 6.807)*factor
     else
         throw(DomainError(material, "Polarisability difference not available for $material"))
     end

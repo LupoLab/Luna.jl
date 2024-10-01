@@ -91,6 +91,8 @@ ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
 ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_tol)
 ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:zero, sum_tol)
 ppt_cycavg_msum_intg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_integral=true)
+ppt_cycavg_msum_stark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum,
+                                              Δα=PhysData.polarisability_difference(:Ar))
 
 s = sortperm(dat[:, 1])
 
@@ -99,6 +101,7 @@ plt.figure()
 plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, average over m")
 plt.loglog(intensity*1e-4, ppt_cycavg_msum, label="PPT cycle averaged, sum over m")
 plt.loglog(intensity*1e-4, ppt_cycavg_m0, ":", label="PPT cycle averaged, m=0")
+plt.loglog(intensity*1e-4, ppt_cycavg_msum_stark, "--", label="PPT cycle averaged, sum over m, with Stark shift")
 # plt.loglog(intensity*1e-4, ppt_cycavg_msum_intg, label="PPT cycle averaged, sum over m, integral for sum")
 plt.loglog(dat[s, 1], dat[s, 2], "--", label="Gonzalez PPT")
 plt.ylim(1, 1e18)

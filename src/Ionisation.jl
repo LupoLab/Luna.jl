@@ -290,77 +290,76 @@ Physics Reports 441(2–4), 47–189 (2007).
 
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average=false,
-                         m_mode=:average, sum_integral=false)
-    Ip_au = ionpot / au_energy
-    ns = Z/sqrt(2Ip_au)
-    ls = ns-1
-    Cnl2 = 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
+                         m_mode=:average, sum_integral=false, Δα=0)
 
-    ω0 = 2π*c/λ0
-    ω0_au = au_time*ω0
-    E0_au = (2*Ip_au)^(3/2)
+    function ionrate(E)
+        Ip_au = (ionpot + Δα/2 * E^2) / au_energy # Δα/2 * E^2 includes the Stark shift
+        ns = Z/sqrt(2Ip_au)
+        ls = ns-1
+        Cnl2 = 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
+    
+        ω0 = 2π*c/λ0
+        ω0_au = au_time*ω0
+        E0_au = (2*Ip_au)^(3/2)
 
-    ionrate = let ω0_au=ω0_au, Cnl2=Cnl2, ns=ns, sum_tol=sum_tol
-        function ionrate(E)
-            E_au = abs(E)/au_Efield
-            γ = ω0_au*sqrt(2Ip_au)/E_au
-            γ2 = γ*γ
-            β = 2γ/sqrt(1 + γ2)
-            α = 2*(asinh(γ) - γ/sqrt(1+γ2))
-            Up_au = E_au^2/(4*ω0_au^2)
-            Uit_au = Ip_au + Up_au
-            v = Uit_au/ω0_au
-            ret = 0
-            divider = 0
-            lrange = m_mode == :zero ? (0:0) : (-l:l)
-            for m in lrange
-                divider += 1
-                mabs = abs(m)
-                flm = ((2l + 1)*factorial(l + mabs)
-                    / (2^mabs*factorial(mabs)*factorial(l - mabs)))
-                # Following 5 lines are [1] eq. 8 and lead to identical results:
-                # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
-                # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
-                # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
-                # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
-                # lret *= Am*exp(-2*E0_au*G/(3E_au))
-                # [2] eq. (A14) 
-                lret = 4sqrt(2)/π*Cnl2
-                lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
-                lret *= flm/factorial(mabs)
-                lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
-                lret *= Ip_au * γ2/(1+γ2)
-                # Remove cycle average factor, see eq. (2) of [1]
-                if !cycle_average
-                    lret *= sqrt(π*E0_au/(3E_au))
-                end
-                k = ceil(v)
-                n0 = ceil(v)
-                sumfunc = let k=k, β=β, m=m
-                    function sumfunc(x, n)
-                        diff = n-v
-                        return x + exp(-α*diff)*φ(m, sqrt(β*diff))
-                    end
-                end
-                # s, success, steps = Maths.aitken_accelerate(
-                #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
-                if sum_integral
-                    s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
-                    *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
-                else
-                    s, success, steps = Maths.converge_series(
-                        sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
-                end
-                lret *= s
-                ret += lret
+        E_au = abs(E)/au_Efield
+        γ = ω0_au*sqrt(2Ip_au)/E_au
+        γ2 = γ*γ
+        β = 2γ/sqrt(1 + γ2)
+        α = 2*(asinh(γ) - γ/sqrt(1+γ2))
+        Up_au = E_au^2/(4*ω0_au^2)
+        Uit_au = Ip_au + Up_au
+        v = Uit_au/ω0_au
+        ret = 0
+        divider = 0
+        lrange = m_mode == :zero ? (0:0) : (-l:l)
+        for m in lrange
+            divider += 1
+            mabs = abs(m)
+            flm = ((2l + 1)*factorial(l + mabs)
+                / (2^mabs*factorial(mabs)*factorial(l - mabs)))
+            # Following 5 lines are [1] eq. 8 and lead to identical results:
+            # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
+            # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
+            # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
+            # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+            # lret *= Am*exp(-2*E0_au*G/(3E_au))
+            # [2] eq. (A14) 
+            lret = 4sqrt(2)/π*Cnl2
+            lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+            lret *= flm/factorial(mabs)
+            lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
+            lret *= Ip_au * γ2/(1+γ2)
+            # Remove cycle average factor, see eq. (2) of [1]
+            if !cycle_average
+                lret *= sqrt(π*E0_au/(3E_au))
             end
-            if m_mode == :average
-                return ret/(au_time*divider)
+            k = ceil(v)
+            n0 = ceil(v)
+            sumfunc = let k=k, β=β, m=m
+                function sumfunc(x, n)
+                    diff = n-v
+                    return x + exp(-α*diff)*φ(m, sqrt(β*diff))
+                end
+            end
+            # s, success, steps = Maths.aitken_accelerate(
+            #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
+            if sum_integral
+                s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
+                *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
             else
-                return ret/au_time
+                s, success, steps = Maths.converge_series(
+                    sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
             end
-
+            lret *= s
+            ret += lret
         end
+        if m_mode == :average
+            return ret/(au_time*divider)
+        else
+            return ret/au_time
+        end
+
     end
     return ionrate
 end
