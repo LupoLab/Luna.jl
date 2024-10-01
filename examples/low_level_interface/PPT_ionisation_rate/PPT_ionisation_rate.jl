@@ -86,7 +86,7 @@ E = Tools.intensity_to_field.(intensity)
 λ0 = 800e-9
 gas = :Ar
 # ppt = Ionisation.ionrate_PPT(gas, λ0, E)
-sum_tol = 1e-6
+sum_tol = 1e-5
 ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
 ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_tol)
 ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:zero, sum_tol)
