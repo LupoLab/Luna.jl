@@ -273,6 +273,11 @@ Create closure to calculate PPT ionisation rate.
 # Keyword arguments
 - `sum_tol::Number`: Relative tolerance used to truncate the infinite sum.
 - `cycle_average::Bool`: If `false` (default), calculate the cycle-averaged rate
+- `sum_integral::Bool`: whether to approximate the infinite sum in the PPT rate equation with
+    an integral (this neglects the multiphoton thresholds).
+- `Δα::Number`: polarisability difference between the ground state and the cation (in SI units)
+    to calculate the Stark shift of the ground-state energy levels. Defaults to 0.
+- `msum::Bool`: for l ≠ 0, whether or not to sum over different m states. Defaults to `true`.
 
 # References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
@@ -291,7 +296,7 @@ Physics Reports 441(2–4), 47–189 (2007).
 
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
-                         sum_tol=1e-6, cycle_average=false, sum_integral=false, Δα=0)
+                         sum_tol=1e-6, cycle_average=false, sum_integral=false, Δα=0, msum=true)
 
     if ismissing(Δα)
         Δα = 0
@@ -316,7 +321,8 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
         Uit_au = Ip_au + Up_au
         v = Uit_au/ω0_au
         ret = 0
-        for m in -l:l
+        mrange = msum ? (-l:l) : (0:0)
+        for m in mrange
             mabs = abs(m)
             flm = ((2l + 1)*factorial(l + mabs)
                 / (2^mabs*factorial(mabs)*factorial(l - mabs)))
