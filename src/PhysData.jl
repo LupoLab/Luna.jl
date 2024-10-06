@@ -787,8 +787,27 @@ function quantum_numbers(material)
     end
 end
 
+"""
+    polarisability_difference(material; unit=:SI)
+
+Return the difference in polarisability between the ground state and the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
 function polarisability_difference(material; unit=:SI)
-    factor = unit == :SI ? au_polarisability : 1
+    if unit == :SI
+        factor = au_polarisability
+    elseif unit == :atomic
+        factor = 1
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
     if material == :He
         return (1.3207 - 0.2811)*factor
     elseif material == :Ne
@@ -796,7 +815,7 @@ function polarisability_difference(material; unit=:SI)
     elseif material == :Ar
         return (10.762 - 6.807)*factor
     else
-        throw(DomainError(material, "Polarisability difference not available for $material"))
+        return missing
     end
 end
 

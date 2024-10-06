@@ -5,7 +5,7 @@ import HDF5
 import FileWatching.Pidfile: mkpidlock
 import GSL: hypergeom
 import Logging: @info
-import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
+import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq, polarisability_difference
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths, Utils
 import Printf: @sprintf
@@ -127,17 +127,18 @@ exists, load this rather than recalculate.
 
 Other keyword arguments are passed on to [`ionrate_fun_PPT`](@ref)
 """
-function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun!_PPTcached(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTcached(ip, λ0, Z, l; kwargs...)
+    ionrate_fun!_PPTcached(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-8, cycle_average=false, N=2^16, Emax=nothing,
+                                sum_tol=1e-6, cycle_average=false, N=2^16, Emax=nothing, Δα=0,
                                 cachedir=joinpath(Utils.cachedir(), "pptcache"),
                                 stale_age=60*10)
-    h = hash((ionpot, λ0, Z, l, sum_tol, cycle_average, N, Emax))
+    h = hash((ionpot, λ0, Z, l, Δα, sum_tol, cycle_average, N, Emax))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
@@ -176,7 +177,7 @@ function loadPPTaccel(fpath)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
-                      sum_tol=1e-8, cycle_average=false, N=2^16, Emax=nothing)
+                      sum_tol=1e-6, cycle_average=false, N=2^16, Emax=nothing)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -265,7 +266,7 @@ function ionrate_fun!_PPT(args...)
 end
 
 """
-    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-8, cycle_average=false)
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average=false)
 
 Create closure to calculate PPT ionisation rate.
 
@@ -289,8 +290,12 @@ media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 Physics Reports 441(2–4), 47–189 (2007).
 
 """
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average=false,
-                         m_mode=:average, sum_integral=false, Δα=0)
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
+                         sum_tol=1e-6, cycle_average=false, sum_integral=false, Δα=0)
+
+    if ismissing(Δα)
+        Δα = 0
+    end
 
     function ionrate(E)
         Ip_au = (ionpot + Δα/2 * E^2) / au_energy # Δα/2 * E^2 includes the Stark shift
@@ -311,10 +316,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average
         Uit_au = Ip_au + Up_au
         v = Uit_au/ω0_au
         ret = 0
-        divider = 0
-        lrange = m_mode == :zero ? (0:0) : (-l:l)
-        for m in lrange
-            divider += 1
+        for m in -l:l
             mabs = abs(m)
             flm = ((2l + 1)*factorial(l + mabs)
                 / (2^mabs*factorial(mabs)*factorial(l - mabs)))
@@ -342,8 +344,6 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average
                     return x + exp(-α*diff)*φ(m, sqrt(β*diff))
                 end
             end
-            # s, success, steps = Maths.aitken_accelerate(
-            #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
             if sum_integral
                 s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
                 *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
@@ -354,12 +354,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average
             lret *= s
             ret += lret
         end
-        if m_mode == :average
-            return ret/(au_time*divider)
-        else
-            return ret/au_time
-        end
-
+        return ret/au_time
     end
     return ionrate
 end
@@ -401,20 +396,22 @@ function φ(m, x)
 end
     
 
-function ionrate_fun_PPT(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun_PPT(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    return ionrate_fun_PPT(ip, λ0, Z, l; kwargs...)
+    return ionrate_fun_PPT(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     return ionrate_fun_PPT(ionpot, λ0, Z, l; kwargs...).(E)
 end
 
-function ionrate_PPT(material::Symbol, λ0, E; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_PPT(material::Symbol, λ0, E; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    return ionrate_PPT(ip, λ0, Z, l, E; kwargs...)
+    return ionrate_PPT(ip, λ0, Z, l, E; Δα, kwargs...)
 end
 
 end

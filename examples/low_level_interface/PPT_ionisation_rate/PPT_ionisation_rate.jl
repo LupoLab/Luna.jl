@@ -11,9 +11,9 @@ this_folder = dirname(@__FILE__)
 k = collect(range(10, stop=12, length=50))
 E = 10 .^ k
 # ppt = Ionisation.ionrate_PPT(:He, 10.6e-6, E)
-ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-6)
-ppt_cycavg_rough = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-4)
-ppt_cycavg_intg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_integral=true)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-6, stark_shift=false)
+ppt_cycavg_rough = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-4, stark_shift=false)
+ppt_cycavg_intg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_integral=true, stark_shift=false)
 adk = Ionisation.ionrate_ADK(:He, E)
 
 dat = readdlm(joinpath(this_folder, "Ilkov_PPT_He.csv"), ',') # ionrate [1/s] vs field [V/cm]
@@ -30,7 +30,7 @@ plt.ylim(0.1, 1e18)
 plt.legend()
 plt.xlabel("Field strength (V/m)")
 plt.ylabel("Ionisation rate (s⁻¹)")
-plt.title("He ionisation at 10.6 μm")
+plt.title("He ionisation at 10.6 μm (Stark shift off)")
 
 
 ## Chang, Fundamentals of Attosecond Optics
@@ -88,11 +88,10 @@ gas = :Ar
 # ppt = Ionisation.ionrate_PPT(gas, λ0, E)
 sum_tol = 1e-5
 ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
-ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_tol)
-ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:zero, sum_tol)
-ppt_cycavg_msum_intg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum, sum_integral=true)
-ppt_cycavg_msum_stark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, m_mode=:sum,
-                                              Δα=PhysData.polarisability_difference(:Ar))
+ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
+ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
+ppt_cycavg_msum_intg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_integral=true)
+ppt_cycavg_msum_nostark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, stark_shift=false)
 
 s = sortperm(dat[:, 1])
 
@@ -101,7 +100,7 @@ plt.figure()
 plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, average over m")
 plt.loglog(intensity*1e-4, ppt_cycavg_msum, label="PPT cycle averaged, sum over m")
 plt.loglog(intensity*1e-4, ppt_cycavg_m0, ":", label="PPT cycle averaged, m=0")
-plt.loglog(intensity*1e-4, ppt_cycavg_msum_stark, "--", label="PPT cycle averaged, sum over m, with Stark shift")
+plt.loglog(intensity*1e-4, ppt_cycavg_msum_nostark, "--", label="PPT cycle averaged, sum over m, no Stark shift")
 # plt.loglog(intensity*1e-4, ppt_cycavg_msum_intg, label="PPT cycle averaged, sum over m, integral for sum")
 plt.loglog(dat[s, 1], dat[s, 2], "--", label="Gonzalez PPT")
 plt.ylim(1, 1e18)
@@ -155,27 +154,6 @@ end
 plt.xlabel("Intensity (W/cm²)")
 plt.ylabel("Ionisation rate (s⁻¹)")
 plt.legend(;title="Sum convergence tolerance")
-plt.title(@sprintf("%s, %.0f nm", gas, λ0*1e9))
-
-## summing vs averaging over m
-gas = :Ar
-λ0 = 800e-9
-k = collect(range(12, 15.8, length=100))
-intensity = 10 .^ k .* 1e4 # W/m^2
-E = Tools.intensity_to_field.(intensity)
-
-avg = Ionisation.ionrate_PPT(gas, λ0, E)
-summed = Ionisation.ionrate_PPT(gas, λ0, E; m_mode=:sum)
-zero_only = Ionisation.ionrate_PPT(gas, λ0, E; m_mode=:zero)
-##
-cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))
-plt.figure()
-plt.loglog(intensity*1e-4, avg; label="averaging over m")
-plt.loglog(intensity*1e-4, summed; label="summing over m")
-plt.loglog(intensity*1e-4, zero_only; label="m=0 only", linestyle="--")
-plt.legend()
-plt.xlabel("Intensity (W/cm²)")
-plt.ylabel("Ionisation rate (s⁻¹)")
 plt.title(@sprintf("%s, %.0f nm", gas, λ0*1e9))
 
 ## Comparing ways of calculating φ
