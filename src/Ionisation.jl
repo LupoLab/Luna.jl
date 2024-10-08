@@ -135,10 +135,11 @@ function ionrate_fun!_PPTcached(material::Symbol, λ0; stark_shift=true, kwargs.
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-6, cycle_average=false, N=2^16, Emax=nothing, Δα=0,
+                                N=2^16, Emax=nothing,
                                 cachedir=joinpath(Utils.cachedir(), "pptcache"),
-                                stale_age=60*10)
-    h = hash((ionpot, λ0, Z, l, Δα, sum_tol, cycle_average, N, Emax))
+                                stale_age=60*10,
+                                kwargs...)
+    h = hash((ionpot, λ0, Z, l, N, Emax, collect(kwargs...)))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
@@ -151,12 +152,12 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
         return rate
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
-                               sum_tol=sum_tol, cycle_average, N=N, Emax=Emax)
+                               N, Emax, kwargs...)
         mkpidlock(lockpath; stale_age) do
             if ~isfile(fpath) # makePPTcache takes a while - has another process saved first?
                 @info @sprintf(
                     "Saving PPT rate for %.2f eV, %.1f nm in %s",
-                    ionpot/electron, 1e9λ0, cachedir
+                    ionpot/electron, 1e9λ0, fpath
                 )
                 HDF5.h5open(fpath, "cw") do file
                     file["E"] = E
@@ -177,7 +178,7 @@ function loadPPTaccel(fpath)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
-                      sum_tol=1e-6, cycle_average=false, N=2^16, Emax=nothing)
+                      N=2^16, Emax=nothing, kwargs...)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -186,7 +187,7 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
-    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol, cycle_average);
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     @info "...PPT pre-calcuation done"
     return E, rate
 end
