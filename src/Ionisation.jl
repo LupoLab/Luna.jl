@@ -101,10 +101,11 @@ end
 
 Create an accelerated (interpolated) PPT ionisation rate function.
 """
-function ionrate_fun!_PPTaccel(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun!_PPTaccel(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTaccel(ip, λ0, Z, l; kwargs...)
+    Δα = stark_shift ? polarisability_difference(material) : 0
+    ionrate_fun!_PPTaccel(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)

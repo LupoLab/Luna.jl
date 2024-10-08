@@ -88,20 +88,16 @@ gas = :Ar
 # ppt = Ionisation.ionrate_PPT(gas, λ0, E)
 sum_tol = 1e-5
 ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
-ppt_cycavg_msum = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
-ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
-ppt_cycavg_msum_intg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_integral=true)
+ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol, msum=false)
 ppt_cycavg_msum_nostark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, stark_shift=false)
 
 s = sortperm(dat[:, 1])
 
 plt.figure()
 # plt.loglog(intensity*1e-4, ppt, label="PPT")
-plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, average over m")
-plt.loglog(intensity*1e-4, ppt_cycavg_msum, label="PPT cycle averaged, sum over m")
+plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, sum over m")
 plt.loglog(intensity*1e-4, ppt_cycavg_m0, ":", label="PPT cycle averaged, m=0")
 plt.loglog(intensity*1e-4, ppt_cycavg_msum_nostark, "--", label="PPT cycle averaged, sum over m, no Stark shift")
-# plt.loglog(intensity*1e-4, ppt_cycavg_msum_intg, label="PPT cycle averaged, sum over m, integral for sum")
 plt.loglog(dat[s, 1], dat[s, 2], "--", label="Gonzalez PPT")
 plt.ylim(1, 1e18)
 plt.xlim(extrema(intensity.*1e-4))
@@ -111,27 +107,7 @@ plt.ylabel("Ionisation rate (1/s)")
 plt.title("Ar ionisation at 800 nm")
 
 ## Sum convergence test
-# Ip = 12.063 * PhysData.electron
-Ip = 24.588 * PhysData.electron
-k = collect(range(12, 15.8, length=100))
-intensity = 10 .^ k .* 1e4 # W/m^2
-E = Tools.intensity_to_field.(intensity)
-sum_tol = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
-ppt = zeros((length(E), length(sum_tol)))
-for (idx, sti) in enumerate(sum_tol)
-    ppt[:, idx] .= Ionisation.ionrate_PPT(Ip, 800e-9, 1, 1, E; sum_tol=sti)
-end
-##
-cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))
-plt.figure()
-for idx in eachindex(sum_tol)
-    plt.loglog(intensity*1e-4, ppt[:, idx];
-            c=cols[idx], label=@sprintf("%.0e", sum_tol[idx]))
-end
-plt.legend()
-
-## Sum convergence test
-k = collect(range(12, 15, length=100))
+k = collect(range(12, 16, length=100))
 intensity = 10 .^ k .* 1e4 # W/m^2
 E = Tools.intensity_to_field.(intensity)
 sum_tol = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
@@ -180,7 +156,7 @@ function φhard(m, x)
 end
 
 m = [0, 1, 2]
-x = collect(range(0, 26, 100))
+x = collect(range(0, 26, 512))
 
 φ1 = mapreduce(hcat, m) do mi
     φ.(mi, x)
