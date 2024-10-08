@@ -298,7 +298,8 @@ Physics Reports 441(2–4), 47–189 (2007).
 
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
-                         sum_tol=1e-6, cycle_average=false, sum_integral=false, Δα=0, msum=true)
+                         sum_tol=1e-6, cycle_average=false, sum_integral=false,
+                         Δα=0, msum=true, Cnl=missing, occupancy=2)
 
     if ismissing(Δα)
         Δα = 0
@@ -308,7 +309,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
         Ip_au = (ionpot + Δα/2 * E^2) / au_energy # Δα/2 * E^2 includes the Stark shift
         ns = Z/sqrt(2Ip_au)
         ls = ns-1
-        Cnl2 = 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
+        Cnl2 = ismissing(Cnl) ? 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls)) : Cnl^2
     
         ω0 = 2π*c/λ0
         ω0_au = au_time*ω0
@@ -360,12 +361,15 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
                     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
             end
             lret *= s
-            ret += lret
+            ret += occ(occupancy, m)*lret
         end
         return ret/au_time
     end
     return ionrate
 end
+
+occ(occupancy::Number, m) = occupancy
+occ(occupancy, m) = occupancy(m)
 
 """
     φ(m, x)

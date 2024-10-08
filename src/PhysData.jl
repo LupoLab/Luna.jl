@@ -808,12 +808,37 @@ function polarisability_difference(material; unit=:SI)
     else
         throw(DomainError(unit, "Unknown unit $unit"))
     end
-    if material == :He
+    if material in (:He, :HeB, :HeJ)
         return (1.3207 - 0.2811)*factor
     elseif material == :Ne
         return (2.376 - 1.2417)*factor
     elseif material == :Ar
         return (10.762 - 6.807)*factor
+    else
+        return missing
+    end
+end
+
+"""
+    Cnl_ADK(material)
+
+Return the value of Cₙₗ from the ADK paper for the `material`. For `material`S
+other than noble gases, this returns `missing`.
+
+Reference:
+Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atoms And Atomic Ions In Electromagnetic Field. Soviet Physics JETP 64, 1191–1194 (1986).
+"""
+function Cnl_ADK(material)
+    if material in (:He, :HeB, :HeJ)
+        return 1.99
+    elseif material == :Ne
+        return 1.31
+    elseif material == :Ar
+        return 1.9
+    elseif material == :Kr
+        return 2.17
+    elseif material == :Xe
+        return 2.27
     else
         return missing
     end

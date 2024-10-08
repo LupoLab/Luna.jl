@@ -12,8 +12,8 @@ import Luna.Modes: hquadrature
 E = collect(range(1e9, 1e11; length=32))
 @test Ionisation.ionrate_ADK(:He, E) == Ionisation.ionrate_ADK(:He, -E)
 
-@test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1e10), 1.40432138471583e-5, rtol=1e-3)
-@test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1.3e10), 0.04517809797503506, rtol=1e-3)
+@test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1e10), 2*1.40432138471583e-5, rtol=1e-3)
+@test isapprox(Ionisation.ionrate_PPT(:He, 800e-9, 1.3e10), 2*0.04517809797503506, rtol=1e-3)
 
 Emin = 1e9
 Emax = 1e11
