@@ -771,6 +771,37 @@ prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, arg
 
 prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 
+"""
+    prop_gratings!(Eω, grid, Λ, L, m, θi)
+    prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
+
+Add the spectral phase acquired after passing through a four grating compressor
+with grating period `Λ`, grating separation `L`, diffraction order `m` and angle
+of incidence `θi`. The sampling axis of `Eω` can be given either as an
+`AbstractGrid` or the frequency axis `ω`.
+"""
+function prop_gratings!(Eω, ω, Λ, L, m, θi)
+    λ = PhysData.wlfreq.(ω)
+    θm = @. asin(m*λ/Λ + sin(θi))
+    x = @. L*tan(θm)
+    ϕg = @. π - m*2*π*x/Λ
+    ϕ = @. ω*L/c + ϕg
+    Eω .*= exp.(-1im.*ϕ)
+end
+
+prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi) = prop_gratings!(Eω, grid.ω, Λ, L, m, θi)
+
+"""
+    prop_gratings(Eω, grid, Λ, L, m, θi)
+    prop_gratings(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
+
+Return a copy of the frequency-domain field `Eω` with the additional spectral phase
+acquired after passing through a four grating compressor with grating period `Λ`, grating
+separation `L`, diffraction order `m` and angle of incidence `θi`.
+The sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency axis `ω`.
+"""
+prop_gratings(Eω, args...) = prop_gratings!(copy(Eω), args...)
+
 
 """
     optcomp_taylor(Eω, grid, λ0; order=2)
