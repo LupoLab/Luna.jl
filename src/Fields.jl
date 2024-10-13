@@ -782,10 +782,12 @@ of incidence `θi`. The sampling axis of `Eω` can be given either as an
 """
 function prop_gratings!(Eω, ω, Λ, L, m, θi)
     λ = PhysData.wlfreq.(ω)
-    θm = @. asin(m*λ/Λ + sin(θi))
+    mask = @. abs(m*λ/Λ + sin(θi)) <= 1
+    θm = @. asin(m*λ[mask]/Λ + sin(θi))
     x = @. L*tan(θm)
     ϕg = @. π - m*2*π*x/Λ
-    ϕ = @. ω*L/c + ϕg
+    ϕ = zero(λ)
+    ϕ[mask] .= @. 2*(ω[mask]*L/PhysData.c + ϕg)
     Eω .*= exp.(-1im.*ϕ)
 end
 
