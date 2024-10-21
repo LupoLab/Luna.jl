@@ -268,7 +268,7 @@ function ionrate_fun!_PPT(args...)
 end
 
 """
-    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-6, cycle_average=false)
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; kwargs...)
 
 Create closure to calculate PPT ionisation rate.
 
@@ -280,6 +280,10 @@ Create closure to calculate PPT ionisation rate.
 - `Δα::Number`: polarisability difference between the ground state and the cation (in SI units)
     to calculate the Stark shift of the ground-state energy levels. Defaults to 0.
 - `msum::Bool`: for l ≠ 0, whether or not to sum over different m states. Defaults to `true`.
+- `Cnl::Real` : Pre-calculated `Cₙₗ` constant. If not given, defaults to the approximate expression from
+    the PPT papers.
+- `occupancy`: Occupancy of the state(s) from which ionisation is considered. Defaults to 2 for 
+    a state with two electrons (spin up/down).
 
 # References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
