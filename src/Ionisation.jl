@@ -345,20 +345,16 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
             if !cycle_average
                 lret *= sqrt(π*E0_au/(3E_au))
             end
-            k = ceil(v)
             n0 = ceil(v)
-            sumfunc = let k=k, β=β, m=m
-                function sumfunc(x, n)
-                    diff = n-v
-                    return x + exp(-α*diff)*φ(m, sqrt(β*diff))
-                end
-            end
             if sum_integral
                 s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
                 *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
             else
-                s, success, steps = Maths.converge_series(
-                    sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
+                s, _, _ = Maths.converge_series(0, n0=n0, rtol=sum_tol, maxiter=Inf) do x, n
+                    diff = n-v
+                    x + exp(-α*diff)*φ(m, sqrt(β*diff))
+                end
+                    
             end
             lret *= s
             ret += occ(occupancy, m)*lret
