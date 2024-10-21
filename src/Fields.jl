@@ -772,7 +772,7 @@ prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, arg
 prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 
 """
-    prop_gratings!(Eω, grid, Λ, L, m, θi)
+    prop_gratings!(Eω, ω, Λ, L, m, θi)
     prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
 
 Add the spectral phase acquired after passing through a four grating compressor
@@ -794,7 +794,7 @@ end
 prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi) = prop_gratings!(Eω, grid.ω, Λ, L, m, θi)
 
 """
-    prop_gratings(Eω, grid, Λ, L, m, θi)
+    prop_gratings(Eω, ω, Λ, L, m, θi)
     prop_gratings(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
 
 Return a copy of the frequency-domain field `Eω` with the additional spectral phase
