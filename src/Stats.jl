@@ -87,8 +87,11 @@ function peakpower(grid)
     function addstat!(d, Eω, Et, z, dz)
         if ndims(Et) > 1
             d["peakpower"] = dropdims(maximum(abs2.(Et), dims=1), dims=1)
+            d["peakpower_allmodes"] = maximum(eachindex(grid.t)) do ii
+                sum(abs2, Et[ii, :])
+            end
         else
-            d["peakpower"] = maximum(abs2.(Et))
+            d["peakpower"] = maximum(abs2, Et)
         end
     end
     return addstat!
@@ -104,14 +107,19 @@ dataset is labeled as `peakpower_[label]`.
 function peakpower(grid, Eω, window::Vector{<:Real}; label)
     Etbuf, analytic! = plan_analytic(grid, Eω) # output buffer and function for inverse FT
     Eωbuf = similar(Eω) # buffer for Eω with window applied
+    Pt = zeros((length(grid.t), size(Eωbuf, 2)))
     key = "peakpower_$label"
     function addstat!(d, Eω, Et, z, dz)
         Eωbuf .= Eω .* window
         analytic!(Etbuf, Eωbuf)
         if ndims(Etbuf) > 1
-            d[key] = dropdims(maximum(abs2.(Etbuf), dims=1), dims=1)
+            Pt .= abs2.(Etbuf)
+            d[key] = dropdims(maximum(Pt, dims=1), dims=1)
+            d[key*"_allmodes"] = maximum(eachindex(grid.t)) do ii
+                sum(Pt[ii, :]; dims=2)
+            end
         else
-            d[key] = maximum(abs2.(Etbuf))
+            d[key] = maximum(abs2, Etbuf)
         end
     end
 end
@@ -141,7 +149,7 @@ Create stats function to calculate the mode-averaged peak intensity given the ef
 """
 function peakintensity(grid, aeff)
     function addstat!(d, Eω, Et, z, dz)
-        d["peakintensity"] = maximum(abs2.(Et))/aeff(z)
+        d["peakintensity"] = maximum(abs2, Et)/aeff(z)
     end
 end
 
@@ -157,9 +165,11 @@ function peakintensity(grid, modes::Modes.ModeCollection; components=:y)
     function addstat!(d, Eω, Et, z, dz)
         Modes.to_space!(Et0, Et, (0, 0), tospace; z=z)
         if npol > 1
-            d["peakintensity"] = c*ε_0/2 * maximum(sum(abs2.(Et0), dims=2))
+            d["peakintensity"] = c*ε_0/2 * maximum(eachindex(grid.t)) do ii
+                sum(abs2, Et0[ii, :])
+            end
         else
-            d["peakintensity"] = c*ε_0/2 * maximum(abs2.(Et0))
+            d["peakintensity"] = c*ε_0/2 * maximum(abs2, Et0)
         end
     end
 end
@@ -200,7 +210,7 @@ function fwhm_r(grid, modes; components=:y)
     function addstat!(d, Eω, Et, z, dz)
         function f(r)
             Modes.to_space!(Eω0, Eω, (r, 0), tospace; z=z)
-            sum(abs2.(Eω0))
+            sum(abs2, Eω0)
         end
         d["fwhm_r"] = 2*Maths.hwhm(f)
     end
