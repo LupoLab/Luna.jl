@@ -351,8 +351,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
             end
             n0 = ceil(v)
             if sum_integral
-                s = (2.0^(2mabs -3)*sqrt(π)*factorial(mabs)^2/(factorial(2mabs)*(mabs+1/2)*asinh(γ))
-                *sqrt(γ/(sqrt(1+γ2)*asinh(γ) - γ)))
+                s = sqrt(π)*factorial(mabs)*β^mabs/(2*(α+β)^(mabs+1))*sqrt(β/α)
             else
                 s, _, _ = Maths.converge_series(0, n0=n0, rtol=sum_tol, maxiter=Inf) do x, n
                     diff = n-v
