@@ -92,7 +92,7 @@ Sellmeier expansion for linear susceptibility from Applied Optics 47, 27, 4856 (
 room temperature and atmospheric pressure
 """
 function γ_Börzsönyi(B1, C1, B2, C2)
-    return μm -> complex(B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
+    return μm -> (B1 * μm^2 / (μm^2 - C1) + B2 * μm^2 / (μm^2 - C2))
 end
 
 """
@@ -102,7 +102,7 @@ Adapted Sellmeier expansion for helium made to fit high frequency data
 Phys. Rev. A 92, 033821 (2015)
 """
 function γ_JCT(B1, C1, B2, C2, B3, C3)
-    return μm -> complex(B1 * μm^2 / (μm^2 - C1)
+    return μm -> (B1 * μm^2 / (μm^2 - C1)
                   + B2 * μm^2 / (μm^2 - C2)
                   + B3 * μm^2 / (μm^2 - C3))
 end
@@ -114,7 +114,7 @@ Sellmeier expansion for linear susceptibility from
 J. Opt. Soc. Am. 67, 1550 (1977)
 """
 function γ_Peck(B1, C1, B2, C2, dens)
-    return μm -> complex(((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
+    return μm -> (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
 """
@@ -123,7 +123,7 @@ end
 Sellmeier expansion for Oxygen from Applied Optics 50, 35, 6484 (2011)
 """
 function γ_Zhang(A, B, C, dens)
-    return μm -> complex((1 + A + B/(C-1/μm^2))^2 - 1)/dens
+    return μm -> ((1 + A + B/(C-1/μm^2))^2 - 1)/dens
 end
 
 """
@@ -439,7 +439,7 @@ Get function which returns refractive index.
 function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
-        return λ -> sqrt(1 + χ1(λ))
+        return λ -> sqrt(1 + complex(χ1(λ)))
     elseif material in glass
         if isnothing(lookup)
             lookup = (material == :SiO2)
