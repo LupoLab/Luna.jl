@@ -1,7 +1,7 @@
 import Test: @test, @testset, @test_throws, @test_broken
 import Luna: Maths, Grid, Fields
-import Dierckx
-import HCubature: hquadrature
+import Luna.Maths: Dierckx
+import Luna.Modes: hquadrature
 import Random: seed!
 import FFTW
 
