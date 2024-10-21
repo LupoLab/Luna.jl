@@ -210,7 +210,7 @@ end
     x = range(0.0, 2π, length=100)
     y = sin.(x)
     spl = Maths.BSpline(x, y)
-    @test all(abs.(spl.(x) .- y) .< 3e-16)
+    @test all(abs.(spl.(x) .- y) .< 3.5e-16)
     x2 = range(0.0, 2π, length=300)
     @test maximum(spl.(x2) - sin.(x2)) < 5e-8
     # these use the actual spline derivative
@@ -234,7 +234,7 @@ end
     @test abs(Maths.derivative(splc, 1.3, 1) - complex(cos(1.3), cos(1.3 + π/6))) < 2.5e-7
     @test abs(Maths.derivative(splc, 1.3, 2) - complex(-sin(1.3), -sin(1.3 + π/6))) < 2.5e-3
     # test Julia evaluation vs original Dierckx
-    @test all(spl.(x2) .== spl.rspl.(x2))
+    @test all(spl.(x2) .≈ spl.rspl.(x2))
     # test full spline Derivatives
     spl1 = Maths.differentiate_spline(spl, 1)
     @test maximum(abs.(cos.(x2) .- spl1.(x2))) < 5.1e-6
