@@ -20,9 +20,9 @@ dat = readdlm(joinpath(this_folder, "Ilkov_PPT_He.csv"), ',') # ionrate [1/s] vs
 
 fig = plt.figure()
 # plt.loglog(E, ppt, label="PPT")
-plt.loglog(E, ppt_cycavg, label="PPT cycle averaged")
-plt.loglog(E, ppt_cycavg_rough, label="PPT cycle averaged, rough tolerance")
-plt.loglog(E, ppt_cycavg_intg, label="PPT cycle averaged, integral for sum")
+plt.loglog(E, ppt_cycavg/2, label="PPT cycle averaged")
+plt.loglog(E, ppt_cycavg_rough/2, label="PPT cycle averaged, rough tolerance")
+plt.loglog(E, ppt_cycavg_intg/2, label="PPT cycle averaged, integral for sum")
 # plt.loglog(E, adk, label="ADK")
 plt.loglog(dat[:, 1].*100, dat[:, 2], label="Ilkov et al. PPT")
 plt.xlim(1e10, 1e12)
@@ -30,7 +30,7 @@ plt.ylim(0.1, 1e18)
 plt.legend()
 plt.xlabel("Field strength (V/m)")
 plt.ylabel("Ionisation rate (s⁻¹)")
-plt.title("He ionisation at 10.6 μm (Stark shift off)")
+plt.title("He ionisation at 10.6 μm (Stark shift off, divided by 2)")
 
 
 ## Chang, Fundamentals of Attosecond Optics
@@ -44,15 +44,16 @@ adk = Ionisation.ionrate_ADK(:He, E)
 s = sortperm(dat[:, 1])
 
 plt.figure()
-plt.loglog(intensity*1e-18, ppt*1e-15, label="PPT")
+plt.loglog(intensity*1e-18, ppt*1e-15/2, label="PPT")
 plt.loglog(intensity*1e-18, adk*1e-15, label="ADK")
-plt.loglog(intensity*1e-18, ppt_cycavg*1e-15, label="PPT cycle averaged")
+plt.loglog(intensity*1e-18, ppt_cycavg*1e-15/2, label="PPT cycle averaged")
 plt.loglog(dat[s, 1], dat[s, 2], label="Chang PPT")
 plt.ylim(1e-14, 1)
 plt.xlim(extrema(intensity.*1e-18))
 plt.legend()
 plt.xlabel("Intensity (10\$^{14}\$ W/cm\$^2\$)")
 plt.ylabel("Ionisation rate (1/fs)")
+plt.title("PPT rate divided by 2")
 
 ## Couairon
 Ip = 12.063 * PhysData.electron
@@ -69,14 +70,14 @@ s = sortperm(dat[:, 1])
 plt.figure()
 # plt.loglog(intensity*1e-4, ppt, label="PPT")
 plt.loglog(intensity*1e-4, adk, label="ADK")
-plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged")
+plt.loglog(intensity*1e-4, ppt_cycavg/2, label="PPT cycle averaged")
 plt.loglog(dat[s, 1], dat[s, 2], "--", label="Couairon PPT")
 plt.ylim(1, 1e17)
 plt.xlim(extrema(intensity.*1e-4))
 plt.legend()
 plt.xlabel("Intensity (W/cm\$^2\$)")
 plt.ylabel("Ionisation rate (1/s)")
-plt.title("O\$_2\$ ionisation at 800 nm")
+plt.title("O\$_2\$ ionisation at 800 nm (PPT divided by 2)")
 
 ## Gonzales et al
 dat = readdlm(joinpath(this_folder, "Gonzalez_PPT_Ar.csv"), ',') # ionrate [1/s] vs intensity [W/cm^2]
@@ -95,16 +96,16 @@ s = sortperm(dat[:, 1])
 
 plt.figure()
 # plt.loglog(intensity*1e-4, ppt, label="PPT")
-plt.loglog(intensity*1e-4, ppt_cycavg, label="PPT cycle averaged, sum over m")
-plt.loglog(intensity*1e-4, ppt_cycavg_m0, ":", label="PPT cycle averaged, m=0")
-plt.loglog(intensity*1e-4, ppt_cycavg_msum_nostark, "--", label="PPT cycle averaged, sum over m, no Stark shift")
+plt.loglog(intensity*1e-4, ppt_cycavg/2, label="PPT cycle averaged, sum over m")
+plt.loglog(intensity*1e-4, ppt_cycavg_m0/2, ":", label="PPT cycle averaged, m=0")
+plt.loglog(intensity*1e-4, ppt_cycavg_msum_nostark/2, "--", label="PPT cycle averaged, sum over m, no Stark shift")
 plt.loglog(dat[s, 1], dat[s, 2], "--", label="Gonzalez PPT")
 plt.ylim(1, 1e18)
 plt.xlim(extrema(intensity.*1e-4))
 plt.legend()
 plt.xlabel("Intensity (W/cm\$^2\$)")
 plt.ylabel("Ionisation rate (1/s)")
-plt.title("Ar ionisation at 800 nm")
+plt.title("Ar ionisation at 800 nm (PPT divided by 2)")
 
 ## Sum convergence test
 k = collect(range(12, 16, length=100))
