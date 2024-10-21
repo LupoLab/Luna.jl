@@ -266,19 +266,19 @@ end
 @testset "randgauss" begin
     import Statistics: std, mean
     seed!(1234)
-    x = Maths.randgauss(1, 0.5, 1000000)
+    x = Maths.randgauss(1, 0.5, 10000000)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
     seed!(1234)
-    x = Maths.randgauss(10, 0.1, 1000000)
+    x = Maths.randgauss(10, 0.1, 10000000)
     @test isapprox(std(x), 0.1, rtol=1e-3)
     @test isapprox(mean(x), 10, rtol=1e-3)
     seed!(1234)
-    x = Maths.randgauss(-1, 0.5, 1000000)
+    x = Maths.randgauss(-1, 0.5, 10000000)
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), -1, rtol=1e-3)
     seed!(1234)
-    x = Maths.randgauss(1, 0.5, (1000, 1000))
+    x = Maths.randgauss(1, 0.5, (10000, 10000))
     @test isapprox(std(x), 0.5, rtol=1e-3)
     @test isapprox(mean(x), 1, rtol=1e-3)
 end
