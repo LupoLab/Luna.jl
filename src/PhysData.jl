@@ -44,6 +44,8 @@ const N_A = ustrip(CODATA2014.N_A)
 const amg = atm/(k_B*273.15)
 "Atomic mass unit"
 const m_u = ustrip(CODATA2014.m_u)
+"Atomic unit of electric polarisability"
+const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
 const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
@@ -782,6 +784,63 @@ function quantum_numbers(material)
         return 2, 0, 0.9 # https://doi.org/10.1016/S0030-4018(99)00113-3
     else
         throw(DomainError(material, "Unknown material $material"))
+    end
+end
+
+"""
+    polarisability_difference(material; unit=:SI)
+
+Return the difference in polarisability between the ground state and the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
+function polarisability_difference(material; unit=:SI)
+    if unit == :SI
+        factor = au_polarisability
+    elseif unit == :atomic
+        factor = 1
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
+    if material in (:He, :HeB, :HeJ)
+        return (1.3207 - 0.2811)*factor
+    elseif material == :Ne
+        return (2.376 - 1.2417)*factor
+    elseif material == :Ar
+        return (10.762 - 6.807)*factor
+    else
+        return missing
+    end
+end
+
+"""
+    Cnl_ADK(material)
+
+Return the value of Cₙₗ from the ADK paper for the `material`. For `material`S
+other than noble gases, this returns `missing`.
+
+Reference:
+Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atoms And Atomic Ions In Electromagnetic Field. Soviet Physics JETP 64, 1191–1194 (1986).
+"""
+function Cnl_ADK(material)
+    if material in (:He, :HeB, :HeJ)
+        return 1.99
+    elseif material == :Ne
+        return 1.31
+    elseif material == :Ar
+        return 1.9
+    elseif material == :Kr
+        return 2.17
+    elseif material == :Xe
+        return 2.27
+    else
+        return missing
     end
 end
 
