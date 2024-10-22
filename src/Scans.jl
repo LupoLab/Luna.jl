@@ -266,6 +266,7 @@ function runscan(f, scan::Scan{LocalExec})
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
+        Base.GC.gc()
     end
     out
 end
@@ -282,6 +283,7 @@ function runscan(f, scan::Scan{RangeExec})
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
+        Base.GC.gc()
     end
     out
 end
@@ -328,6 +330,7 @@ function runscan(f, scan::Scan{BatchExec})
             msg = "Error at scanidx $scanidx:\n"*sprint(showerror, e, bt)
             @warn msg
         end
+        Base.GC.gc()
     end
 end
 
@@ -361,7 +364,7 @@ function _runscan(f, scan::Scan{QueueExec})
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     while true
-        mkpidlock(lockpath; stale_age=10) do
+        mkpidlock(lockpath; stale_age=120) do
             # first process to catch the pidlock creates the queue file
             if ~isfile(qfile)
                 HDF5.h5open(qfile, "cw") do file
@@ -405,6 +408,7 @@ function _runscan(f, scan::Scan{QueueExec})
                 file["qdata"][scanidx] = code # mark as done/failed
             end
         end
+        Base.GC.gc()
     end
 end
 
