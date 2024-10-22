@@ -3,6 +3,7 @@ using Luna
 import FFTW
 import Statistics: mean, std
 import Random: MersenneTwister
+import Luna: Hankel
 
 # note that most of the Fields.jl code is tested in many other modules
 
