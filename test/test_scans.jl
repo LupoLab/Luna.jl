@@ -143,7 +143,7 @@ rm.(files)
 end
 
 ##
-if ~Sys.iswindows()
+if ~("GITHUB_ACTIONS" in keys(ENV))
 @testset "multi-process queue scan" begin
     ps = addprocs(2)
     @everywhere using Luna
@@ -249,7 +249,7 @@ end
     @test length(readdir(td)) == 2length(energies)
     rm(td; recursive=true)
 end
-end # if ~Sys.iswindows()
+end # if ~("GITHUB_ACTIONS" in keys(ENV))
 
 ##
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
