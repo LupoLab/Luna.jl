@@ -7,21 +7,23 @@ For propagation in waveguides taking into account multiple modes and the couplin
 ```math
 \mathbf{E}(t, \mathbf{r_\perp}, z) = \frac{1}{2\pi} \int_{-\infty}^\infty \mathrm{d} \omega \sum_j \hat{\mathbf{e}}_j(\mathbf{r_\perp}, z) \tilde{E}_j(\omega, z) \mathrm{e}^{-i \omega t}\,,
 ```
-where ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)`` is the orthonormal transverse field distribution of the ``j^{\mathrm{th}}`` mode and ``\tilde{E}_j(\omega, z)`` is the frequency-domain field in mode ``j``. The mode fields ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)`` are taken to be independent of frequency but can depend on the propagation coordinate ``z`` (e.g. in tapered waveguides). They can be vector quantities if polarisations other than purely lineary ``x``- or ``y``-polarisations need to be taken into account. The modes are normalised such that ``\vert \tilde{E}_j(\omega, z) \vert^2`` gives the spectral energy density in mode ``j``, and equivalently ``\vert E_j(t, z)\vert^2`` gives the instantaneous power. The inverse transform is simply the overlap integral of the total field with each mode combined with the Fourier transform:
+where ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)`` is the orthonormal transverse field distribution of the ``j^{\mathrm{th}}`` mode and ``\tilde{E}_j(\omega, z)`` is the frequency-domain amplitude in mode ``j``. The mode fields ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)`` are taken to be independent of frequency but can depend on the propagation coordinate ``z`` (e.g. in tapered waveguides). They can be vector quantities if polarisations other than purely lineary ``x``- or ``y``-polarisations need to be taken into account. The modes are normalised such that ``\vert \tilde{E}_j(\omega, z) \vert^2`` gives the spectral energy density in mode ``j`` (when also taking into account the normalisation of the FFT), and equivalently ``\vert E_j(t, z)\vert^2`` gives the instantaneous power. The forward transform to reciprocal space is simply the overlap integral of the total field with each mode combined with the Fourier transform in time:
 ```math
 \tilde{E}_j(\omega, z) = \int_S \mathrm{d}^2\mathbf{r_\perp} \int_{-\infty}^\infty \mathrm{d} t\,\, \hat{\mathbf{e}}_j^*(\mathbf{r_\perp}, z) \cdot \mathbf{E}(t, \mathbf{r_\perp}, z) \mathrm{e}^{i \omega t}\,,
 ```
-where ``S`` is the cross-sectional area of the waveguide. This transform is implemented in [`NonlinearRHS.TransModal`](@ref) for use within simulations and in [`Modes.overlap`](@ref) for decomposition of existing sampled fields.
+where ``S`` is the cross-sectional area of the waveguide. This transform is implemented in [`NonlinearRHS.TransModal`](@ref) for use within simulations and in [`Modes.overlap`](@ref) for decomposition of existing sampled fields. In both cases, the mode overlap integral is solved explicitly with a p-adaptive or h-adaptive cubature method.
 
 The linear operator for a mode ``\mathcal{L}_j(\omega, z)`` is given by (see [`LinearOps.make_const_linop`](@ref))
 ```math
 \mathcal{L}_j(\omega, z) = i\left(\beta_j(\omega, z) - \frac{\omega}{v}\right) - \frac{1}{2}\alpha_j(\omega, z)\,,
 ```
-where ``\beta_j(\omega, z)`` describes the phase evolution of the mode, ``v`` is a chosen frame velocity (this is the same for all modes) and ``\alpha(\omega, z)`` describes the attenuation of the waveguide (i.e. ``1/\alpha`` is the ``1/\mathrm{e}`` loss-length). This can also be expressed in terms of the *effective index* of the mode:
+where ``\beta_j(\omega, z)`` is real-valued and describes the phase evolution of the mode, ``v`` is a chosen frame velocity (this is the same for all modes) and ``\alpha(\omega, z)`` (also real) describes the attenuation of the waveguide (i.e. ``1/\alpha`` is the ``1/\mathrm{e}`` power/energy loss length). This can also be expressed in terms of the *effective index* of the mode:
 ```math
 \mathcal{L}_j(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\,,
 ```
-where ``c`` is the speed of light in vacuum and ``n_\mathrm{eff}`` is complex, ``n_\mathrm{eff} = n + i k``, with ``n`` describing the effective refractive index and ``k`` describing the attenuation. With the modal power normalisation for ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)``, the normalisation factor ``N_{\mathrm{nl}}`` comes out as simply ``N_{\mathrm{nl}}=4``. The propagation equation, coupling the modes through the nonlinear polarisation, is therefore
+where ``c`` is the speed of light in vacuum and ``n_\mathrm{eff}`` is complex, ``n_\mathrm{eff} = n + i k``, with ``n`` describing the effective refractive index and ``k`` describing the attenuation.
+
+With the modal power normalisation for ``\hat{\mathbf{e}}_j(\mathbf{r_\perp}, z)``, the normalisation factor ``N_{\mathrm{nl}}`` comes out as simply ``N_{\mathrm{nl}}=4``. The propagation equation, coupling the modes through the nonlinear polarisation, is therefore
 ```math
 \partial_z \tilde{E}_j(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}_j(\omega, z) + i\frac{\omega}{4} \tilde{\mathbf{P}}_\mathrm{nl}\,,
 ```
@@ -49,6 +51,44 @@ The modules and functions that define and implement this decomposition for diffe
 
 
 ## Single-mode guided
+In some situations, inter-mode coupling in a waveguide is negligible, so including several waveguide modes in the simulation unnecessarily slows down the computation. Simulating propagation in a single mode is trivially achieved by including only that single mode in both the forward and inverse transforms as defined above for [multi-mode propagation](#multi-mode-guided). For example, setting `modes=1` when calling `prop_capillary` achieves this and leads to a significant speed-up. However, in this simple implementation, the overlap integral between the nonlinear polarisation and the waveguide mode still needs to be calculated explicitly. We can make this unnecessary by making an assumption about the nonlinear polarisation.
+
+If the nonlinear polarisation is *only due to third-order effects* like the Kerr effect or Raman scattering, we can express it as
+```math
+P_\mathrm{nl}\left(t, \mathbf{r}_\perp, z \right) = C\, E(t, \mathbf{r}_\perp, z)^3\,,
+```
+where ``C`` is a constant which depends on the specific effect (e.g. for the Kerr effect, ``C`` becomes ``\varepsilon_0 \chi^{(3)}`` with ``\chi^{(3)}`` the third-order susceptibility of the nonlinear medium) and we have switched to *explicitly real-valued* and *scalar* fields to make the notation simpler; the same result can be obtained with vector fields and more algebra. Expanding the field in terms of its modal content as above, this turns into
+```math
+P_\mathrm{nl}\left(t, \mathbf{r}_\perp, z \right) = C\, \Big[\sum_j \hat{e}_j(\mathbf{r_\perp}, z) E_j(t, z)\Big]^3\,,
+```
+where we have simply carried out the time-domain inverse Fourier transform to obtain ``E_j(t, z)``. For a single mode (``j=0`` only), this simplifies greatly to
+```math
+P_\mathrm{nl}\left(t, \mathbf{r}_\perp, z \right) = C\, \hat{e}_0(\mathbf{r_\perp}, z)^3 E_0(t, z)^3\,.
+```
+Now we can explicitly calculate the overlap integral with the single mode we are considering:
+```math
+P_\mathrm{nl}(t, z) =  CE_0(t, z)^3\times\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0^*(\mathbf{r_\perp}, z) \hat{e}_0(\mathbf{r_\perp}, z)^3 = CE_0(t, z)^3\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0(\mathbf{r_\perp}, z)^4 \equiv CE_0(t, z)^3 \Gamma\,,
+```
+where in the second step we have made use of the fact that we are considering real-valued fields and hence ``\hat{e}_0(\mathbf{r_\perp}, z)`` is also real. The constant ``\Gamma`` depends on the mode shape ``\hat{e}_0(\mathbf{r_\perp}, z)``, but crucially, only needs to be calculated *once*. If we now define a re-scaled **mode-averaged** modal field ``E'`` through
+```math
+E_0(t, z) = \frac{E'(t, z)}{\sqrt{\Gamma}}\,,
+```
+then the UPPE reads
+```math
+\Gamma^{-\frac{1}{2}}\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\Gamma^{-\frac{1}{2}}\tilde{E}'(\omega, z) + i\frac{\omega}{4} C\Gamma\times\Gamma^{-\frac{3}{2}} \int_{-\infty}^\infty \mathrm{d} t\, E'(t, z)^3 \mathrm{e}^{i \omega t}\,.
+```
+The factors of ``\Gamma`` and ``\Gamma^{-\frac{3}{2}}`` in the final term combine to cancel with the other ``\Gamma^{-\frac{1}{2}}`` terms, so that we arrive at the **mode-averaged UPPE**
+```math
+\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}'(\omega, z) + i\frac{\omega}{4} \int_{-\infty}^\infty \mathrm{d} t\, P_\mathrm{nl}\left[E'(t, z)\right] \mathrm{e}^{i \omega t}\,.
+```
+This now includes only a single inverse Fourier transform to obtain ``E'(t, z)`` followed by the calculation of ``P_\mathrm{nl}`` and then a forward transform. However, note that we have played a trick in this last step of the derivation: this equation is **only valid for third-order responses** but we have now written it for an arbitrary polarisation ``P_\mathrm{nl}\left[E'(t, z)\right]``. The above derivation quickly fails for other polarisation types, most importantly photoionisation. That means that mode-averaged propagation is a *significant* approximation whenever photoionisation and plasma effects are important.
+
+### Connection to the effective area
+The mode normalisation in Luna is chosen such that the absolute value squared of the modal field amplitudes ``E_j(t, z)`` is the instantaneous power. This means that
+```math
+\left\vert E_j(t, z)\right\vert^2 = \frac{1}{2} c \varepsilon_0 \int_S \left\vert E(t, \mathbf{r}_\perp, z) \right\vert^2
+```
+
 
 ## Radially symmetric free-space
 
