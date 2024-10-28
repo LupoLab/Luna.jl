@@ -84,11 +84,19 @@ The factors of ``\Gamma`` and ``\Gamma^{-\frac{3}{2}}`` in the final term combin
 This now includes only a single inverse Fourier transform to obtain ``E'(t, z)`` followed by the calculation of ``P_\mathrm{nl}`` and then a forward transform. However, note that we have played a trick in this last step of the derivation: this equation is **only valid for third-order responses** but we have now written it for an arbitrary polarisation ``P_\mathrm{nl}\left[E'(t, z)\right]``. The above derivation quickly fails for other polarisation types, most importantly photoionisation. That means that mode-averaged propagation is a *significant* approximation whenever photoionisation and plasma effects are important.
 
 ### Connection to the effective area
-The mode normalisation in Luna is chosen such that the absolute value squared of the modal field amplitudes ``E_j(t, z)`` is the instantaneous power. This means that
+The mode normalisation in Luna is chosen such that the absolute value squared of the modal field amplitudes ``E_j(t, z)`` is the instantaneous power. For this to be fulfilled, we need
 ```math
-\left\vert E_j(t, z)\right\vert^2 = \frac{1}{2} c \varepsilon_0 \int_S \left\vert E(t, \mathbf{r}_\perp, z) \right\vert^2
+\frac{1}{2} c \varepsilon_0 \int_S \mathrm{d}^2\mathbf{r_\perp} \left\vert \hat{e}_j(\mathbf{r_\perp}, z) \right\vert^2 = 1\,.
 ```
-
+This, in turn, means that the *effective area* of the mode,
+```math
+A_{\mathrm{eff}, j}(z) = \frac{\left(\int_S \mathrm{d}^2\mathbf{r_\perp} \,\left\vert \hat{e}_j(\mathbf{r}_\perp, z)\right\vert^2\right)^2}{\int_S \mathrm{d}^2\mathbf{r_\perp}  \,\left\vert \hat{e}_j(\mathbf{r}_\perp, z)\right\vert^4}\,,
+```
+which is **independent of the normalisation** (since the overall power of ``\hat{e}_j`` and any constants inside it is the same in the numerator and denominator), is given by
+```math
+A_\mathrm{eff} = \Big(\frac{1}{4} c^2 \varepsilon_0^2 \Gamma \Big)^{-1}
+```
+with the scaling constant ``\Gamma`` as defined above.
 
 ## Radially symmetric free-space
 
