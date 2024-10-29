@@ -112,7 +112,7 @@ I_\mathrm{av} = \frac{1}{2}\varepsilon_0 c \vert E_\mathrm{av}\vert^2 = \frac{\v
 Plugging in the definition of ``E_\mathrm{av}``, the UPPE reads
 ```math
 \begin{align*}
-\sqrt{\frac{1}{2}\varepsilon_0 c A_\mathrm{eff}}\partial_z \tilde{E}'(\omega, z) &= i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\sqrt{\frac{1}{2}\varepsilon_0 c A_\mathrm{eff}}\tilde{E}'(\omega, z)\\[1em]
+\sqrt{\frac{1}{2}\varepsilon_0 c A_\mathrm{eff}}\partial_z \tilde{E}_\mathrm{av}(\omega, z) &= i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\sqrt{\frac{1}{2}\varepsilon_0 c A_\mathrm{eff}}\tilde{E}_\mathrm{av}(\omega, z)\\[1em]
 &\qquad + i\frac{\omega}{4} C\Big(\frac{1}{2}\varepsilon_0 c A_\mathrm{eff}\Big)^{\frac{3}{2}}\frac{4}{\varepsilon_0^2c^2 A_\mathrm{eff}} \int_{-\infty}^\infty \mathrm{d} t\, E_\mathrm{av}(t, z)^3 \mathrm{e}^{i \omega t}\,.
 \end{align*}
 ```
