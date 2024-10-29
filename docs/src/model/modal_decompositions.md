@@ -67,19 +67,23 @@ P_\mathrm{nl}\left(t, \mathbf{r}_\perp, z \right) = C\, \hat{e}_0(\mathbf{r_\per
 ```
 Now we can explicitly calculate the overlap integral with the single mode we are considering:
 ```math
-P_\mathrm{nl}(t, z) =  CE_0(t, z)^3\times\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0^*(\mathbf{r_\perp}, z) \hat{e}_0(\mathbf{r_\perp}, z)^3 = CE_0(t, z)^3\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0(\mathbf{r_\perp}, z)^4 \equiv CE_0(t, z)^3 \Gamma\,,
+\begin{align*}
+P_\mathrm{nl}(t, z) &=  CE_0(t, z)^3\times\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0^*(\mathbf{r_\perp}, z) \hat{e}_0(\mathbf{r_\perp}, z)^3\\
+&= CE_0(t, z)^3\int_S \mathrm{d}^2\mathbf{r_\perp} \, \hat{e}_0(\mathbf{r_\perp}, z)^4\\
+&\equiv CE_0(t, z)^3 \Gamma\,,
+\end{align*}
 ```
 where in the second step we have made use of the fact that we are considering real-valued fields and hence ``\hat{e}_0(\mathbf{r_\perp}, z)`` is also real. The constant ``\Gamma`` depends on the mode shape ``\hat{e}_0(\mathbf{r_\perp}, z)``, but crucially, only needs to be calculated *once*. If we now define a re-scaled **mode-averaged** modal field ``E'`` through
 ```math
-E_0(t, z) = \frac{E'(t, z)}{\sqrt{\Gamma}}\,,
+E_0(t, z) = \sqrt{\frac{2}{\varepsilon_0 c \Gamma}}E'(t, z)\,,
 ```
 then the UPPE reads
 ```math
-\Gamma^{-\frac{1}{2}}\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\Gamma^{-\frac{1}{2}}\tilde{E}'(\omega, z) + i\frac{\omega}{4} C\Gamma\times\Gamma^{-\frac{3}{2}} \int_{-\infty}^\infty \mathrm{d} t\, E'(t, z)^3 \mathrm{e}^{i \omega t}\,.
+\sqrt{\frac{2}{\varepsilon_0 c \Gamma}}\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\sqrt{\frac{2}{\varepsilon_0 c \Gamma}}\tilde{E}'(\omega, z) + i\frac{\omega}{4} C\Big(\frac{2}{\varepsilon_0 c\Gamma}\Big)^{\frac{3}{2}}\Gamma \int_{-\infty}^\infty \mathrm{d} t\, E'(t, z)^3 \mathrm{e}^{i \omega t}\,.
 ```
 The factors of ``\Gamma`` and ``\Gamma^{-\frac{3}{2}}`` in the final term combine to cancel with the other ``\Gamma^{-\frac{1}{2}}`` terms, so that we arrive at the **mode-averaged UPPE**
 ```math
-\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}'(\omega, z) + i\frac{\omega}{4} \int_{-\infty}^\infty \mathrm{d} t\, P_\mathrm{nl}\left[E'(t, z)\right] \mathrm{e}^{i \omega t}\,.
+\partial_z \tilde{E}'(\omega, z) = i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}'(\omega, z) + i\frac{\omega}{4} \frac{2}{\varepsilon_0 c} \int_{-\infty}^\infty \mathrm{d} t\, P_\mathrm{nl}\left[E'(t, z)\right] \mathrm{e}^{i \omega t}\,.
 ```
 This now includes only a single inverse Fourier transform to obtain ``E'(t, z)`` followed by the calculation of ``P_\mathrm{nl}`` and then a forward transform. However, note that we have played a trick in this last step of the derivation: this equation is **only valid for third-order responses** but we have now written it for an arbitrary polarisation ``P_\mathrm{nl}\left[E'(t, z)\right]``. The above derivation quickly fails for other polarisation types, most importantly photoionisation. That means that mode-averaged propagation is a *significant* approximation whenever photoionisation and plasma effects are important.
 
@@ -106,7 +110,7 @@ A_\mathrm{eff} = \Big(\frac{1}{4} c^2 \varepsilon_0^2 \Gamma \Big)^{-1}
 ```
 with the scaling constant ``\Gamma`` as defined above. Note that ``A_\mathrm{eff}`` is **independent of the normalisation**, because the overall power of ``\hat{e}_j`` and any constants inside it is the same in the numerator and denominator. Hence the scaling factor can be obtained from the effective area as
 ```math
-\Gamma = \Big(\frac{1}{4} c^2 \varepsilon_0^2 A_\mathrm{eff} \Big)^{-1}/,.
+\Gamma = \Big(\frac{1}{4} c^2 \varepsilon_0^2 A_\mathrm{eff} \Big)^{-1}\,.
 ```
 
 ## Radially symmetric free-space
