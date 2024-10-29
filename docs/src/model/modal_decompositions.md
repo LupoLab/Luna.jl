@@ -83,6 +83,14 @@ The factors of ``\Gamma`` and ``\Gamma^{-\frac{3}{2}}`` in the final term combin
 ```
 This now includes only a single inverse Fourier transform to obtain ``E'(t, z)`` followed by the calculation of ``P_\mathrm{nl}`` and then a forward transform. However, note that we have played a trick in this last step of the derivation: this equation is **only valid for third-order responses** but we have now written it for an arbitrary polarisation ``P_\mathrm{nl}\left[E'(t, z)\right]``. The above derivation quickly fails for other polarisation types, most importantly photoionisation. That means that mode-averaged propagation is a *significant* approximation whenever photoionisation and plasma effects are important.
 
+The mode-averaged UPPE as written above is very useful, but the scaling from ``E`` to ``E'`` changes the normalisation: ``\vert E'(t, z) \vert^2`` no longer gives the instantaneous power. To remain consistent with modal propagation simulations (e.g. for data analysis), Luna internally uses the same normalisation for both, that is, the propagating field is ``E(z, t)`` and we only switch to ``E'(z, t)`` to calculate the nonlinear polarisation. This leads to the appearance of an additional factor of ``\sqrt{\Gamma}`` in the equation
+```math
+\begin{align*}
+\partial_z \sqrt{\Gamma}\tilde{E}(\omega, z) &= i\sqrt{\Gamma} \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}(\omega, z) + i\frac{\omega}{4} \int_{-\infty}^\infty \mathrm{d} t\, P_\mathrm{nl}\left[E'(t, z)\right] \mathrm{e}^{i \omega t}\\
+\Rightarrow \partial_z\tilde{E}(\omega, z) &= i \left(\frac{\omega}{c} n_\mathrm{eff}(\omega, z) - \frac{\omega}{v}\right)\tilde{E}(\omega, z) + i\frac{\omega}{4\sqrt{\Gamma}} \int_{-\infty}^\infty \mathrm{d} t\, P_\mathrm{nl}\left[E'(t, z)\right] \mathrm{e}^{i \omega t}\,.
+\end{align*}
+```
+
 ### Connection to the effective area
 The mode normalisation in Luna is chosen such that the absolute value squared of the modal field amplitudes ``E_j(t, z)`` is the instantaneous power. For this to be fulfilled, we need
 ```math
@@ -92,11 +100,14 @@ This, in turn, means that the *effective area* of the mode,
 ```math
 A_{\mathrm{eff}, j}(z) = \frac{\left(\int_S \mathrm{d}^2\mathbf{r_\perp} \,\left\vert \hat{e}_j(\mathbf{r}_\perp, z)\right\vert^2\right)^2}{\int_S \mathrm{d}^2\mathbf{r_\perp}  \,\left\vert \hat{e}_j(\mathbf{r}_\perp, z)\right\vert^4}\,,
 ```
-which is **independent of the normalisation** (since the overall power of ``\hat{e}_j`` and any constants inside it is the same in the numerator and denominator), is given by
+is given by
 ```math
 A_\mathrm{eff} = \Big(\frac{1}{4} c^2 \varepsilon_0^2 \Gamma \Big)^{-1}
 ```
-with the scaling constant ``\Gamma`` as defined above.
+with the scaling constant ``\Gamma`` as defined above. Note that ``A_\mathrm{eff}`` is **independent of the normalisation**, because the overall power of ``\hat{e}_j`` and any constants inside it is the same in the numerator and denominator. Hence the scaling factor can be obtained from the effective area as
+```math
+\Gamma = \Big(\frac{1}{4} c^2 \varepsilon_0^2 A_\mathrm{eff} \Big)^{-1}/,.
+```
 
 ## Radially symmetric free-space
 
