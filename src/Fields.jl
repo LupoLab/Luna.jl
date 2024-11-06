@@ -17,6 +17,12 @@ import DSP: unwrap
 import Logging: @warn
 
 abstract type AbstractField end
+
+"""
+    TimeField
+
+Abstract supertype for time-domain only fields.
+"""
 abstract type TimeField <: AbstractField end
 
 """
@@ -392,12 +398,21 @@ function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Eωk
 end
 
-# TODO: this for FreeGrid
 function prop!(Eωk, z, grid, q::Hankel.QDHT)
     kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
     kzsq[kzsq .< 0] .= 0
     kz = sqrt.(kzsq)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
+end
+
+function prop!(Eωk, z, grid, xygrid)
+    kzsq = ((grid.ω ./ PhysData.c).^2
+            .- reshape(xygrid.ky.^2, (1, length(xygrid.ky), 1))
+            .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx)))
+    )
+    kzsq[kzsq.<0] .= 0
+    kz = sqrt.(kzsq)
+    @. Eωk *= exp(-1im * z * (kz - grid.ω / PhysData.c))
 end
 
 """

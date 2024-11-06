@@ -587,6 +587,7 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
     for i in 1:size(e')[1]
         GLMakie.lines!(ax, z, 1e6*e'[i,:])
     end
+
     maxe = maximum(1e6*e)
     GLMakie.xlims!(ax, extrema(z)...)
     GLMakie.ylims!(ax, 0, maxe)
@@ -594,6 +595,57 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
     GLMakie.xlims!(rax, extrema(z)...)
     GLMakie.DataInspector()
     fig
+end
+
+function add_fwhm_legends(ax, unit)
+    leg = ax.get_legend()
+    texts = leg.get_texts()
+    handles, labels = ax.get_legend_handles_labels()
+    
+    for (ii, line) in enumerate(handles)
+        xy = line.get_xydata()
+        fw = Maths.fwhm(xy[:, 1], xy[:, 2])
+        t = texts[ii]
+        s = t.get_text()
+        s *= @sprintf(" [%.2f %s]", fw, unit)
+        t.set_text(s)
+    end
+end
+
+"""
+    cornertext(ax, text;
+               corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+
+Place a `text` in the axes `ax` in the corner defined by `corner`. Padding can be
+defined for `x` and `y` together via `pad` or separately via `xpad` and `ypad`. Further
+keyword arguments are passed to `plt.text`. 
+
+Possible values for `corner` are `ul`, `ur`, `ll`, `lr` where the first letter
+defines upper/lower and the second defines left/right.
+"""
+function cornertext(ax, text; corner="ul", pad=0.02, xpad=nothing, ypad=nothing, kwargs...)
+    xpad = isnothing(xpad) ? pad : xpad
+    ypad = isnothing(ypad) ? pad : ypad
+    if corner[1] == 'u'
+        val = "top"
+        y = 1 - ypad
+    elseif corner[1] == 'l'
+        val = "bottom"
+        y = ypad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    if corner[2] == 'l'
+        hal = "left"
+        x = xpad
+    elseif corner[2] == 'r'
+        hal = "right"
+        x = 1 - xpad
+    else
+        error("Invalid corner $corner. Must be one of ul, ur, ll, lr")
+    end
+    ax.text(x, y, text; horizontalalignment=hal, verticalalignment=val,
+                 transform=ax.transAxes, kwargs...)
 end
 
 end

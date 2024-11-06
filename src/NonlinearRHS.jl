@@ -369,13 +369,13 @@ end
 function norm_mode_average(grid, βfun!, aeff; shock=true)
     β = zeros(Float64, length(grid.ω))
     shockterm = shock ? grid.ω.^2 : grid.ω .* PhysData.wlfreq(grid.referenceλ)
-    pre = @. -im*shockterm/(2*PhysData.c^(3/2)*sqrt(2*PhysData.ε_0))
+    pre = @. -im*shockterm/4 / nlscale / PhysData.c
     function norm!(nl, z)
         βfun!(β, z)
         sqrtaeff = sqrt(aeff(z))
         for i in eachindex(nl)
             !grid.sidx[i] && continue
-            nl[i] *= pre[i]*sqrtaeff/β[i]
+            nl[i] *= pre[i]/β[i]*sqrtaeff
         end
     end
 end

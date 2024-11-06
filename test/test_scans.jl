@@ -2,6 +2,7 @@ import Test: @test, @testset, @test_throws
 using Luna
 import HDF5
 using Distributed
+import Logging: with_logger, NullLogger
 
 @testset "Chunking" begin
     function contains_all_unique(chunks, x)
@@ -142,7 +143,7 @@ rm.(files)
 end
 
 ##
-if ~Sys.iswindows()
+if ~("GITHUB_ACTIONS" in keys(ENV))
 @testset "multi-process queue scan" begin
     ps = addprocs(2)
     @everywhere using Luna
@@ -151,7 +152,7 @@ if ~Sys.iswindows()
         scan = Scan("scantest_queue_multiproc", Scans.QueueExec(); energy=energies)
         idcs_run = Int[]
         runscan(scan) do scanidx, energy
-            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+            prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                            trange=400e-15, λlims=(200e-9, 4e-6))
             push!(idcs_run, scanidx)
         end
@@ -170,10 +171,11 @@ if ~Sys.iswindows()
     end
     rmprocs(ps)
 end
-
+##
 @testset "multi-process queue scan with error" begin
     ps = addprocs(2)
     @everywhere using Luna
+    @everywhere import Logging: with_logger, NullLogger
     # do it again but with one process giving an error
     scanname = "scantest_queue_multiproc_err"
     function worker_err()
@@ -181,12 +183,14 @@ end
         scan = Scan(scanname, Scans.QueueExec(); energy=energies)
         idcs_run = Int[]
         runscan(scan) do scanidx, energy
-            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
-                           trange=400e-15, λlims=(200e-9, 4e-6))
-            if scanidx == 16
-                error("This exception is expected as part of the test suite")
+            with_logger(NullLogger()) do
+                prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+                            trange=400e-15, λlims=(200e-9, 4e-6))
+                if scanidx == 16
+                    error("This exception is expected as part of the test suite")
+                end
+                push!(idcs_run, scanidx)
             end
-            push!(idcs_run, scanidx)
         end
         idcs_run
     end
@@ -215,7 +219,7 @@ end
     td = joinpath(tempdir(), tempname())
     runscan(scan) do scanidx, energy
         println("running on $(myid())")
-        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+        prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                        trange=400e-15, λlims=(200e-9, 4e-6),
                        filepath=joinpath(td, makefilename(scan, scanidx)))
         open(joinpath(td, "$(scanidx)_on_$(myid())"), "w") do io
@@ -234,7 +238,7 @@ end
     td = joinpath(tempdir(), tempname())
     runscan(scan) do scanidx, energy
         println("running on $(myid())")
-        prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+        prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                        trange=400e-15, λlims=(200e-9, 4e-6),
                        filepath=joinpath(td, makefilename(scan, scanidx)))
         open(joinpath(td, "$(scanidx)_on_$(myid())"), "w") do io
@@ -245,7 +249,7 @@ end
     @test length(readdir(td)) == 2length(energies)
     rm(td; recursive=true)
 end
-end # if ~Sys.iswindows()
+end # if ~("GITHUB_ACTIONS" in keys(ENV))
 
 ##
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
@@ -253,7 +257,7 @@ end # if ~Sys.iswindows()
     scan = Scan("scantest_autofilename", Scans.LocalExec(); energy=energies)
     mktempdir() do td
         runscan(scan) do scanidx, energy
-            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+            prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                         trange=400e-15, λlims=(200e-9, 4e-6), filepath=td, scan, scanidx)
         end
         @test length(readdir(td)) == length(energies)
@@ -266,7 +270,7 @@ end
     scan = Scan("scantest_manualfilename", Scans.LocalExec(); energy=energies)
     mktempdir() do td
         runscan(scan) do scanidx, energy
-            prop_capillary(125e-6, 3, :HeJ, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
+            prop_capillary(125e-6, 3, :He, 0.8; λ0=800e-9, τfwhm=10e-15, energy=energy,
                         trange=400e-15, λlims=(200e-9, 4e-6), filepath=td, scan, scanidx,
                         filename="newname")
         end

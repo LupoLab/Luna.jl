@@ -68,14 +68,15 @@ end
 ```
 """
 function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
-    local scanidcs, arrays
+    local scanidcs = nothing
+    local arrays = nothing
     scanfiles = sort(scanfiles)
     @progress for (idx, fi) in enumerate(scanfiles)
         try
             o = HDF5Output(fi)
             # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
             ret = wraptuple(f(o))
-            if idx == 1 # initialise arrays
+            if isnothing(scanidcs) # initialise arrays
                 isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
                 scanidcs = CartesianIndices(shape)
                 arrays = _arrays(ret, shape)
@@ -86,6 +87,44 @@ function scanproc(f, scanfiles::AbstractVector{<:AbstractString}; shape=nothing)
         catch e
             bt = catch_backtrace()
             msg = "scanproc failed for file: $fi:\n"*sprint(showerror, e, bt)
+            @warn msg
+        end
+    end
+    unwraptuple(arrays) # if f only returns one thing, we also only return one array
+end
+
+"""
+    scanproc(f, outputs; shape=nothing)
+
+Iterate over the scan outputs, apply the processing function `f(o::AbstractOutput)`,
+and collect the results in arrays.
+
+If the `outputs` are `MemoryOutput`s which do not contain the scan metadata,
+the `shape` of the scan must be given explicitly (e.g. via `size(scan)`).
+
+`f` can return a single value, an array, or a tuple/array of arrays/numbers. Arrays returned
+by `f` must either be of the same size for each processed output, or wrapped in a `VarLength`.
+Values returned by `f` which are guaranteed to be identical for each processed output can be
+wrapped in a `Common`, and `scanproc` only returns these once.
+"""
+function scanproc(f, outputs; shape=nothing)
+    local scanidcs = nothing
+    local arrays = nothing
+    @progress for (idx, o) in enumerate(outputs)
+        try
+            # wraptuple makes sure we definitely have a Tuple, even if f only returns one thing
+            ret = wraptuple(f(o))
+            if isnothing(scanidcs) # initialise arrays
+                isnothing(shape) && (shape = Tuple(o["meta"]["scanshape"]))
+                scanidcs = CartesianIndices(shape)
+                arrays = _arrays(ret, shape)
+            end
+            for (ridx, ri) in enumerate(ret)
+                _addret!(arrays[ridx], scanidcs[idx], ri)
+            end
+        catch e
+            bt = catch_backtrace()
+            msg = "scanproc failed at index $idx: \n"*sprint(showerror, e, bt)
             @warn msg
         end
     end
@@ -272,15 +311,20 @@ end
 fwhm(x::Vector, I::Vector; minmax=:min) = Maths.fwhm(x, I; minmax)
 
 """
-    peakpower(grid, Eω; bandpass=nothing, oversampling=1)
-    peakpower(output; bandpass=nothing, oversampling=1)
+    peakpower(grid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
+    peakpower(output; bandpass=nothing, oversampling=1, sumdims=nothing)
 
 Extract the peak power. If `bandpass` is given, bandpass the field according to
-[`window_maybe`](@ref).
+[`window_maybe`](@ref). If `sumdims` is not `nothing`, sum the time-dependent power
+over these dimensions (e.g. modes) before taking the maximum.
 """
-function peakpower(grid, Eω; bandpass=nothing, oversampling=1)
+function peakpower(grid, Eω; bandpass=nothing, oversampling=1, sumdims=nothing)
     to, Eto = getEt(grid, Eω; oversampling=oversampling, bandpass=bandpass)
-    dropdims(maximum(abs2.(Eto); dims=1); dims=1)
+    Pt = abs2.(Eto)
+    if !isnothing(sumdims)
+        Pt = dropdims(sum(Pt; dims=sumdims); dims=sumdims)
+    end
+    dropdims(maximum(Pt; dims=1); dims=1)
 end
 
 function peakpower(output; kwargs...)
@@ -998,9 +1042,10 @@ end
     nearest_z(output, z)
 
 Return the index of saved z-position(s) closest to the position(s) `z`. Output is always
-an array, even if `z` is a number.
+an array, even if `z` is a number. If `z` is negative, its absolute value is taken as the fraction
+of the total propagation distance.
 """
-nearest_z(output, z::Number) = [argmin(abs.(output["z"] .- z))]
-nearest_z(output, z) = [argmin(abs.(output["z"] .- zi)) for zi in z]
+nearest_z(output, z::Number) = z < 0 ? [round(Int, min(abs(z), 1)*length(output["z"]))] : [argmin(abs.(output["z"] .- z))]
+nearest_z(output, z) = [nearest_z(output, zi)[1] for zi in z]
 
 end

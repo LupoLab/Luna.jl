@@ -6,8 +6,8 @@ import Base: getindex, show, haskey
 using EllipsisNotation
 import EllipsisNotation: Ellipsis
 import Printf: @sprintf
-import Luna: Scans, Utils, @hlock
-import Pidfile: mkpidlock
+import Luna: Scans, Utils
+import FileWatching.Pidfile: mkpidlock
 
 abstract type AbstractOutput end
 
@@ -169,7 +169,7 @@ end
 function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
                     script=nothing, cache=true, readonly=false)
     if isfile(fpath) && cache
-        @hlock HDF5.h5open(fpath, "cw") do file
+        HDF5.h5open(fpath, "cw") do file
             if HDF5.haskey(file["meta"], "cache")
                 saved = read(file["meta"]["cache"]["saved"])
                 chash = hash((sort(keys(file["stats"])), size(file[yname])[1:end-1]))
@@ -184,7 +184,7 @@ function HDF5Output(fpath, save_cond, yname, tname, statsfun, compression,
         end
         fdir, fname = splitdir(fpath)
         isdir(fdir) || mkpath(fdir)
-        @hlock HDF5.h5open(fpath, "cw") do file
+        HDF5.h5open(fpath, "cw") do file
             HDF5.create_group(file, "stats")
             HDF5.create_group(file, "meta")
             file["meta"]["sourcecode"] = Utils.sourcecode()
@@ -221,7 +221,7 @@ function initialise(o::HDF5Output, y)
     mdims = copy(cdims)
     mdims[end] = -1
     maxdims = Tuple(mdims)
-    @hlock HDF5.h5open(o.fpath, "r+") do file
+    HDF5.h5open(o.fpath, "r+") do file
         if o.compression
             HDF5.create_dataset(file, o.yname, HDF5.datatype(ComplexF64), (dims, maxdims),
                           chunk=chdims, blosc=3)
@@ -245,7 +245,7 @@ end
 
 # for single String index, read whole data set
 function getindex(o::HDF5Output, idx::AbstractString)
-    @hlock HDF5.h5open(o.fpath, "r") do file
+    HDF5.h5open(o.fpath, "r") do file
         read(file[idx])
     end
 end
@@ -253,7 +253,7 @@ end
 # more indices -> read slice of data
 function getindex(o::HDF5Output, ds::AbstractString,
                   I::Union{AbstractRange, Int, Colon, Ellipsis}...)
-    @hlock HDF5.h5open(o.fpath, "r") do file
+    HDF5.h5open(o.fpath, "r") do file
         file[ds][to_indices(file[ds], I)...]
     end
 end
@@ -264,7 +264,7 @@ function getindex(o::HDF5Output, ds::AbstractString,
     if count(isa.(I, Array)) > 1
         error("Only one dimension can be index with an array.")
     end
-    @hlock HDF5.h5open(o.fpath, "r") do file
+    HDF5.h5open(o.fpath, "r") do file
         dset = file[ds]
         idcs = to_indices(dset, I)
         adim = findfirst(isa.(idcs, Array)) # which of the indices is the array
@@ -282,7 +282,7 @@ end
 
 function show(io::IO, o::HDF5Output)
     if isfile(o.fpath)
-        fields = @hlock HDF5.h5open(o.fpath) do file
+        fields = HDF5.h5open(o.fpath) do file
             keys(file)
         end
         print(io, "HDF5Output$(fields)")
@@ -293,7 +293,7 @@ end
 
 function haskey(o::HDF5Output, key)
     if isfile(o.fpath)
-        return @hlock HDF5.h5open(o.fpath) do file
+        return HDF5.h5open(o.fpath) do file
             haskey(file, key)
         end
     else
@@ -315,7 +315,7 @@ function (o::HDF5Output)(y, t, dt, yfun)
     save, ts = o.save_cond(y, t, dt, o.saved)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
-        @hlock HDF5.h5open(o.fpath, "r+") do file
+        HDF5.h5open(o.fpath, "r+") do file
             !HDF5.haskey(file, o.yname) && initialise(o, y)
             statsnames = sort(collect(keys(o.stats_tmp[end])))
             cachehash = hash((statsnames, size(y)))
@@ -374,21 +374,21 @@ function append_stats!(parent, a::Array{Dict{String,Any},1})
 end
 
 function create_dataset(parent, name, x::Number)
-    @hlock HDF5.create_dataset(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
+    HDF5.create_dataset(parent, name, HDF5.datatype(typeof(x)), ((1,), (-1,)),
                   chunk=(1,))
 end
 
 function create_dataset(parent, name, x::AbstractArray)
     dims = (size(x)..., 1)
     maxdims = (size(x)..., -1)
-    @hlock HDF5.create_dataset(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
+    HDF5.create_dataset(parent, name, HDF5.datatype(eltype(x)), (dims, maxdims),
                   chunk=dims)
 end
 
 "Calling the output on a dictionary writes the items to the file"
 function (o::HDF5Output)(d::AbstractDict; force=false, meta=false, group=nothing)
     o.readonly && error("Cannot add data to read-only output!")
-    @hlock HDF5.h5open(o.fpath, "r+") do file
+    HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         for (k, v) in pairs(d)
             if HDF5.haskey(parent, k)
@@ -425,7 +425,7 @@ end
 "Calling the output on a key, value pair writes the value to the file"
 function (o::HDF5Output)(key::AbstractString, val; force=false, meta=false, group=nothing)
     o.readonly && error("Cannot add data to read-only output!")
-    @hlock HDF5.h5open(o.fpath, "r+") do file
+    HDF5.h5open(o.fpath, "r+") do file
         parent = meta ? file["meta"] : file
         if HDF5.haskey(parent, key)
             if force
@@ -640,16 +640,20 @@ While running the given `scan`, save the variables given as keyword arguments in
 - `stats`: The statistics dictionary from a simulation is saved in scan grid and `NaN`-padded to account for variable lengths in the output arrays
 - `fpath`: Path to the file. Defaults to the scan name plus "_collected"
 - `script`: Path to the Julia scrpt file running the scan. Can be grabbed automatically using the macro [`@scansave`](@ref).
+
+Another keyword argument `lock_stale_age` sets the time in seconds after which the function ignores
+the lock on the file and writes to it anyway. Defaults to 300 s (5 min).
+(Note that if the PID of the locking process appears valid, this is automatically increased 25x.)
 """
 function scansave(scan, scanidx; stats=nothing, fpath=nothing,
-                                 grid=nothing, script=nothing, kwargs...)
+                                 grid=nothing, script=nothing,
+                                 lock_stale_age=300, kwargs...)
     fpath = isnothing(fpath) ? "$(scan.name)_collected.h5" : fpath
-    lockpath = joinpath(Utils.cachedir(), "$(basename(fpath)).scanlock")
-    isdir(Utils.cachedir()) || mkpath(Utils.cachedir())
-    pidlock = mkpidlock(lockpath)
+    lockpath = fpath*"_scanlock"
+    mkpidlock(lockpath; stale_age=lock_stale_age) do # note no indent to keep this legible
     if !isfile(fpath)
         # First save - set up file structure
-        @hlock HDF5.h5open(fpath, "cw") do file
+        HDF5.h5open(fpath, "cw") do file
             group = HDF5.create_group(file, "scanvariables")
             order = String[]
             shape = Int[] # scan shape
@@ -703,7 +707,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             end
         end
     end
-    @hlock HDF5.h5open(fpath, "r+") do file
+    HDF5.h5open(fpath, "r+") do file
         scanshape = Tuple([length(ai) for ai in scan.arrays])
         cidcs = CartesianIndices(scanshape)
         scanidcs = Tuple(cidcs[scanidx])
@@ -739,7 +743,7 @@ function scansave(scan, scanidx; stats=nothing, fpath=nothing,
             file[string(k)][sidcs..., scanidcs...] = v
         end 
     end
-    close(pidlock)
+    end # mkpidlock do
 end
 
 """

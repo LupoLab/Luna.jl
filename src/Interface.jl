@@ -36,7 +36,7 @@ peak power specified.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -71,7 +71,7 @@ specified.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -105,7 +105,7 @@ specified, and duration given either as `τfwhm` or `τw`.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -149,7 +149,7 @@ A custom pulse defined by tabulated data to be used with `prop_capillary`.
 - `mode::Symbol`: Mode in which this input should be coupled. Can be `:lowest` for the
                   lowest-order mode in the simulation, or a mode designation
                   (e.g. `:HE11`, `:HE12`, `:TM01`, etc.). Defaults to `:lowest`.
-- `polarisation`: Can be `:linear`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
+- `polarisation`: Can be `:linear`, `:x`, `:y`, `:circular`, or an ellipticity number -1 ≤ ε ≤ 1,
                   where ε=-1 corresponds to left-hand circular, ε=1 to right-hand circular,
                   and ε=0 to linear polarisation.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -280,8 +280,8 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `power`: Peak power **after any spectral phases are added**.
 - `pulseshape`: Shape of the transform-limited pulse. Can be `:gauss` for a Gaussian pulse
     or `:sech` for a sech² pulse.
-- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:circular`,
-    or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
+- `polarisation`: Polarisation of the input pulse. Can be `:linear` (default), `:x`, `:y`,
+    `:circular`, or an ellipticity number -1 ≤ ε ≤ 1, where ε=-1 corresponds to left-hand circular,
     ε=1 to right-hand circular, and ε=0 to linear polarisation. The major axis for
     elliptical polarisation is always the y-axis.
 - `propagator`: A function `propagator!(Eω, grid)` which **mutates** its first argument to
@@ -311,6 +311,9 @@ In this case, all keyword arguments except for `λ0` are ignored.
     - `true` (default) -- same as `:PPT`.
     - `false` -- ignore plasma.
     Note that plasma is only available for full-field simulations.
+- `PPT_stark_shift::Bool`: when using the PPT ionisation rate, determines whether
+    to include the effect of the Stark shift of the ground-state energy levels.
+    *The necessary data is only available for helium, neon, and argon!*
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
@@ -355,6 +358,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=nothing, kerr=true, plasma=nothing,
+                        PPT_stark_shift=true,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -364,13 +368,11 @@ function prop_capillary_args(radius, flength, gas, pressure;
     plasma = isnothing(plasma) ? !envelope : plasma
     thg = isnothing(thg) ? !envelope : thg
 
-    gas = (gas == :He) ? :HeJ : gas
-
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration, PPT_stark_shift)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -407,12 +409,13 @@ end
 function needpol(pol)
     if pol == :linear
         return false
-    elseif pol == :circular
+    elseif pol in (:circular, :x, :y)
         return true
     else
-        error("Polarisation must be :linear, :circular, or an ellipticity, not $pol")
+        error("Polarisation must be :linear, :circular, :x/:y, or an ellipticity, not $pol")
     end
 end
+
 needpol(pol::Number) = true
 needpol(pulse::Pulses.AbstractPulse) = needpol(pulse.polarisation)
 needpol(pulses::Vector{<:Pulses.AbstractPulse}) = any(needpol, pulses)
@@ -508,7 +511,7 @@ function makedensity(flength, gas, pressure)
 end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration)
+                      rotation, vibration, PPT_stark_shift)
     out = Any[]
     if kerr
         if thg
@@ -517,7 +520,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
         end
     end
-    makeplasma!(out, grid, gas, plasma, pol)
+    makeplasma!(out, grid, gas, plasma, pol, PPT_stark_shift)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
     end
@@ -533,7 +536,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     Tuple(out)
 end
 
-function makeplasma!(out, grid, gas, plasma::Bool, pol)
+function makeplasma!(out, grid, gas, plasma::Bool, pol, PPT_stark_shift)
     # simple true/false => default to PPT for atoms, ADK for molecules
     if ~plasma
         return
@@ -545,15 +548,15 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol)
         @info("Using PPT ionisation rate.")
         model = :PPT
     end
-    makeplasma!(out, grid, gas, model, pol)
+    makeplasma!(out, grid, gas, model, pol, PPT_stark_shift)
 end
 
-function makeplasma!(out, grid, gas, plasma::Symbol, pol)
+function makeplasma!(out, grid, gas, plasma::Symbol, pol, stark_shift)
     ionpot = PhysData.ionisation_potential(gas)
     if plasma == :ADK
         ionrate = Ionisation.ionrate_fun!_ADK(gas)
     elseif plasma == :PPT
-        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ)
+        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ; stark_shift)
     else
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
@@ -562,7 +565,7 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol)
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration)
+                      rotation, vibration, PPT_stark_shift)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
@@ -656,13 +659,19 @@ function scalefield(f::Fields.DataField, fac)
     Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
 end
 
+function scalefield(f::Fields.PropagatedField, fac)
+    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac))
+end
+
 _findmode(mode_s, md) = _findmode([mode_s], md)
 
 function makeinputs(mode_s, λ0, pulse::Pulses.AbstractPulse)
     idcs = findmode(mode_s, pulse)
     (length(idcs) > 0) || error("Mode $(pulse.mode) not found in mode list: $mode_s")
-    if pulse.polarisation == :linear
+    if pulse.polarisation == :linear || pulse.polarisation == :x
         ((mode=idcs[1], fields=(pulse.field,)),)
+    elseif pulse.polarisation == :y
+        ((mode=idcs[2], fields=(pulse.field,)),)
     else
         (length(idcs) == 2) || error("Modes not set up for circular/elliptical polarisation")
         f1, f2 = ellfields(pulse)
