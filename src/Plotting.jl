@@ -157,8 +157,10 @@ function stats(output; kwargs...)
         for n in 1:Npl
             data, ylabel = pstats[n]
             scale = (multimode ? log10 : identity)
+            data = (multimode && ndims(data) > 1) ? data : data'
             data = multimode ? max.(data, 1e-300) : data
             ax = GLMakie.Axis(pfig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
+            println("$(size(data))   $modes")
             for i in 1:size(data,1)
                 GLMakie.lines!(z, data[i,:], label=modes[i])
             end
@@ -174,6 +176,7 @@ function stats(output; kwargs...)
         for n in 1:Npl
             data, ylabel = fstats[n]
             scale = ((multimode && should_log10(data)) ? log10 : identity)
+            data = (multimode && ndims(data) > 1) ? data : data'
             data = (multimode && should_log10(data)) ? max.(data, 1e-300) : data
             ax = GLMakie.Axis(ffig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
             for i in 1:size(data,1)
