@@ -307,7 +307,7 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
 end
 
 function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
-    pfig = newfig()
+    pfig = newfig(size=(1000,400))
     ax, hm = GLMakie.heatmap(pfig[1,1], specx, z, 10*log10.(Iω),
                              colorrange=(dBmin,0), interpolate=true,
                              lowclip=:white,
