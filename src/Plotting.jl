@@ -11,7 +11,7 @@ import Base: display
 GLMakie.set_theme!(GLMakie.Theme(fontsize = 40))
 
 function newfig()
-    f = GLMakie.Figure(resolution = (1600, 1200))
+    f = GLMakie.Figure()
     display(GLMakie.Screen(), f)
     f
 end
