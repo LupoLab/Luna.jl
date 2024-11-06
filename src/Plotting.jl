@@ -10,8 +10,8 @@ import Base: display
 
 GLMakie.set_theme!(GLMakie.Theme(fontsize = 40))
 
-function newfig()
-    f = GLMakie.Figure()
+function newfig(; size=(800,600))
+    f = GLMakie.Figure(; size)
     display(GLMakie.Screen(), f)
     f
 end
@@ -54,10 +54,10 @@ Create a figure with `N` subplots laid out in a grid that is as close to square 
 If `portrait` is `true`, try to lay out the grid in portrait orientation (taller than wide),
 otherwise landscape (wider than tall).
 """
-function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
+function subplotgrid(N, portrait=true; colw=350, rowh=250, title=nothing)
     cols = ceil(Int, sqrt(N))
     rows = ceil(Int, N/cols)
-    collect(Iterators.product(1:rows,1:cols))
+    collect(Iterators.product(1:rows,1:cols)), cols*colw, rows*rowh
 end
 
 """
@@ -152,12 +152,12 @@ function stats(output; kwargs...)
 
     Npl = length(pstats)
     if Npl > 0
-        pfig = newfig()
-        idcs = subplotgrid(Npl)
+        idcs, width, height = subplotgrid(Npl)
+        pfig = newfig(size=(width, height))
         for n in 1:Npl
             data, ylabel = pstats[n]
-            data = data'
             scale = (multimode ? log10 : identity)
+            data = multimode ? max.(data, 1e-300) : data
             ax = GLMakie.Axis(pfig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
             for i in 1:size(data,1)
                 GLMakie.lines!(z, data[i,:], label=modes[i])
@@ -169,12 +169,12 @@ function stats(output; kwargs...)
     
     Npl = length(fstats)
     if Npl > 0
-        ffig = newfig()
-        idcs = subplotgrid(Npl)
+        idcs, width, height = subplotgrid(Npl)
+        ffig = newfig(size=(width, height))
         for n in 1:Npl
             data, ylabel = fstats[n]
-            data = data'
             scale = ((multimode && should_log10(data)) ? log10 : identity)
+            data = (multimode && should_log10(data)) ? max.(data, 1e-300) : data
             ax = GLMakie.Axis(ffig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
             for i in 1:size(data,1)
                 GLMakie.lines!(z, data[i,:], label=modes[i])
@@ -468,8 +468,6 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
     sfig
 end
 
-dashes = [:dash, :dot, :dashdot, :dashdotdot, [0.5, 1.0, 1.5, 2.5]]
-
 function _plot_slice_mm(x, y, z, modestrs, xlabel, ylabel, log10=false; fwlabel=false)
     pfig = newfig()
     scale = (log10 ? Base.log10 : identity)
@@ -489,7 +487,7 @@ function _plot_slice_mm(x, y, z, modestrs, xlabel, ylabel, log10=false; fwlabel=
                 label *= @sprintf(" [%.2f %s]", fw, "fs")
             end
             GLMakie.lines!(x, y[:, midx, sidx]; label,
-                   color=line[:color], linestyle=dashes[midx])
+                   color=line[:color], cycle=[:linestyle])
         end
     end
     pfig
