@@ -9,8 +9,10 @@ import Base: display
 
 function getext()
     ext = Base.get_extension(@__MODULE__, :PythonPlotExt)
-    isnothing(ext) && error("Please load a plotting backend.")
-    ext
+    !isnothing(ext) && return ext
+    ext = Base.get_extension(@__MODULE__, :PyPlotExt)
+    !isnothing(ext) && return ext
+    error("Please load a plotting backend.")
 end
 
 """
