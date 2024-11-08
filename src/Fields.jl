@@ -797,7 +797,7 @@ function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2, boundfac=8)
     τ0FTL = Maths.fwhm(grid.t, ItFTL)/(2*sqrt(log(2)))
     τ0 = Maths.fwhm(grid.t, _It(iFT(Eω, grid), grid))/(2*sqrt(log(2)))
 
-    ϕ2_0 = τ0FTL*sqrt(τ0^2 - τ0FTL^2) # GDD to stretch Gaussian from FTL to actual duration
+    ϕ2_0 = τ0FTL*sqrt(abs(τ0^2 - τ0FTL^2)) # GDD to stretch Gaussian from FTL to actual duration
 
     # for Gaussian with pure GDD, sqrt(ϕ2_0) is the FTL duration, so use that as guide
     bounds = boundfac*(sqrt(ϕ2_0) .^(2:order))
