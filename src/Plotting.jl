@@ -12,7 +12,9 @@ function getext()
     !isnothing(ext) && return ext
     ext = Base.get_extension(@__MODULE__, :PyPlotExt)
     !isnothing(ext) && return ext
-    error("Please load a plotting backend.")
+    ext = Base.get_extension(@__MODULE__, :GLMakieExt)
+    !isnothing(ext) && return ext
+    error("Please load a plotting backend: PythonPlot, PyPlot, or GLMakie.")
 end
 
 """
