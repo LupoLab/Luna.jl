@@ -18,6 +18,16 @@ function getext()
 end
 
 """
+    cmap_white(cmap, N=512, n=8)
+
+Replace the lowest colour stop of `cmap` (after splitting into `n` stops) with white and
+create a new colourmap with `N` stops.
+"""
+function cmap_white(cmap; N=2^12, n=8)
+    getext().cmap_white(cmap; N, n)
+end
+
+"""
     stats(output; kwargs...)
 
 Plot all statistics available in `output`. Additional `kwargs` are passed onto `pyplot.plot()`

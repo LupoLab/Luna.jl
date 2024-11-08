@@ -23,16 +23,7 @@ Replace the lowest colour stop of `cmap` (after splitting into `n` stops) with w
 create a new colourmap with `N` stops.
 """
 function cmap_white(cmap; N=2^12, n=8)
-    vals = collect(range(0, 1, length=n))
-    vals_i = collect(range(0, 1, length=N))
-    cm = ColorMap(cmap)
-    clist = cm(vals)
-    clist[1, :] = [1, 1, 1, 1]
-    clist_i = Array{Float64}(undef, (N, 4))
-    for ii in 1:4
-        clist_i[:, ii] .= Maths.BSpline(vals, clist[:, ii]).(vals_i)
-    end
-    ColorMap(clist_i)
+    insert!(GLMakie.to_colormap(:viridis), 1, GLMakie.Colors.RGBA(Float32(1),1,1,1))
 end
 
 """
@@ -282,7 +273,7 @@ function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bp
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     Iω = Maths.normbymax(Iω)
-    _prop2D_fig(num, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
+    _prop2D_fig(num, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange; kwargs...)
 end
 
 # multi-mode 2D propagation plots
@@ -294,23 +285,28 @@ function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-        pfig = _prop2D_fig(num, specx, z, Iω[:, mi, :], dBmin, speclabel, speclims, t, It[:, mi, :], trange)
+        pfig = _prop2D_fig(num, specx, z, Iω[:, mi, :], dBmin, speclabel, speclims, t, It[:, mi, :], trange; kwargs...)
         push!(pfigs, pfig)
     end
 
     num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
     Itall = dropdims(sum(It, dims=2), dims=2)
-    pfig = _prop2D_fig(num, specx, z, Iωall, dBmin, speclabel, speclims, t, Itall, trange)
+    pfig = _prop2D_fig(num, specx, z, Iωall, dBmin, speclabel, speclims, t, Itall, trange; kwargs...)
     push!(pfigs, pfig)
     return pfigs
 end
 
-function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
+function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange; kwargs...)
+    if haskey(kwargs, :cmap)
+        cmap = kwargs[:cmap]
+    else
+        cmap = :viridis
+    end
     pfig = newfig(size=(1000,400))
     ax, hm = GLMakie.heatmap(pfig[1,1], specx, z, 10*log10.(Iω),
                              colorrange=(dBmin,0), interpolate=true,
-                             lowclip=:white,
+                             colormap=cmap,
                              axis=(; xlabel=speclabel, ylabel="Distance (cm)"))
     GLMakie.xlims!(ax, speclims)
     cb = GLMakie.Colorbar(pfig[1, 2], hm, label="SED (dB)")
@@ -318,7 +314,7 @@ function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, tra
     Pfac, unit = power_unit(It)
     ax, hm = GLMakie.heatmap(pfig[1,3], t*1e15, z, Pfac .* It,
                              interpolate=true,
-                             lowclip=:white,
+                             colormap=cmap,
                              axis=(; xlabel="Time (fs)", ylabel="Distance (cm)"))
     GLMakie.xlims!(ax, trange.*1e15)
     cb = GLMakie.Colorbar(pfig[1, 4], hm, label="Power ($unit)")
@@ -496,22 +492,6 @@ function _plot_slice_mm(x, y, z, modestrs, xlabel, ylabel, log10=false; fwlabel=
     pfig
 end
 
-spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
-    makegrid(output), output, args...; kwargs...)
-
-function spectrogram(grid::Grid.AbstractGrid, Eω::AbstractArray, specaxis=:λ;
-                     propagate=nothing, kwargs...)
-    t, Et = getEt(grid, Eω; propagate=propagate, oversampling=1)
-    spectrogram(t, Et, specaxis; kwargs...)
-end
-
-function spectrogram(grid::Grid.AbstractGrid, output, zslice, specaxis=:λ;
-                     propagate=nothing, kwargs...)
-    t, Et, zactual = getEt(output, zslice; oversampling=1, propagate=propagate)
-    Et = Et[:, 1]
-    spectrogram(t, Et, specaxis; kwargs...)
-end
-
 function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
                      trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
                      surface3d=false,
@@ -530,10 +510,16 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     log && (Ig = 10*log10.(Ig))
     clims = (log ? (dBmin, 0) : extrema(Ig))
 
+    if haskey(kwargs, :cmap)
+        cmap = kwargs[:cmap]
+    else
+        cmap = :viridis
+    end
+
     fig = newfig()
     if surface3d
         ax, pl = GLMakie.surface(fig[1,1], tg.*1e15, specyfac*specy, Ig',
-                         colorrange=clims, colormap=:turbo,
+                         colorrange=clims, colormap=cmap,
                          axis=(;type=GLMakie.Axis3, azimuth = pi/4, elevation=pi/4,
                          protrusions=75, perspectiveness=0.0, viewmode=:stretch,
                          xlabel="Time (fs)", ylabel=speclabel, ylabeloffset=80,
@@ -546,7 +532,7 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
                          xspinesvisible=false, yspinesvisible=false))
     else
         ax, pl = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig',
-                                colorrange=clims, interpolate=true,
+                                colorrange=clims, interpolate=true, colormap=cmap,
                                 axis=(; xlabel="Time (fs)", ylabel=speclabel))
         GLMakie.ylims!(ax, speclims)
     end
