@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 import StaticArrays: SMatrix, SVector
 import LinearAlgebra: mul!, ldiv!
 

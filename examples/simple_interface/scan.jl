@@ -1,5 +1,4 @@
-using Luna
-import PythonPlot: pyplot
+using Luna, PythonPlot
 
 # Fixed parameters:
 a = 125e-6

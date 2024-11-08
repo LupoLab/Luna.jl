@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 a = 13e-6
 gas = :Ar

@@ -1,12 +1,10 @@
-using Luna
+using Luna, PythonPlot
 import Luna.PhysData: wlfreq
 import Logging
 import FFTW
 import NumericalIntegration: integrate, SimpsonEven
 import LinearAlgebra: mul!, ldiv!
 Logging.disable_logging(Logging.BelowMinLevel)
-
-import PythonPlot: pygui, pyplot
 
 a = 225e-6
 gas = :Ar

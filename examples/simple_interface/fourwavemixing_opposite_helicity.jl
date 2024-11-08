@@ -1,5 +1,4 @@
-using Luna
-import PythonPlot: pyplot
+using Luna, PythonPlot
 
 #= In this example we simulate degenerate four-wave mixing between a circularly polarised
 pump pulse at 400 nm and a seed pulse at 800 nm to generate a circularly polarised idler

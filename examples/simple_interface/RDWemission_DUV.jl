@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 radius = 125e-6 # HCF core radius
 flength = 3 # HCF length
@@ -21,4 +21,4 @@ Plotting.time_1D(duv; modes=:sum)
 Plotting.time_1D(duv; modes=1, bandpass=(220e-9, 270e-9))
 # plot the spectrogram of the pulse at the exit with a white background
 Plotting.spectrogram(duv, flength; trange=(-20e-15, 30e-15), λrange=(150e-9, 1000e-9),
-                     N=256, fw=3e-15, cmap=Plotting.cmap_white("viridis"))
+                     N=256, fw=3e-15)

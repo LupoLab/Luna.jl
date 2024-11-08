@@ -1,5 +1,4 @@
-using Luna
-import PythonPlot: pyplot
+using Luna, PythonPlot
 
 #= In this example we simulate the effect of pump pulse dispersion on soliton self-compression
 and RDW emission. To do this we use the "ϕ" and "propagator" keyword arguments to

@@ -1,8 +1,7 @@
 import FFTW
 import Luna: SFA, Tools, Grid, Maths, PhysData, Ionisation
 import Luna.PhysData: wlfreq
-import PythonPlot: pyplot, pygui
-pygui(true)
+import PythonPlot: pyplot
 
 τfwhm = 30e-15
 λ0 = 800e-9
