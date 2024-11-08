@@ -252,32 +252,40 @@ end
 
 # more indices -> read slice of data
 function getindex(o::HDF5Output, ds::AbstractString,
-                  I::Union{AbstractRange, Int, Colon, Ellipsis}...)
+                  I::Union{AbstractRange, Int, Colon, Ellipsis, AbstractString, Array}...)
     HDF5.h5open(o.fpath, "r") do file
-        file[ds][to_indices(file[ds], I)...]
+        _getindex(file[ds], I...)
     end
 end
 
+function _getindex(parent::HDF5.Group, dss::AbstractString, I::Union{AbstractRange, Int, Colon, Ellipsis, Array}...)
+    _getindex(parent[dss], I...)
+end
+
+function _getindex(parent::HDF5.Group, dss::AbstractString)
+    read(parent[dss])
+end
+
+function _getindex(parent::HDF5.Dataset, I::Union{AbstractRange, Int, Colon, Ellipsis}...)
+    parent[to_indices(parent, I)...]
+end
+
 # indexing with an array, e.g. o["Eω", :, [1, 2, 3]] has to be handled separately
-function getindex(o::HDF5Output, ds::AbstractString,
-                  I::Union{AbstractRange, Int, Colon, Array, Ellipsis}...)
+function _getindex(parent::HDF5.Dataset, I::Union{AbstractRange, Int, Colon, Array, Ellipsis}...)
     if count(isa.(I, Array)) > 1
         error("Only one dimension can be index with an array.")
     end
-    HDF5.h5open(o.fpath, "r") do file
-        dset = file[ds]
-        idcs = to_indices(dset, I)
-        adim = findfirst(isa.(idcs, Array)) # which of the indices is the array
-        arr = idcs[adim] # the array itself
-        T = eltype(dset)
-        ret = Array{T}(undef, map(length, idcs))
-        Ilo = idcs[1:adim-1]
-        Ihi = idcs[adim+1:end]
-        for ii in eachindex(arr)
-            ret[Ilo..., ii, Ihi...] .= dset[Ilo..., arr[ii], Ihi...]
-        end
-        ret
+    idcs = to_indices(parent, I)
+    adim = findfirst(isa.(idcs, Array)) # which of the indices is the array
+    arr = idcs[adim] # the array itself
+    T = eltype(parent)
+    ret = Array{T}(undef, map(length, idcs))
+    Ilo = idcs[1:adim-1]
+    Ihi = idcs[adim+1:end]
+    for ii in eachindex(arr)
+        ret[Ilo..., ii, Ihi...] .= parent[Ilo..., arr[ii], Ihi...]
     end
+    ret
 end
 
 function show(io::IO, o::HDF5Output)
