@@ -44,6 +44,8 @@ const N_A = ustrip(CODATA2014.N_A)
 const amg = atm/(k_B*273.15)
 "Atomic mass unit"
 const m_u = ustrip(CODATA2014.m_u)
+"Atomic unit of electric polarisability"
+const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
 const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
@@ -63,7 +65,7 @@ const gas_str = Dict(
     :N2O => "NitrousOxide",
     :D2 => "Deuterium"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe, :CaCO3)
 const metal = (:Ag,:Al)
 
 """
@@ -112,7 +114,7 @@ Sellmeier expansion for linear susceptibility from
 J. Opt. Soc. Am. 67, 1550 (1977)
 """
 function γ_Peck(B1, C1, B2, C2, dens)
-    return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
+    return μm -> (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
 """
@@ -132,7 +134,7 @@ https://doi.org/10.5194/acp-21-14927-2021.
 
 """
 function γ_QuanfuHe(A, B, C, dens)
-    return μm -> ((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
+    return μm -> complex((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
 end
 
 """
@@ -293,6 +295,12 @@ function sellmeier_glass(material::Symbol)
             + 0.0080/(1-(18.0/μm)^2)
             + 2.14973/(1-(25.0/μm)^2)
             ))
+    elseif material == :CaCO3
+        return μm -> @. sqrt(complex(1
+            + 0.73358749
+            + 0.96464345/(1-1.94325203e-2/μm^2)
+            + 1.82831454/(1-120/μm^2)
+            ))
     elseif material == :ADPo
         return μm -> @. sqrt(complex(
             2.302842
@@ -431,7 +439,7 @@ Get function which returns refractive index.
 function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
-        return λ -> sqrt(1 + χ1(λ))
+        return λ -> sqrt(1 + complex(χ1(λ)))
     elseif material in glass
         if isnothing(lookup)
             lookup = (material == :SiO2)
@@ -661,6 +669,9 @@ function n2_glass(material::Symbol; λ=nothing)
     elseif material == :MgF2
         # R. DeSalvo et al., IEEE J. Q. Elec. 32, 10 (1996).
         return 5.79e-21
+    elseif material == :CaCO3
+        # Kabaciński et al., 10.1364/OE.27.011018
+        return 3.22e-20
     else
         error("Unkown glass $material")
     end
@@ -773,6 +784,63 @@ function quantum_numbers(material)
         return 2, 0, 0.9 # https://doi.org/10.1016/S0030-4018(99)00113-3
     else
         throw(DomainError(material, "Unknown material $material"))
+    end
+end
+
+"""
+    polarisability_difference(material; unit=:SI)
+
+Return the difference in polarisability between the ground state and the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
+function polarisability_difference(material; unit=:SI)
+    if unit == :SI
+        factor = au_polarisability
+    elseif unit == :atomic
+        factor = 1
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
+    if material in (:He, :HeB, :HeJ)
+        return (1.3207 - 0.2811)*factor
+    elseif material == :Ne
+        return (2.376 - 1.2417)*factor
+    elseif material == :Ar
+        return (10.762 - 6.807)*factor
+    else
+        return missing
+    end
+end
+
+"""
+    Cnl_ADK(material)
+
+Return the value of Cₙₗ from the ADK paper for the `material`. For `material`S
+other than noble gases, this returns `missing`.
+
+Reference:
+Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atoms And Atomic Ions In Electromagnetic Field. Soviet Physics JETP 64, 1191–1194 (1986).
+"""
+function Cnl_ADK(material)
+    if material in (:He, :HeB, :HeJ)
+        return 1.99
+    elseif material == :Ne
+        return 1.31
+    elseif material == :Ar
+        return 1.9
+    elseif material == :Kr
+        return 2.17
+    elseif material == :Xe
+        return 2.27
+    else
+        return missing
     end
 end
 

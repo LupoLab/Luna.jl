@@ -4,6 +4,8 @@
 [![DOI](https://zenodo.org/badge/190623784.svg)](https://zenodo.org/badge/latestdoi/190623784)
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://lupo-lab.com/Luna.jl)
 
+> [!IMPORTANT]  
+> To stay up-to-date with Luna.jl and learn about bugfixes and new features, subscribe to our [mailing list](https://jiscmail.ac.uk/luna).
 
 Luna.jl is a flexible platform for the simulation of nonlinear optical dynamics—both in waveguides (such as optical fibres) and free-space geometries—using the unidirectional pulse propagation equation (UPPE) and its approximate forms, such as the commonly used generalised nonlinear Schrödinger equation (GNLSE). Some of the key features of Luna:
 - A variety of propagation geometries treated in a unified way:
@@ -34,7 +36,7 @@ There are two ways of using Luna:
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) or [GNLSE](#gnlse) sections below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna requires Julia v1.7 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
+Luna requires Julia v1.9 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
 
 ```julia
 ]

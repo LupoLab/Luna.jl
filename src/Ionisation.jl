@@ -1,13 +1,14 @@
 module Ionisation
-import SpecialFunctions: gamma
-import GSL: hypergeom
+import SpecialFunctions: gamma, dawson
+import HCubature: hquadrature
 import HDF5
-import Pidfile: mkpidlock
+import FileWatching.Pidfile: mkpidlock
+import GSL: hypergeom
 import Logging: @info
-import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq
+import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq, polarisability_difference
 import Luna.PhysData: ionisation_potential, quantum_numbers
-import Luna: Maths
-import Luna: @hlock
+import Luna: Maths, Utils
+import Printf: @sprintf
 
 """
     ionrate_fun!_ADK(ionpot::Float64, threshold=true)
@@ -100,10 +101,11 @@ end
 
 Create an accelerated (interpolated) PPT ionisation rate function.
 """
-function ionrate_fun!_PPTaccel(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun!_PPTaccel(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTaccel(ip, λ0, Z, l; kwargs...)
+    Δα = stark_shift ? polarisability_difference(material) : 0
+    ionrate_fun!_PPTaccel(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)
@@ -126,55 +128,58 @@ exists, load this rather than recalculate.
 
 Other keyword arguments are passed on to [`ionrate_fun_PPT`](@ref)
 """
-function ionrate_fun!_PPTcached(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun!_PPTcached(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTcached(ip, λ0, Z, l; kwargs...)
+    ionrate_fun!_PPTcached(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
-                                sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing,
-                                cachedir=joinpath(homedir(), ".luna", "pptcache"))
-    h = hash((ionpot, λ0, Z, l, sum_tol, cycle_average, N, Emax))
+                                N=2^16, Emax=nothing,
+                                cachedir=joinpath(Utils.cachedir(), "pptcache"),
+                                stale_age=60*10,
+                                kwargs...)
+    h = hash((ionpot, λ0, Z, l, N, Emax, collect(kwargs...)))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
     isdir(cachedir) || mkpath(cachedir)
     if isfile(fpath)
-        @info "Found cached PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-        pidlock = mkpidlock(lockpath)
-        rate = loadPPTaccel(fpath)
-        close(pidlock)
+        @info @sprintf("Found cached PPT rate for %.2f eV, %.1f nm", ionpot/electron, 1e9λ0)
+        rate = mkpidlock(lockpath; stale_age) do
+            loadPPTaccel(fpath)
+        end
         return rate
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
-                               sum_tol=sum_tol, cycle_average, N=N, Emax=Emax)
-        @info "Saving PPT rate cache for $(ionpot/electron) eV, $(λ0*1e9) nm in $cachedir"
-        pidlock = mkpidlock(lockpath)
-        if isfile(fpath) # makePPTcache takes a while - has another process saved first?
-            rate = loadPPTaccel(fpath)
-            close(pidlock)
-            return rate
+                               N, Emax, kwargs...)
+        mkpidlock(lockpath; stale_age) do
+            if ~isfile(fpath) # makePPTcache takes a while - has another process saved first?
+                @info @sprintf(
+                    "Saving PPT rate for %.2f eV, %.1f nm in %s",
+                    ionpot/electron, 1e9λ0, fpath
+                )
+                HDF5.h5open(fpath, "cw") do file
+                    file["E"] = E
+                    file["rate"] = rate
+                end
+            end
         end
-        @hlock HDF5.h5open(fpath, "cw") do file
-            file["E"] = E
-            file["rate"] = rate
-        end
-        close(pidlock)
         return makePPTaccel(E, rate)
     end
 end
 
 function loadPPTaccel(fpath)
     isfile(fpath) || error("PPT cache file $fpath not found!")
-    E, rate = @hlock HDF5.h5open(fpath, "r") do file
+    E, rate = HDF5.h5open(fpath, "r") do file
         (read(file["E"]), read(file["rate"]))
     end
     makePPTaccel(E, rate)
 end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
-                      sum_tol=1e-4, cycle_average=false, N=2^16, Emax=nothing)
+                      N=2^16, Emax=nothing, kwargs...)
     Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
 
     # ω0 = 2π*c/λ0
@@ -182,9 +187,9 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
     Emin = Emax/5000
 
     E = collect(range(Emin, stop=Emax, length=N));
-    @info "Pre-calculating PPT rate for $(ionpot/electron) eV, $(λ0*1e9) nm"
-    rate = ionrate_PPT(ionpot, λ0, Z, l, E; sum_tol=sum_tol, cycle_average);
-    @info "PPT pre-calcuation done"
+    @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
+    rate = ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
+    @info "...PPT pre-calcuation done"
     return E, rate
 end
 
@@ -234,12 +239,23 @@ function ionfrac!(frac, rate, E, δt)
 end
 
 function makePPTaccel(E, rate)
+    # Interpolating the log and re-exponentiating makes the spline more accurate
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
-    # Interpolating the log and re-exponentiating makes the spline more accurate
-    ir(E) = abs(E) <= Emin ? 0.0 : exp(cspl(abs(E)))
+    Emax = maximum(E)
     function ionrate!(out, E)
-        out .= ir.(E)
+        for ii in eachindex(out)
+            aE = abs(E[ii])
+            if aE < Emin
+                out[ii] = 0.0
+            elseif aE > Emax
+                error(
+                    "Field strength $aE V/m exceeds maximum for PPT ionisation rate ($Emax V/m)."
+                    )
+            else
+                out[ii] = exp(cspl(aE))
+            end
+        end
     end
 end
 
@@ -252,13 +268,22 @@ function ionrate_fun!_PPT(args...)
 end
 
 """
-    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
+    ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; kwargs...)
 
 Create closure to calculate PPT ionisation rate.
 
 # Keyword arguments
 - `sum_tol::Number`: Relative tolerance used to truncate the infinite sum.
 - `cycle_average::Bool`: If `false` (default), calculate the cycle-averaged rate
+- `sum_integral::Bool`: whether to approximate the infinite sum in the PPT rate equation with
+    an integral (this neglects the multiphoton thresholds).
+- `Δα::Number`: polarisability difference between the ground state and the cation (in SI units)
+    to calculate the Stark shift of the ground-state energy levels. Defaults to 0.
+- `msum::Bool`: for l ≠ 0, whether or not to sum over different m states. Defaults to `true`.
+- `Cnl::Real` : Pre-calculated `Cₙₗ` constant. If not given, defaults to the approximate expression from
+    the PPT papers.
+- `occupancy`: Occupancy of the state(s) from which ionisation is considered. Defaults to 2 for 
+    a state with two electrons (spin up/down).
 
 # References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
@@ -266,74 +291,84 @@ Ionization of atoms in the tunnelling regime with experimental evidence
 using Hg atoms. Journal of Physics B: Atomic, Molecular and Optical
 Physics 25, 4005–4020 (1992)
 
-[2] 1.Bergé, L., Skupin, S., Nuter, R., Kasparian, J. & Wolf, J.-P.
+[2] Bergé, L., Skupin, S., Nuter, R., Kasparian, J. & Wolf, J.-P.
 Ultrashort filaments of light in weakly ionized, optically transparent
 media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 (Appendix A)
+
+[3] A. Couairon and A. Mysyrowicz,
+"Femtosecond filamentation in transparent media,"
+Physics Reports 441(2–4), 47–189 (2007).
+
 """
-function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l; sum_tol=1e-4, cycle_average=false)
-    Ip_au = ionpot / au_energy
-    ns = Z/sqrt(2Ip_au)
-    ls = ns-1
-    Cnl2 = 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls))
+function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
+                         sum_tol=1e-6, cycle_average=false, sum_integral=false,
+                         Δα=0, msum=true, Cnl=missing, occupancy=2)
 
-    ω0 = 2π*c/λ0
-    ω0_au = au_time*ω0
-    E0_au = (2*Ip_au)^(3/2)
+    if ismissing(Δα)
+        Δα = 0
+    end
 
-    ionrate = let ω0_au=ω0_au, Cnl2=Cnl2, ns=ns, sum_tol=sum_tol
-        function ionrate(E)
-            E_au = abs(E)/au_Efield
-            γ = ω0_au*sqrt(2Ip_au)/E_au
-            γ2 = γ*γ
-            β = 2γ/sqrt(1 + γ2)
-            α = 2*(asinh(γ) - γ/sqrt(1+γ2))
-            Up_au = E_au^2/(4*ω0_au^2)
-            Uit_au = Ip_au + Up_au
-            v = Uit_au/ω0_au
-            ret = 0
-            divider = 0
-            for m = -l:l
-                divider += 1
-                mabs = abs(m)
-                flm = ((2l + 1)*factorial(l + mabs)
-                    / (2^mabs*factorial(mabs)*factorial(l - mabs)))
-                # Following 5 lines are [1] eq. 8 and lead to identical results:
-                # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
-                # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
-                # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
-                # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
-                # lret *= Am*exp(-2*E0_au*G/(3E_au))
-                # [2] eq. (A14) 
-                lret = 4sqrt(2)/π*Cnl2
-                lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
-                lret *= flm/factorial(mabs)
-                lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
-                lret *= Ip_au * γ2/(1+γ2)
-                # Remove cycle average factor, see eq. (2) of [1]
-                if !cycle_average
-                    lret *= sqrt(π*E0_au/(3E_au))
-                end
-                k = ceil(v)
-                n0 = ceil(v)
-                sumfunc = let k=k, β=β, m=m
-                    function sumfunc(x, n)
-                        diff = n-v
-                        return x + exp(-α*diff)*φ(m, sqrt(β*diff))
-                    end
-                end
-                # s, success, steps = Maths.aitken_accelerate(
-                #     sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
-                s, success, steps = Maths.converge_series(
-                    sumfunc, 0, n0=n0, rtol=sum_tol, maxiter=Inf)
-                lret *= s
-                ret += lret
+    function ionrate(E)
+        Ip_au = (ionpot + Δα/2 * E^2) / au_energy # Δα/2 * E^2 includes the Stark shift
+        ns = Z/sqrt(2Ip_au)
+        ls = ns-1
+        Cnl2 = ismissing(Cnl) ? 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls)) : Cnl^2
+    
+        ω0 = 2π*c/λ0
+        ω0_au = au_time*ω0
+        E0_au = (2*Ip_au)^(3/2)
+
+        E_au = abs(E)/au_Efield
+        γ = ω0_au*sqrt(2Ip_au)/E_au
+        γ2 = γ*γ
+        β = 2γ/sqrt(1 + γ2)
+        α = 2*(asinh(γ) - γ/sqrt(1+γ2))
+        Up_au = E_au^2/(4*ω0_au^2)
+        Uit_au = Ip_au + Up_au
+        v = Uit_au/ω0_au
+        ret = 0
+        mrange = msum ? (-l:l) : (0:0)
+        for m in mrange
+            mabs = abs(m)
+            flm = ((2l + 1)*factorial(l + mabs)
+                / (2^mabs*factorial(mabs)*factorial(l - mabs)))
+            # Following 5 lines are [1] eq. 8 and lead to identical results:
+            # G = 3/(2γ)*((1 + 1/(2γ2))*asinh(γ) - sqrt(1 + γ2)/(2γ))
+            # Am = 4/(sqrt(3π)*factorial(mabs))*γ2/(1 + γ2)
+            # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
+            # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+            # lret *= Am*exp(-2*E0_au*G/(3E_au))
+            # [2] eq. (A14) 
+            lret = 4sqrt(2)/π*Cnl2
+            lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
+            lret *= flm/factorial(mabs)
+            lret *= exp(-2v*(asinh(γ) - γ*sqrt(1+γ2)/(1+2γ2)))
+            lret *= Ip_au * γ2/(1+γ2)
+            # Remove cycle average factor, see eq. (2) of [1]
+            if !cycle_average
+                lret *= sqrt(π*E0_au/(3E_au))
             end
-            return ret/(au_time*divider)
+            n0 = ceil(v)
+            if sum_integral
+                s = sqrt(π)*factorial(mabs)*β^mabs/(2*(α+β)^(mabs+1))*sqrt(β/α)
+            else
+                s, _, _ = Maths.converge_series(0, n0=n0, rtol=sum_tol, maxiter=Inf) do x, n
+                    diff = n-v
+                    x + exp(-α*diff)*φ(m, sqrt(β*diff))
+                end
+                    
+            end
+            lret *= s
+            ret += occ(occupancy, m)*lret
         end
+        return ret/au_time
     end
     return ionrate
 end
+
+occ(occupancy::Number, m) = occupancy
+occ(occupancy, m) = occupancy(m)
 
 """
     φ(m, x)
@@ -344,29 +379,50 @@ Note that w_m(x) in [1] and φ_m(x) in [2] look slightly different but
 are in fact identical.
 """
 function φ(m, x)
-    mabs = abs(m)
-    return (exp(-x^2)
+    #= second half of [3], eq. 81
+        for m = 0, φ₀(x) is just the Dawson integral so we can get this directly.
+        for m ≠ 0, we calculate it using the hypergeometric function where possible.
+        for m ≠ 0 and large x, we need to do it brute force with BigFloats (slow)
+    =#
+    if m == 0
+        return dawson(x)
+    end
+    
+    if x <= 26
+        mabs = abs(m)
+        return (exp(-x^2)
             * sqrt(π)
-            * x^(mabs+1)
+            * x^(2mabs+1)
             * gamma(mabs+1)
             * hypergeom(1/2, 3/2 + mabs, x^2)
             / (2*gamma(3/2 + mabs)))
+    else
+        i, _ = hquadrature(0, x) do y
+            y = BigFloat(y)
+            x = BigFloat(x)
+            (x^2 - y^2)^(abs(m))*exp(y^2)
+        end
+        return Float64(exp(-x^2) * i)
+    end
 end
+    
 
-function ionrate_fun_PPT(material::Symbol, λ0; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_fun_PPT(material::Symbol, λ0; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    return ionrate_fun_PPT(ip, λ0, Z, l; kwargs...)
+    return ionrate_fun_PPT(ip, λ0, Z, l; Δα, kwargs...)
 end
 
 function ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     return ionrate_fun_PPT(ionpot, λ0, Z, l; kwargs...).(E)
 end
 
-function ionrate_PPT(material::Symbol, λ0, E; kwargs...)
-    n, l, Z = quantum_numbers(material)
+function ionrate_PPT(material::Symbol, λ0, E; stark_shift=true, kwargs...)
+    _, l, Z = quantum_numbers(material)
+    Δα = stark_shift ? polarisability_difference(material) : 0
     ip = ionisation_potential(material)
-    return ionrate_PPT(ip, λ0, Z, l, E; kwargs...)
+    return ionrate_PPT(ip, λ0, Z, l, E; Δα, kwargs...)
 end
 
 end
