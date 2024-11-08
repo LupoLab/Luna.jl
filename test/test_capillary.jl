@@ -11,10 +11,10 @@ import Luna.PhysData: wlfreq
     λ = 800e-9
     ω = wlfreq(λ)
     a = 125e-6
-    m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced)
     @test isapprox(Capillary.losslength(m, ω), 7.0593180702769, rtol=1e-5)
     @test isapprox(Capillary.dB_per_m(m, ω), 0.6152074146252722, rtol=1e-5)
-    @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatiliMode(2a, :He, 1.0, model=:reduced), ω)
+    @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatiliMode(2a, :HeB, 1.0, model=:reduced), ω)
 end
 
 @testset "normalisation" begin
@@ -55,17 +55,17 @@ end
     @testset "n = $n" for n = 1:6
         @testset "m = $m" for m = 1:6
             # With the exception of HE65 specifically, all of these also pass with rtol=1e-20
-            mode = Capillary.MarcatiliMode(a, :He, 1.0, n=n, m=m)
+            mode = Capillary.MarcatiliMode(a, :HeB, 1.0, n=n, m=m)
             Ni, Nerr = N(mode)
             @test isapprox(Modes.N(mode), Ni, atol=Nerr, rtol=1e-7)
             aeff, aefferr = Aeff(mode)
             @test isapprox(Modes.Aeff(mode), aeff, rtol=1e-7, atol=aefferr)
         end
     end
-    m = Capillary.MarcatiliMode(a, :He, 1.0, n=0, kind=:TE)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, n=0, kind=:TE)
     @test Modes.N(m) ≈ N(m)[1]
     @test Modes.Aeff(m) ≈ Aeff(m)[1]
-    m = Capillary.MarcatiliMode(a, :He, 1.0, n=0, kind=:TM)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, n=0, kind=:TM)
     @test Modes.N(m) ≈ N(m)[1]
     @test Modes.Aeff(m) ≈ Aeff(m)[1]
     
@@ -75,7 +75,7 @@ end
     afun = let a0=a0, aL=aL, L=L
         afun(z) = a0 + (aL-a0)*z/L
     end
-    m = Capillary.MarcatiliMode(afun, :He, 1, loss=false, model=:full)
+    m = Capillary.MarcatiliMode(afun, :HeB, 1, loss=false, model=:full)
     @test Modes.N(m) ≈ N(m)[1]
     @test Modes.N(m, z=L/2) ≈ N(m, z=L/2)[1]
     @test Modes.N(m, z=L) ≈ N(m, z=L)[1]
@@ -87,22 +87,22 @@ end
 
 @testset "β, α" begin
     a = 125e-6
-    m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced)
     λ = 1e-9 .* collect(range(70, stop=7300, length=128))
     ω = wlfreq.(λ)
     @test all(isfinite.(Capillary.β.(m, ω)))
     @test all(isreal.(Capillary.β.(m, ω)))
-    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced), ω)))
-    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :He, 10.0, model=:reduced), ω)))
-    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :He, 50.0, model=:reduced), ω)))
+    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced), ω)))
+    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :HeB, 10.0, model=:reduced), ω)))
+    @test all(isreal.(Capillary.β.(Capillary.MarcatiliMode(a, :HeB, 50.0, model=:reduced), ω)))
     @test all(isfinite.(Capillary.α.(m, ω)))
     @test all(isreal.(Capillary.α.(m, ω)))
 end
 
 @testset "ZDW/Aeff" begin
-    @test abs(1e9*Capillary.zdw(Capillary.MarcatiliMode(125e-6, :He, 0.4, model=:reduced)) - 379) < 1
-    @test abs(1e9*Capillary.zdw(Capillary.MarcatiliMode(75e-6, :He, 5.9, model=:reduced)) - 562) < 1
-    @test Capillary.Aeff(Capillary.MarcatiliMode(75e-6, :He, 1.0, model=:reduced)) ≈ 8.42157534886545e-09
+    @test abs(1e9*Capillary.zdw(Capillary.MarcatiliMode(125e-6, :HeB, 0.4, model=:reduced)) - 379) < 1
+    @test abs(1e9*Capillary.zdw(Capillary.MarcatiliMode(75e-6, :HeB, 5.9, model=:reduced)) - 562) < 1
+    @test Capillary.Aeff(Capillary.MarcatiliMode(75e-6, :HeB, 1.0, model=:reduced)) ≈ 8.42157534886545e-09
 end
 
 
@@ -143,12 +143,12 @@ end
     @test isapprox(Capillary.dispersion(m, 5, ω), 2.64991510536236e-73, rtol=5e-5)
     @test isapprox(Capillary.zdw(m), 7.225347947615157e-07, rtol=2e-8)
     @test isapprox(Capillary.α(m, ω), 0.0290115706883820, rtol=1e-14)
-    @test Capillary.Aeff(Capillary.MarcatiliMode(75e-6, :He, 1.0)) ≈ 8.42157534886545e-09
+    @test Capillary.Aeff(Capillary.MarcatiliMode(75e-6, :HeB, 1.0)) ≈ 8.42157534886545e-09
 end
 
 @testset "to_space" begin
-    ms = (Capillary.MarcatiliMode(125e-6, :He, 1.0),
-          Capillary.MarcatiliMode(125e-6, :He, 1.0, m=2, ϕ=π/2))
+    ms = (Capillary.MarcatiliMode(125e-6, :HeB, 1.0),
+          Capillary.MarcatiliMode(125e-6, :HeB, 1.0, m=2, ϕ=π/2))
     components = :xy
     xs = (10e-6, π/7)
     ts = Modes.ToSpace(ms, components=components)

@@ -1,6 +1,7 @@
 import Test: @test, @testset
 import FFTW
-import Luna: Grid, Processing, Maths, Fields, settings, PhysData
+using Luna
+import Luna: settings
 import Luna.PhysData: wlfreq
 import NumericalIntegration: integrate
 
@@ -223,7 +224,7 @@ end
 @testset "scanproc" begin
     a = 125e-6
     flength = 0.1
-    gas = :HeJ
+    gas = :He
 
     λ0 = 800e-9
     τfwhm = 10e-15
@@ -275,3 +276,21 @@ end
     end
 end
 
+@testset "peak power modal sum" begin
+    λ0 = 800e-9
+    τfwhm = 10e-15
+    pHE11 = 1e8
+    pHE12 = 5e7
+
+    pulses = [
+        Pulses.GaussPulse(;λ0, τfwhm, power=pHE11, mode=:HE11)
+        Pulses.GaussPulse(;λ0, τfwhm, power=pHE12, mode=:HE12)
+    ]
+
+    out = prop_capillary(100e-6, 0.2, :He, 1e-3; λ0, pulses, λlims=(70e-9, 4e-6), trange=1e-12, modes=4)
+
+    @test all(isapprox.(Processing.peakpower(out)[1:2, 1], [pHE11, pHE12]; rtol=1e-4))
+    @test isapprox(Processing.peakpower(out; sumdims=2)[1], pHE11+pHE12; rtol=1e-4)
+
+    @test isapprox(out["stats"]["peakpower_allmodes"][1], pHE11+pHE12; rtol=1e-4)
+end

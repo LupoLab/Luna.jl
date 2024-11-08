@@ -10,15 +10,15 @@ import Luna.PhysData: wlfreq
 
 
 @testset "delegation" begin
-    m = Modes.delegated(Capillary.MarcatiliMode(75e-6, :He, 5.9))
+    m = Modes.delegated(Capillary.MarcatiliMode(75e-6, :HeB, 5.9))
     @test Modes.Aeff(m) ≈ 8.42157534886545e-09
     @test abs(1e9*Modes.zdw(m) - 562) < 1
     n(m, ω; z=0) = real(Modes.neff(m, ω; z=z))
-    m2 = Modes.delegated(Capillary.MarcatiliMode(75e-6, :He, 1.0), neff=n)
+    m2 = Modes.delegated(Capillary.MarcatiliMode(75e-6, :HeB, 1.0), neff=n)
     @test Modes.α(m2, 2e15) == 0
     @test Modes.α(m2, wlfreq(800e-9)) == 0
 
-    cm = Capillary.MarcatiliMode(75e-6, :He, 5.9)
+    cm = Capillary.MarcatiliMode(75e-6, :HeB, 5.9)
     dm = Modes.delegated(cm)
     @test Modes.Aeff(dm) ≈ 8.42157534886545e-09
     
@@ -49,7 +49,7 @@ end
 
 @testset "overlap" begin
 a = 100e-6
-m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced)
+m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced)
 r = collect(range(0, a, length=2^16))
 unm = sf_bessel_zero_Jnu(0, 1)
 Er = besselj.(0, unm*r/a) # spatial profile of the HE11 mode - overlap should be perfect
@@ -63,7 +63,7 @@ Er = besselj.(0, unm*r/a) # spatial profile of HE12 - overlap should be 0
 fac = collect(range(0.3, stop=0.9, length=128))
 ηn = zero(fac)
 r = collect(range(0, 4a, length=2^16))
-m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1)
+m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=1)
 for i in eachindex(fac)
     w0 = fac[i]*a
     Er = Maths.gauss.(r, w0/sqrt(2))
@@ -78,7 +78,7 @@ w0 = fac*a
 Er = Maths.gauss.(r, w0/sqrt(2))
 s = 0
 for mi = 1:10
-    m = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=mi)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=mi)
     η = Modes.overlap(m, r, Er, dim=1)[1]
     s += abs2(η[1])
 end
@@ -122,8 +122,8 @@ energy1 = ert(Etr1)
 energy2 = ert(Etr2)
 @test ert(Etr) ≈ energy1 + energy2
 
-m1 = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1)
-m2 = Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=2)
+m1 = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=1)
+m2 = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=2)
 Eωm1 = Modes.overlap(m1, q.r, Eωr; dim=2, norm=false)
 Eωm2 = Modes.overlap(m2, q.r, Eωr; dim=2, norm=false)
 
@@ -189,8 +189,8 @@ energy1 = ert(Etr1)
 energy2 = ert(Etr2)
 @test ert(Etr) ≈ energy1 + energy2
 
-modes = (Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=1),
-         Capillary.MarcatiliMode(a, :He, 1.0, model=:reduced, m=2))
+modes = (Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=1),
+         Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced, m=2))
 newgrid = Grid.RealGrid(1, 800e-9, (160e-9, 3000e-9), 1e-12)
 
 Eωm = Modes.overlap(modes, newgrid, grid, q.r, Eωr)
@@ -375,7 +375,7 @@ end # testset "makemodes"
 @testset "spatial field and fluence" begin
     a = 100e-6
     flength = 0.1
-    gas = :He
+    gas = :HeB
     pressure = 1
     λ0 = 800e-9
     τfwhm = 30e-15

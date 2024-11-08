@@ -14,7 +14,7 @@ P_{\mathrm{nl}}(\omega, \mathbf{k}_\perp, z) = \int_{-\infty}^{\infty} \mathcal{
 ```
 where ``\mathcal{T}_\perp`` is a transform from (transverse) real space to reciprocal space (i.e. spatial frequency), ``\mathbf{r}_\perp`` is the transverse spatial coordinate, ``t`` is time, and  ``\mathcal{P}`` is an operator which calculates the nonlinear response of the medium given an electric field. Naturally, the real-space field ``E(t, \mathbf{r}_\perp, z)`` first has to be obtained from ``E(\omega, \mathbf{k}_\perp, z)``:
 ```math
-E(t, \mathbf{r}_\perp, z)  = \mathcal{T}_\perp^{-1}\Big[E(\omega, \mathbf{k}_\perp, z)\Big]\,,
+E(t, \mathbf{r}_\perp, z)  = \int_{-\infty}^{\infty} \mathrm{d}\omega \mathcal{T}_\perp^{-1}\Big[E(\omega, \mathbf{k}_\perp, z)\Big]\mathrm{e}^{-i\omega t}\,,
 ```
 where ``\mathcal{T}_\perp^{-1}`` is simply the inverse of ``\mathcal{T}_\perp`` so transforms from transverse reciprocal space to real space. The chief difference between variations of the UPPE implemented in `Luna` is the definition of ``\mathbf{k}_\perp`` and ``\mathcal{T}_\perp``, that is, the choice of [Modal decompositions](@ref) of the field.
 
