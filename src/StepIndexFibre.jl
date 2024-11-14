@@ -143,15 +143,25 @@ function uwv(radius, k0, ncore, nclad, neff)
     u, w, v
 end
 
+function besselk_kp_ratio(n, z)
+    num = besselkp(n, z)
+    den = besselk(n, z)
+    if num == 0 || den == 0 #running out of floating-point precision
+        return -n/z - 1 # approximate formula
+    else
+        return num/den
+    end
+end
+
 function R(ncore, nclad, n, u, w, neff)
-    kpart = ((ncore^2 - nclad^2)/(2*ncore^2))^2*(besselkp(n, w)/(w*besselk(n, w)))^2
+    kpart = ((ncore^2 - nclad^2)/(2*ncore^2))^2*(besselk_kp_ratio(n, w)/w)^2
     rightpart = (n*neff/ncore)^2*(1/u^2 + 1/w^2)^2
     sqrt(kpart + rightpart)
 end
 
 char_LHS(n, u) = besseljp(n, u)/(u*besselj(n, u))
 
-char_RHS(ncore, nclad, n, w) = -(ncore^2 + nclad^2)/(2*ncore^2)*besselkp(n, w)/(w*besselk(n, w))
+char_RHS(ncore, nclad, n, w) = -(ncore^2 + nclad^2)/(2*ncore^2)*besselk_kp_ratio(n, w)/w
 
 function char_EH(radius, k0, ncore, nclad, n, neff)
     u, w, v = uwv(radius, k0, ncore, nclad, neff)
@@ -201,7 +211,7 @@ end
 
 function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
     char = make_char(radius, k0, ncore, nclad, n, mode)
-    roots = find_zeros(char, nclad, ncore, no_pts=pts)
+    roots = find_zeros(char, nclad, ncore, no_pts=pts, xatol=0)
     roots[end - (m - 1)]
 end
 
