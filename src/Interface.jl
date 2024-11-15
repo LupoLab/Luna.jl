@@ -513,7 +513,7 @@ function makedensity(flength, gas, pressure)
 end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_stark_shift)
+                      rotation, vibration, args...)
     out = Any[]
     if kerr
         if thg
@@ -522,7 +522,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
         end
     end
-    makeplasma!(out, grid, gas, plasma, pol, PPT_stark_shift)
+    makeplasma!(out, grid, gas, plasma, pol, args...)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
     end
@@ -539,7 +539,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
 end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol,
-                     PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
+                     args...)
     # simple true/false => default to PPT for atoms, ADK for molecules
     if ~plasma
         return
@@ -551,7 +551,7 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol,
         @info("Using PPT ionisation rate.")
         model = :PPT
     end
-    makeplasma!(out, grid, gas, model, pol, PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
+    makeplasma!(out, grid, gas, model, pol, args...)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol,
