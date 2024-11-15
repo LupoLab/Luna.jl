@@ -358,7 +358,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=nothing, kerr=true, plasma=nothing,
-                        PPT_stark_shift=true, PPT_ocupancy=2, PPT_Cnl=missing,
+                        PPT_stark_shift=true, PPT_occupancy=2, PPT_Cnl=missing,
                         PPT_sum_integral=false, PPT_sum_tol=1e-6,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
@@ -374,7 +374,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
-                        PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
+                        PPT_stark_shift, PPT_occupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
