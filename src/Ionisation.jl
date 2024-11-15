@@ -140,7 +140,7 @@ function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
                                 cachedir=joinpath(Utils.cachedir(), "pptcache"),
                                 stale_age=60*10,
                                 kwargs...)
-    h = hash((ionpot, λ0, Z, l, N, Emax, collect(kwargs...)))
+    h = hash((ionpot, λ0, Z, l, N, Emax, collect(kwargs)))
     fname = string(h, base=16)*".h5"
     fpath = joinpath(cachedir, fname)
     lockpath = joinpath(cachedir, "pptlock")
