@@ -358,7 +358,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=nothing, kerr=true, plasma=nothing,
-                        PPT_stark_shift=true,
+                        PPT_stark_shift=true, PPT_ocupancy=2, PPT_Cnl=missing,
+                        PPT_sum_integral=false, PPT_sum_tol=1e-6,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -372,7 +373,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration, PPT_stark_shift)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
+                        PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -536,7 +538,8 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     Tuple(out)
 end
 
-function makeplasma!(out, grid, gas, plasma::Bool, pol, PPT_stark_shift)
+function makeplasma!(out, grid, gas, plasma::Bool, pol,
+                     PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
     # simple true/false => default to PPT for atoms, ADK for molecules
     if ~plasma
         return
@@ -548,15 +551,17 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol, PPT_stark_shift)
         @info("Using PPT ionisation rate.")
         model = :PPT
     end
-    makeplasma!(out, grid, gas, model, pol, PPT_stark_shift)
+    makeplasma!(out, grid, gas, model, pol, PPT_stark_shift, PPT_ocupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
 end
 
-function makeplasma!(out, grid, gas, plasma::Symbol, pol, stark_shift)
+function makeplasma!(out, grid, gas, plasma::Symbol, pol,
+                     stark_shift, occupancy, Cnl, sum_integral, sum_tol)
     ionpot = PhysData.ionisation_potential(gas)
     if plasma == :ADK
         ionrate = Ionisation.ionrate_fun!_ADK(gas)
     elseif plasma == :PPT
-        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ; stark_shift)
+        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ;
+                                                    stark_shift, occupancy, Cnl, sum_integral, sum_tol)
     else
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
@@ -565,7 +570,7 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol, stark_shift)
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_stark_shift)
+                      rotation, vibration, args...)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
