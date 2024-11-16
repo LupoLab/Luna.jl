@@ -406,6 +406,38 @@ function sellmeier_crystal(material, axis)
         else
             throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
         end
+    elseif material == :ADP
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.302842
+                + 15.102464*μm^2/(μm^2-400)
+                + 0.011125165/(μm^2-0.01325366)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.163510
+                + 5.919896*μm^2/(μm^2-400)
+                + 0.009616676/(μm^2-0.01298912)
+            ))
+        else
+            throw(DomainError(axis, "Unknown ADP axis $axis"))
+        end
+    elseif material == :KDP
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.259276
+                + 13.00522*μm^2/(μm^2-400)
+                + 0.01008956/(μm^2-0.0129426)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.132668
+                + 3.2279924*μm^2/(μm^2-400)
+                + 0.008637494/(μm^2-0.0122810)
+            ))
+        else
+            throw(DomainError(axis, "Unknown KDP axis $axis"))
+        end
     elseif material == :LBO
         # C Chen et al., J Opt. Soc. Am. 6, 616-621 (1989)
         # F. Hanson and D. Dick., Opt. Lett. 16, 205-207 (1991).
