@@ -301,30 +301,6 @@ function sellmeier_glass(material::Symbol)
             + 0.96464345/(1-1.94325203e-2/μm^2)
             + 1.82831454/(1-120/μm^2)
             ))
-    elseif material == :ADPo
-        return μm -> @. sqrt(complex(
-            2.302842
-            + 15.102464*μm^2/(μm^2-400)
-            + 0.011125165/(μm^2-0.01325366)
-        ))
-    elseif material == :ADPe
-        return μm -> @. sqrt(complex(
-            2.163510
-            + 5.919896*μm^2/(μm^2-400)
-            + 0.009616676/(μm^2-0.01298912)
-        ))
-    elseif material == :KDPo
-        return μm -> @. sqrt(complex(
-            2.259276
-            + 13.00522*μm^2/(μm^2-400)
-            + 0.01008956/(μm^2-0.0129426)
-        ))
-    elseif material == :KDPe
-        return μm -> @. sqrt(complex(
-            2.132668
-            + 3.2279924*μm^2/(μm^2-400)
-            + 0.008637494/(μm^2-0.0122810)
-        ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
