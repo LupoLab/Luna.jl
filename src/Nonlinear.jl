@@ -89,33 +89,33 @@ struct Chi2Field{χT}
     χ2::χT
     toCrystal::RotMatrix3{Float64}
     toLab::RotMatrix3{Float64}
-    El::MArray{Tuple{3}, Float64} # field in the lab frame
-    Ec::MArray{Tuple{3}, Float64} # field in the crystal frame
-    Enl::MArray{Tuple{6}, Float64} # field products in the crystal frame
-    Pc::MArray{Tuple{3}, Float64} # polarisation in the crystal frame
-    Pl::MArray{Tuple{3}, Float64} # polarisation in the lab frame
+    χ2_toLab::χT # combined matrix to multiply by toLab * χ2
+    El::Vector{Float64} # field in the lab frame
+    Ec::Vector{Float64} # field in the crystal frame
+    Enl::Vector{Float64} # field products in the crystal frame
+    Pl::Vector{Float64} # polarisation in the lab frame
 end
 
 function Chi2Field(θ, ϕ, χ2)
-    toCrystal = RotMatrix(RotZY(-ϕ, -θ))
+    toCrystal = RotMatrix(RotZY(-ϕ, -θ)) # RotMatrix converts to static matrix
     toLab = RotMatrix(RotYZ(θ, ϕ))
-    sv3 = MArray{Tuple{3}}(zeros(3))
-    sv6 = MArray{Tuple{6}}(zeros(6))
-    χ2 = SMatrix{3, 6}(χ2)
-    Chi2Field(χ2, toCrystal, toLab, sv3, copy(sv3), sv6, copy(sv3), copy(sv3))
+    sv3 = zeros(3)
+    sv6 = zeros(6)
+    χ2 = SMatrix{3, 6}(χ2) # just χ2
+    χ2_toLab = SMatrix{3, 6}(toLab * χ2) # χ2 and coordinate transform in one step
+    Chi2Field(χ2, toCrystal, toLab, χ2_toLab, sv3, copy(sv3), sv6, copy(sv3))
 end
 
 function (c::Chi2Field)(out, E, ρ)
     for i in axes(E, 1)
         @inbounds c.El[1] = E[i, 1]
         @inbounds c.El[2] = E[i, 2]
-        # c.El[3] = E[i, 3]
+        # note c.El[3] (Ez in the lab frame) is always zero here
         mul!(c.Ec, c.toCrystal, c.El)
         @inbounds field_products!(c.Enl, c.Ec)
-        mul!(c.Pc, c.χ2, c.Enl)
-        mul!(c.Pl, c.toLab, c.Pc)
-        out[i, 1] += ε_0*c.Pl[1]
-        out[i, 2] += ε_0*c.Pl[2]
+        mul!(c.Pl, c.χ2_toLab, c.Enl)
+        @inbounds out[i, 1] += ε_0*c.Pl[1]
+        @inbounds out[i, 2] += ε_0*c.Pl[2]
     end
 end
 
