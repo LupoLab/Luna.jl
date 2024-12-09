@@ -4,6 +4,8 @@ import Luna.PhysData: ε_0, e_ratio
 import Luna: Maths, Utils
 import FFTW
 import LinearAlgebra: mul!, ldiv!
+import Rotations: RotZY, RotYZ, RotMatrix, RotMatrix3
+import StaticArrays: SMatrix, MArray
 
 function KerrScalar!(out, E, fac)
     @. out += fac*E^3
@@ -81,6 +83,49 @@ function Kerr_env_thg(γ3, ω0, t)
             @. out += ρ*ε_0*γ3/4*(3*abs2(E) + C*E^2)*E
         end
     end
+end
+
+struct Chi2Field{χT}
+    χ2::χT
+    toCrystal::RotMatrix3{Float64}
+    toLab::RotMatrix3{Float64}
+    El::MArray{Tuple{3}, Float64} # field in the lab frame
+    Ec::MArray{Tuple{3}, Float64} # field in the crystal frame
+    Enl::MArray{Tuple{6}, Float64} # field products in the crystal frame
+    Pc::MArray{Tuple{3}, Float64} # polarisation in the crystal frame
+    Pl::MArray{Tuple{3}, Float64} # polarisation in the lab frame
+end
+
+function Chi2Field(θ, ϕ, χ2)
+    toCrystal = RotMatrix(RotZY(-ϕ, -θ))
+    toLab = RotMatrix(RotYZ(θ, ϕ))
+    sv3 = MArray{Tuple{3}}(zeros(3))
+    sv6 = MArray{Tuple{6}}(zeros(6))
+    χ2 = SMatrix{3, 6}(χ2)
+    Chi2Field(χ2, toCrystal, toLab, sv3, copy(sv3), sv6, copy(sv3), copy(sv3))
+end
+
+function (c::Chi2Field)(out, E, ρ)
+    for i in axes(E, 1)
+        @inbounds c.El[1] = E[i, 1]
+        @inbounds c.El[2] = E[i, 2]
+        # c.El[3] = E[i, 3]
+        mul!(c.Ec, c.toCrystal, c.El)
+        @inbounds field_products!(c.Enl, c.Ec)
+        mul!(c.Pc, c.χ2, c.Enl)
+        mul!(c.Pl, c.toLab, c.Pc)
+        out[i, 1] += ε_0*c.Pl[1]
+        out[i, 2] += ε_0*c.Pl[2]
+    end
+end
+
+function field_products!(Enl, Ec)
+    Enl[1] = Ec[1]^2
+    Enl[2] = Ec[2]^2
+    Enl[3] = Ec[3]^2
+    Enl[4] = 2*Ec[2]*Ec[3]
+    Enl[5] = 2*Ec[1]*Ec[3]
+    Enl[6] = 2*Ec[1]*Ec[2]
 end
 
 "Response type for cumtrapz-based plasma polarisation, adapted from:
