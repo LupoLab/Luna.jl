@@ -423,7 +423,6 @@ function show(io::IO, t::TransRadial)
 end
 
 function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun, pol=false)
-    shape = (length(grid.ωo), pol ? 2 : 1, HT.N)
     Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, HT.N))
     Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, HT.N))
     Pto = similar(Eto)
@@ -495,7 +494,9 @@ Make function to return normalisation factor for radial symmetry.
 """
 function norm_radial(grid, q, nfun)
     ω = grid.ω
-    out = zeros(Float64, (length(ω), 2, q.N))
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    out = zeros(Float64, (length(ω), np, q.N))
     kr2 = q.k.^2
     function norm(z)
         for ir = 1:q.N
