@@ -221,14 +221,18 @@ end
 function setup(grid::Grid.RealGrid, q::Hankel.QDHT,
                densityfun, normfun, responses, inputs)
     Utils.loadFFTwisdom()
-    xt = zeros(Float64, length(grid.t), length(q.r))
+    np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
+    tshape = (length(grid.t), np, length(q.r))
+    ωshape = (length(grid.ω), np, length(q.r))
+    xt = zeros(Float64, tshape)
     FT = FFTW.plan_rfft(xt, 1, flags=settings["fftw_flag"])
-    Eω = zeros(ComplexF64, length(grid.ω), length(q.k))
+    Eω = zeros(ComplexF64, ωshape)
     Eωk = q * Eω
     doinputs_fs!(Eωk, grid, q, FT, inputs)
-    xo = Array{Float64}(undef, length(grid.to), length(q.r))
+    oshape = tshape[2:end]
+    xo = Array{Float64}(undef, length(grid.to), oshape...)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
-    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun)
+    transform = NonlinearRHS.TransRadial(grid, q, FTo, responses, densityfun, normfun, np > 1)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
