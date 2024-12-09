@@ -128,8 +128,8 @@ Make constant linear operator for radial free-space. `n` is the refractive index
 and β1 is 1/velocity of the reference frame.
 """
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
-                          n::AbstractArray, β1::Number)
-    out = Array{ComplexF64}(undef, (length(grid.ω), q.N))
+                          n::AbstractMatrix, β1::Number)
+    out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
     _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
@@ -137,14 +137,22 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
 end
 
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
-    n = zero(grid.ω)
-    n[grid.sidx] = nfun.(2π*PhysData.c./grid.ω[grid.sidx])
-    β1 = PhysData.dispersion_func(1, nfun)(grid.referenceλ)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    n = zeros(Float64, (length(grid.ω), np))
+    for (ii, si) in enumerate(grid.sidx)
+        if si
+            n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
+        end
+    end
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
     make_const_linop(grid, q, n, β1)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
-    n = zeros(Float64, (length(grid.ω), 2))
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    n = zeros(Float64, (length(grid.ω), np))
     for (ii, si) in enumerate(grid.sidx)
         if si
             n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
@@ -161,7 +169,7 @@ end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
                           n::AbstractMatrix, β1::Number, β0ref::Number; thg=false)
-    out = Array{ComplexF64}(undef, (length(grid.ω), 2, q.N))
+    out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
     _fill_linop_r!(out, grid, β1, k2, kr2, q.N, β0ref, thg)
@@ -188,13 +196,15 @@ end
 
 function _fill_linop_r!(out, grid::Grid.RealGrid, β1, k2, kr2, Nr)
     for ir = 1:Nr
-        for iω = 1:length(grid.ω)
-            βsq = k2[iω] - kr2[ir]
-            if βsq < 0
-                # negative βsq -> evanescent fields -> attenuation
-                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
-            else
-                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+        for ip in axes(k2, 2)
+            for iω = 1:length(grid.ω)
+                βsq = k2[iω, ip] - kr2[ir]
+                if βsq < 0
+                    # negative βsq -> evanescent fields -> attenuation
+                    out[iω, ip, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+                else
+                    out[iω, ip, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+                end
             end
         end
     end
