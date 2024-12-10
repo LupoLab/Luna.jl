@@ -234,6 +234,33 @@ end
 
 FreeGrid(R, N) = FreeGrid(R, N, R, N)
 
+struct Free2DGrid
+    x::Vector{Float64}
+    kx::Vector{Float64}
+    xwin::Vector{Float64}
+    r::Vector{Float64}
+end
+
+"""
+    Free2DGrid(R, N; window_factor=0.1)
+
+Spatial grid for 2D freespace propagation with `x` half-width `R` and
+`N` samples. `window_factor` determines by how much the grid size is extended to fit
+a filtering window.
+"""
+function Free2DGrid(R, N; window_factor=0.1)
+    Rw = R * (1 + window_factor) # size including window
+
+    δx = 2Rw/N
+    n = collect(range(0, length=N))
+    x = @. (n-N/2) * δx
+    kx = 2π*FFTW.fftfreq(N, 1/δx)
+
+    xwin = Maths.planck_taper(x, -Rw, -R, R, Rw)
+
+    Free2DGrid(x, kx, xwin, copy(x))
+end
+
 
 function to_dict(g::GT) where GT <: AbstractGrid
     d = Dict{String, Any}()

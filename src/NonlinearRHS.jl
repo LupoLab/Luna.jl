@@ -652,4 +652,142 @@ function norm_free(grid, xygrid, nfun)
     end
 end
 
+mutable struct TransFree2D{TT, FTT, nT, rT, gT, xgT, dT, iT}
+    FT::FTT # 2D Fourier transform (space to k-space and time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    xgrid::xgT
+    densityfun::dT # callable which returns density
+    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 3} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    scale::Float64 # scale factor to be applied during oversampling
+    idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
+end
+
+function show(io::IO, t::TransFree2D)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    x = "x grid: $(minimum(t.xgrid.x)) to $(maximum(t.xgrid.x)), N=$(length(t.xgrid.x))"
+    out = join(["TransFree", grid, samples, x, resp], "\n  ")
+    print(io, out)
+end
+
+function TransFree2D(TT, scale, grid, xgrid, FT, responses, densityfun, normfun, pol=false)
+    Nx = length(xgrid.x)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Nx))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Nx))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    idcs = CartesianIndices(size(Pto)[3:end])
+    TransFree2D(FT, normfun, responses, grid, xgrid, densityfun,
+              Pto, Eto, Eωo, Pωo, scale, idcs)
+end
+
+"""
+    TransFree2D(grid, xygrid, FT, responses, densityfun, normfun)
+
+Construct a `TransFree2D` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
+- `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
+"""
+function TransFree2D(grid::Grid.RealGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = (No-1)/(N-1)
+    TransFree2D(Float64, scale, grid, args...)
+end
+
+function TransFree2D(grid::Grid.EnvGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = No/N
+    TransFree2D(ComplexF64, scale, grid, args...)
+end
+
+"""
+    (t::TransFree2D)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-kx-space) nonlinear response due to the field `Eω`
+and place the result in `nl`.
+"""
+function (t::TransFree2D)(nl, Eωk, z)
+    # TODO: this can probably be combined with the case for TransFree
+    fill!(t.Eωo, 0)
+    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+"""
+    const_norm_free2D(grid, xgrid, nfun)
+
+Make function to return normalisation factor for 3D propagation without re-calculating at
+every step.
+"""
+function const_norm_free2D(grid, xgrid, nfun)
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_free2D(grid, xgrid, nfunω)
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+"""
+    norm_free2D(grid, xgrid, nfun)
+
+Make function to return normalisation factor for 3D propagation.
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+"""
+function norm_free2D(grid, xgrid, nfun)
+    # TODO: this can probably be combined with the case for TransFree by adjusting idcs
+    kperp2 = xgrid.kx.^2
+    ω = grid.ω
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    out = zeros(Float64, (length(ω), np, length(xgrid.kx)))
+    function norm(z)
+        for (ii, si) in enumerate(grid.sidx)
+            if si
+                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]); z) .* grid.ω[ii]./PhysData.c).^2
+            end
+        end
+        for ii in eachindex(xgrid.kx)
+            for iω in eachindex(ω)
+                if ω[iω] == 0
+                    out[iω, :, ii] .= 1.0
+                    continue
+                end
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    βsq = k2[iω, ip] - kperp2[ii]
+                    if βsq <= 0
+                        out[iω, ip, ii] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                end
+            end
+        end
+        return out
+    end
+end
+
 end

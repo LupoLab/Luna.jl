@@ -379,8 +379,8 @@ function make_Etr(s::SpatioTemporalField, grid::Grid.EnvGrid, spacegrid)
 end
 
 transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
-
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
+transform(spacegrid::Grid.Free2DGrid, FT, Etr) = FT * Etr
 
 """
     (s::SpatioTemporalField)(grid, spacegrid, FT)
@@ -390,7 +390,7 @@ and Fourier transform `FT`
 """
 function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Etr = make_Etr(s, grid, spacegrid)
-    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
+    energy_t = energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
     Etr = permutedims(
         cat(Etr .* sin(s.θ), Etr .* cos(s.θ); dims=3),
@@ -606,6 +606,43 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     δky = xygrid.ky[2] - xygrid.ky[1]
     Δky = length(xygrid.ky)*δky
     prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
+
+function energyfuncs(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid)
+    δx = xgrid.x[2] - xgrid.x[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δt
+    function energy_t(Et)
+        Eta = Maths.hilbert(Et)
+        return  prefac_t * sum(abs2.(Eta)) 
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = grid.ω[end]
+    δkx = xgrid.kx[2] - xgrid.kx[1]
+    Δkx = length(xgrid.kx)*δkx
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2)
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
+
+function energyfuncs(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid)
+    δx = xgrid.x[2] - xgrid.x[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δt
+    function energy_t(Et)
+        return  prefac_t * sum(abs2.(Et)) 
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    δkx = xgrid.kx[2] - xgrid.kx[1]
+    Δkx = length(xgrid.kx)*δkx
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2)
     energy_ω(Eω) = prefac * sum(abs2.(Eω))
 
     return energy_t, energy_ω

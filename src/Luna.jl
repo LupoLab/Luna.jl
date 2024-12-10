@@ -206,14 +206,14 @@ function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
     Eω, transform, FT
 end
 
-function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT, Grid.FreeGrid, Grid.Free2DGrid}, FT,
                    inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
     for field in inputs
         Eωk .+= field(grid, spacegrid, FT)
     end
 end
 
-function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT,Grid.FreeGrid}, FT,
+function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT, Grid.FreeGrid, Grid.Free2DGrid}, FT,
                    inputs::Fields.SpatioTemporalField)
     doinputs_fs!(Eωk, grid, spacegrid, FT, (inputs,))
 end
@@ -290,6 +290,48 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
+    Utils.saveFFTwisdom()
+    Eωk, transform, FT
+end
+
+function setup(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid,
+               densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
+    x = xgrid.x
+    np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
+    tshape = (length(grid.t), np, length(x))
+    ωshape = (length(grid.ω), np, length(x))  
+    xr = Array{Float64}(undef, tshape)
+    FT = FFTW.plan_rfft(xr, (1, 3), flags=settings["fftw_flag"])
+    Eωk = zeros(ComplexF64, ωshape)
+    doinputs_fs!(Eωk, grid, xgrid, FT, inputs)
+    xo = Array{Float64}(undef, (length(grid.to), np, length(x)))
+    FTo = FFTW.plan_rfft(xo, (1, 3), flags=settings["fftw_flag"])
+    transform = NonlinearRHS.TransFree2D(grid, xgrid, FTo,
+                                         responses, densityfun, normfun, np > 1)
+    inv(FT) # create inverse FT plans now, so wisdom is saved
+    inv(FTo)
+    Utils.saveFFTwisdom()
+    Eωk, transform, FT
+end
+
+function setup(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid,
+               densityfun, normfun, responses, inputs)
+    Utils.loadFFTwisdom()
+    x = xgrid.x
+    np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
+    tshape = (length(grid.t), np, length(x))
+    ωshape = (length(grid.ω), np, length(x))  
+    xr = Array{ComplexF64}(undef, tshape)
+    FT = FFTW.plan_fft(xr, (1, 3), flags=settings["fftw_flag"])
+    Eωk = zeros(ComplexF64, ωshape)
+    doinputs_fs!(Eωk, grid, xgrid, FT, inputs)
+    xo = Array{ComplexF64}(undef, (length(grid.to), np, length(x)))
+    FTo = FFTW.plan_fft(xo, (1, 3), flags=settings["fftw_flag"])
+    transform = NonlinearRHS.TransFree2D(grid, xgrid, FTo,
+                                         responses, densityfun, normfun, np > 1)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()

@@ -8,7 +8,7 @@ import Luna.PhysData: wlfreq
 #===============    FREE SPACE     ===============#
 #=================================================#
 """
-    make_const_linop(grid, xygrid, n, frame_vel)
+    make_const_linop(grid, xygrid, n, β1)
 
 Make constant linear operator for full 3D propagation. `n` is the refractive index (array)
 and β1 is 1/velocity of the reference frame.
@@ -113,6 +113,146 @@ function _fill_linop_xy!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs
             end
             if !thg
                 out[iω, ii] -= -im*βref
+            end
+        end
+    end
+end
+
+#=================================================#
+#============   FREE SPACE (2D)   ================#
+#=================================================#
+"""
+    make_const_linop(grid, xgrid, n, β1)
+
+Make constant linear operator for 2D free-space propagation. `n` is the refractive index (array)
+and β1 is 1/velocity of the reference frame.
+"""
+function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid,
+                          n::AbstractArray, β1::Number)
+    kperp2 = xgrid.kx.^2
+    idcs = CartesianIndices(xgrid.kx)
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    out = zeros(ComplexF64, (length(grid.ω), size(n, 2), length(xgrid.kx)))
+    _fill_linop_x!(out, grid, β1, k2, kperp2, idcs)
+    return out
+end
+
+function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    n = zeros(Float64, (length(grid.ω), np))
+    for (ii, si) in enumerate(grid.sidx)
+        if si
+            n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
+        end
+    end
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    make_const_linop(grid, xgrid, n, β1)
+end
+
+function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid,
+                          n::AbstractArray, β1::Number, β0ref::Number; thg=false)
+    kperp2 = xgrid.kx.^2
+    idcs = CartesianIndices(xgrid.kx)
+    k2 = @. (n*grid.ω/PhysData.c)^2
+    out = zeros(ComplexF64, (length(grid.ω), size(n, 2), length(xgrid.kx)))
+    _fill_linop_x!(out, grid, β1, k2, kperp2, idcs, β0ref; thg=thg)
+    return out
+end
+
+function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun,     
+                          thg=false)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    n = zeros(Float64, (length(grid.ω), np))
+    for (ii, si) in enumerate(grid.sidx)
+        if si
+            n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
+        end
+    end
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    if thg
+        β0const = 0.0
+    else
+        β0const = grid.ω0/PhysData.c * nfun(wlfreq(grid.ω0))
+    end
+    make_const_linop(grid, xgrid, n, β1, β0const; thg=thg)
+end
+
+"""
+    make_linop(grid, xgrid, nfun)
+
+Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` should return the
+refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
+"""
+function make_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
+    kperp2 = xgrid.kx.^2
+    idcs = CartesianIndices(xgrid.kx)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[1]
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        for (ii, si) in enumerate(grid.sidx)
+            if si
+                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]; z)) .* grid.ω[ii]./PhysData.c).^2
+            end
+        end
+        _fill_linop_x!(out, grid, β1, k2, kperp2, idcs)
+    end
+end
+
+# Internal routine -- function barrier aids with JIT compilation
+function _fill_linop_x!(out, grid::Grid.RealGrid, β1::Float64, k2, kperp2, idcs)
+    for ii in idcs
+        for ip in axes(k2, 2)
+            for iω in eachindex(grid.ω)
+                βsq = k2[iω, ip] - kperp2[ii]
+                if βsq < 0
+                    # negative βsq -> evanescent fields -> attenuation
+                    out[iω, ip, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+                else
+                    out[iω, ip, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+                end
+            end
+        end
+    end
+end
+
+function make_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun; thg=false)
+    kperp2 = xgrid.kx.^2
+    idcs = CartesianIndices(xgrid.kx)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    nfunλ(z) = λ -> nfun(wlfreq(λ); z)[1]
+    function linop!(out, z)
+        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
+        for (ii, si) in enumerate(grid.sidx)
+            if si
+                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]); z) .* grid.ω[ii]./PhysData.c).^2
+            end
+        end
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)[1]
+        _fill_linop_x!(out, grid, β1, k2, kperp2, idcs, βref; thg=thg)
+    end
+end
+
+function _fill_linop_x!(out, grid::Grid.EnvGrid, β1::Float64, k2, kperp2, idcs, βref; thg)
+    for ii in idcs
+        for ip in axes(k2, 2)
+            for iω in eachindex(grid.ω)
+                βsq = k2[iω, ip] - kperp2[ii]
+                if βsq < 0
+                    # negative βsq -> evanescent fields -> attenuation
+                    out[iω, ip, ii] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
+                else
+                    out[iω, ip, ii] = -im*(sqrt(βsq) - β1*grid.ω[iω])
+                end
+                if !thg
+                    out[iω, ip, ii] -= -im*βref
+                end
             end
         end
     end
