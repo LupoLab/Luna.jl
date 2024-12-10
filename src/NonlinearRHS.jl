@@ -6,7 +6,7 @@ import Base: show
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
-import Luna.PhysData: wlfreq, c
+import Luna.PhysData: wlfreq, c, crystal_internal_angle
 using EllipsisNotation
 
 """
@@ -802,7 +802,7 @@ function norm_free2D(grid, xgrid, nfun)
 end
 
 function norm_free2D(grid, xgrid, nfunx, nfuny)
-    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ)
+    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ+δθ)
     # nfuny(λ; z) just takes wavelength
     ω = grid.ω
     out = zeros(Float64, (length(ω), 2, length(xgrid.kx)))
@@ -816,13 +816,12 @@ function norm_free2D(grid, xgrid, nfunx, nfuny)
                 ny = nfuny(wlfreq(grid.ω[iω]))
                 ksq_ypol = (ny*grid.ω[iω]/c)^2
                 for (ik, kxi) in enumerate(xgrid.kx)
-                    k0 = grid.ω[iω]/PhysData.c
-                    δθ = asin(kxi/k0)
+                    δθ = crystal_internal_angle(nfunx, grid.ω[iω], kxi)
                     nx = nfunx(wlfreq(grid.ω[iω]), δθ)
-                    ksq_xpol = (nx*grid.ω[iω]/c)^2
-                    βsq_xpol = ksq_xpol - kxi^2
+                    k_xpol = nx*grid.ω[iω]/c
+                    βsq_xpol = k_xpol^2 - kxi^2
                     if βsq_xpol < 0
-                        out[iω, 1, ik] .= 1.0
+                        out[iω, 1, ik] = 1.0
                     else
                         out[iω, 1, ik] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
                     end

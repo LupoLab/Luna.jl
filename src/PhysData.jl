@@ -7,6 +7,7 @@ import CSV
 import DelimitedFiles: readdlm
 import Polynomials
 import Luna: Maths, Utils
+import Roots: fzero
 
 include("data/lookup_tables.jl")
 
@@ -400,6 +401,23 @@ function ref_index_fun_uniax(material; axes=(:o, :e))
     n_e = sellmeier_crystal(material, axes[2])
     n(λ, θ) = sqrt(1/((cos(θ)/n_o(λ*1e6))^2+(sin(θ)/n_e(λ*1e6))^2))
     return n
+end
+
+function crystal_internal_angle(nfun, ω, kx)
+    # External wavevector is kx = ω/c*sin(θ_i) with θ_i the AOI of the plane wave
+    # Internal wavevector is kx2 = ω/c * n(θ+δθ) * sin(δθ)
+    # Momentum conservation requires kx = kx2
+    # kx is given by the grid, so 
+    # kx = ω/c * n(θ+δθ)*sin(δθ)
+    # Solve this numerically
+    try
+        global δθ = fzero(0.0) do δθi
+            ω/c * nfun(wlfreq(ω), δθi)*sin(δθi) - kx
+        end
+    catch
+        error("Crystal index could not be found for λ=$(1e9wlfreq(ω)) nm, kx=$kx")
+    end
+    δθ
 end
 
 function χ2(material)

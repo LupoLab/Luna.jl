@@ -2,8 +2,7 @@ module LinearOps
 import FFTW
 import Hankel
 import Luna: Modes, Grid, PhysData, Maths
-import Luna.PhysData: wlfreq, c
-import Roots: fzero
+import Luna.PhysData: wlfreq, c, crystal_internal_angle
 
 #=================================================#
 #===============    FREE SPACE     ===============#
@@ -164,7 +163,6 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfunx, nf
                 δθ = crystal_internal_angle(nfunx, grid.ω[iω], kxi)
                 nx = nfunx(wlfreq(grid.ω[iω]), δθ)
                 k_xpol = nx*grid.ω[iω]/c
-                # kx_xpol = k_xpol*sin(δθ)
                 βsq_xpol = k_xpol^2 - kxi^2
                 β_xpol = βsq_xpol < 0 ? -im*min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
                 out[iω, 1, ik] = -im*(β_xpol - β1*grid.ω[iω])
@@ -177,24 +175,6 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfunx, nf
     end
     out
 end
-
-function crystal_internal_angle(nfun, ω, kx)
-    # External wavevector is kx = ω/c*sin(θ_i) with θ_i the AOI of the plane wave
-    # Internal wavevector is kx2 = ω/c * n(θ+δθ) * sin(δθ)
-    # Momentum conservation requires kx = kx2
-    # kx is given by the grid, so 
-    # kx = ω/c * n(θ+δθ)*sin(δθ)
-    # Solve this numerically
-    try
-        global δθ = fzero(0.0) do δθi
-            ω/c * nfun(wlfreq(ω), δθi)*sin(δθi) - kx
-        end
-    catch
-        error("Crystal index could not be found for λ=$(1e9wlfreq(ω)) nm, kx=$kx")
-    end
-    δθ
-end
-
 
 function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid,
                           n::AbstractArray, β1::Number, β0ref::Number; thg=false)
