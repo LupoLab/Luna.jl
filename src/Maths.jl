@@ -11,6 +11,7 @@ import Luna: settings
 import Roots: fzero
 import Dierckx
 import Peaks
+import NumericalIntegration: integrate
 
 #= Pre-created finite difference methods for speed.
    Use (order+6)th order central finite differences with 2 adaptive steps up to
@@ -348,6 +349,26 @@ function cumtrapz(y, x; dim=1)
     out = similar(y)
     cumtrapz!(out, y, x; dim=dim) 
     return out
+end
+
+"""
+    integrateNd(x, y; dim=1)
+
+Integrate a multi-dimensional array `y` over `x` along array dimension `dim` using the
+trapezoidal method.
+"""
+function integrateNd(x, y; dim=1)
+    idxlo = CartesianIndices(size(y)[1:dim - 1])
+    idxhi = CartesianIndices(size(y)[dim + 1:end])
+    outshape = collect(size(y))
+    outshape[dim] = 1
+    out = zeros(eltype(y), Tuple(outshape))
+    for hi in idxhi
+        for lo in idxlo
+            out[lo, 1, hi] = integrate(x, y[lo, :, hi])
+        end
+    end
+    out
 end
 
 """
