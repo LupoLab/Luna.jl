@@ -9,7 +9,7 @@ import NumericalIntegration: integrate
 w0 = 50e-6
 energy = 1e-6 / 8
 
-thickness = 2000e-6
+thickness = 1000e-6
 material = :BBO
 
 R = 4*w0
@@ -30,9 +30,11 @@ function nfunreal(λ; z=0)
     # n_e, n_o
     real(nfun(λ, θ)), real(nfun(λ, 0))
 end
-linop = LinearOps.make_const_linop(grid, xgrid, nfunreal)
+nfunx(λ, δθ; z=0) = real(nfun(λ, θ+δθ))
+nfuny(λ; z=0) = real(nfun(λ, 0))
+linop = LinearOps.make_const_linop(grid, xgrid, nfunx, nfuny)
 
-normfun = NonlinearRHS.const_norm_free2D(grid, xgrid, nfunreal)
+normfun = NonlinearRHS.const_norm_free2D(grid, xgrid, nfunx, nfuny)
 densityfun = z -> 1
 ##
 inputs = Fields.GaussGaussField(;λ0, τfwhm, energy=energy/(sqrt(π/2)*w0), w0)
@@ -157,8 +159,8 @@ plt.legend()
 
 ##
 plt.figure()
-plt.plot(grid.ω, imag(linop[:, 1, 32]))
+# plt.plot(grid.ω, imag(linop[:, 1, 32]))
 plt.plot(grid.ω, imag(linop[:, 2, 32]))
 plt.axvline(PhysData.wlfreq(λ0))
 plt.axvline(PhysData.wlfreq(λ0/2))
-plt.ylim(-1e6, 1e6)
+# plt.ylim(-1e6, 1e6)

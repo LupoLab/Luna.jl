@@ -2,7 +2,7 @@ module LinearOps
 import FFTW
 import Hankel
 import Luna: Modes, Grid, PhysData, Maths
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, c
 
 #=================================================#
 #===============    FREE SPACE     ===============#
@@ -146,8 +146,35 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
             n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
     make_const_linop(grid, xgrid, n, β1)
+end
+
+function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfunx, nfuny)
+    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ)
+    # nfuny(λ; z) just takes wavelength
+    out = zeros(ComplexF64, (length(grid.ω), 2, length(xgrid.kx)))
+    β1 = PhysData.dispersion_func(1, nfuny)(grid.referenceλ)
+    for (iω, si) in enumerate(grid.sidx)
+        if si
+            ny = nfuny(wlfreq(grid.ω[iω]))
+            ksq_ypol = (ny*grid.ω[iω]/c)^2
+            for (ik, kxi) in enumerate(xgrid.kx)
+                k0 = grid.ω[iω]/PhysData.c
+                δθ = asin(kxi/k0)
+                nx = nfunx(wlfreq(grid.ω[iω]), δθ)
+                ksq_xpol = (nx*grid.ω[iω]/c)^2
+                βsq_xpol = ksq_xpol - kxi^2
+                β_xpol = βsq_xpol < 0 ? -im*min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
+                out[iω, 1, ik] = -im*(β_xpol - β1*grid.ω[iω])
+                
+                βsq_ypol = ksq_ypol - kxi^2
+                β_ypol = βsq_ypol < 0 ? -im*min(sqrt(abs(βsq_ypol)), 200) : sqrt(βsq_ypol)
+                out[iω, 2, ik] = -im*(β_ypol - β1*grid.ω[iω])
+            end
+        end
+    end
+    out
 end
 
 function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid,
@@ -170,7 +197,7 @@ function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun,
             n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
     if thg
         β0const = 0.0
     else
@@ -285,7 +312,7 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
             n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
     make_const_linop(grid, q, n, β1)
 end
 
@@ -298,7 +325,7 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
             n[ii, :] .= nfun(2π*PhysData.c./grid.ω[ii])
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[1])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
     if thg
         β0const = 0.0
     else
