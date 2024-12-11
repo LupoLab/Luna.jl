@@ -66,9 +66,9 @@ const gas_str = Dict(
     :N2O => "NitrousOxide",
     :D2 => "Deuterium"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :CaCO3)
-const crystal = (:ADP, :KPD, :BBO)
-const metal = (:Ag,:Al)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2)
+const metal = (:Ag, :Al)
 
 """
     wlfreq(ωλ)
@@ -290,19 +290,6 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
-    elseif material == :MgF2
-        return μm -> @. sqrt(complex(1
-            + 0.27620
-            + 0.60967/(1-(0.08636/μm)^2)
-            + 0.0080/(1-(18.0/μm)^2)
-            + 2.14973/(1-(25.0/μm)^2)
-            ))
-    elseif material == :CaCO3
-        return μm -> @. sqrt(complex(1
-            + 0.73358749
-            + 0.96464345/(1-1.94325203e-2/μm^2)
-            + 1.82831454/(1-120/μm^2)
-            ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -391,6 +378,43 @@ function sellmeier_crystal(material, axis=nothing)
         else
             throw(DomainError(axis, "Unknown KDP axis $axis"))
         end
+    elseif material == :CaCO3
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.73358749
+                + 0.96464345/(1-1.94325203e-2/μm^2)
+                + 1.82831454/(1-120/μm^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.35859695
+                + 0.82427830/(1-1.06689543e-2/μm^2)
+                + 0.14429128/(1-120/μm^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
+        end
+    elseif material == :MgF2
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.27620
+                + 0.60967/(1-(0.08636/μm)^2)
+                + 0.0080/(1-(18.0/μm)^2)
+                + 2.14973/(1-(25.0/μm)^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.25385
+                + 0.66405/(1-(0.08504/μm)^2)
+                + 1.0899/(1-(22.2/μm)^2)
+                + 0.1816/(1-(24.4/μm)^2)
+                + 2.1227/(1-(40.6/μm)^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown MgF2 axis $axis"))
+        end
     else
         throw(DomainError(material, "Unknown crystal $material"))
     end
@@ -473,7 +497,7 @@ end
 Get refractive index for any material at wavelength given in SI units.
 """
 function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
-    return ref_index_fun(material, P, T; lookup=lookup)(λ)
+    return ref_index_fun(material, P, T; lookup, axis)(λ)
 end
 
 """
@@ -497,7 +521,7 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing, axis
             return λ -> sell(λ*1e6)
         end
     elseif material in crystal
-        sell = sellmeier_crystal(material)
+        sell = sellmeier_crystal(material, axis)
         return λ -> sell(λ*1e6)
     elseif material in metal
         nmetal = let spl = lookup_metal(material)
