@@ -67,7 +67,7 @@ const gas_str = Dict(
     :D2 => "Deuterium"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
-const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2)
+const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2, :LBO)
 const metal = (:Ag, :Al)
 
 """
