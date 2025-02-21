@@ -189,7 +189,7 @@ function dispersion_func(m::AbstractMode, order; z=0.0)
 end
 
 """
-    dispersion_func(m::AbstractMode, order; z=0.0)
+    dispersion(m::AbstractMode, order, ω; z=0.0)
 
 Calculate the dispersion of a given `order` at frequency `ω`.
 """

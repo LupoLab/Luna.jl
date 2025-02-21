@@ -711,13 +711,14 @@ a certain `thickness` of a `material`. If the central wavelength `λ0` is given,
 delay at this wavelength.  Keyword arguments `P` (pressure), `T` (temperature)
 and `lookup` (whether to use lookup table instead of Sellmeier expansion).
 """
-function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
-    n = PhysData.ref_index_fun(material, P, T; lookup=lookup)
-    β1 = PhysData.dispersion_func(1, n)
-    function prop!(Eω, ω, thickness, λ0=nothing)
+function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing, axis=nothing)
+    n = PhysData.ref_index_fun(material, P, T; lookup, axis)
+    β1fun = PhysData.dispersion_func(1, n)
+    function prop!(Eω, ω, thickness, λ0=nothing; β1=nothing)
         β = ω./PhysData.c .* n.(wlfreq.(ω))
         if !isnothing(λ0)
-            β .-= β1(λ0) .* (ω .- wlfreq(λ0))
+            β1 = isnothing(β1) ? β1fun(λ0) : β1
+            β .-= β1 .* (ω .- wlfreq(λ0))
         end
         β[.!isfinite.(β)] .= 0
         Eω .*= exp.(-1im.*real(β).*thickness)
