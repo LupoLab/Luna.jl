@@ -1032,7 +1032,7 @@ than x0. Otherwise, it defaults two one of two options:
 For accurate derivatives use 5th order splines
 """
 function BSpline(x::AbstractVector{Tx}, y::AbstractVector{T}; ifun = nothing, order=3) where {Tx <: Real, T <: Real}
-    check_spline_args(x, y)
+    x, y = check_spline_args(x, y)
     rspl = Dierckx.Spline1D(x, y, bc="extrapolate", k=order, s=0.0)
     h = zeros(eltype(y), order + 1)
     hh = similar(h)
