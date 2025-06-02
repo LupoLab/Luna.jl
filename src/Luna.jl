@@ -336,7 +336,6 @@ function run(Eω, grid,
 
     output(Grid.to_dict(grid), group="grid")
     output(simtype(grid, transform, linop), group="simulation_type")
-    output(dumps(transform, linop), group="dumps")
 
     RK45.solve_precon(
         transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
