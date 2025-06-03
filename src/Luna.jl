@@ -301,16 +301,6 @@ simtype(g, t, l) = Dict("field" => gridtype(g),
                         "transform" => string(t),
                         "linop" => linoptype(l))
 
-function dumps(t, l)
-    io = IOBuffer()
-    dump(io, t)
-    tr = String(take!(io))
-    io = IOBuffer()
-    dump(io, l)
-    lo = String(take!(io))
-    Dict("transform" => tr, "linop" => lo)
-end
-
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
