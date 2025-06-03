@@ -88,9 +88,9 @@ function loadFFTwisdom()
     isdir(cachedir()) || mkpath(cachedir())
     if isfile(fpath)
         Logging.@info("Found FFTW wisdom at $fpath")
-        pidlock = mkpidlock(lockpath)
-        ret = FFTW.import_wisdom(fpath)
-        close(pidlock)
+        mkpidlock(lockpath; stale_age=600) do
+            FFTW.import_wisdom(fpath)
+        end
     else
         Logging.@info("No FFTW wisdom found")
     end
@@ -99,11 +99,11 @@ end
 function saveFFTwisdom()
     fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
-    pidlock = mkpidlock(lockpath)
-    isfile(fpath) && rm(fpath)
-    isdir(cachedir()) || mkpath(cachedir())
-    FFTW.export_wisdom(fpath)
-    close(pidlock)
+    mkpidlock(lockpath; stale_age=600) do
+        isfile(fpath) && rm(fpath)
+        isdir(cachedir()) || mkpath(cachedir())
+        FFTW.export_wisdom(fpath)
+    end
     Logging.@info("FFTW wisdom saved to $fpath")
 end
 
