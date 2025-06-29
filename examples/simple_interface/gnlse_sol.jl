@@ -20,5 +20,5 @@ output = prop_gnlse(γ, flength, βs; λ0, τfwhm, power=P0, pulseshape=:sech, �
                     raman=false, shock=false, fr, shotnoise=false)
 
 ##
-Plotting.pygui(true)
+
 Plotting.prop_2D(output, :ω, dBmin=-100.0,  λrange=(720e-9,1000e-9), trange=(-300e-15, 300e-15), oversampling=1)

@@ -2,7 +2,7 @@
 We then optimise the pulse compression, plot the resulting compressed pulse,
 and pass the compressed pulse on to a second simulation for UV RDW emission.
 =#
-using Luna
+using Luna, PythonPlot
 
 λ0 = 800e-9
 τfwhm = 35e-15

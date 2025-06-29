@@ -1,6 +1,5 @@
-using Luna
+using Luna, PythonPlot
 import DelimitedFiles: readdlm
-import PyPlot: plt, pygui
 import Printf: @sprintf
 import GSL: hypergeom
 import SpecialFunctions: dawson, gamma

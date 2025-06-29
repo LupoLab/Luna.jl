@@ -75,3 +75,4 @@ ratefun!(outneg, -E)
     adk_avg_kw = Ionisation.ionrate_ADK.(gas, E0; cycle_average=true)
     @test all(isapprox.(adk_avg, adk_avg_kw; rtol=0.05))
 end
+
