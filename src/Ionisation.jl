@@ -239,6 +239,11 @@ function ionfrac!(frac, rate, E, δt)
 end
 
 function makePPTaccel(E, rate)
+    # first remove points where the rate is zero within floating-point
+    # precision to avoid NaNs in the CSpline
+    idcs = rate .> 0
+    E = E[idcs]
+    rate = rate[idcs]
     # Interpolating the log and re-exponentiating makes the spline more accurate
     cspl = Maths.CSpline(E, log.(rate); bounds_error=true)
     Emin = minimum(E)
