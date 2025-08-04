@@ -5,7 +5,7 @@ import HDF5
 import FileWatching.Pidfile: mkpidlock
 import GSL: hypergeom
 import Logging: @info
-import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq, polarisability_difference
+import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq, polarisability_difference, polarisability, au_polarisability
 import Luna.PhysData: ionisation_potential, quantum_numbers
 import Luna: Maths, Utils
 import Printf: @sprintf
@@ -101,11 +101,13 @@ end
 
 Create an accelerated (interpolated) PPT ionisation rate function.
 """
-function ionrate_fun!_PPTaccel(material::Symbol, λ0; stark_shift=true, kwargs...)
+function ionrate_fun!_PPTaccel(material::Symbol, λ0;
+                               stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
     ip = ionisation_potential(material)
     Δα = stark_shift ? polarisability_difference(material) : 0
-    ionrate_fun!_PPTaccel(ip, λ0, Z, l; Δα, kwargs...)
+    α_ion = dipole_corr ? polarisability(material, true) : 0
+    ionrate_fun!_PPTaccel(ip, λ0, Z, l; Δα, α_ion, kwargs...)
 end
 
 function ionrate_fun!_PPTaccel(ionpot::Float64, λ0, Z, l; kwargs...)
@@ -128,11 +130,13 @@ exists, load this rather than recalculate.
 
 Other keyword arguments are passed on to [`ionrate_fun_PPT`](@ref)
 """
-function ionrate_fun!_PPTcached(material::Symbol, λ0; stark_shift=true, kwargs...)
+function ionrate_fun!_PPTcached(material::Symbol, λ0;
+                                stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0
+    α_ion = dipole_corr ? polarisability(material, true) : 0
     ip = ionisation_potential(material)
-    ionrate_fun!_PPTcached(ip, λ0, Z, l; Δα, kwargs...)
+    ionrate_fun!_PPTcached(ip, λ0, Z, l; Δα, α_ion, kwargs...)
 end
 
 function ionrate_fun!_PPTcached(ionpot::Float64, λ0, Z, l;
@@ -308,11 +312,17 @@ Physics Reports 441(2–4), 47–189 (2007).
 """
 function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
                          sum_tol=1e-6, cycle_average=false, sum_integral=false,
-                         Δα=0, msum=true, Cnl=missing, occupancy=2)
+                         Δα=0, α_ion=0, msum=true, Cnl=missing, occupancy=2)
 
     if ismissing(Δα)
         Δα = 0
     end
+
+    if ismissing(α_ion)
+        α_ion = 0
+    end
+
+    α_ion_au = α_ion/au_polarisability
 
     function ionrate(E)
         Ip_au = (ionpot + Δα/2 * E^2) / au_energy # Δα/2 * E^2 includes the Stark shift
@@ -367,6 +377,9 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
             lret *= s
             ret += occ(occupancy, m)*lret
         end
+        if α_ion_au ≠ 0
+            ret *= exp(-2*α_ion_au*E_au)
+        end
         return ret/au_time
     end
     return ionrate
@@ -412,22 +425,26 @@ function φ(m, x)
 end
     
 
-function ionrate_fun_PPT(material::Symbol, λ0; stark_shift=true, kwargs...)
+function ionrate_fun_PPT(material::Symbol, λ0;
+                         stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0
+    α_ion = dipole_corr ? polarisability(material, true) : 0
     ip = ionisation_potential(material)
-    return ionrate_fun_PPT(ip, λ0, Z, l; Δα, kwargs...)
+    return ionrate_fun_PPT(ip, λ0, Z, l; Δα, α_ion, kwargs...)
 end
 
 function ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     return ionrate_fun_PPT(ionpot, λ0, Z, l; kwargs...).(E)
 end
 
-function ionrate_PPT(material::Symbol, λ0, E; stark_shift=true, kwargs...)
+function ionrate_PPT(material::Symbol, λ0, E;
+                     stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0
+    α_ion = dipole_corr ? polarisability(material, true) : 0
     ip = ionisation_potential(material)
-    return ionrate_PPT(ip, λ0, Z, l, E; Δα, kwargs...)
+    return ionrate_PPT(ip, λ0, Z, l, E; Δα, α_ion, kwargs...)
 end
 
 end
