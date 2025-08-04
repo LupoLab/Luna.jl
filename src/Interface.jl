@@ -358,8 +358,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
                         raman=nothing, kerr=true, plasma=nothing,
-                        PPT_stark_shift=true, PPT_occupancy=2, PPT_Cnl=missing,
-                        PPT_sum_integral=false, PPT_sum_tol=1e-6,
+                        PPT_options=Dict{Symbol, Any}(),
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -373,8 +372,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
-                        PPT_stark_shift, PPT_occupancy, PPT_Cnl, PPT_sum_integral, PPT_sum_tol)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration, PPT_options)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -385,7 +383,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, modes, model, loss, raman, kerr, plasma, saveN, filepath, filename)
+        shotnoise, modes, model, loss, raman, kerr, plasma, PPT_options, saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
 end
@@ -513,7 +511,7 @@ function makedensity(flength, gas, pressure)
 end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, args...)
+                      rotation, vibration, PPT_options)
     out = Any[]
     if kerr
         if thg
@@ -522,7 +520,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
         end
     end
-    makeplasma!(out, grid, gas, plasma, pol, args...)
+    makeplasma!(out, grid, gas, plasma, pol, PPT_options)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
     end
@@ -539,7 +537,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
 end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol,
-                     args...)
+                     PPT_options)
     # simple true/false => default to PPT for atoms, ADK for molecules
     if ~plasma
         return
@@ -551,17 +549,17 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol,
         @info("Using PPT ionisation rate.")
         model = :PPT
     end
-    makeplasma!(out, grid, gas, model, pol, args...)
+    makeplasma!(out, grid, gas, model, pol, PPT_options)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol,
-                     stark_shift, occupancy, Cnl, sum_integral, sum_tol)
+                     PPT_options)
     ionpot = PhysData.ionisation_potential(gas)
     if plasma == :ADK
         ionrate = Ionisation.ionrate_fun!_ADK(gas)
     elseif plasma == :PPT
         ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ;
-                                                    stark_shift, occupancy, Cnl, sum_integral, sum_tol)
+                                                    PPT_options...)
     else
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
