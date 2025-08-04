@@ -268,8 +268,8 @@ function makePPTaccel(E, rate)
     end
 end
 
-function ionrate_fun!_PPT(args...)
-    ir = ionrate_fun_PPT(args...)
+function ionrate_fun!_PPT(args...; kwargs...)
+    ir = ionrate_fun_PPT(args...; kwargs...)
     function ionrate!(out, E)
         out .= ir.(E)
     end
