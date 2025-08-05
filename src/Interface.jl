@@ -313,7 +313,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
     Note that plasma is only available for full-field simulations.
 - `PPT_options::Dict{Symbol, Any}`: when using the PPT ionisation rate for the
     plasma nonlinearity, this allows for fine-tuning of the options in calculating
-    the ionisation. See [`ionrate_fun_PPt`](@ref Ionisation.ionrate_fun_PPT) for possible
+    the ionisation. See [`ionrate_fun_PPT`](@ref Ionisation.ionrate_fun_PPT) for possible
     keyword arguments.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
