@@ -282,12 +282,14 @@ end
 Create closure to calculate PPT ionisation rate.
 
 # Keyword arguments
-- `sum_tol::Number`: Relative tolerance used to truncate the infinite sum.
-- `cycle_average::Bool`: If `false` (default), calculate the cycle-averaged rate
+- `sum_tol::Number`: Relative tolerance used to truncate the infinite sum. Defaults to 1e-6.
+- `cycle_average::Bool`: If `true`, calculate the cycle-averaged rate. Defaults to `false`.
 - `sum_integral::Bool`: whether to approximate the infinite sum in the PPT rate equation with
     an integral (this neglects the multiphoton thresholds).
 - `Δα::Number`: polarisability difference between the ground state and the cation (in SI units)
     to calculate the Stark shift of the ground-state energy levels. Defaults to 0.
+- `α_ion::Number`: polarisability of the cation (in SI units) to calculate the dipole correction
+    to the rate. Defaults to 0.
 - `msum::Bool`: for l ≠ 0, whether or not to sum over different m states. Defaults to `true`.
 - `Cnl::Real` : Pre-calculated `Cₙₗ` constant. If not given, defaults to the approximate expression from
     the PPT papers.

@@ -311,9 +311,10 @@ In this case, all keyword arguments except for `λ0` are ignored.
     - `true` (default) -- same as `:PPT`.
     - `false` -- ignore plasma.
     Note that plasma is only available for full-field simulations.
-- `PPT_stark_shift::Bool`: when using the PPT ionisation rate, determines whether
-    to include the effect of the Stark shift of the ground-state energy levels.
-    *The necessary data is only available for helium, neon, and argon!*
+- `PPT_options::Dict{Symbol, Any}`: when using the PPT ionisation rate for the
+    plasma nonlinearity, this allows for fine-tuning of the options in calculating
+    the ionisation. See [`ionrate_fun_PPt`](@ref Ionisation.ionrate_fun_PPT) for possible
+    keyword arguments.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
