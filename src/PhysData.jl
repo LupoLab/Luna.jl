@@ -788,6 +788,42 @@ function quantum_numbers(material)
 end
 
 """
+    polarisability(material, ion=false; unit=:SI)
+
+Return the polarisability of the ground state or the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Data exists for helium, neon and argon. For other `material`s,
+return `missing`.
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
+function polarisability(material, ion=false; unit=:SI)
+    if unit == :SI
+        factor = au_polarisability
+    elseif unit == :atomic
+        factor = 1
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
+    if material in (:He, :HeB, :HeJ)
+        return (ion ? 0.2811 : 1.3207)*factor
+    elseif material == :Ne
+        return (ion ? 1.2417 : 2.376)*factor
+    elseif material == :Ar
+        return (ion ? 6.807 : 10.762)*factor
+    else
+        return missing
+    end
+end
+
+
+"""
     polarisability_difference(material; unit=:SI)
 
 Return the difference in polarisability between the ground state and the ion for the
@@ -801,22 +837,7 @@ Eur. Phys. J. D 75, 46 (2021).
 
 """
 function polarisability_difference(material; unit=:SI)
-    if unit == :SI
-        factor = au_polarisability
-    elseif unit == :atomic
-        factor = 1
-    else
-        throw(DomainError(unit, "Unknown unit $unit"))
-    end
-    if material in (:He, :HeB, :HeJ)
-        return (1.3207 - 0.2811)*factor
-    elseif material == :Ne
-        return (2.376 - 1.2417)*factor
-    elseif material == :Ar
-        return (10.762 - 6.807)*factor
-    else
-        return missing
-    end
+    polarisability(material, false; unit) - polarisability(material, true; unit)
 end
 
 """
