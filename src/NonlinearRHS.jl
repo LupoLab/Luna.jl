@@ -528,10 +528,10 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     grid::gT # time grid
     xygrid::xygT
     densityfun::dT # callable which returns density
-    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
-    Eto::Array{TT, 3} # buffer for oversampled time-domain field
-    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
-    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    Pto::Array{TT, 4} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 4} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 4} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 4} # buffer for oversampled frequency-domain NL polarisation
     scale::Float64 # scale factor to be applied during oversampling
     idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
 end
@@ -546,11 +546,11 @@ function show(io::IO, t::TransFree)
     print(io, out)
 end
 
-function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
+function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun, pol=false)
     Ny = length(xygrid.y)
     Nx = length(xygrid.x)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
-    Eto = zeros(TT, (length(grid.to), Ny, Nx))
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Ny, Nx))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Ny, Nx))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
@@ -628,24 +628,65 @@ Make function to return normalisation factor for 3D propagation.
 """
 function norm_free(grid, xygrid, nfun)
     ω = grid.ω
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
     idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
-    k2 = zero(grid.ω)
-    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    out = zeros(Float64, (length(grid.ω), np, length(xygrid.ky), length(xygrid.kx)))
     function norm(z)
-        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         for ii in idcs
             for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ii] = 1.0
+                if ω[iω] == 0 || ~grid.sidx[iω]
+                    out[iω, :, ii] = 1.0
                     continue
                 end
-                βsq = k2[iω] - kperp2[ii]
-                if βsq <= 0
-                    out[iω, ii] = 1.0
-                    continue
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    k2 = (n*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kperp2[ii]
+                    if βsq <= 0
+                        out[iω, ip, ii] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
                 end
-                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+            end
+        end
+        return out
+    end
+end
+
+function norm_free(grid, xygrid, nfunx, nfuny)
+    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ+δθ)
+    # nfuny(λ; z) just takes wavelength
+    ω = grid.ω
+    out = zeros(Float64, (length(ω), 2, length(xygrid.ky), length(xygrid.kx)))
+    function norm(z)
+        for iω in eachindex(ω)
+            if ω[iω] == 0 || ~grid.sidx[iω]
+                out[iω, :, :] .= 1.0
+                continue
+            end
+            ny = nfuny(wlfreq(ω[iω]))
+            ksq_ypol = (ny*ω[iω]/c)^2
+            for (ikx, kxi) in enumerate(xygrid.kx)
+                for (iky, kyi) in enumerate(xygrid.ky)
+                    δθ = crystal_internal_angle(nfunx, ω[iω], kxi)
+                    nx = nfunx(wlfreq(ω[iω]), δθ)
+                    k_xpol = nx*grid.ω[iω]/c
+                    βsq_xpol = k_xpol^2 - kxi^2 - kyi^2
+                    if βsq_xpol < 0
+                        out[iω, 1, iky, ikx] = 1.0
+                    else
+                        out[iω, 1, iky, ikx] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
+                    end
+                    
+                    βsq_ypol = ksq_ypol - kxi^2 - kyi^2
+                    if βsq_ypol < 0
+                        out[iω, 2, iky, ikx] .= 1.0
+                    else
+                        out[iω, 2, iky, ikx] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
+                    end
+                end
             end
         end
         return out
@@ -694,8 +735,8 @@ Construct a `TransFree2D` to calculate the reciprocal-domain nonlinear polarisat
 
 # Arguments
 - `grid::AbstractGrid` : the grid used in the simulation
-- `xygrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
-- `FT::FFTW.Plan` : the full 3D (t-y-x) Fourier transform for the oversampled time grid
+- `xgrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
+- `FT::FFTW.Plan` : the 2D (t-x) Fourier transform for the oversampled time grid
 - `responses` : `Tuple` of response functions
 - `densityfun` : callable which returns the gas density as a function of `z`
 - `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
@@ -727,7 +768,7 @@ function (t::TransFree2D)(nl, Eωk, z)
     ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x) -> (ω, kx)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
@@ -768,27 +809,21 @@ Make function to return normalisation factor for 3D propagation.
     Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
 """
 function norm_free2D(grid, xgrid, nfun)
-    # TODO: this can probably be combined with the case for TransFree by adjusting idcs
     kperp2 = xgrid.kx.^2
     ω = grid.ω
     ωfirst = ω[findfirst(grid.sidx)]
     np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    k2 = zeros(Float64, (length(grid.ω), np))
     out = zeros(Float64, (length(ω), np, length(xgrid.kx)))
     function norm(z)
-        for (ii, si) in enumerate(grid.sidx)
-            if si
-                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]); z) .* grid.ω[ii]./PhysData.c).^2
-            end
-        end
         for ii in eachindex(xgrid.kx)
             for iω in eachindex(ω)
-                if ω[iω] == 0
+                if ω[iω] == 0 || ~grid.sidx[iω]
                     out[iω, :, ii] .= 1.0
                     continue
                 end
                 for (ip, n) in enumerate(nfun(ω[iω]; z))
-                    βsq = k2[iω, ip] - kperp2[ii]
+                    k2 = (n*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kperp2[ii]
                     if βsq <= 0
                         out[iω, ip, ii] = 1.0
                         continue
@@ -807,34 +842,30 @@ function norm_free2D(grid, xgrid, nfunx, nfuny)
     ω = grid.ω
     out = zeros(Float64, (length(ω), 2, length(xgrid.kx)))
     function norm(z)
-        for (iω, si) in enumerate(grid.sidx)
-            if ω[iω] == 0
+        for iω in eachindex(ω)
+            if ω[iω] == 0 || ~grid.sidx[iω]
                 out[iω, :, :] .= 1.0
                 continue
             end
-            if si
-                ny = nfuny(wlfreq(grid.ω[iω]))
-                ksq_ypol = (ny*grid.ω[iω]/c)^2
-                for (ik, kxi) in enumerate(xgrid.kx)
-                    δθ = crystal_internal_angle(nfunx, grid.ω[iω], kxi)
-                    nx = nfunx(wlfreq(grid.ω[iω]), δθ)
-                    k_xpol = nx*grid.ω[iω]/c
-                    βsq_xpol = k_xpol^2 - kxi^2
-                    if βsq_xpol < 0
-                        out[iω, 1, ik] = 1.0
-                    else
-                        out[iω, 1, ik] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
-                    end
-                    
-                    βsq_ypol = ksq_ypol - kxi^2
-                    if βsq_ypol < 0
-                        out[iω, :, ik] .= 1.0
-                    else
-                        out[iω, 2, ik] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
-                    end
+            ny = nfuny(wlfreq(ω[iω]))
+            ksq_ypol = (ny*ω[iω]/c)^2
+            for (ik, kxi) in enumerate(xgrid.kx)
+                δθ = crystal_internal_angle(nfunx, ω[iω], kxi)
+                nx = nfunx(wlfreq(ω[iω]), δθ)
+                k_xpol = nx*grid.ω[iω]/c
+                βsq_xpol = k_xpol^2 - kxi^2
+                if βsq_xpol < 0
+                    out[iω, 1, ik] = 1.0
+                else
+                    out[iω, 1, ik] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
                 end
-            else
-                out[iω, :, :] .= 1.0
+                
+                βsq_ypol = ksq_ypol - kxi^2
+                if βsq_ypol < 0
+                    out[iω, 2, ik] .= 1.0
+                else
+                    out[iω, 2, ik] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
+                end
             end
         end
         return out
