@@ -743,7 +743,7 @@ end
     end
 end
 
-@testset "free-space inputs: radial" begin
+# @testset "free-space inputs: radial" begin
     λ0 = 800e-9
     τfwhm = 10e-15
     energy = 1e-6
@@ -759,9 +759,9 @@ end
 
     grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
 
-    q = Hankel.QDHT(R, N, dim=2)
+    q = Hankel.QDHT(R, N, dim=3)
 
-    xt = zeros(Float64, length(grid.t), length(q.r))
+    xt = zeros(Float64, length(grid.t), 2, length(q.r))
     FT = FFTW.plan_fft(xt, 1, flags=FFTW.ESTIMATE)
 
     Eωk = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz)(grid, q, FT)
@@ -770,11 +770,11 @@ end
     Eωr = Hankel.symmetric(q \ Eωk, q)
 
     Iωr = abs2.(Eωr)
-    Ir = dropdims(sum(Iωr; dims=1); dims=1)
+    Ir = dropdims(sum(Iωr; dims=(1, 2)); dims=(1, 2))
     w1q = 2Maths.rms_width(r, Ir)
 
     @test isapprox(w1q, w1; rtol=1e-3)
-end
+# end
 
 @testset "free-space inputs: full 3D" begin
     λ0 = 800e-9
@@ -792,14 +792,14 @@ end
     grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
     xygrid = Grid.FreeGrid(R, N)
 
-    xr = Array{ComplexF64}(undef, length(grid.t), length(xygrid.y), length(xygrid.x))
-    FT = FFTW.plan_fft(xr, (1, 2, 3), flags=FFTW.ESTIMATE)
+    xr = Array{ComplexF64}(undef, length(grid.t), 2, length(xygrid.y), length(xygrid.x))
+    FT = FFTW.plan_fft(xr, (1, 3, 4), flags=FFTW.ESTIMATE)
 
     Eωk = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz)(grid, xygrid, FT)
 
     Etxy = FT \ Eωk
 
-    Ixy = dropdims(sum(abs2.(Etxy); dims=1); dims=1)
+    Ixy = dropdims(sum(abs2.(Etxy); dims=(1, 2)); dims=(1, 2))
 
     Ix = dropdims(sum(Ixy; dims=1); dims=1)
     Iy = dropdims(sum(Ixy; dims=2); dims=2)

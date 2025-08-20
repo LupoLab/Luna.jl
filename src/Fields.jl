@@ -389,13 +389,10 @@ Get the field for the provided `grid`, `spacegrid` function
 and Fourier transform `FT`
 """
 function (s::SpatioTemporalField)(grid, spacegrid, FT)
-    Etr = make_Etr(s, grid, spacegrid)
+    Etr = make_Etr(s, grid, spacegrid) # (t, r) or (t, x) or (t, y, x)
     energy_t = energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
-    Etr = permutedims(
-        cat(Etr .* sin(s.θ), Etr .* cos(s.θ); dims=3),
-        (1, 3, 2)
-    )
+    Etr = rotate(Etr, s.θ)
     Eωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
         prop!(Eωk, s.propz, grid, spacegrid)
@@ -403,8 +400,22 @@ function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Eωk
 end
 
+function rotate(Etr::AbstractArray{T, 2}, θ) where T
+    Etr = permutedims(
+        cat(Etr .* sin(θ), Etr .* cos(θ); dims=3),
+        (1, 3, 2)
+    )
+end
+
+function rotate(Etr::AbstractArray{T, 3}, θ) where T
+    Etr = permutedims(
+        cat(Etr .* sin(θ), Etr .* cos(θ); dims=4),
+        (1, 4, 2, 3)
+    )
+end
+
 function prop!(Eωk, z, grid, q::Hankel.QDHT)
-    kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
+    kzsq = (grid.ω/PhysData.c).^2 .- reshape(q.k.^2, (1, 1, length(q.k)))
     kzsq[kzsq .< 0] .= 0
     kz = sqrt.(kzsq)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
@@ -412,8 +423,8 @@ end
 
 function prop!(Eωk, z, grid, xygrid)
     kzsq = ((grid.ω ./ PhysData.c).^2
-            .- reshape(xygrid.ky.^2, (1, length(xygrid.ky), 1))
-            .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx)))
+            .- reshape(xygrid.ky.^2, (1, 1, length(xygrid.ky), 1))
+            .- reshape(xygrid.kx.^2, (1, 1, 1, length(xygrid.kx)))
     )
     kzsq[kzsq.<0] .= 0
     kz = sqrt.(kzsq)

@@ -209,7 +209,12 @@ end
 function doinputs_fs!(Eωk, grid, spacegrid::Union{Hankel.QDHT, Grid.FreeGrid, Grid.Free2DGrid}, FT,
                    inputs::Tuple{Vararg{T} where T <: Fields.SpatioTemporalField})
     for field in inputs
-        Eωk .+= field(grid, spacegrid, FT)
+        Eωki = field(grid, spacegrid, FT)
+        if size(Eωk, 2) == 2
+            Eωk .+= Eωki
+        else
+            Eωk .+= Eωki[:, 2] # take y-polarisation if only 1 polarisation specified
+        end
     end
 end
 
@@ -264,11 +269,11 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     x = xygrid.x
     y = xygrid.y          
     xr = Array{Float64}(undef, length(grid.t), length(y), length(x))
-    FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=settings["fftw_flag"])
+    FT = FFTW.plan_rfft(xr, (1, 3, 4), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
     doinputs_fs!(Eωk, grid, xygrid, FT, inputs)
     xo = Array{Float64}(undef, length(grid.to), length(y), length(x))
-    FTo = FFTW.plan_rfft(xo, (1, 2, 3), flags=settings["fftw_flag"])
+    FTo = FFTW.plan_rfft(xo, (1, 3, 4), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
@@ -283,11 +288,11 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     x = xygrid.x
     y = xygrid.y          
     xr = Array{ComplexF64}(undef, length(grid.t), length(y), length(x))
-    FT = FFTW.plan_fft(xr, (1, 2, 3), flags=settings["fftw_flag"])
+    FT = FFTW.plan_fft(xr, (1, 3, 4), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
     doinputs_fs!(Eωk, grid, xygrid, FT, inputs)
     xo = Array{ComplexF64}(undef, length(grid.to), length(y), length(x))
-    FTo = FFTW.plan_fft(xo, (1, 2, 3), flags=settings["fftw_flag"])
+    FTo = FFTW.plan_fft(xo, (1, 3, 4), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun)
     inv(FT) # create inverse FT plans now, so wisdom is saved
