@@ -288,13 +288,13 @@ end
 #==============   RADIAL SYMMETRY   ==============#
 #=================================================#
 """
-    make_const_linop(grid, q::QDHT, n, frame_vel)
+    make_const_linop(grid, q::QDHT, n, β1)
 
 Make constant linear operator for radial free-space. `n` is the refractive index (array)
 and β1 is 1/velocity of the reference frame.
 """
 function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
-                          n::AbstractMatrix, β1::Number)
+                          n::AbstractVecOrMat, β1::Number)
     out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
@@ -334,7 +334,7 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
 end
 
 function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
-                          n::AbstractMatrix, β1::Number, β0ref::Number; thg=false)
+                          n::AbstractVecOrMat, β1::Number, β0ref::Number; thg=false)
     out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
     k2 = @. (n*grid.ω/PhysData.c)^2
     kr2 = q.k.^2
@@ -351,11 +351,13 @@ distance `z`.
 """
 function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     kr2 = q.k.^2
-    k2 = zero(grid.ω)
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[2]
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
+        k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
         _fill_linop_r!(out, grid, β1, k2, kr2, q.N)
     end
 end
@@ -378,36 +380,21 @@ end
 
 function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
     kr2 = q.k.^2
-    k2 = zero(grid.ω)
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[2]
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
-        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)
+        k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./PhysData.c).^2
+        βref = thg ? 0.0 : grid.ω0/PhysData.c * nfun(grid.ω0; z=z)[2]
         _fill_linop_r!(out, grid, β1, k2, kr2, q.N, βref, thg)
     end
 end
 
 function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2, kr2, Nr, βref, thg)
     for ir = 1:Nr
-        for iω = 1:length(grid.ω)
-            βsq = k2[iω] - kr2[ir]
-            if βsq < 0
-                # negative βsq -> evanescent fields -> attenuation
-                out[iω, ir] = -im*(-β1*grid.ω[iω]) - min(sqrt(abs(βsq)), 200)
-            else
-                out[iω, ir] = -im*(sqrt(βsq) - β1*grid.ω[iω])
-            end
-            if !thg
-                out[iω, ir] -= -im*βref
-            end
-        end
-    end
-end
-
-function _fill_linop_r!(out, grid::Grid.EnvGrid, β1, k2::AbstractMatrix, kr2, Nr, βref, thg)
-    for ir = 1:Nr
-        for ip = 1:2
+        for ip in axes(k2, 2)
             for iω = 1:length(grid.ω)
                 βsq = k2[iω, ip] - kr2[ir]
                 if βsq < 0
