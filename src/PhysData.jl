@@ -67,7 +67,7 @@ const gas_str = Dict(
     :D2 => "Deuterium"
 )
 const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
-const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2, :LBO)
+const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2, :LBO, :quartz)
 const metal = (:Ag, :Al)
 
 """
@@ -290,19 +290,6 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
-    elseif material == :MgF2
-        return μm -> @. sqrt(complex(1
-            + 0.27620
-            + 0.60967/(1-(0.08636/μm)^2)
-            + 0.0080/(1-(18.0/μm)^2)
-            + 2.14973/(1-(25.0/μm)^2)
-            ))
-    elseif material == :CaCO3
-        return μm -> @. sqrt(complex(1
-            + 0.73358749
-            + 0.96464345/(1-1.94325203e-2/μm^2)
-            + 1.82831454/(1-120/μm^2)
-            ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -333,6 +320,7 @@ function sellmeier_crystal(material, axis=nothing)
             throw(DomainError(axis, "Unknown BBO axis $axis"))
         end
     elseif material == :MgF2
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> @. sqrt(complex(1
                 + 0.27620
@@ -351,7 +339,8 @@ function sellmeier_crystal(material, axis=nothing)
         else
             throw(DomainError(axis, "Unknown MgF2 axis $axis"))
         end
-    elseif material == :SiO2
+    elseif material == :quartz
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> @. sqrt(complex(
                 1
@@ -367,9 +356,10 @@ function sellmeier_crystal(material, axis=nothing)
                 + 1.15662475/(1-100/μm^2)
                 ))
         else
-            throw(DomainError(axis, "Unknown SiO2 axis $axis"))
+            throw(DomainError(axis, "Unknown quartz axis $axis"))
         end
     elseif material == :CaCO3
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> @. sqrt(complex(1
                 + 0.73358749
@@ -386,6 +376,7 @@ function sellmeier_crystal(material, axis=nothing)
             throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
         end
     elseif material == :ADP
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> @. sqrt(complex(
                 2.302842
@@ -402,6 +393,7 @@ function sellmeier_crystal(material, axis=nothing)
             throw(DomainError(axis, "Unknown ADP axis $axis"))
         end
     elseif material == :KDP
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> @. sqrt(complex(
                 2.259276
@@ -441,77 +433,6 @@ function sellmeier_crystal(material, axis=nothing)
             ))
         else
             throw(DomainError(axis, "Unknown LBO axis $axis"))
-        end
-    elseif material == :ADP
-        isnothing(axis) && (axis = :o)
-        if axis == :o
-            return μm -> @. sqrt(complex(
-                2.302842
-                + 15.102464*μm^2/(μm^2-400)
-                + 0.011125165/(μm^2-0.01325366)
-            ))
-        elseif axis == :e
-            return μm -> @. sqrt(complex(
-                2.163510
-                + 5.919896*μm^2/(μm^2-400)
-                + 0.009616676/(μm^2-0.01298912)
-            ))
-        else
-            throw(DomainError(axis, "Unknown ADP axis $axis"))
-        end
-    elseif material == :KDP
-        isnothing(axis) && (axis = :o)
-        if axis == :o
-            return μm -> @. sqrt(complex(
-                2.259276
-                + 13.00522*μm^2/(μm^2-400)
-                + 0.01008956/(μm^2-0.0129426)
-            ))
-        elseif axis == :e
-            return μm -> @. sqrt(complex(
-                2.132668
-                + 3.2279924*μm^2/(μm^2-400)
-                + 0.008637494/(μm^2-0.0122810)
-            ))
-        else
-            throw(DomainError(axis, "Unknown KDP axis $axis"))
-        end
-    elseif material == :CaCO3
-        isnothing(axis) && (axis = :o)
-        if axis == :o
-            return μm -> @. sqrt(complex(1
-                + 0.73358749
-                + 0.96464345/(1-1.94325203e-2/μm^2)
-                + 1.82831454/(1-120/μm^2)
-                ))
-        elseif axis == :e
-            return μm -> @. sqrt(complex(1
-                + 0.35859695
-                + 0.82427830/(1-1.06689543e-2/μm^2)
-                + 0.14429128/(1-120/μm^2)
-                ))
-        else
-            throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
-        end
-    elseif material == :MgF2
-        isnothing(axis) && (axis = :o)
-        if axis == :o
-            return μm -> @. sqrt(complex(1
-                + 0.27620
-                + 0.60967/(1-(0.08636/μm)^2)
-                + 0.0080/(1-(18.0/μm)^2)
-                + 2.14973/(1-(25.0/μm)^2)
-                ))
-        elseif axis == :e
-            return μm -> @. sqrt(complex(1
-                + 0.25385
-                + 0.66405/(1-(0.08504/μm)^2)
-                + 1.0899/(1-(22.2/μm)^2)
-                + 0.1816/(1-(24.4/μm)^2)
-                + 2.1227/(1-(40.6/μm)^2)
-                ))
-        else
-            throw(DomainError(axis, "Unknown MgF2 axis $axis"))
         end
     else
         throw(DomainError(material, "Unknown crystal $material"))
