@@ -111,9 +111,9 @@ function (c::Chi2Field)(out, E, ρ)
         @inbounds c.El[1] = E[i, 1]
         @inbounds c.El[2] = E[i, 2]
         # note c.El[3] (Ez in the lab frame) is always zero here
-        mul!(c.Ec, c.toCrystal, c.El)
-        @inbounds field_products!(c.Enl, c.Ec)
-        mul!(c.Pl, c.χ2_toLab, c.Enl)
+        mul!(c.Ec, c.toCrystal, c.El) # transform to crystal frame
+        @inbounds field_products!(c.Enl, c.Ec) # calculate nonlinear products
+        mul!(c.Pl, c.χ2_toLab, c.Enl) # multiply by χ2 tensor and transform to lab frame
         @inbounds out[i, 1] += ε_0*c.Pl[1]
         @inbounds out[i, 2] += ε_0*c.Pl[2]
     end
