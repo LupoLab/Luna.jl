@@ -446,6 +446,16 @@ function ref_index_fun_uniax(material; axes=(:o, :e))
     return n
 end
 
+function ref_index_fun_xy(material, θ; ordinary=:o, extraordinary=:e)
+    # y polarisation: ordinary polarisation
+    no = ref_index_fun(material; axis=ordinary)
+    # x polarisation: extraordinary polarisation, need extra δθ argument
+    ne = ref_index_fun_uniax(material; axes=(ordinary, extraordinary))
+    nfunx(λ, δθ=0) = real(ne(λ, θ+δθ))
+    nfuny(λ) = real(no(λ))
+    nfunx, nfuny
+end
+
 function crystal_internal_angle(nfun, ω, kx)
     # External wavevector is kx = ω/c*sin(θ_i) with θ_i the AOI of the plane wave
     # Internal wavevector is kx2 = ω/c * n(θ+δθ) * sin(δθ)
@@ -567,7 +577,8 @@ end
 Get function which returns refractive index for gas mixture. `gases` is a `Tuple` of gas
 identifiers (`Symbol`s) and `P` is a `Tuple` of equal length containing pressures.
 """
-function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
+function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp;
+                       lookup=nothing, axis=nothing) where N
     ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
         function ngas(λ)
             res = funs[1](λ)
