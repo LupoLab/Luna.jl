@@ -290,6 +290,19 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
+    elseif material == :MgF2
+        return μm -> @. sqrt(complex(1
+            + 0.27620
+            + 0.60967/(1-(0.08636/μm)^2)
+            + 0.0080/(1-(18.0/μm)^2)
+            + 2.14973/(1-(25.0/μm)^2)
+            ))
+    elseif material == :CaCO3
+        return μm -> @. sqrt(complex(1
+            + 0.73358749
+            + 0.96464345/(1-1.94325203e-2/μm^2)
+            + 1.82831454/(1-120/μm^2)
+            ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -318,6 +331,91 @@ function sellmeier_crystal(material, axis=nothing)
                 ))
         else
             throw(DomainError(axis, "Unknown BBO axis $axis"))
+        end
+    elseif material == :MgF2
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.27620
+                + 0.60967/(1-(0.08636/μm)^2)
+                + 0.0080/(1-(18.0/μm)^2)
+                + 2.14973/(1-(25.0/μm)^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.25385
+                + 0.66405/(1-(0.08504/μm)^2)
+                + 1.0899/(1-(22.2/μm)^2)
+                + 0.1816/(1-(24.4/μm)^2)
+                + 2.1227/(1-(40.6/μm)^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown MgF2 axis $axis"))
+        end
+    elseif material == :SiO2
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                1
+                + 0.28604141
+                + 1.07044083/(1-1.00585997e-2/μm^2)
+                + 1.10202242/(1-100/μm^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                1
+                + 0.28851804
+                + 1.09509924/(1-1.02101864e-2/μm^2)
+                + 1.15662475/(1-100/μm^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown SiO2 axis $axis"))
+        end
+    elseif material == :CaCO3
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.73358749
+                + 0.96464345/(1-1.94325203e-2/μm^2)
+                + 1.82831454/(1-120/μm^2)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.35859695
+                + 0.82427830/(1-1.06689543e-2/μm^2)
+                + 0.14429128/(1-120/μm^2)
+            ))
+        else
+            throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
+        end
+    elseif material == :ADP
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.302842
+                + 15.102464*μm^2/(μm^2-400)
+                + 0.011125165/(μm^2-0.01325366)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.163510
+                + 5.919896*μm^2/(μm^2-400)
+                + 0.009616676/(μm^2-0.01298912)
+            ))
+        else
+            throw(DomainError(axis, "Unknown ADP axis $axis"))
+        end
+    elseif material == :KDP
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.259276
+                + 13.00522*μm^2/(μm^2-400)
+                + 0.01008956/(μm^2-0.0129426)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.132668
+                + 3.2279924*μm^2/(μm^2-400)
+                + 0.008637494/(μm^2-0.0122810)
+            ))
+        else
+            throw(DomainError(axis, "Unknown KDP axis $axis"))
         end
     elseif material == :LBO
         # C Chen et al., J Opt. Soc. Am. 6, 616-621 (1989)
@@ -505,10 +603,14 @@ end
 
 Get function which returns refractive index.
 """
-function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
+function ref_index_fun(material::Symbol, P=1.0, T=roomtemp;
+                       lookup=nothing, axis=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + complex(χ1(λ)))
+    elseif ~isnothing(axis)
+        sell = sellmeier_crystal(material, axis)
+        return λ -> sell(λ*1e6)
     elseif material in glass
         if isnothing(lookup)
             lookup = (material == :SiO2)
@@ -578,8 +680,7 @@ end
 """
     dispersion_func(order, n)
 
-Get a function that calculates dispersion of order `order` for a refractive index given by
-`n(λ)`.
+Get a function that calculates dispersion of order `order` for a refractive index given by `n(λ)`.
 """
 function dispersion_func(order, n)
     β(ω) = @. ω/c * real(n(wlfreq(ω)))
@@ -592,7 +693,8 @@ end
 
 Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
 """
-function dispersion_func(order, material::Symbol, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
+function dispersion_func(order, material::Symbol, P=1.0, T=roomtemp;
+                         lookup=nothing, axis=nothing)
     n = ref_index_fun(material, P, T; lookup, axis)
     dispersion_func(order, n)
 end
@@ -612,7 +714,8 @@ julia> dispersion(2, :BK7, 400e-9) * 1e30 * 1e-3 # convert to fs^2/mm
 122.03632107303108
 ```
 """
-function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
+function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp;
+                    lookup=nothing, axis=nothing)
     return dispersion_func(order, material, P, T; lookup, axis).(λ)
 end
 
