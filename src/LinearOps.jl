@@ -33,7 +33,7 @@ function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
             n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     make_const_linop(grid, xygrid, n, β1)
 end
 
@@ -152,7 +152,7 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
             n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     make_const_linop(grid, xgrid, n, β1)
 end
 
@@ -202,7 +202,7 @@ function make_const_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun,
             n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     if thg
         β0const = 0.0
     else
@@ -228,7 +228,7 @@ function make_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         for (ii, si) in enumerate(grid.sidx)
             if si
-                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]; z)) .* grid.ω[ii]./c).^2
+                k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii]./c).^2
             end
         end
         _fill_linop_x!(out, grid, β1, k2, kperp2, idcs)
@@ -263,10 +263,10 @@ function make_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun; thg=false)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         for (ii, si) in enumerate(grid.sidx)
             if si
-                k2[ii, :] .= (nfun(wlfreq(grid.ω[ii]); z) .* grid.ω[ii]./c).^2
+                k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii]./c).^2
             end
         end
-        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[1]
+        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[end]
         _fill_linop_x!(out, grid, β1, k2, kperp2, idcs, βref; thg=thg)
     end
 end
@@ -317,7 +317,7 @@ function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
             n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     make_const_linop(grid, q, n, β1)
 end
 
@@ -330,7 +330,7 @@ function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
             n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
         end
     end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[2])(grid.referenceλ)
+    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     if thg
         β0const = 0.0
     else
@@ -360,7 +360,7 @@ function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
     ωfirst = grid.ω[findfirst(grid.sidx)]
     np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
     k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[2]
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[end]
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./c).^2
@@ -389,11 +389,11 @@ function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
     ωfirst = grid.ω[findfirst(grid.sidx)]
     np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
     k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[2]
+    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[end]
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./c).^2
-        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[2]
+        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[end]
         _fill_linop_r!(out, grid, β1, k2, kr2, q.N, βref, thg)
     end
 end
