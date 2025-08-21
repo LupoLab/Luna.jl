@@ -1,40 +1,47 @@
+#=
+Here we simulate type I SHG in a BBO crystal driven at 800 nm. The focus is small and the crystal
+is reasonably thick, so we observe strong temporal and spatial walk-off effects.
+=#
 using Luna
 import FFTW
 import Luna: Hankel
 import PyPlot: plt
 import NumericalIntegration: integrate
 
-λ0 = 1030e-9
-τfwhm = 250e-15
-w0 = 50e-6
-energy = 1e-6
+λ0 = 800e-9 # driving wavelength
+τfwhm = 30e-15 # pulse duration
+w0 = 20e-6 # 1/e² beam radius
+energy = 10e-9 # pulse energy
 
-thickness = 1000e-6
 material = :BBO
+thickness = 200e-6 # BBO thickness
 
-R = 4*w0
-N = 2^6
+R = 4*w0 # radius of the spatial window
+N = 2^6 # number of spatial points
 
-grid = Grid.RealGrid(thickness, λ0, (300e-9, 2e-6), 1200e-15)
+grid = Grid.RealGrid(thickness, λ0, (250e-9, 2e-6), 120e-15)
 xgrid = Grid.Free2DGrid(R, N)
 
-θ = deg2rad(23.3717) 
-ϕ = deg2rad(30)
+θ = deg2rad(29.2) # type I phase-matching angle
+ϕ = deg2rad(30) # ϕ for type I phase-matching
 
-
+##
 responses = (Nonlinear.Chi2Field(θ, ϕ, PhysData.χ2(material)),
              Nonlinear.Kerr_field(PhysData.χ3(material)))
 
-nfun = PhysData.ref_index_fun_uniax(material)
-nfunx(λ, δθ; z=0) = real(nfun(λ, θ+δθ))
-nfuny(λ; z=0) = real(nfun(λ, 0))
+#=
+Ref index functions. Note that here nfunx takes (λ, δθ=0) as arguments,
+which allows make_const_linop to calculate the actual internal angle depending
+on frequency and transverse k-vector component.
+=#
+nfunx, nfuny = PhysData.ref_index_fun_xy(material, θ)
 linop = LinearOps.make_const_linop(grid, xgrid, nfunx, nfuny)
 
 normfun = NonlinearRHS.const_norm_free2D(grid, xgrid, nfunx, nfuny)
-densityfun = z -> 1
+densityfun = z -> 1 # density is unity because we're considering a solid.
 ##
+# scaling factor in front of the energy corresponds to the integral over y
 inputs = Fields.GaussGaussField(;λ0, τfwhm, energy=energy/(sqrt(π/2)*w0), w0)
-# inputs = Fields.GaussGaussField(;λ0, τfwhm, energy, w0)
 Eω, transform, FT = Luna.setup(grid, xgrid, densityfun, normfun, responses, inputs)
 
 ##
@@ -46,6 +53,7 @@ z = output["z"]
 Eωk = output["Eω"] # (ω, pol, k, z)
 x = xgrid.x
 
+# normalisation prefactor for spectral intensity
 ωprefac = PhysData.c*PhysData.ε_0/2 * 2π/(grid.ω[end]^2) * sqrt(π/2)*w0
 
 Eωr = FFTW.ifft(Eωk, 3) # (ω, pol, x, z)
@@ -67,37 +75,24 @@ It0 = 0.5*PhysData.c*PhysData.ε_0*abs2.(Et0)
 
 et, eω = Fields.energyfuncs(grid, xgrid)
 
-energy_x = eω(Eωk[:, 1, :, 1])*sqrt(π/2)*w0
-energy_y = eω(Eωk[:, 2, :, 1])*sqrt(π/2)*w0
+energy_out = dropdims(mapslices(eω, Eωk; dims=(1, 3)); dims=(1, 3))*sqrt(π/2)*w0
 
 ω = grid.ω
 
-##
-I1 = 2*0.94*energy/τfwhm / (π*w0^2)
-d31 = 0.16e-12
-d22 = -2.3e-12
-deff = d31*sin(θ) - d22*cos(θ)*sin(3ϕ)
-
-ω3 = PhysData.wlfreq(λ0/2)
-n1 = real(nfun(λ0, 0))
-n2 = n1
-n3 = real(nfun(λ0/2, θ))
-
-χ2eff = 2deff
-
-I3 = 2*χ2eff^2*ω3^2/(n1*n2*n3*PhysData.ε_0 * PhysData.c^3) * I1^2 * z.^2
-
-##
-plt.figure()
-# plt.plot(z*1e6, I3*1e-4; label="Calculated")
-plt.plot(z*1e6, dropdims(maximum(It0[:, 1, :]; dims=1); dims=1)*1e-4; label="Simulated")
-# plt.plot(z*1e6, dropdims(maximum(Itr[:, 1, 1, :]; dims=1); dims=1)*1e-4; label="Simulated")
 
 ##
 plt.figure()
 plt.pcolormesh(z*1e3, x*1e6, Ir)
 plt.xlabel("Distance (mm)")
 plt.ylabel("X (μm)")
+
+##
+plt.figure()
+plt.plot(z*1e6, 1e9energy_out[1, :]; label="X polarisation")
+plt.plot(z*1e6, 1e9energy_out[2, :]; label="Y polarisation")
+plt.xlabel("Distance (μm)")
+plt.ylabel("Energy (nJ)")
+plt.legend()
 
 ##
 fig = plt.figure()
@@ -147,14 +142,14 @@ plt.subplot(2, 1, 1)
 plt.semilogy(ω*1e-12/2π, 2π*1e12*Iωxy[:, 1, 1]; label="input X")
 plt.semilogy(ω*1e-12/2π, 2π*1e12*Iωxy[:, 2, 1]; label="input Y")
 plt.ylim(1e-5mm, 5mm)
-plt.xlim(200, 800)
+plt.xlim(200, 900)
 plt.legend()
 plt.subplot(2, 1, 2)
 plt.semilogy(ω*1e-12/2π, 2π*1e12*Iωxy[:, 1, end]; label="output X")
 plt.semilogy(ω*1e-12/2π, 2π*1e12*Iωxy[:, 2, end]; label="output Y")
 # plt.semilogy(ω*1e-12/2π, 2π*1e12*Iωxy[:, 2, 1]; c="C1", linestyle="--", label="input Y")
 plt.ylim(1e-5mm, 5mm)
-plt.xlim(200, 800)
+plt.xlim(200, 900)
 plt.xlabel("Frequency (THz)")
 plt.ylabel("SED (J/Hz)")
 plt.legend()
@@ -162,28 +157,23 @@ plt.legend()
 ##
 lwe = Utils.load_dict_h5(joinpath(@__DIR__, "field_for_luna.h5"))
 fig = plt.figure()
-fig.set_size_inches(12, 12)
-plt.subplot(2, 2, 1)
+fig.set_size_inches(12, 7)
+plt.subplot(1, 2, 1)
 plt.pcolormesh(grid.t*1e15, xgrid.x*1e6, (Etr[:, 1, :, end])'; cmap="seismic")
 plt.clim([-1, 1].*maximum(abs.(Etr[:, 1, :, end])))
-plt.xlim(-512, 512)
-plt.ylim(-200, 200)
+plt.xlim(-50, 50)
+plt.ylim(-100, 100)
+plt.xlabel("Time (fs)")
+plt.ylabel("X (μm)")
+plt.title("X polarisation")
 
-plt.subplot(2, 2, 2)
+plt.subplot(1, 2, 2)
 plt.pcolormesh(grid.t*1e15, xgrid.x*1e6, (Etr[:, 2, :, end])'; cmap="seismic")
 plt.clim([-1, 1].*maximum(abs.(Etr[:, 2, :, end])))
-plt.xlim(-512, 512)
-plt.ylim(-200, 200)
-
-plt.subplot(2, 2, 3)
-plt.pcolormesh(lwe["t"]*1e15, lwe["x"]*1e6, lwe["Etx_x"]; cmap="seismic")
-plt.clim([-1, 1].*maximum(abs.(lwe["Etx_x"])))
-plt.ylim(-200, 200)
-
-plt.subplot(2, 2, 4)
-plt.pcolormesh(lwe["t"]*1e15, lwe["x"]*1e6, lwe["Etx_y"]; cmap="seismic")
-plt.clim([-1, 1].*maximum(abs.(lwe["Etx_y"])))
-plt.ylim(-200, 200)
+plt.xlim(-50, 50)
+plt.ylim(-100, 100)
+plt.xlabel("Time (fs)")
+plt.title("Y polarisation")
 
 ##
 fig = plt.figure()
@@ -201,37 +191,3 @@ plt.plot(grid.t*1e15, 1e-9*(Etr[:, 2, length(xgrid.x)÷2+1, end]);
 plt.legend()
 plt.xlabel("Time (fs)")
 plt.title("Y Polarisation")
-
-
-# ##
-# nfunx2(λ, δθ; z=0) = real(nfun(λ, θ))
-# plt.figure()
-# plt.plot(
-#     asin.(xgrid.kx .* PhysData.c ./ PhysData.wlfreq(λ0)),
-#     LinearOps.crystal_internal_angle.(nfunx, PhysData.wlfreq(λ0), xgrid.kx),
-#     ".";
-#     label="With angle dependence"
-# )
-# plt.plot(
-#     asin.(xgrid.kx .* PhysData.c ./ PhysData.wlfreq(λ0)),
-#     LinearOps.crystal_internal_angle.(nfunx2, PhysData.wlfreq(λ0), xgrid.kx),
-#     ".";
-#     label="No angle dependence"
-# )
-# plt.plot(
-#     asin.(xgrid.kx .* PhysData.c ./ PhysData.wlfreq(λ0)),
-#     asin.(xgrid.kx*PhysData.c/PhysData.wlfreq(λ0)/nfunx(λ0, 0)),
-#     ".";
-#     label="Naive calculation"
-# )
-# plt.legend()
-
-##
-Utils.save_dict_h5(
-        joinpath(@__DIR__, "beam_walk_off.h5"),
-        Dict(
-                "x" => x,
-                "z" => z,
-                "Irxy" => Irxy
-        )
-)
