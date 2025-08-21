@@ -260,20 +260,24 @@ function pointcalc!(fval, xs, t::TransModal)
             end
         end
         x = (x1,x2)
-        Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
-        to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
-        # get nonlinear pol at r,θ
-        Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
-        t.ncalls += 1
-        @. t.Pr *= t.grid.towin
-        to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
-        @. t.Prω *= t.grid.ωwin
-        t.norm!(t.Prω)
+        Erω_to_Prω!(t, x)
         # now project back to each mode
         # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
         mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))
         fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
     end
+end
+
+function Erω_to_Prω!(t, x)
+    Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
+    to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
+    # get nonlinear pol at r,θ
+    Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
+    t.ncalls += 1
+    @. t.Pr *= t.grid.towin
+    to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
+    @. t.Prω *= t.grid.ωwin
+    t.norm!(t.Prω)
 end
 
 function (t::TransModal)(nl, Eω, z)
