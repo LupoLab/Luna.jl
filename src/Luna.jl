@@ -164,7 +164,8 @@ end
 
 function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components;
-               full=false, norm! = NonlinearRHS.norm_modal(grid))
+               full=false, norm! = NonlinearRHS.norm_modal(grid),
+               rtol=1e-3, atol=0.0, mfcn=512)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{Float64}(undef, length(grid.t))
@@ -176,8 +177,8 @@ function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, norm!,
-                                 rtol=1e-3, atol=0.0, mfcn=300, full=full)
+                                 responses, densityfun, norm!;
+                                 rtol, atol, mfcn, full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
@@ -186,7 +187,8 @@ end
 
 function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components;
-               full=false, norm! = NonlinearRHS.norm_modal(grid))
+               full=false, norm! = NonlinearRHS.norm_modal(grid),
+               rtol=1e-3, atol=0.0, mfcn=512)
     ts = Modes.ToSpace(modes, components=components)
     Utils.loadFFTwisdom()
     xt = Array{ComplexF64}(undef, length(grid.t))
@@ -198,8 +200,8 @@ function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, norm!,
-                                 rtol=1e-3, atol=0.0, mfcn=300, full=full)
+                                 responses, densityfun, norm!;
+                                 rtol, atol, mfcn, full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
