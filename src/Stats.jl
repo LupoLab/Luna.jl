@@ -307,7 +307,7 @@ function mode_reconstruction_error(t::TransModal)
         Prω_recon .*= 1/2*sqrt(PhysData.ε_0/PhysData.μ_0)
         Erω_to_Prω!(t, x)
         d["mode_reconstruction_error"] = sqrt(sum(abs2.(Prω_recon .- t.Prω)))/sqrt(sum(abs2.(Prω_recon)))
-        d["transverse_points"] = t.ncalls
+        d["transverse_points"] = float(t.ncalls) # convert to Float64 to enable NaN padding
     end
 end
 
