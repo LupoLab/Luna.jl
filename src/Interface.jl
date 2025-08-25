@@ -455,7 +455,7 @@ makegrid(flength, λ0::Tuple, args...) = makegrid(flength, λ0[1], args...)
 
 function parse_mode(mode)
     ms = String(mode)
-    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4]))
+    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4:end]))
 end
 
 function makemodes_pol(pol, args...; kwargs...)
