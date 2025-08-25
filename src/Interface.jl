@@ -359,6 +359,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
+                        radial_integral_rtol=1e-3,
                         raman=nothing, kerr=true, plasma=nothing,
                         PPT_options=Dict{Symbol, Any}(),
                         stats_kwargs=Dict{Symbol, Any}(),
@@ -380,7 +381,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
-                                     const_linop(radius, pressure))
+                                     radial_integral_rtol, const_linop(radius, pressure))
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas, stats_kwargs...)
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
@@ -743,7 +744,7 @@ function shotnoise_maybe(inputs, modes, shotnoise::Bool)
     (inputs..., [(mode=ii, fields=(Fields.ShotNoise(),)) for ii in eachindex(modes)]...)
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{true})
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol, c::Val{true})
     @info("Using mode-averaged propagation.")
     linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
     
@@ -752,7 +753,7 @@ function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, 
     linop, Eω, transform, FT
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{false})
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol, c::Val{false})
     @info("Using mode-averaged propagation.")
     linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
 
@@ -765,21 +766,21 @@ needfull(modes) = !all(modes) do mode
     (mode.kind == :HE) && (mode.n == 1)
 end
 
-function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
+function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{true})
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf, rtol)
     linop, Eω, transform, FT
 end
 
-function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
+function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{false})
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf, rtol)
     linop, Eω, transform, FT
 end
 
