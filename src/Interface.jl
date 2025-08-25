@@ -639,18 +639,22 @@ end
 function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
     k = 2π/λ0
     gauss = Fields.normalised_gauss_beam(k, pulse.waist)
-    facs = [abs2(Modes.overlap(mi, gauss)) for mi in mode_s]
+    ovlps = [Modes.overlap(mi, gauss) for mi in mode_s]
     fields = Any[]
     if pulse.polarisation == :linear
-        for (modeidx, fac) in enumerate(facs)
-            sf = scalefield(pulse.timepulse.field, fac)
+        for (modeidx, ovlp) in enumerate(ovlps)
+            energyfac = abs2(ovlp)
+            phase = angle(ovlp)
+            sf = scalefield(pulse.timepulse.field, energyfac, phase)
             push!(fields, (mode=modeidx, fields=(sf,)))
         end
     else
         fy, fx = ellfields(pulse.timepulse)
-        for (idx, fac) in enumerate(facs[1:2:end])
-            sfy = scalefield(fy, fac)
-            sfx = scalefield(fx, fac)
+        for (idx, ovlp) in enumerate(ovlps[1:2:end])
+            energyfac = abs2(ovlp)
+            phase = angle(ovlp)
+            sfy = scalefield(fy, energyfac, phase)
+            sfx = scalefield(fx, energyfac, phase)
             push!(fields, (mode=2idx-1, fields=(sfy,)))
             push!(fields, (mode=2idx, fields=(sfx,)))
         end
@@ -658,16 +662,29 @@ function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
     Tuple(fields)
 end
 
-function scalefield(f::Fields.PulseField, fac)
-    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), f.ϕ, f.Itshape)
+function scalefield(f::Fields.PulseField, fac, phase)
+    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), addphase(f.ϕ, phase), f.Itshape)
 end
 
-function scalefield(f::Fields.DataField, fac)
-    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
+function scalefield(f::Fields.DataField, fac, phase)
+    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), addphase(f.ϕ, phase), f.λ0)
 end
 
-function scalefield(f::Fields.PropagatedField, fac)
-    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac))
+function scalefield(f::Fields.PropagatedField, fac, phase)
+    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac, phase))
+end
+
+function addphase(ϕ, phase)
+    if phase == 0
+        return copy(ϕ)
+    end
+    if length(ϕ) == 0
+        return [phase]
+    else
+        out = copy(ϕ)
+        out[1] += phase
+        return out
+    end
 end
 
 _findmode(mode_s, md) = _findmode([mode_s], md)
@@ -693,17 +710,7 @@ function makeinputs(mode_s, λ0, pulses::AbstractVector)
 end
 
 ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
-
-function ellphase(ϕ, ε)
-    shift = π/2 * sign(ε)
-    if length(ϕ) == 0
-        return [shift]
-    else
-        out = copy(ϕ)
-        out[1] += shift
-        return out
-    end
-end
+ellphase(ϕ, ε) = addphase(ϕ, π/2 * sign(ε))
 
 ellfac(pol::Symbol) = (1/2, 1/2) # circular
 function ellfac(ε::Number)
