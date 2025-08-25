@@ -322,6 +322,7 @@ If `raman` is `true`, then the following options apply:
     - `vibration::Bool = true`: whether to include the vibrational Raman contribution
 
 # Output options
+- `stats_kwargs::Dict{Symbol, Any}`: a dictionary of keyword arguments to `Stats.default`
 - `saveN::Integer`: Number of points along z at which to save the field.
 - `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
     only in the working memory. If not `nothing`, should be a file path as a `String`,
@@ -358,8 +359,10 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         pulses=nothing,
                         shotnoise=true,
                         modes=:HE11, model=:full, loss=true,
+                        radial_integral_rtol=1e-3,
                         raman=nothing, kerr=true, plasma=nothing,
                         PPT_options=Dict{Symbol, Any}(),
+                        stats_kwargs=Dict{Symbol, Any}(),
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -378,8 +381,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
-                                     const_linop(radius, pressure))
-    stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas)
+                                     radial_integral_rtol, const_linop(radius, pressure))
+    stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas, stats_kwargs...)
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
@@ -452,7 +455,7 @@ makegrid(flength, λ0::Tuple, args...) = makegrid(flength, λ0[1], args...)
 
 function parse_mode(mode)
     ms = String(mode)
-    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4]))
+    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4:end]))
 end
 
 function makemodes_pol(pol, args...; kwargs...)
@@ -636,18 +639,22 @@ end
 function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
     k = 2π/λ0
     gauss = Fields.normalised_gauss_beam(k, pulse.waist)
-    facs = [abs2(Modes.overlap(mi, gauss)) for mi in mode_s]
+    ovlps = [Modes.overlap(mi, gauss) for mi in mode_s]
     fields = Any[]
     if pulse.polarisation == :linear
-        for (modeidx, fac) in enumerate(facs)
-            sf = scalefield(pulse.timepulse.field, fac)
+        for (modeidx, ovlp) in enumerate(ovlps)
+            energyfac = abs2(ovlp)
+            phase = angle(ovlp)
+            sf = scalefield(pulse.timepulse.field, energyfac, phase)
             push!(fields, (mode=modeidx, fields=(sf,)))
         end
     else
         fy, fx = ellfields(pulse.timepulse)
-        for (idx, fac) in enumerate(facs[1:2:end])
-            sfy = scalefield(fy, fac)
-            sfx = scalefield(fx, fac)
+        for (idx, ovlp) in enumerate(ovlps[1:2:end])
+            energyfac = abs2(ovlp)
+            phase = angle(ovlp)
+            sfy = scalefield(fy, energyfac, phase)
+            sfx = scalefield(fx, energyfac, phase)
             push!(fields, (mode=2idx-1, fields=(sfy,)))
             push!(fields, (mode=2idx, fields=(sfx,)))
         end
@@ -655,16 +662,29 @@ function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
     Tuple(fields)
 end
 
-function scalefield(f::Fields.PulseField, fac)
-    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), f.ϕ, f.Itshape)
+function scalefield(f::Fields.PulseField, fac, phase)
+    Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), addphase(f.ϕ, phase), f.Itshape)
 end
 
-function scalefield(f::Fields.DataField, fac)
-    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), f.ϕ, f.λ0)
+function scalefield(f::Fields.DataField, fac, phase)
+    Fields.DataField(f.ω, f.Iω, f.ϕω, nmult(f.energy, fac), addphase(f.ϕ, phase), f.λ0)
 end
 
-function scalefield(f::Fields.PropagatedField, fac)
-    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac))
+function scalefield(f::Fields.PropagatedField, fac, phase)
+    Fields.PropagatedField(f.propagator!, scalefield(f.field, fac, phase))
+end
+
+function addphase(ϕ, phase)
+    if phase == 0
+        return copy(ϕ)
+    end
+    if length(ϕ) == 0
+        return [phase]
+    else
+        out = copy(ϕ)
+        out[1] += phase
+        return out
+    end
 end
 
 _findmode(mode_s, md) = _findmode([mode_s], md)
@@ -690,17 +710,7 @@ function makeinputs(mode_s, λ0, pulses::AbstractVector)
 end
 
 ellphase(ϕ, pol::Symbol) = ellphase(ϕ, 1.0)
-
-function ellphase(ϕ, ε)
-    shift = π/2 * sign(ε)
-    if length(ϕ) == 0
-        return [shift]
-    else
-        out = copy(ϕ)
-        out[1] += shift
-        return out
-    end
-end
+ellphase(ϕ, ε) = addphase(ϕ, π/2 * sign(ε))
 
 ellfac(pol::Symbol) = (1/2, 1/2) # circular
 function ellfac(ε::Number)
@@ -741,7 +751,7 @@ function shotnoise_maybe(inputs, modes, shotnoise::Bool)
     (inputs..., [(mode=ii, fields=(Fields.ShotNoise(),)) for ii in eachindex(modes)]...)
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{true})
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol, c::Val{true})
     @info("Using mode-averaged propagation.")
     linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
     
@@ -750,7 +760,7 @@ function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, 
     linop, Eω, transform, FT
 end
 
-function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, c::Val{false})
+function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol, c::Val{false})
     @info("Using mode-averaged propagation.")
     linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
 
@@ -763,21 +773,21 @@ needfull(modes) = !all(modes) do mode
     (mode.kind == :HE) && (mode.n == 1)
 end
 
-function setup(grid, modes, density, responses, inputs, pol, c::Val{true})
+function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{true})
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf, rtol)
     linop, Eω, transform, FT
 end
 
-function setup(grid, modes, density, responses, inputs, pol, c::Val{false})
+function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{false})
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
     linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
-                                   pol ? :xy : :y; full=nf)
+                                   pol ? :xy : :y; full=nf, rtol)
     linop, Eω, transform, FT
 end
 
