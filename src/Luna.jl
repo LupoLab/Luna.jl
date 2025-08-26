@@ -303,6 +303,26 @@ simtype(g, t, l) = Dict("field" => gridtype(g),
                         "transform" => string(t),
                         "linop" => linoptype(l))
 
+function save_modeinfo_maybe(output, t::NonlinearRHS.TransModal)
+    pol = t.ts.indices == 1:2 ? "xy" : t.ts.indices == 1 ? "x" : "y"
+    modeinfos = unnest([Modes.modeinfo(m) for m in t.ts.ms])
+    output(modeinfos; group="modes")
+    output("polarisation", pol)
+end
+
+function unnest(dicts)
+    out = Dict{String, Any}()
+    for k in keys(dicts[1]) # assuming all dicts have the same keys
+        out[sym2string(k)] = [sym2string(di[k]) for di in dicts]
+    end
+    out
+end
+
+sym2string(sym::Symbol) = string(sym)
+sym2string(other) = other
+
+save_modeinfo_maybe(output, t) = nothing
+
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
@@ -328,6 +348,7 @@ function run(Eω, grid,
 
     output(Grid.to_dict(grid), group="grid")
     output(simtype(grid, transform, linop), group="simulation_type")
+    save_modeinfo_maybe(output, transform)
 
     RK45.solve_precon(
         transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
