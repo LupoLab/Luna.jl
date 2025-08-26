@@ -375,7 +375,7 @@ end # testset "makemodes"
 @testset "spatial field and fluence" begin
     a = 100e-6
     flength = 0.1
-    gas = :HeB
+    gas = :He
     pressure = 1
     λ0 = 800e-9
     τfwhm = 30e-15
@@ -383,6 +383,24 @@ end # testset "makemodes"
 
     trange = 500e-15
     λlims = (500e-9, 1500e-9)
+
+    @testset "fluence HE1$m" for m = 1:6
+        pulse = Pulses.GaussPulse(;λ0, τfwhm, energy, mode=Symbol("HE1$m"))
+        out = prop_capillary(a, flength, gas, pressure;
+                             λ0, pulses=pulse, λlims, trange, plasma=false, kerr=false, loss=false, modes=6)
+        x = collect(range(-a, a, 513))
+        y = [0.0]
+        fluence = Processing.beam(out, x, y, flength)
+
+        # Calculate fluence by normalising Bessel mode to the correct energy
+        unm = sf_bessel_zero_Jnu(0, m)
+        mode(r) = besselj(0, unm/a*r)^2
+        N, _ = hquadrature(r -> r*mode(r), 0, a)
+        N *= 2π # azimuthal integral
+        # mode(0) = 1.0, so peak fluence is just energy/N
+        @test isapprox(fluence[1, length(x)÷2+1], energy/N, rtol=1e-6)
+        @test isapprox(energy/N .* mode.(x), fluence[1, :], rtol=1e-6)
+    end
 
     out = prop_capillary(a, flength, gas, pressure;
                          λ0, τfwhm, energy, λlims, trange, plasma=false, kerr=false, loss=false, modes=4)
