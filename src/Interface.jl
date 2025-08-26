@@ -292,7 +292,8 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `modes`: Defines which modes are included in the propagation. Can be any of:
     - a single mode signifier (default: :HE11), which leads to mode-averaged propagation
         (as long as all inputs are linearly polarised).
-    - a list of mode signifiers, which leads to multi-mode propagation in those modes.
+    - a `Dict` mode signifier with keys `:kind`, `:n`, and `:m`, e.g. `Dict(:kind=>:HE, :n=>1, :m=>1)`
+    - a `Tuple` of mode signifiers (`Symbol`s or `Dict`s), which leads to multi-mode propagation in those modes.
     - a `Number` `N` of modes, which simply creates the first `N` `HE` modes.
     Note that when elliptical or circular polarisation is included, each mode is present
     twice in the output, once for `x` and once for `y` polarisation.
@@ -431,7 +432,7 @@ needpol(pol, pulses) = any(needpol, pulses)
 needpol_modes(mode::Symbol) = false # mode average
 needpol_modes(modes::Number) = false # only HE1m modes
 
-function needpol_modes(modes::NTuple{N, Symbol}) where N
+function needpol_modes(modes::Tuple)
     any(modes) do mode
         md = parse_mode(mode)
         md[:kind] ≠ :HE || md[:n] > 1
@@ -455,8 +456,17 @@ makegrid(flength, λ0::Tuple, args...) = makegrid(flength, λ0[1], args...)
 
 function parse_mode(mode)
     ms = String(mode)
-    Dict(:kind => Symbol(ms[1:2]), :n => parse(Int, ms[3]), :m => parse(Int, ms[4:end]))
+    kind_string = ms[1:2]
+    if length(ms) > 4
+        throw(DomainError(mode, "Ambiguous mode designation $mode. Pass modes as `Dict`s to disambiguate, e.g. Dict(:kind => :HE, :n => 1, :m => 12)."))
+    else
+        nstring = ms[3]
+        mstring = ms[4]
+    end
+    Dict(:kind => Symbol(kind_string), :n => parse(Int, nstring), :m => parse(Int, mstring))
 end
+
+parse_mode(mode::Dict) = mode
 
 function makemodes_pol(pol, args...; kwargs...)
     if pol
@@ -471,27 +481,27 @@ function makemodes_pol(pol, args...; kwargs...)
     end
 end
 
-function makemode_s(mode::Symbol, flength, radius, gas, pressure::Number, model, loss, pol)
+function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure::Number, model, loss, pol)
     makemodes_pol(pol, radius, gas, pressure; model, loss, parse_mode(mode)...)
 end
 
-function makemode_s(mode::Symbol, flength, radius, gas, pressure::Tuple{<:Number, <:Number},
+function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure::Tuple{<:Number, <:Number},
                     model, loss, pol)
     coren, _ = Capillary.gradient(gas, flength, pressure...)
     makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
 end
 
-function makemode_s(mode::Symbol, flength, radius, gas, pressure, model, loss, pol)
+function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure, model, loss, pol)
     Z, P = pressure
     coren, _ = Capillary.gradient(gas, Z, P)
     makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
 end
 
 function makemode_s(modes::Int, args...)
-    _flatten([makemode_s(Symbol("HE1$n"), args...) for n=1:modes])
+    _flatten([makemode_s(Dict(:kind => :HE, :n => 1, :m => m), args...) for m=1:modes])
 end
 
-function makemode_s(modes::NTuple{N, Symbol}, args...) where N 
+function makemode_s(modes::Tuple, args...)
     _flatten([makemode_s(m, args...) for m in modes])
 end
 
