@@ -80,6 +80,19 @@ struct CondorExec <: AbstractExec
 end
 
 """
+    SlurmExec(scriptfile, ncores)
+
+Execution mode which submits a scan to an slurm queue system claiming `ncores` cores.
+
+!!! note
+    `scriptfile` must **always** be `@__FILE__`
+"""
+struct SlurmExecExec <: AbstractExec
+    scriptfile::String
+    ncores::Int
+end
+
+"""
     SSHExec(localexec, scriptfile, hostname, subdir)
 
 Execution mode which transfers the `scriptfile` file to the host given by `hostname` via SSH
@@ -410,6 +423,37 @@ function _runscan(f, scan::Scan{QueueExec})
         end
         Base.GC.gc()
     end
+end
+
+function runscan(f, scan::Scan{CondorExec})
+    # make submission file for HTCondor
+    cmd = split(string(Base.julia_cmd()))[1]
+    julia = strip(cmd, ['`', '\''])
+    script = scan.exec.scriptfile
+    cores = scan.exec.ncores
+    name = scan.name
+    @info "Submitting Condor job for $script running on $cores cores."
+    # Adding the --queue command-line argument below means that when running the Condor job,
+    # the CondorExec is ignored even if explicitly defined inside the script.
+    lines = [
+        "#!/bin/bash",
+        "#SBATCH --ntasks=1",
+        "#SBATCH --cpus-per-task=1",
+        "#SBATCH -o %x_%j.stdout",
+        "#SBATCH -e %x_%j.stderr",
+        "#SBATCH --array=1-$cores",
+        "$julia $(basename(script)) --queue"
+    ]
+    subfile = joinpath(dirname(script), "$name.sh")
+    @info "Writing job file to $subfile..."
+    open(subfile, "w") do file
+        for l in lines
+            write(file, l*"\n")
+        end
+    end
+    @info "Submitting job..."
+    # out = read(`sbatch $subfile`, String)
+    # @info "Condor submission output:\n$out"
 end
 
 function runscan(f, scan::Scan{CondorExec})
