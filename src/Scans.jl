@@ -448,7 +448,7 @@ function runscan(f, scan::Scan{SlurmExec})
         "#SBATCH -e %x_%a.stderr",
         "#SBATCH --array=1-$cores",
         "#SBATCH --chdir $dir",
-        "julia $(basename(script)) --queue"
+        "stdbuf -o=0 -e=0 julia $(basename(script)) --queue"
     ]
     subfile = joinpath(dir, "$name.sh")
     @info "Writing job file to $subfile..."
