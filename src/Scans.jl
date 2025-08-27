@@ -114,6 +114,10 @@ function SSHExec(le::CondorExec, hostname, subdir)
     SSHExec(le, le.scriptfile, hostname, subdir)
 end
 
+function SSHExec(le::SlurmExec, hostname, subdir)
+    SSHExec(le, le.scriptfile, hostname, subdir)
+end
+
 struct Scan{eT}
     name::String
     variables::Vector{Symbol}
