@@ -430,16 +430,14 @@ function _runscan(f, scan::Scan{QueueExec})
 end
 
 function runscan(f, scan::Scan{SlurmExec})
-    # make submission file for HTCondor
-    cmd = split(string(Base.julia_cmd()))[1]
-    julia = strip(cmd, ['`', '\''])
+    # make submission file for slurm
     script = scan.exec.scriptfile
     dir = dirname(script)
     cores = scan.exec.ncores
     name = scan.name
-    @info "Submitting Condor job for $script running on $cores cores."
+    @info "Submitting slurm job for $script running on $cores cores."
     # Adding the --queue command-line argument below means that when running the Condor job,
-    # the CondorExec is ignored even if explicitly defined inside the script.
+    # the SlurmExec is ignored even if explicitly defined inside the script.
     lines = [
         "#!/bin/bash",
         "#SBATCH --ntasks=1",
