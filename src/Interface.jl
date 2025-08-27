@@ -221,19 +221,20 @@ make_energies(energy::Number, scale_energy::Nothing, eout) = eout ./ sum(eout) .
 make_energies(energy::Nothing, scale_energy, eout) = eout .* scale_energy
 make_energies(energy::Nothing, scale_energy::Nothing, eout) = eout
 
-struct GaussBeamPulse{pT} <: AbstractPulse
+struct GaussBeamPulse{pT, NmT} <: AbstractPulse
     waist::Float64
     timepulse::pT
     polarisation
+    Nmodes::NmT
 end
 
 """
-    GaussBeamPulse(waist, timepulse)
+    GaussBeamPulse(waist, timepulse, Nmodes=:all)
 
-A pulse whose shape in time is defined by the `timepulse::AbstractPulse`, and whose modal content is calculated by considering the overlap of an ideal Gaussian laser beam with 1/e² radius `waist` with the modes of the waveguide.
+A pulse whose shape in time is defined by the `timepulse::AbstractPulse`, and whose modal content is calculated by considering the overlap of an ideal Gaussian laser beam with 1/e² radius `waist` with the modes of the waveguide. `Nmodes` determines how many of the available modes to couple to. By default (`Nmodes=:all`) all modes are taken into account, but this can lead to numerical inaccuracies.
 """
-function GaussBeamPulse(waist, timepulse)
-    GaussBeamPulse(waist, timepulse, timepulse.polarisation)
+function GaussBeamPulse(waist, timepulse, Nmodes=:all)
+    GaussBeamPulse(waist, timepulse, timepulse.polarisation, Nmodes)
 end
 
 end
@@ -649,7 +650,7 @@ end
 function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
     k = 2π/λ0
     gauss = Fields.normalised_gauss_beam(k, pulse.waist)
-    ovlps = [Modes.overlap(mi, gauss) for mi in mode_s]
+    ovlps = [Modes.overlap(mi, gauss) for mi in selectmodes(mode_s, pulse.Nmodes, pulse.polarisation)]
     fields = Any[]
     if pulse.polarisation == :linear
         for (modeidx, ovlp) in enumerate(ovlps)
@@ -670,6 +671,14 @@ function makeinputs(mode_s, λ0, pulse::Pulses.GaussBeamPulse)
         end
     end
     Tuple(fields)
+end
+
+function selectmodes(mode_s, Nmodes, pol)
+    if pol == :linear
+        mode_s[1:Nmodes]
+    else
+        mode_s[1:2Nmodes]
+    end
 end
 
 function scalefield(f::Fields.PulseField, fac, phase)
