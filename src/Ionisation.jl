@@ -192,8 +192,10 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
 
     E = collect(range(Emin, stop=Emax, length=N));
     @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
+    flush(stderr) # pre-calculating can take a while, so make sure this message is shown
     rate = ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     @info "...PPT pre-calcuation done"
+    flush(stderr)
     return E, rate
 end
 
