@@ -444,8 +444,8 @@ function runscan(f, scan::Scan{SlurmExec})
         "#!/bin/bash",
         "#SBATCH --ntasks=1",
         "#SBATCH --cpus-per-task=1",
-        "#SBATCH -o %x_%j.stdout",
-        "#SBATCH -e %x_%j.stderr",
+        "#SBATCH -o %x_%a.stdout",
+        "#SBATCH -e %x_%a.stderr",
         "#SBATCH --array=1-$cores",
         "#SBATCH --chdir $dir",
         "julia $(basename(script)) --queue"
