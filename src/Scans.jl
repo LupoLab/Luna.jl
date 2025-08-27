@@ -87,7 +87,7 @@ Execution mode which submits a scan to an slurm queue system claiming `ncores` c
 !!! note
     `scriptfile` must **always** be `@__FILE__`
 """
-struct SlurmExecExec <: AbstractExec
+struct SlurmExec <: AbstractExec
     scriptfile::String
     ncores::Int
 end
@@ -425,7 +425,7 @@ function _runscan(f, scan::Scan{QueueExec})
     end
 end
 
-function runscan(f, scan::Scan{CondorExec})
+function runscan(f, scan::Scan{SlurmExec})
     # make submission file for HTCondor
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
