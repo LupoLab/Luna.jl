@@ -434,6 +434,7 @@ function runscan(f, scan::Scan{SlurmExec})
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
     script = scan.exec.scriptfile
+    dir = dirname(script)
     cores = scan.exec.ncores
     name = scan.name
     @info "Submitting Condor job for $script running on $cores cores."
@@ -446,9 +447,10 @@ function runscan(f, scan::Scan{SlurmExec})
         "#SBATCH -o %x_%j.stdout",
         "#SBATCH -e %x_%j.stderr",
         "#SBATCH --array=1-$cores",
-        "$julia $(basename(script)) --queue"
+        "#SBATCH --chdir $dir",
+        "julia $(basename(script)) --queue"
     ]
-    subfile = joinpath(dirname(script), "$name.sh")
+    subfile = joinpath(dir, "$name.sh")
     @info "Writing job file to $subfile..."
     open(subfile, "w") do file
         for l in lines
