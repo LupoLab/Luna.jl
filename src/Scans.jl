@@ -456,8 +456,8 @@ function runscan(f, scan::Scan{SlurmExec})
         end
     end
     @info "Submitting job..."
-    # out = read(`sbatch $subfile`, String)
-    # @info "Condor submission output:\n$out"
+    out = read(`sbatch $subfile`, String)
+    @info "Slurm submission output:\n$out"
 end
 
 function runscan(f, scan::Scan{CondorExec})
