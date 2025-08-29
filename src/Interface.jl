@@ -681,6 +681,8 @@ function selectmodes(mode_s, Nmodes, pol)
     end
 end
 
+selectmodes(mode_s, Nmodes::Symbol, pol) = mode_s
+
 function scalefield(f::Fields.PulseField, fac, phase)
     Fields.PulseField(f.λ0, nmult(f.energy, fac), nmult(f.power, fac), addphase(f.ϕ, phase), f.Itshape)
 end
