@@ -44,7 +44,8 @@ function printstop(p::Printer, integrator)
     totaltime = Dates.now() - p.start
     dtstring = format_elapsed(totaltime)
     Logging.@info @sprintf("Propagation finished in %s", dtstring)
-    Logging.@info @sprintf("Steps accepted: %d; rejected: %d", integrator.stats.naccept, integrator.stats.nreject)
+    Logging.@info @sprintf("Steps accepted: %d; rejected: %d",
+                           integrator.stats.naccept, integrator.stats.nreject)
     Logging.@info @sprintf("Nonlinear function calls: %d", integrator.stats.nf)
 end
 
@@ -73,7 +74,8 @@ function callbackcl(integrator)
             @. u * exp(integrator.p.L * z)
         end
     end
-    integrator.p.stepfun(integrator.p.Eωtmp, integrator.t, ODE.get_proposed_dt(integrator), interp)
+    integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
+                         ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
     ODE.u_modified!(integrator, false)
 end
@@ -112,7 +114,8 @@ function callbackncl(integrator)
             @. Eω * exp(L)
         end
     end
-    integrator.p.stepfun(integrator.p.Eωtmp, integrator.t, ODE.get_proposed_dt(integrator), interp)
+    integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
+                         ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
     ODE.u_modified!(integrator, false)
 end
@@ -124,18 +127,20 @@ function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printe
 end
 
 function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
-    prop = NonConstPropagator(linop, f!, stepfun, length(Eω0), similar(Eω0), similar(Eω0), printer)
+    prop = NonConstPropagator(linop, f!, stepfun,
+                              length(Eω0), similar(Eω0), similar(Eω0), printer)
     u0 = vcat(Eω0, zero(Eω0))
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
     prob, callbackncl
 end
 
 function propagate(f!, linop, Eω0, z, zmax, stepfun;
-                   rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0, status_period=1)
+                   rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0,
+                   status_period=1, solver=:Tsit5)
     printer = Printer(status_period, zmax)
     prob, cbfunc = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
     cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
-    integrator = ODE.init(prob, ODE.Tsit5(); adaptive=true, reltol=rtol, abstol=atol,
+    integrator = ODE.init(prob, getproperty(ODE, solver)(); adaptive=true, reltol=rtol, abstol=atol,
                           dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
     printstart(printer)
     ODE.solve!(integrator)
