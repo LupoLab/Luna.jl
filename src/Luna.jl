@@ -390,7 +390,7 @@ function run(Eω, grid,
     #    rtol=rtol, atol=atol, safety=safety, norm=norm,
     #    status_period=status_period)
     Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
-                         rtol, atol, max_dz, min_dz, status_period)
+                         rtol, atol, init_dz, max_dz, min_dz, status_period)
 end
 
 # run some code for precompilation

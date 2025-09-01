@@ -51,7 +51,7 @@ end
 
 abstract type AbstractPropagator end
 
-struct ConstPropagator{NLT, SFT, PT, AT} <: AbstractPropagator
+struct ConstPropagator{NLT, SFT, PT, AT<:AbstractArray} <: AbstractPropagator
     L::AT
     nonlinop!::NLT
     stepfun::SFT
@@ -79,7 +79,7 @@ function callbackcl(integrator)
     ODE.u_modified!(integrator, false)
 end
 
-struct NonConstPropagator{LT, NLT, SFT, PT, AT} <: AbstractPropagator
+struct NonConstPropagator{LT, NLT, SFT, PT, AT<:AbstractArray} <: AbstractPropagator
     linop!::LT
     nonlinop!::NLT
     stepfun::SFT
@@ -132,12 +132,12 @@ function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
 end
 
 function propagate(f!, linop, Eω0, z, zmax, stepfun;
-                   rtol=1e-3, atol=1e-6, max_dz=Inf, min_dz=0, status_period=1)
+                   rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0, status_period=1)
     printer = Printer(status_period, zmax)
     prob, cbfunc = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
     cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
     integrator = ODE.init(prob, ODE.Tsit5(); adaptive=true, reltol=rtol, abstol=atol,
-                          dtmin=min_dz, dtmax=max_dz, callback=cb)
+                          dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
     printstart(printer)
     ODE.solve!(integrator)
     printstop(printer)
