@@ -86,8 +86,8 @@ end
 
 function callbackncl(integrator)
     n = integrator.p.n
-    Eω = @views integrator.p.u[1:n]
-    L = @views integrator.p.u[n+1:end]
+    Eω = @views integrator.u[1:n]
+    L = @views integrator.u[n+1:end]
     @. integrator.p.Eωtmp = Eω * exp(L)
     interp = let integrator=integrator, n=n
         function interp(z)
@@ -99,7 +99,7 @@ function callbackncl(integrator)
     end
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t, ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    u_modified!(integrator, false)
+    ODE.u_modified!(integrator, false)
 end
 
 function propagate(f!, linop!, Eω0, z, zmax, stepfun;
