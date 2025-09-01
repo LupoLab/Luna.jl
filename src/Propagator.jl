@@ -14,8 +14,13 @@ mutable struct Printer{DT}
 end
 
 function Printer(status_period, zmax)
-    Logging.@info "Starting propagation"
     Printer(status_period, Dates.now(), Dates.now(), 0, zmax)
+end
+
+function printstart(p::Printer)
+    p.start = Dates.now()
+    p.tic = Dates.now()
+    Logging.@info "Starting propagation"
 end
 
 function printstep(p::Printer, z, dz)
@@ -46,16 +51,14 @@ end
 
 abstract type AbstractPropagator end
 
-struct ConstPropagator{NLT} <: AbstractPropagator
-    L::Vector{ComplexF64}
+struct ConstPropagator{NLT, SFT, PT, AT} <: AbstractPropagator
+    L::AT
     nonlinop!::NLT
-    Eωtmp::Vector{ComplexF64}
-    Pωtmp::Vector{ComplexF64}
+    stepfun::SFT
+    Eωtmp::AT
+    Pωtmp::AT
+    p::PT
 end
-
-#function make_propagator(f!, linop::Vector{ComplexF64}, u0::Vector{ComplexF64})
-#    prop = ConstPropagator(linop, f!, similar(u0), similar(u0))
-#end
 
 function fcl!(du,u,p,z)
     @. p.Eωtmp = u * exp(p.L * z)
@@ -63,13 +66,26 @@ function fcl!(du,u,p,z)
     @. du = p.Pωtmp * exp(-p.L * z)
 end
 
-struct NonConstPropagator{LT, NLT, SFT, PT} <: AbstractPropagator
+function callbackcl(integrator)
+    @. integrator.p.Eωtmp = integrator.u * exp(integrator.p.L * integrator.t)
+    interp = let integrator=integrator
+        function interp(z)
+            u = integrator(z)
+            @. u * exp(integrator.p.L * z)
+        end
+    end
+    integrator.p.stepfun(integrator.p.Eωtmp, integrator.t, ODE.get_proposed_dt(integrator), interp)
+    printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
+    ODE.u_modified!(integrator, false)
+end
+
+struct NonConstPropagator{LT, NLT, SFT, PT, AT} <: AbstractPropagator
     linop!::LT
     nonlinop!::NLT
     stepfun::SFT
     n::Int
-    Eωtmp::Vector{ComplexF64}
-    Pωtmp::Vector{ComplexF64}
+    Eωtmp::AT
+    Pωtmp::AT
     p::PT
 end
 
@@ -102,17 +118,29 @@ function callbackncl(integrator)
     ODE.u_modified!(integrator, false)
 end
 
-function propagate(f!, linop!, Eω0, z, zmax, stepfun;
-                   rtol=1e-6, atol=1e-10, max_dz=Inf, min_dz=0, status_period=1)
-    p = Printer(status_period, zmax)
-    prop = NonConstPropagator(linop!, f!, stepfun, length(Eω0), similar(Eω0), similar(Eω0), p)
+function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printer) where N
+    prop = ConstPropagator(linop, f!, stepfun, similar(Eω0), similar(Eω0), printer)
+    prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
+    prob, callbackcl
+end
+
+function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
+    prop = NonConstPropagator(linop, f!, stepfun, length(Eω0), similar(Eω0), similar(Eω0), printer)
     u0 = vcat(Eω0, zero(Eω0))
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
-    cb = ODE.DiscreteCallback((u,t,integrator) -> true, callbackncl, save_positions=(false,false))
+    prob, callbackncl
+end
+
+function propagate(f!, linop, Eω0, z, zmax, stepfun;
+                   rtol=1e-3, atol=1e-6, max_dz=Inf, min_dz=0, status_period=1)
+    printer = Printer(status_period, zmax)
+    prob, cbfunc = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
+    cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
     integrator = ODE.init(prob, ODE.Tsit5(); adaptive=true, reltol=rtol, abstol=atol,
                           dtmin=min_dz, dtmax=max_dz, callback=cb)
+    printstart(printer)
     ODE.solve!(integrator)
-    printstop(p)
+    printstop(printer)
 end
 
 end # module
