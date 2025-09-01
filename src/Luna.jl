@@ -384,11 +384,13 @@ function run(Eω, grid,
     save_modeinfo_maybe(output, transform)
 
     flush(stderr) # flush std error once before starting to show setup steps
-    RK45.solve_precon(
-        transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
-        max_dt=max_dz, min_dt=min_dz,
-        rtol=rtol, atol=atol, safety=safety, norm=norm,
-        status_period=status_period)
+    #RK45.solve_precon(
+    #    transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
+    #    max_dt=max_dz, min_dt=min_dz,
+    #    rtol=rtol, atol=atol, safety=safety, norm=norm,
+    #    status_period=status_period)
+    Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
+                         rtol, atol, max_dz, min_dz, status_period)
 end
 
 # run some code for precompilation
