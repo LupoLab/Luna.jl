@@ -51,6 +51,7 @@ end
 
 abstract type AbstractPropagator end
 
+# For a constant linear operator, we can integrate L(z) analytically
 struct ConstPropagator{NLT, SFT, PT, AT<:AbstractArray} <: AbstractPropagator
     L::AT
     nonlinop!::NLT
@@ -61,12 +62,13 @@ struct ConstPropagator{NLT, SFT, PT, AT<:AbstractArray} <: AbstractPropagator
 end
 
 function fcl!(du,u,p,z)
-    @. p.Eωtmp = u * exp(p.L * z)
-    p.nonlinop!(p.Pωtmp, p.Eωtmp, z)
-    @. du = p.Pωtmp * exp(-p.L * z)
+    @. p.Eωtmp = u * exp(p.L * z)       # Transform back from interaction picture
+    p.nonlinop!(p.Pωtmp, p.Eωtmp, z)    # Apply nonlinear operator
+    @. du = p.Pωtmp * exp(-p.L * z)     # Transform to interaction picture
 end
 
 function callbackcl(integrator)
+    # The output we want must be transformed back from the interaction picture
     @. integrator.p.Eωtmp = integrator.u * exp(integrator.p.L * integrator.t)
     interp = let integrator=integrator
         function interp(z)
@@ -77,9 +79,11 @@ function callbackcl(integrator)
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    ODE.u_modified!(integrator, false)
+    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
 end
 
+# For a non-constant linear operator, we need to integrate L(z) numerically along with
+# the solution. We do this by simply including the linear operator in the state vector.
 struct NonConstPropagator{LT, NLT, SFT, PT, AT<:AbstractArray} <: AbstractPropagator
     linop!::LT
     nonlinop!::NLT
@@ -95,16 +99,17 @@ function fncl!(du,u,p,z)
     L = @views u[p.n+1:end]
     dEω = @views du[1:p.n]
     dL = @views du[p.n+1:end]
-    @. p.Eωtmp = Eω * exp(L)
-    p.nonlinop!(p.Pωtmp, p.Eωtmp, z)
-    @. dEω = p.Pωtmp * exp(-L)
-    p.linop!(dL, z)
+    @. p.Eωtmp = Eω * exp(L)            # Transform back from interaction picture
+    p.nonlinop!(p.Pωtmp, p.Eωtmp, z)    # Apply nonlinear operator
+    @. dEω = p.Pωtmp * exp(-L)          # Transform to interaction picture
+    p.linop!(dL, z)                     # Integrate linear operator
 end
 
 function callbackncl(integrator)
     n = integrator.p.n
     Eω = @views integrator.u[1:n]
     L = @views integrator.u[n+1:end]
+    # The output we want must be transformed back from the interaction picture
     @. integrator.p.Eωtmp = Eω * exp(L)
     interp = let integrator=integrator, n=n
         function interp(z)
@@ -117,7 +122,7 @@ function callbackncl(integrator)
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    ODE.u_modified!(integrator, false)
+    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
 end
 
 function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printer) where N
@@ -129,7 +134,7 @@ end
 function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
     prop = NonConstPropagator(linop, f!, stepfun,
                               length(Eω0), similar(Eω0), similar(Eω0), printer)
-    u0 = vcat(Eω0, zero(Eω0))
+    u0 = vcat(Eω0, zero(Eω0))   # Initial linear operator is zero
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
     prob, callbackncl
 end
@@ -139,6 +144,7 @@ function propagate(f!, linop, Eω0, z, zmax, stepfun;
                    status_period=1, solver=:Tsit5)
     printer = Printer(status_period, zmax)
     prob, cbfunc = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
+    # We do all saving and stats in a callback called at every step
     cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
     integrator = ODE.init(prob, getproperty(ODE, solver)(); adaptive=true, reltol=rtol, abstol=atol,
                           dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
