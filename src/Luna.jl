@@ -387,8 +387,8 @@ function run(Eω, grid,
 
     if solver == :OrigRK45
         Logging.@info("Using original Luna RK45 solver.")
-        rtol = isnothing(rtol) ? 1e-3 : rtol
-        atol = isnothing(atol) ? 1e-6 : atol
+        rtol = isnothing(rtol) ? 1e-6 : rtol
+        atol = isnothing(atol) ? 1e-10 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         RK45.solve_precon(
             transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
@@ -398,8 +398,8 @@ function run(Eω, grid,
         return
     else
         Logging.@info("Using $solver solver")
-        rtol = isnothing(rtol) ? 1e-3 : rtol
-        atol = isnothing(atol) ? 1e-6 : atol
+        rtol = isnothing(rtol) ? 1e-2 : rtol
+        atol = isnothing(atol) ? 1e-5 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
                              rtol, atol, init_dz, max_dz, min_dz, status_period)

@@ -9,12 +9,11 @@ mutable struct Printer{DT}
     status_period::Int
     start::DT
     tic::DT
-    steps::Int
     zmax::Float64
 end
 
 function Printer(status_period, zmax)
-    Printer(status_period, Dates.now(), Dates.now(), 0, zmax)
+    Printer(status_period, Dates.now(), Dates.now(), zmax)
 end
 
 function printstart(p::Printer)
@@ -24,7 +23,6 @@ function printstart(p::Printer)
 end
 
 function printstep(p::Printer, z, dz)
-    p.steps += 1
     if Dates.value(Dates.now() - p.tic) > 1000*p.status_period
         speed = z/(Dates.value(Dates.now() - p.start)/1000)
         eta_in_s = (p.zmax - z)/speed
@@ -42,11 +40,12 @@ function printstep(p::Printer, z, dz)
     end
 end
 
-function printstop(p::Printer)
+function printstop(p::Printer, integrator)
     totaltime = Dates.now() - p.start
     dtstring = format_elapsed(totaltime)
-    Logging.@info @sprintf("Propagation finished in %s, %d steps",
-                           dtstring, p.steps)
+    Logging.@info @sprintf("Propagation finished in %s", dtstring)
+    Logging.@info @sprintf("Steps accepted: %d; rejected: %d", integrator.stats.naccept, integrator.stats.nreject)
+    Logging.@info @sprintf("Nonlinear function calls: %d", integrator.stats.nf)
 end
 
 abstract type AbstractPropagator end
@@ -140,7 +139,7 @@ function propagate(f!, linop, Eω0, z, zmax, stepfun;
                           dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
     printstart(printer)
     ODE.solve!(integrator)
-    printstop(printer)
+    printstop(printer, integrator)
 end
 
 end # module
