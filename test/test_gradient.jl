@@ -75,6 +75,8 @@ statsfun = Stats.collect_stats(grid, Eω,
 output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
+# TODO: tolerances here are quite high, not because of inherent errors, but due to different ODE solvers
+# it would be good to investigate this further
 @test isapprox(output_grad.data["Eω"][grid.sidx, :], output_const.data["Eω"][grid.sidx, :], rtol=3e-6)
 @test isapprox(output_grad_array.data["Eω"][grid.sidx, :], output_const.data["Eω"][grid.sidx, :], rtol=3e-6)
 end
@@ -134,6 +136,8 @@ statsfun = Stats.collect_stats(grid, Eω,
 output_grad_array = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output_grad_array, status_period=10)
 
+# TODO: tolerances here are quite high, not because of inherent errors, but due to different ODE solvers
+# it would be good to investigate this further
 @test isapprox(output_grad.data["Eω"][grid.sidx, :], output_const.data["Eω"][grid.sidx, :], rtol=3e-6)
 @test isapprox(output_grad_array.data["Eω"][grid.sidx, :], output_const.data["Eω"][grid.sidx, :], rtol=3e-6)
 end
