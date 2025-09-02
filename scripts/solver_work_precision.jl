@@ -245,6 +245,23 @@ function workprecision(nlse::NLSE, solvers)
     errs, nfs
 end
 
+function plot_nlse(nlse::NLSE, z, u)
+    IT = 10log10.(abs2.(FFTW.ifft(u,1)))
+    IW = 10log10.(abs2.(FFTW.fftshift(u,1)))
+    IT .-= maximum(IT)
+    IW .-= maximum(IW)
+    figure()
+    subplot(121)
+    pcolormesh(z, nlse.T, IT, clim=(-160,0))
+    xlabel("Position")
+    ylabel("Time")
+    subplot(122)
+    pcolormesh(z, FFTW.fftshift(nlse.Ω), IW, clim=(-160,0))
+    colorbar()
+    xlabel("Position")
+    ylabel("Frequency")
+    tight_layout()
+end
 
 nlse = NLSE(0.016, 48.0);
 
