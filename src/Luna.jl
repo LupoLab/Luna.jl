@@ -402,7 +402,7 @@ function run(Eω, grid,
         atol = isnothing(atol) ? 1e-5 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
-                             rtol, atol, init_dz, max_dz, min_dz, status_period, solver)
+                             rtol, atol, init_dz, max_dz, min_dz, status_period, solver)#, zstops=output.save_cond.grid)
     end
 end
 
