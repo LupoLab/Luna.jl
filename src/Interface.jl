@@ -571,7 +571,7 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol,
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_options)
+                      rotation, vibration, PPT_options, preionfrac)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
