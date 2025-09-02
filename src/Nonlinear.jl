@@ -121,7 +121,7 @@ end
 function PlasmaScalar!(Plas::PlasmaCumtrapz, E)
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = (1 - Plas.preionfrac) - exp(-Plas.fraction)
+    @. Plas.fraction = Plas.preionfrac + 1 - exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     for ii in eachindex(E)
@@ -147,7 +147,7 @@ function PlasmaVector!(Plas::PlasmaCumtrapz, E)
     Em = @. hypot.(Ex, Ey)
     Plas.ratefunc(Plas.rate, Em)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = (1 - Plas.preionfrac) - exp(-Plas.fraction)
+    @. Plas.fraction = Plas.preionfrac + 1 - exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     for ii in eachindex(Em)
