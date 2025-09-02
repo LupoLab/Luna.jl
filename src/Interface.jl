@@ -316,6 +316,8 @@ In this case, all keyword arguments except for `λ0` are ignored.
     the ionisation. See [`ionrate_fun_PPT`](@ref Ionisation.ionrate_fun_PPT) for possible
     keyword arguments.
 - `preionfrac::Float64`: fraction of the gas that is pre-ionised before the pulse. Defaults to `0.0`.
+    Note that this is a very simplistic model of pre-ionisation and should be used with
+    caution.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
