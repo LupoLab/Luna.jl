@@ -567,7 +567,7 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol,
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
     Et = pol ? Array{Float64}(undef, length(grid.to), 2) : grid.to
-    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot, preionfrac))
+    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot; preionfrac))
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,

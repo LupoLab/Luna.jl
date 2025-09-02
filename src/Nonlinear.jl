@@ -94,6 +94,7 @@ struct PlasmaCumtrapz{R, EType, tType}
     J::EType # buffer to hold the plasma current
     P::EType # buffer to hold the plasma polarisation
     δt::Float64 # the time step
+    preionfrac::Float64 # the pre-ionisation fraction
 end
 
 """
@@ -103,20 +104,21 @@ Construct the Plasma polarisation response for a field on time grid `t`
 with example electric field like `E`, an ionization rate callable
 `ratefunc` and ionization potential `ionpot`.
 """
-function PlasmaCumtrapz(t, E, ratefunc, ionpot)
+function PlasmaCumtrapz(t, E, ratefunc, ionpot; preionfrac=0.0)
     rate = similar(t)
     fraction = similar(t)
     phase = similar(E)
     J = similar(E)
     P = similar(E)
-    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1])
+    !(0.0 <= pre <= 1.0) && throw(DomainError(preionfrac, "preionfrac must be between 0 and 1"))
+    return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1], preionfrac)
 end
 
 "The plasma response for a scalar electric field"
 function PlasmaScalar!(Plas::PlasmaCumtrapz, E)
     Plas.ratefunc(Plas.rate, E)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.fraction = (1 - Plas.preionfrac) - exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     for ii in eachindex(E)
@@ -142,7 +144,7 @@ function PlasmaVector!(Plas::PlasmaCumtrapz, E)
     Em = @. hypot.(Ex, Ey)
     Plas.ratefunc(Plas.rate, Em)
     Maths.cumtrapz!(Plas.fraction, Plas.rate, Plas.δt)
-    @. Plas.fraction = 1-exp(-Plas.fraction)
+    @. Plas.fraction = (1 - Plas.preionfrac) - exp(-Plas.fraction)
     @. Plas.phase = Plas.fraction * e_ratio * E
     Maths.cumtrapz!(Plas.J, Plas.phase, Plas.δt)
     for ii in eachindex(Em)
