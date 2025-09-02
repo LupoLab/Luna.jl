@@ -83,7 +83,8 @@ function callbackcl(integrator)
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
+    @. integrator.u = integrator.p.Eωtmp * exp(-integrator.p.Litmp) # copy back as we modify u in stepfun (absorbing boundaries)
+    #ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
 end
 
 # For a non-constant linear operator, we need to integrate L(z) numerically along with
@@ -126,7 +127,8 @@ function callbackncl(integrator)
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
+    @. Eω = integrator.p.Eωtmp * exp(-Li) # copy back as we modify u in stepfun (absorbing boundaries)
+    # ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
 end
 
 # Constant linear operator case--linop is an array
