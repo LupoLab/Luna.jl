@@ -111,6 +111,9 @@ function PlasmaCumtrapz(t, E, ratefunc, ionpot; preionfrac=0.0)
     J = similar(E)
     P = similar(E)
     !(0.0 <= preionfrac <= 1.0) && throw(DomainError(preionfrac, "preionfrac must be between 0 and 1"))
+    if preionfrac > 0.0
+        @warn("Using preionfrac > 0.0 is not a well founded physical model. Use only after careful consideration.")
+    end
     return PlasmaCumtrapz(ratefunc, ionpot, rate, fraction, phase, J, P, t[2]-t[1], preionfrac)
 end
 
