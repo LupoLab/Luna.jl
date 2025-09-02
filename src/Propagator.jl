@@ -125,25 +125,27 @@ function callbackncl(integrator)
     ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
 end
 
-function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printer) where N
+function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printer, rtol, atol) where N
     prop = ConstPropagator(linop, f!, stepfun, similar(Eω0), similar(Eω0), printer)
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
-    prob, callbackcl
+    prob, callbackcl, rtol, atol
 end
 
-function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
+function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     prop = NonConstPropagator(linop, f!, stepfun,
                               length(Eω0), similar(Eω0), similar(Eω0), printer)
     u0 = vcat(Eω0, zero(Eω0))   # Initial linear operator is zero
+    #rtol = vcat(ones(length(Eω0))*rtol, ones(length(Eω0))*1e-10)
+    #atol = vcat(ones(length(Eω0))*atol, ones(length(Eω0))*1e-15)
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
-    prob, callbackncl
+    prob, callbackncl, rtol, atol
 end
 
 function propagate(f!, linop, Eω0, z, zmax, stepfun;
                    rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0,
                    status_period=1, solver=:Tsit5)
     printer = Printer(status_period, zmax)
-    prob, cbfunc = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer)
+    prob, cbfunc, rtol, atol = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # We do all saving and stats in a callback called at every step
     cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
     integrator = ODE.init(prob, getproperty(ODE, solver)(); adaptive=true, reltol=rtol, abstol=atol,
