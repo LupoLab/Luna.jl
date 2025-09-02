@@ -143,13 +143,13 @@ end
 
 function propagate(f!, linop, Eω0, z, zmax, stepfun;
                    rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0,
-                   status_period=1, solver=:Tsit5)
+                   status_period=1, solver=:Tsit5, zstops=nothing)
     printer = Printer(status_period, zmax)
     prob, cbfunc, rtol, atol = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # We do all saving and stats in a callback called at every step
     cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
     integrator = ODE.init(prob, getproperty(ODE, solver)(); adaptive=true, reltol=rtol, abstol=atol,
-                          dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
+                          dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb, tstops=zstops)
     printstart(printer)
     ODE.solve!(integrator)
     printstop(printer, integrator)
