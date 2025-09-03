@@ -297,6 +297,7 @@ induced polarisation on axis at every step.
 """
 function mode_reconstruction_error(t::TransModal)
     Prω_recon = similar(t.Prω)
+    difference = similar(Prω_recon)
     nl = similar(t.Emω)
     function addstat!(d, Eω, Et, z, dz)
         t(nl, Eω, z)
@@ -306,7 +307,8 @@ function mode_reconstruction_error(t::TransModal)
         # in going to modes and back we've picked up two factors of the mode normalisation
         Prω_recon .*= 1/2*sqrt(PhysData.ε_0/PhysData.μ_0)
         Erω_to_Prω!(t, x)
-        d["mode_reconstruction_error"] = sqrt(sum(abs2, Prω_recon .- t.Prω))/sqrt(sum(abs2, Prω_recon))
+        difference .= Prω_recon .- t.Prω
+        d["mode_reconstruction_error"] = sqrt(sum(abs2, difference))/sqrt(sum(abs2, Prω_recon))
         d["transverse_points"] = float(t.ncalls) # convert to Float64 to enable NaN padding
         d["transverse_integral_error_abs"] = sqrt(sum(abs2, t.err)/length(t.err))
         d["transverse_integral_error_rel"] = d["transverse_integral_error_abs"]/sqrt(sum(abs2, nl)/length(nl))
