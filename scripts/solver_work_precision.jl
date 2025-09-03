@@ -5,6 +5,7 @@ import FFTW
 import LinearAlgebra: inv, mul!, ldiv!, norm, Diagonal
 using PyPlot
 import Luna
+import Printf: @sprintf
 
 # NLSE grid and temporary storage
 mutable struct NLSE{TFT}
@@ -188,10 +189,21 @@ function run_splitlin(nlse::NLSE; solver=ETDRK4(), adaptive=false, dt=0.0002, re
 end
     
 # Luna original RK45 solver
-function run_Luna(nlse::NLSE; solver=nothing, adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6)
+function run_Luna_weak(nlse::NLSE; solver=nothing, adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6)
     reset!(nlse)
     z, u, steps = Luna.RK45.solve_precon((du, u, z) -> f2!(du, u, nlse, z), nlse.L, getinit(nlse), 0.0, dt, π/2;
-                    rtol=reltol, atol=abstol, output=true, locextrap=true)#, norm=Luna.RK45.normnorm)
+                    rtol=reltol, atol=abstol, output=true, locextrap=true, norm=Luna.RK45.weaknorm)
+    err = geterror(nlse, u[:,end])
+    println("nfunc: $(nlse.nfunc)")
+    println("error: $err")
+    z, u, nlse.nfunc, err
+end
+
+# Luna original RK45 solver with better norm
+function run_Luna_norm(nlse::NLSE; solver=nothing, adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6)
+    reset!(nlse)
+    z, u, steps = Luna.RK45.solve_precon((du, u, z) -> f2!(du, u, nlse, z), nlse.L, getinit(nlse), 0.0, dt, π/2;
+                    rtol=reltol, atol=abstol, output=true, locextrap=true, norm=Luna.RK45.normnorm)
     err = geterror(nlse, u[:,end])
     println("nfunc: $(nlse.nfunc)")
     println("error: $err")
@@ -245,33 +257,54 @@ function workprecision(nlse::NLSE, solvers)
     errs, nfs
 end
 
-function plot_nlse(nlse::NLSE, z, u)
+function plot_nlse(nlse::NLSE, z, u; axs=nothing)
     IT = 10log10.(abs2.(FFTW.ifft(u,1)))
     IW = 10log10.(abs2.(FFTW.fftshift(u,1)))
     IT .-= maximum(IT)
     IW .-= maximum(IW)
-    figure()
-    subplot(121)
-    pcolormesh(z, nlse.T, IT, clim=(-160,0))
-    xlabel("Position")
-    ylabel("Time")
-    subplot(122)
-    pcolormesh(z, FFTW.fftshift(nlse.Ω), IW, clim=(-160,0))
-    colorbar()
-    xlabel("Position")
-    ylabel("Frequency")
-    tight_layout()
+    if isnothing(axs)
+        fig = PyPlot.plt.figure(constrained_layout=true, figsize=(10, 6))
+        axd = fig.subplot_mosaic(
+            """
+            ab
+            """)
+        axs = (axd["a"], axd["b"])
+    end
+    axs[1].pcolormesh(z, nlse.T, IT, clim=(-200,0), rasterized=true)
+    axs[1].set_xlabel("Position")
+    axs[1].set_ylabel("Time")
+    img = axs[2].pcolormesh(z, FFTW.fftshift(nlse.Ω), IW, clim=(-200,0), rasterized=true)
+    axs[2].set_xlabel("Position")
+    axs[2].set_ylabel("Frequency")
+    colorbar(img, ax=axs, fraction=0.05, pad=0.1, label="dB")
+end
+
+function plot_nlse_cmp(nlse::NLSE, data)
+    fig = PyPlot.plt.figure(constrained_layout=true, figsize=(10, 3*length(data)))
+    ax_array = fig.subplots(length(data), 2)
+    for (i, (z, u, nfs, err)) in enumerate(data)
+        axs = (ax_array[i,1], ax_array[i,2])
+        plot_nlse(nlse, z, u; axs=axs)
+        errs = @sprintf("%.2e", err)
+        axs[1].set_title("nfs=$(nfs), err=$(errs)")
+    end
 end
 
 nlse = NLSE(0.016, 48.0);
 
+# run at plot work-precision
 errs, nfs = workprecision(nlse, (
     (run_fullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
     (run_pieceip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
     (run_numfullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
     (run_splitlin, collect(logrange(1e-4, 1e-2, 30)), 1e-6 .* ones(30), 1e-6 .* ones(30)),
-    (run_Luna, 0.0002 .* ones(30), collect(logrange(1e-10, 1e-3, 30)), 1e-10 .* ones(30)),
+    (run_Luna_weak, 0.0002 .* ones(30), collect(logrange(1e-10, 1e-3, 30)), 1e-10 .* ones(30)),
+    (run_Luna_norm, 0.0002 .* ones(30), collect(logrange(1e-7, 1e-1, 30)), 1e-6 .* ones(30)),
     (run_newLuna, 0.0002 .* ones(40), collect(logrange(5e-5, 1.2e-1, 40)), 1e-6 .* ones(40))
 ))
-
 savefig(joinpath(pkgdir(Luna), "scripts/solver_work_precision.svg"))
+
+# run a comparison to visualise the error
+data = [run_newLuna(nlse; reltol=rtol, abstol=1e-6) for rtol in (1e-1, 6.9e-2, 1.2e-2, 5e-4)]
+plot_nlse_cmp(nlse, data)
+savefig(joinpath(pkgdir(Luna), "scripts/solver_work_precision_cmp.svg"), dpi=600)

@@ -132,7 +132,7 @@ function callbackncl(integrator)
 end
 
 # Constant linear operator case--linop is an array
-function makeprop(f!, linop::Array{ComplexF64,N}, Eω0, z, zmax, stepfun, printer, rtol, atol) where N
+function makeprop(f!, linop::Array{ComplexF64}, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # For a constant linear operator L, the integral is just L*z
     Li! = let linop=linop
         function Li!(out, z)
@@ -146,7 +146,7 @@ end
 
 # For a linop tuple we expect a pair of functions (linop, ilinop) where the second function provides the
 # cumulatively integrated linear operator. This is mostly for testing.
-function makeprop(f!, linop::Tuple, Eω0, z, zmax, stepfun, printer, rtol, atol) where N
+function makeprop(f!, linop::Tuple, Eω0, z, zmax, stepfun, printer, rtol, atol)
     Li! = linop[2]
     prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
