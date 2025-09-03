@@ -317,6 +317,9 @@ In this case, all keyword arguments except for `λ0` are ignored.
     plasma nonlinearity, this allows for fine-tuning of the options in calculating
     the ionisation. See [`ionrate_fun_PPT`](@ref Ionisation.ionrate_fun_PPT) for possible
     keyword arguments.
+- `preionfrac::Float64`: fraction of the gas that is pre-ionised before the pulse. Defaults to `0.0`.
+    Note that this is a very simplistic model of pre-ionisation and should be used with
+    caution.
 - `thg::Bool`: Whether to include third-harmonic generation. Defaults to `true` for
     full-field simulations and to `false` for envelope simulations.
 If `raman` is `true`, then the following options apply:
@@ -363,8 +366,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         modes=:HE11, model=:full, loss=true,
                         radial_integral_rtol=1e-3,
                         raman=nothing, kerr=true, plasma=nothing,
-                        PPT_options=Dict{Symbol, Any}(),
                         stats_kwargs=Dict{Symbol, Any}(),
+                        PPT_options=Dict{Symbol, Any}(), preionfrac=0.0,
                         rotation=true, vibration=true,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
@@ -378,7 +381,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
     mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure)
-    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration, PPT_options)
+    resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
+                        PPT_options, preionfrac)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -526,7 +530,7 @@ function makedensity(flength, gas, pressure)
 end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_options)
+                      rotation, vibration, PPT_options, preionfrac)
     out = Any[]
     if kerr
         if thg
@@ -535,7 +539,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
             push!(out, Nonlinear.Kerr_field_nothg(PhysData.γ3_gas(gas), length(grid.to)))
         end
     end
-    makeplasma!(out, grid, gas, plasma, pol, PPT_options)
+    makeplasma!(out, grid, gas, plasma, pol, PPT_options, preionfrac)
     if isnothing(raman)
         raman = gas in (:N2, :H2, :D2, :N2O, :CH4, :SF6)
     end
@@ -552,7 +556,7 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
 end
 
 function makeplasma!(out, grid, gas, plasma::Bool, pol,
-                     PPT_options)
+                     PPT_options, preionfrac)
     # simple true/false => default to PPT for atoms, ADK for molecules
     if ~plasma
         return
@@ -564,11 +568,11 @@ function makeplasma!(out, grid, gas, plasma::Bool, pol,
         @info("Using PPT ionisation rate.")
         model = :PPT
     end
-    makeplasma!(out, grid, gas, model, pol, PPT_options)
+    makeplasma!(out, grid, gas, model, pol, PPT_options, preionfrac)
 end
 
 function makeplasma!(out, grid, gas, plasma::Symbol, pol,
-                     PPT_options)
+                     PPT_options, preionfrac)
     ionpot = PhysData.ionisation_potential(gas)
     if plasma == :ADK
         ionrate = Ionisation.ionrate_fun!_ADK(gas)
@@ -579,11 +583,11 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol,
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))
     end
     Et = pol ? Array{Float64}(undef, length(grid.to), 2) : grid.to
-    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot))
+    push!(out, Nonlinear.PlasmaCumtrapz(grid.to, Et, ionrate, ionpot; preionfrac))
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_options)
+                      rotation, vibration, PPT_options, preionfrac)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
     isnothing(thg) && (thg = false) 
     out = Any[]
