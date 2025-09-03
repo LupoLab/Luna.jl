@@ -164,6 +164,8 @@ function stats(output; kwargs...)
         fstats, (stats["mode_reconstruction_error"], "Mode error"))
     haskey(stats, "transverse_points") && push!(
         fstats, (stats["transverse_points"], "Transverse grid points"))
+    haskey(stats, "transverse_integral_error_rel") && push!(
+        fstats, (stats["transverse_integral_error_rel"], "Transverse integral error (relative)"))
 
 
     z = stats["z"]*1e2
