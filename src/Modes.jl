@@ -24,6 +24,8 @@ ModeCollection = Union{Tuple{Vararg{T} where T <: Modes.AbstractMode},
 # make modes broadcast like a scalar
 Broadcast.broadcastable(m::AbstractMode) = Ref(m)
 
+modeinfo(m::AbstractMode) = Dict()
+
 """
     dimlimits(m::AbstractMode; z=0.0)
 
@@ -322,7 +324,7 @@ coordinates `xs = (r,θ)`.
 """
 function overlap(m::AbstractMode, E)
     dl = dimlimits(m)
-    val, _ = hcubature(dl[2], dl[3]; maxevals=1000) do xs
+    val, _ = hcubature(dl[2], dl[3]; maxevals=10000) do xs
         0.5*sqrt(ε_0/μ_0)*dot(Exy(m, xs), E(xs))*xs[1]
     end
     val

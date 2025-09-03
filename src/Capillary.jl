@@ -7,7 +7,7 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, modeinfo
 import Luna.LinearOps: make_linop, conj_clamp, neff_grid, neff_β_grid
 import Luna.PhysData: wlfreq
 import Luna.Utils: subscript
@@ -52,6 +52,10 @@ end
 mode_string(m::MarcatiliMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
 radius_string(m::MarcatiliMode{<:Number, Tco, Tcl, LT}) where {Tco, Tcl, LT} = "a=$(m.a)"
 radius_string(m::MarcatiliMode) = "a(z=0)=$(radius(m, 0))"
+
+modeinfo(m::MarcatiliMode) = Dict(:kind => m.kind, :n => m.n, :m => m.m,
+                                  :radius => radius(m, 0), :ϕ => m.ϕ, :model => m.model,
+                                  :loss => m.loss == Val(true))
 
 """
     MarcatiliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
