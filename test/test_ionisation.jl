@@ -1,4 +1,4 @@
-import Test: @test, @testset
+import Test: @test, @testset, @test_throws
 using Luna
 import NumericalIntegration: integrate, SimpsonEven
 import Logging: with_logger, NullLogger
@@ -122,4 +122,13 @@ end
 
     @test ir2.cspl.x == ir.cspl.x
     @test ir2.cspl.y == ir.cspl.y
+end
+
+@testset "preionisation" begin
+    @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
+                                            λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=1.01)
+    @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
+                                            λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=-0.001)
 end
