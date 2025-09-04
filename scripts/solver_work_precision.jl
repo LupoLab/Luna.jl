@@ -304,7 +304,7 @@ end
 
 nlse = NLSE(0.016, 48.0);
 
-# run at plot work-precision
+# run work-precision plots for various solvers
 # errs, nfs = workprecision(nlse, (
 #     (run_fullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
 #     (run_pieceip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
@@ -325,14 +325,15 @@ nlse = NLSE(0.016, 48.0);
 # ))
 # savefig(solver_work_precision_nabsbound.svg"))
 
+# # wor-precision curves for multiple atol values for new Luna solver
 # errs, nfs = workprecision(nlse, (
 #     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-4 .* ones(40), "1e-4"),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-5 .* ones(40), "1e-5"),
 #     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-6 .* ones(40), "1e-6"),
 #     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-8 .* ones(40), "1e-8"),
 #     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-10 .* ones(40), "1e-10"),
 # ))
 # savefig(solver_work_precision_atolscan.svg"))
-
 
 # # run a comparison to visualise the error
 # data = [run_newLuna(nlse; reltol=rtol, abstol=1e-6) for rtol in (1e-1, 6.9e-2, 1.2e-2, 5e-4)]

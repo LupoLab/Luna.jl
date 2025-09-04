@@ -91,7 +91,6 @@ function callbackcl(integrator)
     # copy back as we (might) modify u in stepfun (absorbing boundaries)
     integrator.p.Li!(integrator.p.Litmp, integrator.t)
     @. integrator.u = integrator.p.Eωtmp * exp(-integrator.p.Litmp)
-    #ODE.u_modified!(integrator, false)  # We did (possibly) mutate the solution, so cannot keep fsal
 end
 
 # For a non-constant linear operator, we need to integrate L(z) numerically along with
@@ -140,7 +139,6 @@ function callbackncl(integrator)
 
     # copy back as we (might) modify u in stepfun (absorbing boundaries)
     @. Eω = integrator.p.Eωtmp * exp(-Li)
-    #ODE.u_modified!(integrator, false)  # We did (possibly) mutate the solution, so cannot keep fsal
 end
 
 # Constant linear operator case--linop is an array

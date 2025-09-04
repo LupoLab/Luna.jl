@@ -365,7 +365,7 @@ function run(Eω, grid,
     Et = FT \ Eω
 
     function stepfun(Eω, z, dz, interpolant)
-        Eω .*= grid.ωwin
+        #Eω .*= grid.ωwin
         ldiv!(Et, FT, Eω)
         Et .*= grid.twin
         mul!(Eω, FT, Et)
