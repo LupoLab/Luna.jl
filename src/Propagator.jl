@@ -149,6 +149,9 @@ function makeprop(f!, linop::Array{ComplexF64}, Eω0, z, zmax, stepfun, printer,
             @. out = linop * z
         end
     end
+    if z > 0    # Handle continuing
+        Eω0 = @. Eω0 * exp(-linop * z)
+    end
     prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
     prob, callbackcl, rtol, atol
@@ -159,6 +162,10 @@ end
 function makeprop(f!, linop::Tuple, Eω0, z, zmax, stepfun, printer, rtol, atol)
     Li! = linop[2]
     prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
+    if z > 0    # Handle continuing
+        Li!(prop.Litmp, z)
+        Eω0 = @. Eω0 * exp(-prop.Litmp)
+    end
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
     prob, callbackcl, rtol, atol
 end
@@ -167,9 +174,12 @@ end
 function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     prop = NonConstPropagator(linop, f!, stepfun,
                               length(Eω0), similar(Eω0), similar(Eω0), printer)
-    u0 = vcat(Eω0, zero(Eω0))   # Initial linear operator is zero
-    #rtol = vcat(ones(length(Eω0))*rtol, ones(length(Eω0))*1e-10)
-    #atol = vcat(ones(length(Eω0))*atol, ones(length(Eω0))*1e-10)
+    Li = zeros(ComplexF64, size(Eω0))
+    if z > 0    # Handle continuing
+        quadgk!(linop, Li, 0.0, z)
+        Eω0 = @. Eω0 * exp(-Li)
+    end
+    u0 = vcat(Eω0, Li) # state vector includes integrated linear operator
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
     prob, callbackncl, rtol, atol
 end
