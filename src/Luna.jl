@@ -398,8 +398,8 @@ function run(Eω, grid,
         return
     else
         Logging.@info("Using $solver solver")
-        rtol = isnothing(rtol) ? 1e-2 : rtol
-        atol = isnothing(atol) ? 1e-5 : atol
+        rtol = isnothing(rtol) ? 7e-2 : rtol
+        atol = isnothing(atol) ? 1e-6 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
                              rtol, atol, init_dz, max_dz, min_dz, status_period, solver)
