@@ -104,6 +104,10 @@ function resetaffect!(integrator)
     integrator.p.cz = integrator.t
 end
 
+function noaffect!(integrator)
+    # do nothing
+end
+
 function geterror(nlse, u)
     ana = @. 5*sech(nlse.T)*exp(-1im*π/4)
     norm(FFTW.ifft(u) .- ana)/norm(ana)
@@ -119,7 +123,7 @@ function run(prob, solver, adaptive, dt, reltol, abstol; cb=nothing)
 end
 
 # run full interaction picture, constant L, analytically integrated
-function run_fullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6)
+function run_fullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6, fullret=false)
     reset!(nlse)
     prob = ODEProblem(fpre!, getinit(nlse), (0.0, π/2), nlse)
     zs, u = run(prob, solver, adaptive, dt, reltol, abstol)
@@ -130,6 +134,9 @@ function run_fullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol
     err = geterror(nlse, res[:,end])
     println("nfunc: $(nlse.nfunc)")
     println("error: $err")
+    if fullret
+        return zs, res, nlse.nfunc, err, u
+    end
     zs, res, nlse.nfunc, err
 end
 
@@ -138,7 +145,9 @@ function run_numfullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, rel
     reset!(nlse)
     u0 = vcat(getinit(nlse), zero(nlse.L))
     prob = ODEProblem(fdbl!, u0, (0.0, π/2), nlse)
-    zs, u = run(prob, solver, adaptive, dt, reltol, abstol)
+    cb = DiscreteCallback((u,t,integrator) -> true, noaffect!, save_positions=(true,true))
+    zs, u = run(prob, solver, adaptive, dt, reltol, abstol; cb=cb)
+    zs = Array(u.t)
     res = Array{Complex{Float64}}(undef, nlse.n, length(zs))
     for i in 1:length(zs)
         @. res[:,i] =  u[1:nlse.n,i] * exp(u[nlse.n + 1:end,i])
@@ -236,7 +245,7 @@ function workprecision(nlse::NLSE, solvers)
     errs = []
     nfs = []
     for (i,solverset) in enumerate(solvers)
-        solver, dts, reltols, abstols = solverset
+        solver, dts, reltols, abstols, label = solverset
         errsi = zeros(length(dts))
         nfsi = zeros(length(dts))
         for j in 1:length(dts)
@@ -244,7 +253,10 @@ function workprecision(nlse::NLSE, solvers)
             errsi[j] = err
             nfsi[j] = nfuncs
         end
-        loglog(errsi, nfsi, label=string(solver))
+        if isnothing(label)
+            label = string(solver)
+        end
+        loglog(errsi, nfsi, label=label)
         push!(errs, errsi)
         push!(nfs, nfsi)
     end
@@ -293,18 +305,36 @@ end
 nlse = NLSE(0.016, 48.0);
 
 # run at plot work-precision
-errs, nfs = workprecision(nlse, (
-    (run_fullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
-    (run_pieceip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
-    (run_numfullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30)),
-    (run_splitlin, collect(logrange(1e-4, 1e-2, 30)), 1e-6 .* ones(30), 1e-6 .* ones(30)),
-    (run_Luna_weak, 0.0002 .* ones(30), collect(logrange(1e-10, 1e-3, 30)), 1e-10 .* ones(30)),
-    (run_Luna_norm, 0.0002 .* ones(30), collect(logrange(1e-7, 1e-1, 30)), 1e-6 .* ones(30)),
-    (run_newLuna, 0.0002 .* ones(40), collect(logrange(5e-5, 1.2e-1, 40)), 1e-6 .* ones(40))
-))
-savefig(joinpath(pkgdir(Luna), "scripts/solver_work_precision.svg"))
+# errs, nfs = workprecision(nlse, (
+#     (run_fullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_pieceip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_numfullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_splitlin, collect(logrange(1e-4, 1e-2, 30)), 1e-6 .* ones(30), 1e-6 .* ones(30), nothing),
+#     (run_Luna_weak, 0.0002 .* ones(30), collect(logrange(1e-10, 1e-3, 30)), 1e-10 .* ones(30), nothing),
+#     (run_Luna_norm, 0.0002 .* ones(30), collect(logrange(1e-7, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(5e-5, 1.2e-1, 40)), 1e-6 .* ones(40), nothing)
+# ))
+# savefig("scripts/solver_work_precision_nofsal.svg"))
 
-# run a comparison to visualise the error
-data = [run_newLuna(nlse; reltol=rtol, abstol=1e-6) for rtol in (1e-1, 6.9e-2, 1.2e-2, 5e-4)]
-plot_nlse_cmp(nlse, data)
-savefig(joinpath(pkgdir(Luna), "scripts/solver_work_precision_cmp.svg"), dpi=600)
+# errs, nfs = workprecision(nlse, (
+#     (run_fullip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_pieceip, 0.0002 .* ones(30), collect(logrange(1e-5, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_Luna_weak, 0.0002 .* ones(30), collect(logrange(1e-10, 1e-3, 30)), 1e-10 .* ones(30), nothing),
+#     (run_Luna_norm, 0.0002 .* ones(30), collect(logrange(1e-7, 1e-1, 30)), 1e-6 .* ones(30), nothing),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(5e-5, 1.2e-1, 40)), 1e-6 .* ones(40), nothing)
+# ))
+# savefig(solver_work_precision_nabsbound.svg"))
+
+# errs, nfs = workprecision(nlse, (
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-4 .* ones(40), "1e-4"),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-6 .* ones(40), "1e-6"),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-8 .* ones(40), "1e-8"),
+#     (run_newLuna, 0.0002 .* ones(40), collect(logrange(1e-10, 1.2e-1, 40)), 1e-10 .* ones(40), "1e-10"),
+# ))
+# savefig(solver_work_precision_atolscan.svg"))
+
+
+# # run a comparison to visualise the error
+# data = [run_newLuna(nlse; reltol=rtol, abstol=1e-6) for rtol in (1e-1, 6.9e-2, 1.2e-2, 5e-4)]
+# plot_nlse_cmp(nlse, data)
+# savefig("solver_work_precision_cmp.svg"), dpi=600)

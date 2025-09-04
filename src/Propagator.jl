@@ -73,6 +73,8 @@ function callbackcl(integrator)
     # The output we want must be transformed back from the interaction picture
     integrator.p.Li!(integrator.p.Litmp, integrator.t)
     @. integrator.p.Eωtmp = integrator.u * exp(integrator.p.Litmp)
+
+    # define interp function to pass to output
     interp = let integrator=integrator
         function interp(z)
             u = integrator.sol(z)
@@ -80,11 +82,16 @@ function callbackcl(integrator)
             @. u * exp(integrator.p.Litmp)
         end
     end
+
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
+    
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    #@. integrator.u = integrator.p.Eωtmp * exp(-integrator.p.Litmp) # copy back as we modify u in stepfun (absorbing boundaries)
-    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
+    
+    # copy back as we (might) modify u in stepfun (absorbing boundaries)
+    integrator.p.Li!(integrator.p.Litmp, integrator.t)
+    @. integrator.u = integrator.p.Eωtmp * exp(-integrator.p.Litmp)
+    #ODE.u_modified!(integrator, false)  # We did (possibly) mutate the solution, so cannot keep fsal
 end
 
 # For a non-constant linear operator, we need to integrate L(z) numerically along with
@@ -116,6 +123,8 @@ function callbackncl(integrator)
     Li = @views integrator.u[n+1:end]    # Cumulatively integrated linear operator
     # The output we want must be transformed back from the interaction picture
     @. integrator.p.Eωtmp = Eω * exp(Li)
+
+    # define interp function to pass to output
     interp = let integrator=integrator, n=n
         function interp(z)
             u = integrator.sol(z)
@@ -124,11 +133,14 @@ function callbackncl(integrator)
             @. Eω * exp(Li)
         end
     end
+
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
                          ODE.get_proposed_dt(integrator), interp)
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
-    #@. Eω = integrator.p.Eωtmp * exp(-Li) # copy back as we modify u in stepfun (absorbing boundaries)
-    ODE.u_modified!(integrator, false)  # We didn't mutate the solution, so can keep fsal
+
+    # copy back as we (might) modify u in stepfun (absorbing boundaries)
+    @. Eω = integrator.p.Eωtmp * exp(-Li)
+    #ODE.u_modified!(integrator, false)  # We did (possibly) mutate the solution, so cannot keep fsal
 end
 
 # Constant linear operator case--linop is an array
@@ -145,7 +157,7 @@ function makeprop(f!, linop::Array{ComplexF64}, Eω0, z, zmax, stepfun, printer,
 end
 
 # For a linop tuple we expect a pair of functions (linop, ilinop) where the second function provides the
-# cumulatively integrated linear operator. This is mostly for testing.
+# cumulatively integrated linear operator. This is mostly for testing with analytically integrable operators.
 function makeprop(f!, linop::Tuple, Eω0, z, zmax, stepfun, printer, rtol, atol)
     Li! = linop[2]
     prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
@@ -170,9 +182,10 @@ function propagate(f!, linop, Eω0, z, zmax, stepfun;
     printer = Printer(status_period, zmax)
     prob, cbfunc, rtol, atol = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # We do all saving and stats in a callback called at every step
-    cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(false,false))
-    integrator = ODE.init(prob, getproperty(ODE, solver)(); adaptive=true, reltol=rtol, abstol=atol,
-                          dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb, tstops=zstops)
+    cb = ODE.DiscreteCallback((u,t,integrator) -> true, cbfunc, save_positions=(true,true))
+    solveri = getproperty(ODE, solver)()
+    integrator = ODE.init(prob, solveri; adaptive=true, reltol=rtol, abstol=atol,
+                          dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
     printstart(printer)
     sol = ODE.solve!(integrator)
     printstop(printer, integrator)
