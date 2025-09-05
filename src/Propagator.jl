@@ -144,13 +144,10 @@ end
 # Constant linear operator case--linop is an array
 function makeprop(f!, linop::Array{ComplexF64}, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # For a constant linear operator L, the integral is just L*z
-    Li! = let linop=linop
+    Li! = let linop=linop, z0=z
         function Li!(out, z)
-            @. out = linop * z
+            @. out = linop * (z - z0) # difference from z0 to handle continuing
         end
-    end
-    if z > 0    # Handle continuing
-        Eω0 = @. Eω0 * exp(-linop * z)
     end
     prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
@@ -160,12 +157,16 @@ end
 # For a linop tuple we expect a pair of functions (linop, ilinop) where the second function provides the
 # cumulatively integrated linear operator. This is mostly for testing with analytically integrable operators.
 function makeprop(f!, linop::Tuple, Eω0, z, zmax, stepfun, printer, rtol, atol)
-    Li! = linop[2]
-    prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
-    if z > 0    # Handle continuing
-        Li!(prop.Litmp, z)
-        Eω0 = @. Eω0 * exp(-prop.Litmp)
+    Li0 = zero(Eω0)
+    ilinop! = linop[2]
+    ilinop!(Li0, z)
+    Li! = let ilinop! = ilinop!, Li0=Li0
+        function Li!(out, z)
+            ilinop!(out, z)
+            out .-= Li0 # handle continuing
+        end
     end
+    prop = AnalyticalPropagator(Li!, f!, stepfun, similar(Eω0), similar(Eω0), similar(Eω0), printer)
     prob = ODE.ODEProblem(fcl!, Eω0, (z, zmax), prop)
     prob, callbackcl, rtol, atol
 end
@@ -174,12 +175,8 @@ end
 function makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     prop = NonConstPropagator(linop, f!, stepfun,
                               length(Eω0), similar(Eω0), similar(Eω0), printer)
-    Li = zeros(ComplexF64, size(Eω0))
-    if z > 0    # Handle continuing
-        quadgk!(linop, Li, 0.0, z)
-        Eω0 = @. Eω0 * exp(-Li)
-    end
-    u0 = vcat(Eω0, Li) # state vector includes integrated linear operator
+    # continuing is handled implicilty
+    u0 = vcat(Eω0, zero(Eω0)) # state vector includes integrated linear operator
     prob = ODE.ODEProblem(fncl!, u0, (z, zmax), prop)
     prob, callbackncl, rtol, atol
 end
