@@ -119,14 +119,14 @@ function run(prob, solver, adaptive, dt, reltol, abstol; cb=nothing)
     @time integrator = init(prob, solver; dt, adaptive, reltol, abstol, saveat=zs, callback=cb)
     println("starting")
     @time u = solve!(integrator)
-    zs, u
+    zs, u, integrator
 end
 
 # run full interaction picture, constant L, analytically integrated
 function run_fullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6, fullret=false)
     reset!(nlse)
     prob = ODEProblem(fpre!, getinit(nlse), (0.0, π/2), nlse)
-    zs, u = run(prob, solver, adaptive, dt, reltol, abstol)
+    zs, u, integrator = run(prob, solver, adaptive, dt, reltol, abstol)
     res = Array{Complex{Float64}}(undef, nlse.n, length(zs))
     for (i,z) in enumerate(zs)
         @. res[:,i] =  u[:,i] * exp(nlse.L * z)
@@ -135,7 +135,7 @@ function run_fullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol
     println("nfunc: $(nlse.nfunc)")
     println("error: $err")
     if fullret
-        return zs, res, nlse.nfunc, err, u
+        return zs, res, nlse.nfunc, err, u, integrator
     end
     zs, res, nlse.nfunc, err
 end
@@ -146,7 +146,7 @@ function run_numfullip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, rel
     u0 = vcat(getinit(nlse), zero(nlse.L))
     prob = ODEProblem(fdbl!, u0, (0.0, π/2), nlse)
     cb = DiscreteCallback((u,t,integrator) -> true, noaffect!, save_positions=(true,true))
-    zs, u = run(prob, solver, adaptive, dt, reltol, abstol; cb=cb)
+    zs, u, integrator = run(prob, solver, adaptive, dt, reltol, abstol; cb=cb)
     zs = Array(u.t)
     res = Array{Complex{Float64}}(undef, nlse.n, length(zs))
     for i in 1:length(zs)
@@ -163,7 +163,7 @@ function run_pieceip(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, relto
     reset!(nlse)
     prob = ODEProblem(fpre2!, getinit(nlse), (0.0, π/2), nlse)
     cb = DiscreteCallback((u,t,integrator) -> true, resetaffect!, save_positions=(false,true))
-    _, u = run(prob, solver, adaptive, dt, reltol, abstol; cb)
+    _, u, integrator = run(prob, solver, adaptive, dt, reltol, abstol; cb)
     res = Array(u)
     zs = u.t
     err = geterror(nlse, res[:,end])
@@ -175,7 +175,7 @@ end
 function run_stiff(nlse::NLSE; solver=Tsit5(), adaptive=true, dt=0.0002, reltol=1e-2, abstol=1e-6)
     reset!(nlse)
     prob = ODEProblem(fall!, getinit(nlse), (0.0, π/2), nlse)
-    zs, u = run(prob, solver, adaptive, dt, reltol, abstol)
+    zs, u, integrator = run(prob, solver, adaptive, dt, reltol, abstol)
     res = Array(u)
     err = geterror(nlse, res[:,end])
     println("nfunc: $(nlse.nfunc)")
@@ -189,7 +189,7 @@ function run_splitlin(nlse::NLSE; solver=ETDRK4(), adaptive=false, dt=0.0002, re
     op = DiagonalOperator(nlse.L)
     f = SplitFunction(op, f2!)
     prob = SplitODEProblem(f, getinit(nlse), (0.0, π/2), nlse)
-    zs, u = run(prob, solver, adaptive, dt, reltol, abstol)
+    zs, u, integrator = run(prob, solver, adaptive, dt, reltol, abstol)
     res = Array(u)
     err = geterror(nlse, res[:,end])
     println("nfunc: $(nlse.nfunc)")

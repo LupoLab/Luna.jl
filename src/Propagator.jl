@@ -70,6 +70,7 @@ function fcl!(du,u,p,z)
 end
 
 function callbackcl(integrator)
+    println(integrator.t, " ", ODE.get_proposed_dt(integrator), " ", integrator.t - integrator.tprev, " ", integrator.dt)
     # The output we want must be transformed back from the interaction picture
     integrator.p.Li!(integrator.p.Litmp, integrator.t)
     @. integrator.p.Eωtmp = integrator.u * exp(integrator.p.Litmp)
@@ -77,14 +78,20 @@ function callbackcl(integrator)
     # define interp function to pass to output
     interp = let integrator=integrator
         function interp(z)
-            u = integrator.sol(z)
+            u = integrator(z)
             integrator.p.Li!(integrator.p.Litmp, z)
             @. u * exp(integrator.p.Litmp)
         end
     end
 
+    cache = (dtpropose = integrator.dtpropose,
+             dtcache = integrator.dtcache,
+             qold = integrator.qold,
+             erracc = integrator.erracc,
+             dtacc = integrator.dtacc)
+
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
-                         ODE.get_proposed_dt(integrator), interp)
+                         integrator.dt, interp; cache)
     
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
     
@@ -126,7 +133,7 @@ function callbackncl(integrator)
     # define interp function to pass to output
     interp = let integrator=integrator, n=n
         function interp(z)
-            u = integrator.sol(z)
+            u = integrator(z)
             Eω = @views u[1:n]
             Li = @views u[n+1:end]
             @. Eω * exp(Li)
@@ -183,7 +190,7 @@ end
 
 function propagate(f!, linop, Eω0, z, zmax, stepfun;
                    rtol=1e-3, atol=1e-6, init_dz=1e-4, max_dz=Inf, min_dz=0,
-                   status_period=1, solver=:Tsit5, zstops=nothing)
+                   status_period=1, solver=:Tsit5, zstops=nothing, stepcache=nothing)
     printer = Printer(status_period, zmax)
     prob, cbfunc, rtol, atol = makeprop(f!, linop, Eω0, z, zmax, stepfun, printer, rtol, atol)
     # We do all saving and stats in a callback called at every step
@@ -191,7 +198,15 @@ function propagate(f!, linop, Eω0, z, zmax, stepfun;
     solveri = getproperty(ODE, solver)()
     integrator = ODE.init(prob, solveri; adaptive=true, reltol=rtol, abstol=atol,
                           dt=init_dz, dtmin=min_dz, dtmax=max_dz, callback=cb)
+    if !isnothing(stepcache)
+        integrator.qold = stepcache.qold
+        integrator.erracc = stepcache.erracc
+        integrator.dtacc = stepcache.dtacc
+        integrator.dtpropose = stepcache.dtpropose
+        integrator.dtcache = stepcache.dtcache
+    end
     printstart(printer)
+    println("size of integrator: ", Base.summarysize(integrator))
     sol = ODE.solve!(integrator)
     printstop(printer, integrator)
     sol

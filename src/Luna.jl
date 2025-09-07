@@ -364,16 +364,16 @@ function run(Eω, grid,
 
     Et = FT \ Eω
 
-    function stepfun(Eω, z, dz, interpolant)
+    function stepfun(Eω, z, dz, interpolant; cache=nothing)
         #Eω .*= grid.ωwin
         ldiv!(Et, FT, Eω)
         Et .*= grid.twin
         mul!(Eω, FT, Et)
-        output(Eω, z, dz, interpolant)
+        output(Eω, z, dz, interpolant; cache)
     end
 
     # check_cache does nothing except for HDF5Outputs
-    Eωc, zc, dzc = Output.check_cache(output, Eω, z0, init_dz)
+    Eωc, zc, dzc, stepcache = Output.check_cache(output, Eω, z0, init_dz)
     if zc > z0
         Logging.@info("Found cached propagation. Resuming...")
         Eω, z0, init_dz = Eωc, zc, dzc
@@ -402,7 +402,7 @@ function run(Eω, grid,
         atol = isnothing(atol) ? 1e-6 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
-                             rtol, atol, init_dz, max_dz, min_dz, status_period, solver)
+                             rtol, atol, init_dz, max_dz, min_dz, status_period, solver, stepcache)
     end
 end
 

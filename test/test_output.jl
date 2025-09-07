@@ -225,8 +225,8 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
     output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
-    function stepfun(Eω, z, dz, interpolant)
-        output(Eω, z, dz, interpolant)
+    function stepfun(Eω, z, dz, interpolant; cache)
+        output(Eω, z, dz, interpolant; cache)
         if z > 3e-2
             error("Oh no!")
         end
