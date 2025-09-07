@@ -364,12 +364,12 @@ function run(Eω, grid,
 
     Et = FT \ Eω
 
-    function stepfun(Eω, z, dz, interpolant; cache=nothing)
+    function stepfun(Eω, z, dz, interpolant; stepcache=nothing)
         #Eω .*= grid.ωwin
         ldiv!(Et, FT, Eω)
         Et .*= grid.twin
         mul!(Eω, FT, Et)
-        output(Eω, z, dz, interpolant; cache)
+        output(Eω, z, dz, interpolant; stepcache)
     end
 
     # check_cache does nothing except for HDF5Outputs
@@ -402,7 +402,8 @@ function run(Eω, grid,
         atol = isnothing(atol) ? 1e-6 : atol
         Logging.@info("Using rtol = $rtol, atol = $atol")
         Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
-                             rtol, atol, init_dz, max_dz, min_dz, status_period, solver, stepcache)
+                             rtol, atol, init_dz, max_dz, min_dz, status_period,
+                             solver, stepcache)
     end
 end
 

@@ -66,7 +66,7 @@ haskey(o::MemoryOutput, key) = haskey(o.data, key)
         yfun: callable which returns interpolated function value at different t
     Note that from RK45.jl, this will be called with yn and tn as arguments.
 """
-function (o::MemoryOutput)(y, t, dt, yfun; kwargs...)
+function (o::MemoryOutput)(y, t, dt, yfun; stepcache=nothing)
     save, ts = o.save_cond(y, t, dt, o.saved)
     append_stats!(o, o.statsfun(y, t, dt))
     !haskey(o.data, o.yname) && initialise(o, t, dt, y)
@@ -86,6 +86,13 @@ function (o::MemoryOutput)(y, t, dt, yfun; kwargs...)
     o.data["cache"]["y"] .= y
     o.data["cache"]["t"] = t
     o.data["cache"]["dt"] = dt
+    if !isnothing(stepcache)
+        o.data["cache"]["dtpropose"] = stepcache.dtpropose
+        o.data["cache"]["dtcache"] = stepcache.dtcache
+        o.data["cache"]["qold"] = stepcache.qold
+        o.data["cache"]["erracc"] = stepcache.erracc
+        o.data["cache"]["dtacc"] = stepcache.dtacc
+    end
 end
 
 function append_stats!(o::MemoryOutput, d)
@@ -322,7 +329,7 @@ end
         yfun: callable which returns interpolated function value at different t
     Note that from RK45.jl, this will be called with yn and tn as arguments.
 """
-function (o::HDF5Output)(y, t, dt, yfun; cache=nothing)
+function (o::HDF5Output)(y, t, dt, yfun; stepcache=nothing)
     o.readonly && error("Cannot add data to read-only output!")
     save, ts = o.save_cond(y, t, dt, o.saved)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
@@ -357,11 +364,13 @@ function (o::HDF5Output)(y, t, dt, yfun; cache=nothing)
                 write(file["meta"]["cache"]["dt"], dt)
                 write(file["meta"]["cache"]["y"], y)
                 write(file["meta"]["cache"]["saved"], o.saved)
-                write(file["meta"]["cache"]["dtpropose"], cache.dtpropose)
-                write(file["meta"]["cache"]["dtcache"], cache.dtcache)
-                write(file["meta"]["cache"]["qold"], cache.qold)
-                write(file["meta"]["cache"]["erracc"], cache.erracc)
-                write(file["meta"]["cache"]["dtacc"], cache.dtacc)
+                if !isnothing(stepcache)
+                    write(file["meta"]["cache"]["dtpropose"], stepcache.dtpropose)
+                    write(file["meta"]["cache"]["dtcache"], stepcache.dtcache)
+                    write(file["meta"]["cache"]["qold"], stepcache.qold)
+                    write(file["meta"]["cache"]["erracc"], stepcache.erracc)
+                    write(file["meta"]["cache"]["dtacc"], stepcache.dtacc)
+                end
             end
         end
     end
@@ -489,13 +498,21 @@ function check_cache(o::HDF5Output, y, t, dt)
     end
     yc = o["meta"]["cache"]["y"]
     dtc = o["meta"]["cache"]["dt"]
-    dtacc = o["meta"]["cache"]["dtacc"]
-    dtpropose = o["meta"]["cache"]["dtpropose"]
-    dtcache = o["meta"]["cache"]["dtcache"]
-    qold = o["meta"]["cache"]["qold"]
-    erracc = o["meta"]["cache"]["erracc"]
-    dtacc = o["meta"]["cache"]["dtacc"]
-    return yc, tc, dtc, (;qold, erracc, dtacc, dtpropose, dtcache)
+    if haskey(o["meta"]["cache"], "dtacc")
+        dtacc = o["meta"]["cache"]["dtacc"]
+        dtpropose = o["meta"]["cache"]["dtpropose"]
+        dtcache = o["meta"]["cache"]["dtcache"]
+        qold = o["meta"]["cache"]["qold"]
+        erracc = o["meta"]["cache"]["erracc"]
+        dtacc = o["meta"]["cache"]["dtacc"]
+        stepcache = (; dtacc, dtpropose, dtcache, qold, erracc)
+        if all(iszero, stepcache)
+            stepcache = nothing
+        end
+    else
+        stepcache = nothing
+    end
+    return yc, tc, dtc, stepcache
 end
 
 """
@@ -513,7 +530,21 @@ function check_cache(o::MemoryOutput, y, t, dt)
     end
     yc = o.data["cache"]["y"]
     dtc = o.data["cache"]["dt"]
-    return yc, tc, dtc, nothing
+    if haskey(o["cache"], "dtacc")
+        dtacc = o["cache"]["dtacc"]
+        dtpropose = o["cache"]["dtpropose"]
+        dtcache = o["cache"]["dtcache"]
+        qold = o["cache"]["qold"]
+        erracc = o["cache"]["erracc"]
+        dtacc = o["cache"]["dtacc"]
+        stepcache = (; dtacc, dtpropose, dtcache, qold, erracc)
+        if all(iszero, stepcache)
+            stepcache = nothing
+        end
+    else
+        stepcache = nothing
+    end
+    return yc, tc, dtc, stepcache
 end
 
 # For other outputs, checking the cache does nothing.

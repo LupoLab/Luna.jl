@@ -70,7 +70,6 @@ function fcl!(du,u,p,z)
 end
 
 function callbackcl(integrator)
-    println(integrator.t, " ", ODE.get_proposed_dt(integrator), " ", integrator.t - integrator.tprev, " ", integrator.dt)
     # The output we want must be transformed back from the interaction picture
     integrator.p.Li!(integrator.p.Litmp, integrator.t)
     @. integrator.p.Eωtmp = integrator.u * exp(integrator.p.Litmp)
@@ -84,15 +83,15 @@ function callbackcl(integrator)
         end
     end
 
-    cache = (dtpropose = integrator.dtpropose,
-             dtcache = integrator.dtcache,
-             qold = integrator.qold,
-             erracc = integrator.erracc,
-             dtacc = integrator.dtacc)
+    stepcache = (dtpropose = integrator.dtpropose,
+                dtcache = integrator.dtcache,
+                qold = integrator.qold,
+                erracc = integrator.erracc,
+                dtacc = integrator.dtacc)
 
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
-                         integrator.dt, interp; cache)
-    
+                         integrator.dt, interp; stepcache)
+
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
     
     # copy back as we (might) modify u in stepfun (absorbing boundaries)
@@ -140,8 +139,15 @@ function callbackncl(integrator)
         end
     end
 
+        stepcache = (dtpropose = integrator.dtpropose,
+                dtcache = integrator.dtcache,
+                qold = integrator.qold,
+                erracc = integrator.erracc,
+                dtacc = integrator.dtacc)
+
     integrator.p.stepfun(integrator.p.Eωtmp, integrator.t,
-                         ODE.get_proposed_dt(integrator), interp)
+                         integrator.dt, interp; stepcache)
+
     printstep(integrator.p.p, integrator.t, ODE.get_proposed_dt(integrator))
 
     # copy back as we (might) modify u in stepfun (absorbing boundaries)
@@ -206,7 +212,6 @@ function propagate(f!, linop, Eω0, z, zmax, stepfun;
         integrator.dtcache = stepcache.dtcache
     end
     printstart(printer)
-    println("size of integrator: ", Base.summarysize(integrator))
     sol = ODE.solve!(integrator)
     printstop(printer, integrator)
     sol

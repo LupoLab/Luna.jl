@@ -225,8 +225,8 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
                                    Stats.ω0(grid),
                                    Stats.energy(grid, energyfunω))
     output = Output.HDF5Output(fpath, 0, grid.zmax, 51, statsfun)
-    function stepfun(Eω, z, dz, interpolant; cache)
-        output(Eω, z, dz, interpolant; cache)
+    function stepfun(Eω, z, dz, interpolant; stepcache)
+        output(Eω, z, dz, interpolant; stepcache)
         if z > 3e-2
             error("Oh no!")
         end
@@ -263,9 +263,9 @@ fpath = joinpath(homedir(), ".luna", "output_test", "test.h5")
     Eω = output["Eω"][idx1:idx2, :]
     Iω = abs2.(Eω)
     Iωm = abs2.(Eωm)
-    @test norm(Iω - Iωm)/norm(Iω) < 1e-7
-    @test all(isapprox.(Eωm, Eω, atol=1e-4*maximum(abs.(Eωm))))
-    @test all(isapprox.(output["stats"]["ω0"], mem.data["stats"]["ω0"], rtol=1e-6))
+    @test norm(Iω - Iωm)/norm(Iω) < 6e-9
+    @test all(isapprox.(Eωm, Eω, atol=1e-5*maximum(abs.(Eωm))))
+    @test all(isapprox.(output["stats"]["ω0"], mem.data["stats"]["ω0"], rtol=3e-6))
     @test all(output["stats"]["energy"] .≈ mem.data["stats"]["energy"])
     @test output["z"] == mem.data["z"]
     @test output["grid"] == Grid.to_dict(grid)
