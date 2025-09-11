@@ -1,0 +1,38 @@
+PREFIX=/home/mohammed/.julia/conda/3
+Unpacking bootstrapper...
+Unpacking payload...
+
+Installing base environment...
+
+Preparing transaction: ...working... done
+Executing transaction: ...working... done
+installation finished.
+WARNING conda.cli.main_config:_set_key(451): Key pip_interop_enabled is an alias of prefix_data_interoperability; setting value with latter
+Precompiling Conda...
+    464.3 ms  ✓ PrecompileTools
+    483.7 ms  ✓ VersionParsing
+   7893.0 ms  ✓ Parsers
+   1203.1 ms  ✓ JSON
+    774.5 ms  ✓ Conda
+  5 dependencies successfully precompiled in 11 seconds. 17 already precompiled.
+[ Info: building!
+[ Info: Downloading miniconda installer ...
+[ Info: Installing miniconda ...
+[ Info: Running `conda config --set pip_interop_enabled true --file /home/mohammed/.julia/conda/3/condarc-julia.yml` in root environment
+ERROR: LoadError: pip_interop is not enabled
+Use `Conda.pip_interop(true; [env::Environment=ROOTENV])` to enable
+
+Stacktrace:
+ [1] error(s::String)
+   @ Base ./error.jl:35
+ [2] check_pip_interop
+   @ ~/.julia/packages/Conda/zReqD/src/Conda.jl:637 [inlined]
+ [3] pip(cmd::String, pkgs::String, env::String)
+   @ Conda ~/.julia/packages/Conda/zReqD/src/Conda.jl:666
+ [4] top-level scope
+   @ ~/.julia/dev/Luna/deps/build.jl:5
+ [5] include(fname::String)
+   @ Main ./sysimg.jl:38
+ [6] top-level scope
+   @ none:5
+in expression starting at /home/mohammed/.julia/dev/Luna/deps/build.jl:5

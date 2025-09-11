@@ -9,12 +9,14 @@ import Luna.PhysData: wlfreq
 @testset "Capillary" begin
 @testset "loss" begin
     λ = 800e-9
-    ω = wlfreq(λ)
+    ω = PhysData.wlfreq(λ)
     a = 125e-6
     m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced)
     @test isapprox(Capillary.losslength(m, ω), 7.0593180702769, rtol=1e-5)
     @test isapprox(Capillary.dB_per_m(m, ω), 0.6152074146252722, rtol=1e-5)
     @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatiliMode(2a, :HeB, 1.0, model=:reduced), ω)
+    m = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:reduced,loss=1.0)
+    @test isapprox(Capillary.dB_per_m(m, ω), 1, rtol=1e-5)
 end
 
 @testset "normalisation" begin

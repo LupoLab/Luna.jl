@@ -77,9 +77,15 @@ Create a MarcatiliMode.
 function MarcatiliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     # chkzkwarg makes sure that coren and cladn take z as a keyword argument
     aeff_intg = Aeff_Jintg(n, get_unm(n, m, kind), kind)
-    MarcatiliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
-                   chkzkwarg(coren), chkzkwarg(cladn),
-                   model, Val(loss), aeff_intg)
+    if typeof(loss) == Bool
+        MarcatiliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
+                    chkzkwarg(coren), chkzkwarg(cladn),
+                    model, Val(loss), aeff_intg)
+    else
+        MarcatiliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
+                    chkzkwarg(coren), chkzkwarg(cladn),
+                    model, loss, aeff_intg)
+    end
 end
 
 """
@@ -150,7 +156,13 @@ function neff(m::MarcatiliMode, ω; z=0)
     εcl = m.cladn(ω, z=z)^2
     εco = m.coren(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
-    neff(m, ω, εco, vn, radius(m, z))
+    if m.loss isa Function
+        neff(m, ω, εco, vn, radius(m, z), m.loss(ω, z))
+    elseif m.loss isa Float64 || m.loss isa Int
+        neff(m, ω, εco, vn, radius(m, z), m.loss)
+    else
+        neff(m, ω, εco, vn, radius(m, z))
+    end
 end
 
 # Dispatch on loss to make neff type stable
@@ -176,6 +188,34 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, ω, εco, vn, a) where
         return (n < 1e-3) ? 1e-3 : n
     elseif m.model == :reduced
         return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
+    else
+        error("model must be :full or :reduced")
+    end 
+end
+
+# m.loss = Float64 (in dB/m)
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, Tlos}, ω, εco, vn, a, lossq::Float64) where {Ta, Tcl, Tco, Tlos}
+    if m.model == :full
+        k = ω/c
+        n = real(sqrt(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2)) + 1im*lossq*log(10)/10/k/2
+        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+    elseif m.model == :reduced
+        k = ω/c
+        return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2)) + 1im*lossq*log(10)/10/k/2
+    else
+        error("model must be :full or :reduced")
+    end 
+end
+
+# m.loss = function in ω (in dB/m), example loss(ω, z) = Maths.gauss(ω, fwhm; x0=ω0, power=100).*loss0
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, Tlos}, ω, εco, vn, a, lossq) where {Ta, Tcl, Tco, Tlos}
+    if m.model == :full
+        k = ω/c
+        n = real(sqrt(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2)) + 1im*lossq*log(10)/10/k/2
+        return (real(n) < 1e-3) ? (1e-3 + im*clamp(imag(n), 0, Inf)) : n
+    elseif m.model == :reduced
+        k = ω/c
+        return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2)) + 1im*lossq*log(10)/10/k/2
     else
         error("model must be :full or :reduced")
     end 
