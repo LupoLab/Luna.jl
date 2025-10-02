@@ -166,11 +166,13 @@ function sellmeier_gas(material::Symbol)
         C2 = 5.728e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Ar
-        B1 = 20332.29e-8
-        C1 = 206.12e-6
-        B2 = 34458.31e-8
-        C2 = 8.066e-3
-        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+        B1 = 0.00032323117217767093
+        C1 = 0.0045416501944977915
+        B2 = 0.00011557814904827939
+        C2 = 0.011120847461156543
+        B3 = 0.00010909808164540697
+        C3 = 0.0006827046691889898
+        return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
     elseif material == :Kr
         B1 = 26102.88e-8
         C1 = 2.01e-6
