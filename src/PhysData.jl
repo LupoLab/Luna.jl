@@ -47,12 +47,13 @@ const m_u = ustrip(CODATA2014.m_u)
 "Atomic unit of electric polarisability"
 const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
-const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :ArB, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
     :HeJ => "He",
     :Ar => "Ar",
+    :ArB => "Ar",
     :Ne => "Neon",
     :Kr => "Krypton",
     :Xe => "Xenon",
@@ -173,6 +174,12 @@ function sellmeier_gas(material::Symbol)
         B3 = 0.00010909808164540697
         C3 = 0.0006827046691889898
         return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
+    elseif material == :ArB
+        B1 = 20332.29e-8
+        C1 = 206.12e-6
+        B2 = 34458.31e-8
+        C2 = 8.066e-3
+        return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Kr
         B1 = 26102.88e-8
         C1 = 2.01e-6
@@ -581,7 +588,7 @@ References:
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
-        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
+        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :ArB, :Kr, :Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
@@ -600,7 +607,7 @@ function γ3_gas(material::Symbol; source=nothing)
             fac = 1
         elseif material == :Ne
             fac = 1.8
-        elseif material == :Ar
+        elseif material in (:Ar, :ArB)
             fac = 23.5
         elseif material == :Kr
             fac = 64.0
@@ -726,7 +733,7 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.9036
     elseif material == :Ne
         Ip = 0.7925
-    elseif material == :Ar
+    elseif material in (:Ar, :ArB)
         Ip = 0.5792
     elseif material == :Kr
         Ip = 0.5142
@@ -770,7 +777,7 @@ Return the quantum numbers of the `material` for use in the PPT ionisation rate.
 """
 function quantum_numbers(material)
     # Returns n, l, ion Z
-    if material == :Ar
+    if material in (:Ar, :ArB)
         return 3, 1, 1
     elseif material == :Ne
         return 2, 1, 1;
@@ -817,7 +824,7 @@ function polarisability(material, ion=false; unit=:SI)
         return (ion ? 0.2811 : 1.3207)*factor
     elseif material == :Ne
         return (ion ? 1.2417 : 2.376)*factor
-    elseif material == :Ar
+    elseif material in (:Ar, :ArB)
         return (ion ? 6.807 : 10.762)*factor
     else
         return missing
@@ -856,7 +863,7 @@ function Cnl_ADK(material)
         return 1.99
     elseif material == :Ne
         return 1.31
-    elseif material == :Ar
+    elseif material in (:Ar, :ArB)
         return 1.9
     elseif material == :Kr
         return 2.17
