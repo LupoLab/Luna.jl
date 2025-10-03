@@ -108,7 +108,8 @@ end
 
 @testset "dispersion" begin
     # tests based on symbolic results in symbolic_marcatilli.py
-    m = Capillary.MarcatiliMode(50e-6, :Ar, 2.0, model=:reduced, T=294.0)
+    # here we're using the argon ref. index from Börzsönyi et al.
+    m = Capillary.MarcatiliMode(50e-6, :ArB, 2.0, model=:reduced, T=294.0)
     ω = wlfreq(800e-9)
     @test isapprox(Capillary.β(m, ω), 7857866.63899973, rtol=1e-15)
     @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744405855838e-9, rtol=1e-13)
@@ -118,7 +119,7 @@ end
     @test isapprox(Capillary.dispersion(m, 5, ω), 2.45046358889987e-73, rtol=2e-4)
     @test isapprox(Capillary.zdw(m), 7.289431065526978e-07, rtol=1e-7)
 
-    rfg = ref_index_fun(:Ar, 2.0, 294.0)
+    rfg = ref_index_fun(:ArB, 2.0, 294.0)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> 1.45
     m = Capillary.MarcatiliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
@@ -131,7 +132,7 @@ end
     @test isapprox(Capillary.zdw(m), 7.289459086128214e-07, rtol=1e-8)
     @test isapprox(Capillary.α(m, ω), 2.21505826015050, rtol=1e-14)
 
-    rfg = ref_index_fun(:Ar, 2.0, 294.0)
+    rfg = ref_index_fun(:ArB, 2.0, 294.0)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> 0.036759+im*5.5698
     m = Capillary.MarcatiliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
