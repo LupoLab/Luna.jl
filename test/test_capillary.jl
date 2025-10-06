@@ -1,12 +1,11 @@
 import Test: @test, @testset, @test_broken
 import SpecialFunctions: besselj
-import Cubature: hcubature
+import Luna.Modes: hcubature
 import LinearAlgebra: dot, norm
 import Luna: Modes, Capillary, Grid
 import Luna.PhysData: c, roomtemp, ref_index_fun, ε_0, μ_0
 import Luna.PhysData: wlfreq
 
-@testset "Capillary" begin
 @testset "loss" begin
     λ = 800e-9
     ω = wlfreq(λ)
@@ -52,8 +51,8 @@ end
     end
 
     a = 125e-6
-    @testset "n = $n" for n = 1:6
-        @testset "m = $m" for m = 1:6
+    @testset "n = $n" for n = 1:8
+        @testset "m = $m" for m = 1:8
             # With the exception of HE65 specifically, all of these also pass with rtol=1e-20
             mode = Capillary.MarcatiliMode(a, :HeB, 1.0, n=n, m=m)
             Ni, Nerr = N(mode)
@@ -161,6 +160,4 @@ end
     Erω2 = Modes.to_space(Emω, xs, ms, components=components)
     @test all(Erω2 .== Erω!)
     @test all(Erω1 .== Erω!)
-end
-
 end

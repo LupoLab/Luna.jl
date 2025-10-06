@@ -115,10 +115,10 @@ end
 function (o::MemoryOutput)(key::AbstractString, val; force=false, meta=false, group=nothing)
     parent = meta ? o.data["meta"] : o.data
     if haskey(parent, key)
-            if force
-                Logging.@warn("Key $key already exists and will be overwritten.")
-            else
-                error("Key $key already present in dataset.")
+        if force
+            Logging.@warn("Key $key already exists and will be overwritten.")
+        else
+            error("Key $key already present in dataset.")
         end
     end
     if !isnothing(group)

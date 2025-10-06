@@ -160,6 +160,13 @@ function stats(output; kwargs...)
     haskey(stats, "dz") && push!(fstats, (1e6*stats["dz"], "Stepsize (μm)"))
     haskey(stats, "core_radius") && push!(fstats, (1e6*stats["core_radius"], "Core radius (μm)"))
     haskey(stats, "zdw") && push!(fstats, (1e9*stats["zdw"], "ZDW (nm)"))
+    haskey(stats, "mode_reconstruction_error") && push!(
+        fstats, (stats["mode_reconstruction_error"], "Mode error"))
+    haskey(stats, "transverse_points") && push!(
+        fstats, (stats["transverse_points"], "Transverse grid points"))
+    haskey(stats, "transverse_integral_error_rel") && push!(
+        fstats, (stats["transverse_integral_error_rel"], "Transverse integral error (relative)"))
+
 
     z = stats["z"]*1e2
 
