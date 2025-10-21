@@ -1,7 +1,7 @@
 module Stats
 import Luna: Maths, Grid, Modes, Utils, settings, PhysData, Fields, Processing
 import Luna.PhysData: wlfreq, c, ε_0
-import Luna.NonlinearRHS: TransModal, TransModeAvg
+import Luna.NonlinearRHS: TransModal, TransModeAvg, Erω_to_Prω!
 import Luna.Nonlinear: PlasmaCumtrapz
 import Luna.Capillary: MarcatiliMode
 import FFTW
@@ -290,6 +290,32 @@ function electrondensity(grid::Grid.RealGrid, ionrate!, dfun,
 end
 
 """
+    mode_reconstruction_error(t::TransModal)
+
+Create a stats function to calculate and collect the mode reconstruction error in the
+induced polarisation on axis at every step.
+"""
+function mode_reconstruction_error(t::TransModal)
+    Prω_recon = similar(t.Prω)
+    difference = similar(Prω_recon)
+    nl = similar(t.Emω)
+    function addstat!(d, Eω, Et, z, dz)
+        t(nl, Eω, z)
+        x = (0.0, 0.0) # on-axis coordinate
+        # reconstruct 
+        Modes.to_space!(Prω_recon, nl, x, t.ts, z=z)
+        # in going to modes and back we've picked up two factors of the mode normalisation
+        Prω_recon .*= 1/2*sqrt(PhysData.ε_0/PhysData.μ_0)
+        Erω_to_Prω!(t, x)
+        difference .= Prω_recon .- t.Prω
+        d["mode_reconstruction_error"] = sqrt(sum(abs2, difference))/sqrt(sum(abs2, Prω_recon))
+        d["transverse_points"] = float(t.ncalls) # convert to Float64 to enable NaN padding
+        d["transverse_integral_error_abs"] = sqrt(sum(abs2, t.err)/length(t.err))
+        d["transverse_integral_error_rel"] = d["transverse_integral_error_abs"]/sqrt(sum(abs2, nl)/length(nl))
+    end
+end
+
+"""
     density(dfun)
 
 Create stats function to capture the gas density as defined by `dfun(z)`
@@ -506,7 +532,7 @@ function default(grid, Eω, mode::Modes.AbstractMode, linop, transform;
 end
 
 function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
-                 windows=nothing, gas=nothing, userfuns=Any[])
+                 windows=nothing, gas=nothing, mode_error=true, userfuns=Any[])
     _, energyfunω = Fields.energyfuncs(grid)
     pol = transform.ts.indices == 1:2 ? :xy : transform.ts.indices == 1 ? :x : :y
     funs = [ω0(grid), energy(grid, energyfunω), peakpower(grid),
@@ -515,6 +541,9 @@ function default(grid, Eω, modes::Modes.ModeCollection, linop, transform;
             fwhm_r(grid, modes; components=pol)]
     if !isnothing(gas)
         push!(funs, pressure(transform.densityfun, gas))
+    end
+    if mode_error
+        push!(funs, mode_reconstruction_error(transform))
     end
     for resp in transform.resp
         if resp isa PlasmaCumtrapz
