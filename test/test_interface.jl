@@ -1,4 +1,6 @@
 using Luna
+import Luna.Capillary: besselj, get_unm
+import Luna.Modes: hquadrature
 import Test: @test, @testset, @test_throws
 import Logging
 
@@ -162,40 +164,69 @@ end
 
 ##
 @testset "GaussBeamPulse" begin
+    function overlap(n, m, kind, w0)
+        unm = get_unm(n, m, kind)
+
+        mode(ρ) = ρ >= 1 ? 0.0 : besselj(0, unm*ρ)
+        beam(ρ) = exp(-ρ^2/w0^2)
+
+        sqrt_numerator, _ = hquadrature(0, 1) do ρ
+            mode(ρ)*beam(ρ)*ρ
+        end
+
+        den1, _ = hquadrature(0, 1) do ρ
+            abs2(mode(ρ))*ρ
+        end
+
+        den2, _ = hquadrature(0, 10) do ρ
+            abs2(beam(ρ))*ρ
+        end
+
+        sqrt_numerator/sqrt((den1*den2))
+    end
+    Nmodes = 16
+    ovlp = overlap.(1, 1:Nmodes, :HE, 0.64)
+    gauss_overlaps = abs2.(ovlp)
+    phases = angle.(ovlp)
+
     a = 100e-6
     args = (a, 0.1, :He, 1)
     kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15,
-              λlims=(200e-9, 4e-6), saveN=51, plasma=false)
+              λlims=(200e-9, 4e-6), saveN=51, plasma=false, loss=false)
     p = (λ0=800e-9, energy=1e-12, τfwhm=10e-15)
     gpl = Pulses.GaussPulse(;p...)
     gpc = Pulses.GaussPulse(;polarisation=:circular, p...)
     pulse = Pulses.GaussBeamPulse(0.64*a, gpl)
-    o = prop_capillary(args...; pulses=pulse, modes=4, kwargs...)
-    @test Processing.energy(o)[1, 1] ≈ p.energy * 0.9807131210817726
-    @test Processing.energy(o)[2, 1] ≈ p.energy * 0.006182621678046407
-    @test Processing.energy(o)[3, 1] ≈ p.energy * 0.0013567813790567626
-    @test Processing.energy(o)[4, 1] ≈ p.energy * 0.0008447236094573648
+    Eω, grid, linop, transform, FT, o = Interface.prop_capillary_args(args...; pulses=pulse, modes=Nmodes, kwargs...)
+    Luna.run(Eω, grid, linop, transform, FT, o)
+    @testset for m in 1:Nmodes
+        @test Processing.energy(o)[m, 1] ≈ p.energy * gauss_overlaps[m]
+    end
 
+    # testing internals of GaussBeamPulse separately
+    # do we get the same overlap integrals?
+    modes = transform.ts.ms
+    k = 2π/kwargs[:λ0]
+    gauss = Fields.normalised_gauss_beam(k, pulse.waist)
+    ovlps = [Modes.overlap(mi, gauss) for mi in modes]
+    @test all(ovlps .≈ ovlp)
+
+    # circular polarisation
     pulse = Pulses.GaussBeamPulse(0.64*a, gpc)
-    o = prop_capillary(args...; pulses=pulse, modes=4, kwargs...)
-    @test Processing.energy(o)[1, 1] ≈ p.energy * 0.9807131210817726/2
-    @test Processing.energy(o)[2, 1] ≈ p.energy * 0.9807131210817726/2
-    @test Processing.energy(o)[3, 1] ≈ p.energy * 0.006182621678046407/2
-    @test Processing.energy(o)[4, 1] ≈ p.energy * 0.006182621678046407/2
-    @test Processing.energy(o)[5, 1] ≈ p.energy * 0.0013567813790567626/2
-    @test Processing.energy(o)[6, 1] ≈ p.energy * 0.0013567813790567626/2
-    @test Processing.energy(o)[7, 1] ≈ p.energy * 0.0008447236094573648/2
-    @test Processing.energy(o)[8, 1] ≈ p.energy * 0.0008447236094573648/2
+    o = prop_capillary(args...; pulses=pulse, modes=Nmodes, kwargs...)
+    @testset for m in 1:Nmodes
+        @test Processing.energy(o)[2m, 1] ≈ p.energy * gauss_overlaps[m]/2
+        @test Processing.energy(o)[2m-1, 1] ≈ p.energy * gauss_overlaps[m]/2
+    end
 
     # two GaussBeamPulses
     pulse1 = Pulses.GaussBeamPulse(0.64*a, gpl)
     gpl2 = Pulses.GaussPulse(;ϕ=[0, 100e-15], p...)
     pulse2 = Pulses.GaussBeamPulse(0.64*a, gpl2)
-    o = prop_capillary(args...; pulses=[pulse1, pulse2], modes=4, kwargs...)
-    @test Processing.energy(o)[1, 1] ≈ 2p.energy * 0.9807131210817726
-    @test Processing.energy(o)[2, 1] ≈ 2p.energy * 0.006182621678046407
-    @test Processing.energy(o)[3, 1] ≈ 2p.energy * 0.0013567813790567626
-    @test Processing.energy(o)[4, 1] ≈ 2p.energy * 0.0008447236094573648
+    o = prop_capillary(args...; pulses=[pulse1, pulse2], modes=Nmodes, kwargs...)
+    @testset for m in 1:Nmodes
+        @test Processing.energy(o)[m, 1] ≈ 2p.energy * gauss_overlaps[m]
+    end
 end
 
 ##

@@ -168,6 +168,7 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT}
     rtol::Float64
     atol::Float64
     mfcn::Int
+    err::Array{ComplexF64,2}
 end
 
 function show(io::IO, t::TransModal)
@@ -196,11 +197,11 @@ Construct a `TransModal`, transform E(ω) -> Pₙₗ(ω) for modal fields.
 - `norm!` : normalisation function as fctn of `z`, can be created via [`norm_modal`](@ref)
 - `rtol::Float=1e-3` : relative tolerance on the `HCubature` integration
 - `atol::Float=0.0` : absolute tolerance on the `HCubature` integration
-- `mfcn::Int=300` : maximum number of function evaluations for one modal integration
+- `mfcn::Int=512` : maximum number of function evaluations for one modal integration
 - `full::Bool=false` : if `true`, use full 2-D mode integral, if `false`, only do radial integral
 """
 function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
-                    rtol=1e-3, atol=0.0, mfcn=300, full=false)
+                    rtol=1e-3, atol=0.0, mfcn=512, full=false)
     Emω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     Erω = Array{ComplexF64,2}(undef, length(grid.ω), ts.npol)
     Erωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
@@ -211,7 +212,7 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
     TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn)
+               FT, resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn, similar(Prmω))
 end
 
 function TransModal(grid::Grid.RealGrid, args...; kwargs...)
@@ -260,20 +261,24 @@ function pointcalc!(fval, xs, t::TransModal)
             end
         end
         x = (x1,x2)
-        Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
-        to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
-        # get nonlinear pol at r,θ
-        Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
+        Erω_to_Prω!(t, x)
         t.ncalls += 1
-        @. t.Pr *= t.grid.towin
-        to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
-        @. t.Prω *= t.grid.ωwin
-        t.norm!(t.Prω)
         # now project back to each mode
         # matrix product (nω x npol) * (npol x nmodes) -> (nω x nmodes)
         mul!(t.Prmω, t.Prω, transpose(t.ts.Ems))
         fval[:, i] .= pre.*reshape(reinterpret(Float64, t.Prmω), length(t.Emω)*2)
     end
+end
+
+function Erω_to_Prω!(t, x)
+    Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
+    to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
+    # get nonlinear pol at r,θ
+    Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
+    @. t.Pr *= t.grid.towin
+    to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
+    @. t.Prω *= t.grid.ωwin
+    t.norm!(t.Prω)
 end
 
 function (t::TransModal)(nl, Eω, z)
@@ -292,6 +297,7 @@ function (t::TransModal)(nl, Eω, z)
             (ll[1],), (ul[1],), 
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
+    t.err .= reshape(reinterpret(ComplexF64, err), size(nl))
     nl .= reshape(reinterpret(ComplexF64, val), size(nl))
 end
 
