@@ -57,6 +57,7 @@ include("Grid.jl")
 include("Modes.jl")
 include("Fields.jl")
 include("RK45.jl")
+include("Propagator.jl")
 include("LinearOps.jl")
 include("Capillary.jl")
 include("Antiresonant.jl")
@@ -88,7 +89,7 @@ export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, Rect
        Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
        Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface, SFA,
        prop_capillary, prop_gnlse, Pulses, Scan, runscan, makefilename, addvariable!,
-       StepIndexFibre, SimpleFibre
+       StepIndexFibre, SimpleFibre, Propagator
 
 # for a tuple of TimeFields we assume all inputs are for mode 1
 function doinput_sm(grid, inputs::Tuple{Vararg{T} where T <: Fields.TimeField}, FT)
@@ -358,21 +359,21 @@ save_modeinfo_maybe(output, t) = nothing
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
-             rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
-             status_period=1)
+             rtol=nothing, atol=nothing, safety=0.9, norm=RK45.weaknorm,
+             status_period=1, solver=:Tsit5)
 
     Et = FT \ Eω
 
-    function stepfun(Eω, z, dz, interpolant)
-        Eω .*= grid.ωwin
+    function stepfun(Eω, z, dz, interpolant; stepcache=nothing)
+        #Eω .*= grid.ωwin
         ldiv!(Et, FT, Eω)
         Et .*= grid.twin
         mul!(Eω, FT, Et)
-        output(Eω, z, dz, interpolant)
+        output(Eω, z, dz, interpolant; stepcache)
     end
 
     # check_cache does nothing except for HDF5Outputs
-    Eωc, zc, dzc = Output.check_cache(output, Eω, z0, init_dz)
+    Eωc, zc, dzc, stepcache = Output.check_cache(output, Eω, z0, init_dz)
     if zc > z0
         Logging.@info("Found cached propagation. Resuming...")
         Eω, z0, init_dz = Eωc, zc, dzc
@@ -383,20 +384,36 @@ function run(Eω, grid,
     save_modeinfo_maybe(output, transform)
 
     flush(stderr) # flush std error once before starting to show setup steps
-    RK45.solve_precon(
-        transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
-        max_dt=max_dz, min_dt=min_dz,
-        rtol=rtol, atol=atol, safety=safety, norm=norm,
-        status_period=status_period)
+
+    if solver == :OrigRK45
+        Logging.@info("Using original Luna RK45 solver.")
+        rtol = isnothing(rtol) ? 1e-6 : rtol
+        atol = isnothing(atol) ? 1e-10 : atol
+        Logging.@info("Using rtol = $rtol, atol = $atol")
+        RK45.solve_precon(
+            transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,
+            max_dt=max_dz, min_dt=min_dz,
+            rtol=rtol, atol=atol, safety=safety, norm=norm,
+            status_period=status_period)
+        return
+    else
+        Logging.@info("Using $solver solver")
+        rtol = isnothing(rtol) ? 7e-2 : rtol
+        atol = isnothing(atol) ? 1e-6 : atol
+        Logging.@info("Using rtol = $rtol, atol = $atol")
+        Propagator.propagate(transform, linop, Eω, z0, grid.zmax, stepfun;
+                             rtol, atol, init_dz, max_dz, min_dz, status_period,
+                             solver, stepcache)
+    end
 end
 
 # run some code for precompilation
 Logging.with_logger(Logging.NullLogger()) do
-    prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
+    prop_capillary(125e-6, 0.03, :He, 1.0; λ0=800e-9, energy=1e-9,
                     τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
-    prop_capillary(125e-6, 0.3, :He, (1.0, 0); λ0=800e-9, energy=1e-9,
+    prop_capillary(125e-6, 0.03, :He, (1.0, 0); λ0=800e-9, energy=1e-9,
                     τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
-    prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
+    prop_capillary(125e-6, 0.03, :He, 1.0; λ0=800e-9, energy=1e-9,
                     τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
                     modes=4)
     p = Tools.capillary_params(120e-6, 10e-15, 800e-9, 125e-6, :He, P=1.0)
