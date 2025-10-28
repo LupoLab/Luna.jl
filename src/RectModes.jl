@@ -4,7 +4,7 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, modeinfo
 import Base: show
 
 export RectMode, dimlimits, neff, field, N, Aeff
@@ -32,6 +32,8 @@ function show(io::IO, m::RectMode)
 end
 
 mode_string(m::RectMode) = string(m.n)*string(m.m)
+
+modeinfo(m::RectMode) = Dict(:a => m.a(0), :b => m.b(0), :n => m.n, :m => m.m)
 
 RectMode(a::Number, args...; kwargs...) = RectMode(z->a, args...; kwargs...)
 RectMode(afun, b::Number, args...; kwargs...) = RectMode(afun, z->b, args...; kwargs...)

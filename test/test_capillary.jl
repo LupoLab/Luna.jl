@@ -1,12 +1,11 @@
 import Test: @test, @testset, @test_broken
 import SpecialFunctions: besselj
-import Cubature: hcubature
+import Luna.Modes: hcubature
 import LinearAlgebra: dot, norm
 import Luna: Modes, Capillary, Grid
 import Luna.PhysData: c, roomtemp, ref_index_fun, ε_0, μ_0
 import Luna.PhysData: wlfreq
 
-@testset "Capillary" begin
 @testset "loss" begin
     λ = 800e-9
     ω = wlfreq(λ)
@@ -52,8 +51,8 @@ end
     end
 
     a = 125e-6
-    @testset "n = $n" for n = 1:6
-        @testset "m = $m" for m = 1:6
+    @testset "n = $n" for n = 1:8
+        @testset "m = $m" for m = 1:8
             # With the exception of HE65 specifically, all of these also pass with rtol=1e-20
             mode = Capillary.MarcatiliMode(a, :HeB, 1.0, n=n, m=m)
             Ni, Nerr = N(mode)
@@ -108,7 +107,8 @@ end
 
 @testset "dispersion" begin
     # tests based on symbolic results in symbolic_marcatilli.py
-    m = Capillary.MarcatiliMode(50e-6, :Ar, 2.0, model=:reduced, T=294.0)
+    # here we're using the argon ref. index from Börzsönyi et al.
+    m = Capillary.MarcatiliMode(50e-6, :ArB, 2.0, model=:reduced, T=294.0)
     ω = wlfreq(800e-9)
     @test isapprox(Capillary.β(m, ω), 7857866.63899973, rtol=1e-15)
     @test isapprox(Capillary.dispersion(m, 1, ω), 3.33744405855838e-9, rtol=1e-13)
@@ -118,7 +118,7 @@ end
     @test isapprox(Capillary.dispersion(m, 5, ω), 2.45046358889987e-73, rtol=2e-4)
     @test isapprox(Capillary.zdw(m), 7.289431065526978e-07, rtol=1e-7)
 
-    rfg = ref_index_fun(:Ar, 2.0, 294.0)
+    rfg = ref_index_fun(:ArB, 2.0, 294.0)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> 1.45
     m = Capillary.MarcatiliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
@@ -131,7 +131,7 @@ end
     @test isapprox(Capillary.zdw(m), 7.289459086128214e-07, rtol=1e-8)
     @test isapprox(Capillary.α(m, ω), 2.21505826015050, rtol=1e-14)
 
-    rfg = ref_index_fun(:Ar, 2.0, 294.0)
+    rfg = ref_index_fun(:ArB, 2.0, 294.0)
     coren = (ω; z) -> rfg(wlfreq(ω))
     cladn = (ω; z) -> 0.036759+im*5.5698
     m = Capillary.MarcatiliMode(50e-6, 1, 1, :HE, 0.0, coren, cladn)
@@ -160,6 +160,4 @@ end
     Erω2 = Modes.to_space(Emω, xs, ms, components=components)
     @test all(Erω2 .== Erω!)
     @test all(Erω1 .== Erω!)
-end
-
 end
