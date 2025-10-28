@@ -1,6 +1,6 @@
 module Interface
 using Luna
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, roomtemp
 import Luna: Grid, Modes, Output, Fields
 import Logging: @info, @debug
 
@@ -303,6 +303,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
     commonly seen in the literature. See `Luna.Capillary` for more details.
     Defaults to `:full`.
 - `loss::Bool`: Whether to include propagation loss. Defaults to `true`.
+- `temperature::Number`: Temperature of the gas in Kelvin. Defaults to room temperature.
 
 # Nonlinear interaction options
 - `kerr`: Whether to include the Kerr effect. Defaults to `true`.
@@ -368,7 +369,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         raman=nothing, kerr=true, plasma=nothing,
                         stats_kwargs=Dict{Symbol, Any}(),
                         PPT_options=Dict{Symbol, Any}(), preionfrac=0.0,
-                        rotation=true, vibration=true,
+                        rotation=true, vibration=true, temperature=roomtemp,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
 
@@ -378,9 +379,9 @@ function prop_capillary_args(radius, flength, gas, pressure;
     thg = isnothing(thg) ? !envelope : thg
 
     grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
-    mode_s = makemode_s(modes, flength, radius, gas, pressure, model, loss, pol)
+    mode_s = makemode_s(modes, flength, radius, gas, pressure, temperature, model, loss, pol)
     check_orth(mode_s)
-    density = makedensity(flength, gas, pressure)
+    density = makedensity(flength, gas, pressure, temperature)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
                         PPT_options, preionfrac)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
@@ -486,19 +487,19 @@ function makemodes_pol(pol, args...; kwargs...)
     end
 end
 
-function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure::Number, model, loss, pol)
-    makemodes_pol(pol, radius, gas, pressure; model, loss, parse_mode(mode)...)
+function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure::Number, temperature, model, loss, pol)
+    makemodes_pol(pol, radius, gas, pressure; T=temperature, model, loss, parse_mode(mode)...)
 end
 
 function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure::Tuple{<:Number, <:Number},
-                    model, loss, pol)
-    coren, _ = Capillary.gradient(gas, flength, pressure...)
+                    temperature, model, loss, pol)
+    coren, _ = Capillary.gradient(gas, flength, pressure..., T=temperature)
     makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
 end
 
-function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure, model, loss, pol)
+function makemode_s(mode::Union{Symbol, Dict}, flength, radius, gas, pressure, temperature, model, loss, pol)
     Z, P = pressure
-    coren, _ = Capillary.gradient(gas, Z, P)
+    coren, _ = Capillary.gradient(gas, Z, P, T=temperature)
     makemodes_pol(pol, radius, coren; model, loss, parse_mode(mode)...)
 end
 
@@ -514,18 +515,18 @@ end
 _flatten(modes::Vector{<:AbstractArray}) = collect(Iterators.flatten(modes))
 _flatten(mode) = mode
 
-function makedensity(flength, gas, pressure::Number)
-    ρ0 = PhysData.density(gas, pressure)
+function makedensity(flength, gas, pressure::Number, temperature)
+    ρ0 = PhysData.density(gas, pressure, temperature)
     z -> ρ0
 end
 
-function makedensity(flength, gas, pressure::Tuple{<:Number, <:Number})
-    _, density = Capillary.gradient(gas, flength, pressure...)
+function makedensity(flength, gas, pressure::Tuple{<:Number, <:Number}, temperature)
+    _, density = Capillary.gradient(gas, flength, pressure..., T=temperature)
     density
 end
 
-function makedensity(flength, gas, pressure)
-    _, density = Capillary.gradient(gas, pressure...)
+function makedensity(flength, gas, pressure, temperature)
+    _, density = Capillary.gradient(gas, pressure..., T=temperature)
     density
 end
 

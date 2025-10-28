@@ -9,7 +9,7 @@ import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
 import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, modeinfo
 import Luna.LinearOps: make_linop, conj_clamp, neff_grid, neff_β_grid
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, roomtemp
 import Luna.Utils: subscript
 import Base: show
 
@@ -294,15 +294,15 @@ Aeff(m::MarcatiliMode; z=0) = radius(m, z)^2 * m.aeff_intg
 
 
 """
-    gradient(gas, L, p0, p1)
+    gradient(gas, L, p0, p1; T=roomtemp)
 
 Convenience function to create density and core index profiles for
 simple two-point gradient fills defined by the waveguide length `L` and the pressures at
 `z=0` and `z=L`.
 """
-function gradient(gas, L, p0, p1)
+function gradient(gas, L, p0, p1; T=roomtemp)
     γ = sellmeier_gas(gas)
-    dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1))
+    dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1); T)
     p(z) =  z > L ? p1 :
             z <= 0 ? p0 : 
             sqrt(p0^2 + z/L*(p1^2 - p0^2))
@@ -312,15 +312,15 @@ function gradient(gas, L, p0, p1)
 end
 
 """
-    gradient(gas, Z, P)
+    gradient(gas, Z, P; T=roomtemp)
 
 Convenience function to create density and core index profiles for
 multi-point gradient fills defined by positions `Z` and pressures `P`.
 """
-function gradient(gas, Z, P)
+function gradient(gas, Z, P; T=roomtemp)
     γ = sellmeier_gas(gas)
     ex = extrema(P)
-    dspl = densityspline(gas, Pmin=ex[1]==ex[2] ? 0 : ex[1], Pmax=ex[2])
+    dspl = densityspline(gas, Pmin=ex[1]==ex[2] ? 0 : ex[1], Pmax=ex[2]; T)
     function p(z)
         if z <= Z[1]
             return P[1]
