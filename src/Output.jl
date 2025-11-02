@@ -39,10 +39,14 @@ function MemoryOutput(save_cond, yname, tname, statsfun=nostats, script=nothing)
     MemoryOutput(save_cond, yname, tname, 0, data, statsfun)
 end
 
-function initialise(o::MemoryOutput, y)
+function initialise(o::MemoryOutput, t, dt, y)
     dims = init_dims(size(y), o.save_cond)
     o.data[o.yname] = Array{ComplexF64}(undef, dims)
     o.data[o.tname] = Array{Float64}(undef, (dims[end],))
+    o.data["cache"] = Dict{String, Any}()
+    o.data["cache"]["y"] = copy(y)
+    o.data["cache"]["t"] = t
+    o.data["cache"]["dt"] = dt
 end
 
 "getindex works interchangeably so when switching from one Output to
@@ -62,10 +66,10 @@ haskey(o::MemoryOutput, key) = haskey(o.data, key)
         yfun: callable which returns interpolated function value at different t
     Note that from RK45.jl, this will be called with yn and tn as arguments.
 """
-function (o::MemoryOutput)(y, t, dt, yfun)
+function (o::MemoryOutput)(y, t, dt, yfun; stepcache=nothing)
     save, ts = o.save_cond(y, t, dt, o.saved)
     append_stats!(o, o.statsfun(y, t, dt))
-    !haskey(o.data, o.yname) && initialise(o, y)
+    !haskey(o.data, o.yname) && initialise(o, t, dt, y)
     while save
         s = size(o.data[o.yname])
         if s[end] < o.saved+1
@@ -78,6 +82,16 @@ function (o::MemoryOutput)(y, t, dt, yfun)
         end
         o.saved += 1
         save, ts = o.save_cond(y, t, dt, o.saved)
+    end
+    o.data["cache"]["y"] .= y
+    o.data["cache"]["t"] = t
+    o.data["cache"]["dt"] = dt
+    if !isnothing(stepcache)
+        o.data["cache"]["dtpropose"] = stepcache.dtpropose
+        o.data["cache"]["dtcache"] = stepcache.dtcache
+        o.data["cache"]["qold"] = stepcache.qold
+        o.data["cache"]["erracc"] = stepcache.erracc
+        o.data["cache"]["dtacc"] = stepcache.dtacc
     end
 end
 
@@ -212,7 +226,7 @@ function HDF5Output(fpath::AbstractString)
     HDF5Output(fpath, 0, 0, 1; readonly=true)
 end
 
-function initialise(o::HDF5Output, y)
+function initialise(o::HDF5Output, t, dt, y)
     ydims = size(y)
     idims = init_dims(ydims, o.save_cond)
     cdims = collect(idims)
@@ -235,10 +249,15 @@ function initialise(o::HDF5Output, y)
         o.cachehash = hash((statsnames, size(y)))
         file["meta"]["cachehash"] = o.cachehash
         if o.cache
-            file["meta"]["cache"]["t"] = typemin(0.0)
-            file["meta"]["cache"]["dt"] = typemin(0.0)
+            file["meta"]["cache"]["t"] = t
+            file["meta"]["cache"]["dt"] = dt
             file["meta"]["cache"]["y"] = y
             file["meta"]["cache"]["saved"] = 0
+            file["meta"]["cache"]["dtpropose"] = 0.0
+            file["meta"]["cache"]["dtcache"] = 0.0
+            file["meta"]["cache"]["qold"] = 0.0
+            file["meta"]["cache"]["erracc"] = 0.0
+            file["meta"]["cache"]["dtacc"] = 0.0
         end
     end
 end
@@ -310,13 +329,13 @@ end
         yfun: callable which returns interpolated function value at different t
     Note that from RK45.jl, this will be called with yn and tn as arguments.
 """
-function (o::HDF5Output)(y, t, dt, yfun)
+function (o::HDF5Output)(y, t, dt, yfun; stepcache=nothing)
     o.readonly && error("Cannot add data to read-only output!")
     save, ts = o.save_cond(y, t, dt, o.saved)
     push!(o.stats_tmp, o.statsfun(y, t, dt))
     if save
         HDF5.h5open(o.fpath, "r+") do file
-            !HDF5.haskey(file, o.yname) && initialise(o, y)
+            !HDF5.haskey(file, o.yname) && initialise(o, t, dt, y)
             statsnames = sort(collect(keys(o.stats_tmp[end])))
             cachehash = hash((statsnames, size(y)))
             cachehash == o.cachehash || error(
@@ -345,6 +364,13 @@ function (o::HDF5Output)(y, t, dt, yfun)
                 write(file["meta"]["cache"]["dt"], dt)
                 write(file["meta"]["cache"]["y"], y)
                 write(file["meta"]["cache"]["saved"], o.saved)
+                if !isnothing(stepcache)
+                    write(file["meta"]["cache"]["dtpropose"], stepcache.dtpropose)
+                    write(file["meta"]["cache"]["dtcache"], stepcache.dtcache)
+                    write(file["meta"]["cache"]["qold"], stepcache.qold)
+                    write(file["meta"]["cache"]["erracc"], stepcache.erracc)
+                    write(file["meta"]["cache"]["dtacc"], stepcache.dtacc)
+                end
             end
         end
     end
@@ -464,19 +490,65 @@ Check for an existing cached propagation in the output `o` and return this cache
 """
 function check_cache(o::HDF5Output, y, t, dt)
     if !o.cache || !haskey(o["meta"]["cache"], "t")
-        return y, t, dt
+        return y, t, dt, nothing
     end
     tc = o["meta"]["cache"]["t"]
     if tc < t
-        return y, t, dt
+        return y, t, dt, nothing
     end
     yc = o["meta"]["cache"]["y"]
     dtc = o["meta"]["cache"]["dt"]
-    return yc, tc, dtc
+    if haskey(o["meta"]["cache"], "dtacc")
+        dtacc = o["meta"]["cache"]["dtacc"]
+        dtpropose = o["meta"]["cache"]["dtpropose"]
+        dtcache = o["meta"]["cache"]["dtcache"]
+        qold = o["meta"]["cache"]["qold"]
+        erracc = o["meta"]["cache"]["erracc"]
+        dtacc = o["meta"]["cache"]["dtacc"]
+        stepcache = (; dtacc, dtpropose, dtcache, qold, erracc)
+        if all(iszero, stepcache)
+            stepcache = nothing
+        end
+    else
+        stepcache = nothing
+    end
+    return yc, tc, dtc, stepcache
 end
 
-# For other outputs (e.g. MemoryOutput or another function), checking the cache does nothing.
-check_cache(o, y, t, dt) = y, t, dt
+"""
+    check_cache(o::MemoryOutput, y, t, dt)
+
+Check for an existing cached propagation in the output `o` and return this cache if present.
+"""
+function check_cache(o::MemoryOutput, y, t, dt)
+    if !haskey(o, "cache")
+        return y, t, dt, nothing
+    end
+    tc = o.data["cache"]["t"]
+    if tc < t
+        return y, t, dt, nothing
+    end
+    yc = o.data["cache"]["y"]
+    dtc = o.data["cache"]["dt"]
+    if haskey(o["cache"], "dtacc")
+        dtacc = o["cache"]["dtacc"]
+        dtpropose = o["cache"]["dtpropose"]
+        dtcache = o["cache"]["dtcache"]
+        qold = o["cache"]["qold"]
+        erracc = o["cache"]["erracc"]
+        dtacc = o["cache"]["dtacc"]
+        stepcache = (; dtacc, dtpropose, dtcache, qold, erracc)
+        if all(iszero, stepcache)
+            stepcache = nothing
+        end
+    else
+        stepcache = nothing
+    end
+    return yc, tc, dtc, stepcache
+end
+
+# For other outputs, checking the cache does nothing.
+check_cache(o, y, t, dt) = y, t, dt, nothing
 
 "Condition callable that distributes save points evenly on a grid"
 struct GridCondition

@@ -340,11 +340,19 @@ If `raman` is `true`, then the following options apply:
 - `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
 - `filename`: Can be used to to overwrite the scan name when running a parameter scan.
     The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
+
+# Solver options
+- `rtol::Number`: Relative tolerance for the solver. Defaults to an optimal solver dependent value.
+- `atol::Number`: Absolute tolerance for the solver. Defaults to an optimal solver dependent value.
+- `solver::Symbol`: The solver to use. Defaults to `:Tsit5` from DifferentialEquations.jl.
+    Other possible choices can be found in the non-stiff ODE documentation of DifferentialEquations.jl.
+    For the original Luna RK45 solver, use `:OrigRK45`.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
-function prop_capillary(args...; status_period=5, kwargs...)
+function prop_capillary(args...; rtol=nothing, atol=nothing, solver=:Tsit5,
+                        status_period=5, kwargs...)
     Eω, grid, linop, transform, FT, output = prop_capillary_args(args...; kwargs...)
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    Luna.run(Eω, grid, linop, transform, FT, output; rtol, atol, solver, status_period)
     output
 end
 
@@ -898,11 +906,19 @@ Note that the current GNLSE model is single mode only.
 - `scanidx`: Current scan index within a scan being run. Only used when `scan` is passed.
 - `filename`: Can be used to to overwrite the scan name when running a parameter scan.
     The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
+
+# Solver options
+- `rtol::Number`: Relative tolerance for the solver. Defaults to an optimal solver dependent value.
+- `atol::Number`: Absolute tolerance for the solver. Defaults to an optimal solver dependent value.
+- `solver::Symbol`: The solver to use. Defaults to `:Tsit5` from DifferentialEquations.jl.
+    Other possible choices can be found in the non-stiff ODE documentation of DifferentialEquations.jl.
+    For the original Luna RK45 solver, use `:OrigRK45`.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
 """
-function prop_gnlse(args...; status_period=5, kwargs...)
+function prop_gnlse(args...; rtol=nothing, atol=nothing, solver=:Tsit5,
+                        status_period=5, kwargs...)
     Eω, grid, linop, transform, FT, output = prop_gnlse_args(args...; kwargs...)
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    Luna.run(Eω, grid, linop, transform, FT, output; rtol, atol, solver, status_period)
     output
 end
 
