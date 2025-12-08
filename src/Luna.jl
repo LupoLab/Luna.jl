@@ -172,7 +172,8 @@ end
 
 function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components;
-               full=false, norm! = NonlinearRHS.norm_modal(grid))
+               full=false, norm! = NonlinearRHS.norm_modal(grid),
+               rtol=1e-3, atol=0.0, mfcn=512)
     Logging.@info("Setting up and planning FFTs...")
     flush(stderr)
     ts = Modes.ToSpace(modes, components=components)
@@ -186,8 +187,8 @@ function setup(grid::Grid.RealGrid, densityfun, responses, inputs,
     xo = Array{Float64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_rfft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, norm!,
-                                 rtol=1e-3, atol=0.0, mfcn=300, full=full)
+                                 responses, densityfun, norm!;
+                                 rtol, atol, mfcn, full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
@@ -198,7 +199,8 @@ end
 
 function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
                modes::Modes.ModeCollection, components;
-               full=false, norm! = NonlinearRHS.norm_modal(grid))
+               full=false, norm! = NonlinearRHS.norm_modal(grid),
+               rtol=1e-3, atol=0.0, mfcn=512)
     Logging.@info("Setting up and planning FFTs...")
     flush(stderr)
     ts = Modes.ToSpace(modes, components=components)
@@ -212,8 +214,8 @@ function setup(grid::Grid.EnvGrid, densityfun, responses, inputs,
     xo = Array{ComplexF64}(undef, length(grid.to), ts.npol)
     FTo = FFTW.plan_fft(xo, 1, flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransModal(grid, ts, FTo,
-                                 responses, densityfun, norm!,
-                                 rtol=1e-3, atol=0.0, mfcn=300, full=full)
+                                 responses, densityfun, norm!;
+                                 rtol, atol, mfcn, full)
     inv(FT) # create inverse FT plans now, so wisdom is saved
     inv(FTo)
     Utils.saveFFTwisdom()
@@ -333,6 +335,26 @@ simtype(g, t, l) = Dict("field" => gridtype(g),
                         "transform" => string(t),
                         "linop" => linoptype(l))
 
+function save_modeinfo_maybe(output, t::NonlinearRHS.TransModal)
+    pol = t.ts.indices == 1:2 ? "xy" : t.ts.indices == 1 ? "x" : "y"
+    modeinfos = unnest([Modes.modeinfo(m) for m in t.ts.ms])
+    output(modeinfos; group="modes")
+    output("polarisation", pol)
+end
+
+function unnest(dicts)
+    out = Dict{String, Any}()
+    for k in keys(dicts[1]) # assuming all dicts have the same keys
+        out[sym2string(k)] = [sym2string(di[k]) for di in dicts]
+    end
+    out
+end
+
+sym2string(sym::Symbol) = string(sym)
+sym2string(other) = other
+
+save_modeinfo_maybe(output, t) = nothing
+
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
@@ -358,6 +380,8 @@ function run(Eω, grid,
 
     output(Grid.to_dict(grid), group="grid")
     output(simtype(grid, transform, linop), group="simulation_type")
+    save_modeinfo_maybe(output, transform)
+
     flush(stderr) # flush std error once before starting to show setup steps
     RK45.solve_precon(
         transform, linop, Eω, z0, init_dz, grid.zmax, stepfun=stepfun,

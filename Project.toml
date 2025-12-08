@@ -1,7 +1,7 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
-version = "0.5.1"
+version = "0.6.0"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
