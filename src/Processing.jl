@@ -804,55 +804,52 @@ used to match the gas fill from the simulation. Otherwise, the modes are created
 fill.
 """
 function makemodes(output; warn_dispersion=true)
-    mlines = modelines(output["simulation_type"]["transform"])
+    if ~haskey(output, "modes")
+        error("makemodes only works for multi-mode simulations")
+    end
+    a, kind, n, m, loss, model, ϕ = modeargs(output["modes"]) # each is an array of length Nmodes
     if haskey(output, "prop_capillary_args")
         gas = Symbol(output["prop_capillary_args"]["gas"])
         flength = parse(Float64, output["prop_capillary_args"]["flength"])
-        return [makemode(l, gas, output["prop_capillary_args"]["pressure"], flength) for l in mlines]
+        return makemodes(a, kind, n, m, loss, model, ϕ, gas, output["prop_capillary_args"]["pressure"], flength)
     else
         if warn_dispersion
             @warn("Gas fill not available when creating modes. Dispersion will not be correct.")
         end
-        return [makemode(l) for l in mlines]
+        return makemodes(a, kind, n, m, loss, model, ϕ)
     end
 end
 
 function makemodes(output, gas, pressure, flength=nothing)
-    mlines = modelines(output["simulation_type"]["transform"])
-    return [makemode(l, gas, pressure, flength) for l in mlines]
+    if ~haskey(output, "modes")
+        error("makemodes only works for multi-mode simulations")
+    end
+    a, kind, n, m, loss, model, ϕ = modeargs(o["modes"]) # each is an array of length Nmodes
+    return makemodes(a, kind, n, m, loss, model, ϕ, gas, pressure, flength)
 end
 
-function modelines(transform_text)
-    startswith(transform_text, "TransModal") || error("makemodes only works for multi-mode simulations")
-    lines = split(transform_text, "\n")
-    modeline = findfirst(li -> startswith(li, "  modes:"), lines)
-    endline = findnext(li -> !startswith(li, " "^4), lines, modeline+1)
-    lines[modeline+1 : endline-1]
-end
-    
-
-function modeargs(line)
-    sidx = nextind(line, findfirst('{', line))
-    eidx = prevind(line, findfirst('}', line))
-    line = line[sidx:eidx]
-    kindnm, radius, loss, model, angle = split(line, ",")
-    kind = Symbol(kindnm[1:2])
-    n = parse(Int, Utils.unsubscript(kindnm[3]))
-    m = parse(Int, Utils.unsubscript(kindnm[nextind(kindnm, 3)]))
-    a = parse(Float64, split(radius, "=")[2])
-    loss = parse(Bool, split(loss, "=")[2])
-    model = Symbol(split(model, "=")[2])
-    ϕ = parse(Float64, split(angle, "=")[2][1:end-1])*π
+function modeargs(mi)
+    a = mi["radius"]
+    kind = Symbol.(mi["kind"])
+    n = mi["n"]
+    m = mi["m"]
+    model = Symbol.(mi["model"])
+    loss = mi["loss"]
+    ϕ = mi["ϕ"]
     a, kind, n, m, loss, model, ϕ
 end
 
-function makemode(line)
-    a, kind, n, m, loss, model, ϕ = modeargs(line)
-    Capillary.MarcatiliMode(a; kind, n, m, loss, model, ϕ)
+function makemodes(a, kind, n, m, loss, model, ϕ)
+    [
+        Capillary.MarcatiliMode(
+            a[ii]; kind=kind[ii], n=n[ii], m=m[ii],
+            loss=loss[ii], model=model[ii], ϕ=ϕ[ii]
+            )
+        for ii in eachindex(a)
+    ]
 end
 
-function makemode(line, gas, pressure::AbstractString, flength)
-    a, kind, n, m, loss, model, ϕ = modeargs(line)
+function makemodes(a, kind, n, m, loss, model, ϕ, gas, pressure::AbstractString, flength)
     if occursin("(", pressure)
         if occursin("[", pressure)
             error("TODO: Z, P type inputs")
@@ -861,31 +858,52 @@ function makemode(line, gas, pressure::AbstractString, flength)
             pin = parse(Float64, strip(pin, '('))
             pout = parse(Float64, strip(pout, ')'))
             coren, _ = Capillary.gradient(gas, flength, pin, pout)
-            return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+            return [
+                Capillary.MarcatiliMode(
+                    a[ii], coren; kind=kind[ii], n=n[ii], m=m[ii],
+                    loss=loss[ii], model=model[ii], ϕ=ϕ[ii]
+                    )
+                for ii in eachindex(a)
+            ]
         end
     else
         p = parse(Float64, pressure)
-        return Capillary.MarcatiliMode(a, gas, p; kind, n, m, loss, model, ϕ)
+        return makemodes(a, kind, n, m, loss, model, ϕ, gas, p, flength)
     end
 end
 
-function makemode(line, gas, pressure::Number, flength)
-    a, kind, n, m, loss, model, ϕ = modeargs(line)
-    Capillary.MarcatiliMode(a, gas, pressure; kind, n, m, loss, model, ϕ)
+function makemodes(a, kind, n, m, loss, model, ϕ, gas, pressure::Number, flength)
+    return [
+        Capillary.MarcatiliMode(
+            a[ii], gas, pressure; kind=kind[ii], n=n[ii], m=m[ii],
+            loss=loss[ii], model=model[ii], ϕ=ϕ[ii]
+            )
+        for ii in eachindex(a)
+    ]
 end
 
-function makemode(line, gas, pressure::Tuple, flength)
-    a, kind, n, m, loss, model, ϕ = modeargs(line)
+function makemodes(a, kind, n, m, loss, model, ϕ, gas, pressure::Tuple, flength)
     isnothing(flength) && error("To make two-point gradient, fibre length must be given")
     coren, _ = Capillary.gradient(gas, flength, pressure...)
-    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+    return [
+        Capillary.MarcatiliMode(
+            a[ii], coren; kind=kind[ii], n=n[ii], m=m[ii],
+            loss=loss[ii], model=model[ii], ϕ=ϕ[ii]
+            )
+        for ii in eachindex(a)
+    ]
 end
 
-function makemode(line, gas, pressure::AbstractArray, flength)
-    a, kind, n, m, loss, model, ϕ = modeargs(line)
+function makemode(a, kind, n, m, loss, model, ϕ, gas, pressure::AbstractArray, flength)
     Z, P = pressure
     coren, _ = Capillary.gradient(gas, Z, P)
-    return Capillary.MarcatiliMode(a, coren; kind, n, m, loss, model, ϕ)
+    return [
+        Capillary.MarcatiliMode(
+            a[ii], coren; kind=kind[ii], n=n[ii], m=m[ii],
+            loss=loss[ii], model=model[ii], ϕ=ϕ[ii]
+            )
+        for ii in eachindex(a)
+    ]
 end
 
 """
@@ -915,7 +933,7 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
     coords = Modes.dimlimits(modes[1])[1]
     for (yidx, yi) in enumerate(y)
         for (xidx, xi) in enumerate(x)
-            xs = coords == :polar ? xs = (hypot(xi, yi), atan(yi, xi)) : (xi, yi)
+            xs = coords == :polar ? (hypot(xi, yi), atan(yi, xi)) : (xi, yi)
             Modes.to_space!(Eωxy, Eωm, xs, tospace; z)
             # integrate over time/frequency and multiply by ε₀c/2 -> fluence
             fluence[yidx, xidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
@@ -965,18 +983,10 @@ function getEtxy(Etm, modes, xs::Tuple{AbstractVector, AbstractVector}, z; compo
 end
 
 function polarisation_components(output)
-    t = output["simulation_type"]["transform"]
-    startswith(t, "TransModal") || error("beam profile only works for multi-mode simulations")
-    lines = split(t, "\n")
-    lidx = findfirst(lines) do line
-        occursin("polarisation:", line)
+    if ~haskey(output, "modes")
+        error("makemodes only works for multi-mode simulations")
     end
-    pl = lines[lidx]
-    if occursin("x,y", pl)
-        return :xy
-    else
-        return Symbol(pl[end])
-    end
+    Symbol(output["polarisation"])
 end
 
 """

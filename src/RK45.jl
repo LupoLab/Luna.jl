@@ -55,6 +55,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
                 Logging.@info @sprintf("Progress: %.2f %%, ETA: %s, stepsize %.2e, err %.2f, repeated %d",
                     s.tn/tmax*100, Dates.format(etad, "HH:MM:SS"), s.dt, s.err, repeated_tot)
             end
+            flush(stderr)
             tic = Dates.now()
         end
         if ok
