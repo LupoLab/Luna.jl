@@ -493,6 +493,7 @@ julia> fields[1].fields[1].energy/energy ≈ 0.98071312
 true
 julia> fields[2].fields[1].energy/energy ≈ 0.0061826217
 true
+```
 """
 function gauss_beam_init(modes, k, ω0, fieldfunc; energy, kwargs...)
     gauss = normalised_gauss_beam(k, ω0)
