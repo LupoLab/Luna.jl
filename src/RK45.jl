@@ -57,6 +57,7 @@ function solve(s, tmax; stepfun=donothing!, output=false, outputN=201,
                 flush(stderr)
                 flush(stdout)
             end
+            flush(stderr)
             tic = Dates.now()
         end
         if ok
