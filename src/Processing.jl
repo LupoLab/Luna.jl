@@ -624,12 +624,19 @@ end
 fftnorm(grid::RealGrid) = Maths.rfftnorm(grid.t[2] - grid.t[1])
 fftnorm(grid::EnvGrid) = Maths.fftnorm(grid.t[2] - grid.t[1])
 
+
+"""
+    getφ(grid, Eω)
+    getφ(ω, Eω, τ)
+
+Extract the unwrapped spectral phase from the field `Eω`, subtracting the linear phase ramp corresponding
+to a pulse in the middle of the time window defined by the `grid`. 
+"""
 function getφ(grid::AbstractGrid, Eω)
-    ω, Eω = getEω(output)
+    ω = grid.ω
     t = grid.t
     τ = length(t) * (t[2] - t[1])/2 # middle of time window
-    φ = unwrap(angle.(Eω); dims=1)
-    φ .- ω*τ
+    getφ(ω, Eω, τ)
 end
 
 function getφ(ω::AbstractVector, Eω, τ)
@@ -637,6 +644,13 @@ function getφ(ω::AbstractVector, Eω, τ)
     φ .- ω*τ
 end
 
+"""
+    getφ(output, args...)
+
+Extract the frequency-domain `Eω` from the `output` (additional `args...` are passed to `getEω`) and
+extract the spectral phase, subtracting the linear phase ramp corresponding
+to a pulse in the middle of the time window defined by the frequency grid.
+"""
 function getφ(output, args...)
     ω, Eω = getEω(output, args...)
     grid = makegrid(output)
