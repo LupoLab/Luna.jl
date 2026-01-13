@@ -17,7 +17,7 @@ m = RectModes.RectMode(a, b, :Ar, 0.0, :Ag)
 @test isapprox(Modes.β(m, wlfreq(800e-9)), 7852915.234685494)
 @test isapprox(Modes.β(m, wlfreq(210e-9)), 29919650.305427298)
 
-@test abs(1e9*Modes.zdw(RectModes.RectMode(a, b, :Ar, 5.0, :Ag)) - 563.5) < 1
+@test abs(1e9*Modes.zdw(RectModes.RectMode(a, b, :Ar, 5.0, :Ag); λmin=140e-9) - 563.5) < 1
 
 @testset "normalisation" begin
     # Copied definitions from Modes.jl to force manual calculation of Aeff and N

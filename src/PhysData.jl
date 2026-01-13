@@ -44,13 +44,16 @@ const N_A = ustrip(CODATA2014.N_A)
 const amg = atm/(k_B*273.15)
 "Atomic mass unit"
 const m_u = ustrip(CODATA2014.m_u)
+"Atomic unit of electric polarisability"
+const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
-const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :ArB, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
     :HeJ => "He",
     :Ar => "Ar",
+    :ArB => "Ar",
     :Ne => "Neon",
     :Kr => "Krypton",
     :Xe => "Xenon",
@@ -112,7 +115,7 @@ Sellmeier expansion for linear susceptibility from
 J. Opt. Soc. Am. 67, 1550 (1977)
 """
 function γ_Peck(B1, C1, B2, C2, dens)
-    return μm -> @. (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
+    return μm -> (((B1 / (C1 - 1/μm^2) + B2 / (C2 - 1/μm^2)) + 1)^2 - 1)/dens
 end
 
 """
@@ -132,7 +135,7 @@ https://doi.org/10.5194/acp-21-14927-2021.
 
 """
 function γ_QuanfuHe(A, B, C, dens)
-    return μm -> ((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
+    return μm -> complex((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
 end
 
 """
@@ -164,6 +167,14 @@ function sellmeier_gas(material::Symbol)
         C2 = 5.728e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
     elseif material == :Ar
+        B1 = 0.00032323117217767093
+        C1 = 0.0045416501944977915
+        B2 = 0.00011557814904827939
+        C2 = 0.011120847461156543
+        B3 = 0.00010909808164540697
+        C3 = 0.0006827046691889898
+        return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
+    elseif material == :ArB
         B1 = 20332.29e-8
         C1 = 206.12e-6
         B2 = 34458.31e-8
@@ -437,7 +448,7 @@ Get function which returns refractive index.
 function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
-        return λ -> sqrt(1 + χ1(λ))
+        return λ -> sqrt(1 + complex(χ1(λ)))
     elseif material in glass
         if isnothing(lookup)
             lookup = (material == :SiO2)
@@ -577,7 +588,7 @@ References:
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
-        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :Kr, :Xe, :N2)
+        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :ArB, :Kr, :Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
@@ -596,7 +607,7 @@ function γ3_gas(material::Symbol; source=nothing)
             fac = 1
         elseif material == :Ne
             fac = 1.8
-        elseif material == :Ar
+        elseif material in (:Ar, :ArB)
             fac = 23.5
         elseif material == :Kr
             fac = 64.0
@@ -722,7 +733,7 @@ function ionisation_potential(material; unit=:SI)
         Ip = 0.9036
     elseif material == :Ne
         Ip = 0.7925
-    elseif material == :Ar
+    elseif material in (:Ar, :ArB)
         Ip = 0.5792
     elseif material == :Kr
         Ip = 0.5142
@@ -766,7 +777,7 @@ Return the quantum numbers of the `material` for use in the PPT ionisation rate.
 """
 function quantum_numbers(material)
     # Returns n, l, ion Z
-    if material == :Ar
+    if material in (:Ar, :ArB)
         return 3, 1, 1
     elseif material == :Ne
         return 2, 1, 1;
@@ -782,6 +793,84 @@ function quantum_numbers(material)
         return 2, 0, 0.9 # https://doi.org/10.1016/S0030-4018(99)00113-3
     else
         throw(DomainError(material, "Unknown material $material"))
+    end
+end
+
+"""
+    polarisability(material, ion=false; unit=:SI)
+
+Return the polarisability of the ground state or the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Data exists for helium, neon and argon. For other `material`s,
+return `missing`.
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
+function polarisability(material, ion=false; unit=:SI)
+    if unit == :SI
+        factor = au_polarisability
+    elseif unit == :atomic
+        factor = 1
+    else
+        throw(DomainError(unit, "Unknown unit $unit"))
+    end
+    if material in (:He, :HeB, :HeJ)
+        return (ion ? 0.2811 : 1.3207)*factor
+    elseif material == :Ne
+        return (ion ? 1.2417 : 2.376)*factor
+    elseif material in (:Ar, :ArB)
+        return (ion ? 6.807 : 10.762)*factor
+    else
+        return missing
+    end
+end
+
+
+"""
+    polarisability_difference(material; unit=:SI)
+
+Return the difference in polarisability between the ground state and the ion for the
+`material`. `unit` can be `:SI` or `:atomic`
+
+Reference:
+Wang, K. et al.
+Static dipole polarizabilities of atoms and ions from Z=1 to 20
+calculated within a single theoretical scheme.
+Eur. Phys. J. D 75, 46 (2021).
+
+"""
+function polarisability_difference(material; unit=:SI)
+    polarisability(material, false; unit) - polarisability(material, true; unit)
+end
+
+"""
+    Cnl_ADK(material)
+
+Return the value of Cₙₗ from the ADK paper for the `material`. For `material`S
+other than noble gases, this returns `missing`.
+
+Reference:
+Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atoms And Atomic Ions In Electromagnetic Field. Soviet Physics JETP 64, 1191–1194 (1986).
+"""
+function Cnl_ADK(material)
+    if material in (:He, :HeB, :HeJ)
+        return 1.99
+    elseif material == :Ne
+        return 1.31
+    elseif material in (:Ar, :ArB)
+        return 1.9
+    elseif material == :Kr
+        return 2.17
+    elseif material == :Xe
+        return 2.27
+    else
+        return missing
     end
 end
 
