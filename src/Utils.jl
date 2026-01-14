@@ -13,7 +13,7 @@ import Luna
 subzero = '\u2080'
 subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
 subscript(num::AbstractString) = prod([subscript(chi) for chi in num])
-subscript(num::Int) = subscript(string(num))
+subscript(num::Int) = num >= 0 ? subscript(string(num)) : "₋"*subscript(string(abs(num)))
 
 unsubscript(digit::Char) = string(codepoint(digit)-codepoint(subzero))
 unsubscript(num::AbstractString) = prod([unsubscript(chi) for chi in num])
@@ -143,7 +143,7 @@ function save_dict_h5(fpath, d; force=false, rmold=false)
             dict2h5(kk, vv, subparent)
         end
     end
-    
+
     HDF5.h5open(fpath, "cw") do file
         for (k, v) in pairs(d)
             dict2h5(k, v, file)
