@@ -10,3 +10,5 @@ _git2_*
 docs/build
 *.info
 .vscode/spellright.dict
+.CondaPkg
+deps/build.log

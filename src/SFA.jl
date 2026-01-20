@@ -4,7 +4,6 @@ import FFTW
 import DataStructures: CircularBuffer
 import Luna: Maths, PhysData, Ionisation
 import Luna.PhysData: wlfreq, c
-import PyPlot: plt
 
 
 """

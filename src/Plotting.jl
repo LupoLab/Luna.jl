@@ -3,25 +3,18 @@ import Luna: Grid, Maths, PhysData, Processing
 import Luna.PhysData: wlfreq, c, ε_0
 import Luna.Output: AbstractOutput
 import Luna.Processing: makegrid, getIω, getEω, getEt, nearest_z
-import PyPlot: ColorMap, plt, pygui, Figure
+import GLMakie
 import FFTW
 import Printf: @sprintf
 import Base: display
 
-"""
-    displayall()
+GLMakie.set_theme!(GLMakie.Theme(fontsize = 40))
 
-`display` all currently open PyPlot figures.
-"""
-function displayall()
-    for fign in plt.get_fignums()
-        fig = plt.figure(fign)
-        display(fig)
-    end
-
+function newfig(; size=(800,600))
+    f = GLMakie.Figure(; size)
+    display(GLMakie.Screen(), f)
+    f
 end
-
-display(figs::AbstractArray{Figure, N}) where N = [display(fig) for fig in figs]
 
 """
     cmap_white(cmap, N=512, n=8)
@@ -61,19 +54,10 @@ Create a figure with `N` subplots laid out in a grid that is as close to square 
 If `portrait` is `true`, try to lay out the grid in portrait orientation (taller than wide),
 otherwise landscape (wider than tall).
 """
-function subplotgrid(N, portrait=true; colw=4, rowh=2.5, title=nothing)
+function subplotgrid(N, portrait=true; colw=350, rowh=250, title=nothing)
     cols = ceil(Int, sqrt(N))
     rows = ceil(Int, N/cols)
-    portrait && ((rows, cols) = (cols, rows))
-    fig, axs = plt.subplots(rows, cols, num=title)
-    ndims(axs) > 1 && (axs = permutedims(axs, (2, 1)))
-    if cols*rows > N
-        for axi in axs[N+1:end]
-            axi.remove()
-        end
-    end
-    fig.set_size_inches(cols*colw, rows*rowh)
-    fig, N > 1 ? axs : [axs]
+    collect(Iterators.product(1:rows,1:cols)), cols*colw, rows*rowh
 end
 
 """
@@ -139,7 +123,7 @@ function stats(output; kwargs...)
         push!(pstats, (Pfac*stats["peakpower"], "Peak power ($unit)"))
     end
     haskey(stats, "peakintensity") && push!(
-        pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm\$^2\$)"))
+        pstats, (1e-16*stats["peakintensity"], "Peak Intensity (TW/cm²)"))
     haskey(stats, "fwhm_t_min") && push!(pstats, (1e15*stats["fwhm_t_min"], "min FWHM (fs)"))
     haskey(stats, "fwhm_t_max") && push!(pstats, (1e15*stats["fwhm_t_max"], "max FWHM (fs)"))
     haskey(stats, "fwhm_r") && push!(pstats, (1e6*stats["fwhm_r"], "Radial FWHM (μm)"))
@@ -147,14 +131,14 @@ function stats(output; kwargs...)
 
     fstats = [] # fibre/waveguide/propagation statistics
     if haskey(stats, "electrondensity")
-        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm\$^{-3}\$)"))
+        push!(fstats, (1e-6*stats["electrondensity"], "Electron density (cm⁻³)"))
         if haskey(stats, "density")
             push!(fstats,
                  (100*stats["electrondensity"]./stats["density"], "Ionisation fraction (%)"))
         end
     end
     haskey(stats, "density") && push!(
-        fstats, (1e-6*stats["density"], "Density (cm\$^{-3}\$)"))
+        fstats, (1e-6*stats["density"], "Density (cm⁻³)"))
     haskey(stats, "pressure") && push!(
         fstats, (stats["pressure"], "Pressure (bar)"))
     haskey(stats, "dz") && push!(fstats, (1e6*stats["dz"], "Stepsize (μm)"))
@@ -171,37 +155,43 @@ function stats(output; kwargs...)
     z = stats["z"]*1e2
 
     multimode, modes = get_modes(output)
+    modes = isnothing(modes) ? [""] : modes
 
     Npl = length(pstats)
     if Npl > 0
-        pfig, axs = subplotgrid(Npl, title="Pulse stats")
+        idcs, width, height = subplotgrid(Npl)
+        pfig = newfig(size=(width, height))
         for n in 1:Npl
-            ax = axs[n]
-            data, label = pstats[n]
-            multimode && (ndims(data) > 1) && (data = data')
-            ax.plot(z, data; kwargs...)
-            ax.set_xlabel("Distance (cm)")
-            ax.set_ylabel(label)
-            multimode && (ndims(data) > 1) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
+            data, ylabel = pstats[n]
+            scale = (multimode ? log10 : identity)
+            data = (multimode && ndims(data) > 1) ? data : data'
+            data = multimode ? max.(data, 1e-300) : data
+            ax = GLMakie.Axis(pfig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
+            println("$(size(data))   $modes")
+            for i in 1:size(data,1)
+                GLMakie.lines!(z, data[i,:], label=modes[i])
+            end
+            multimode && (ndims(data) > 1) && GLMakie.axislegend(framevisible=false)
         end
-        pfig.tight_layout()
+        GLMakie.DataInspector()
     end
     
     Npl = length(fstats)
     if Npl > 0
-        ffig, axs = subplotgrid(Npl, title="Other stats")
+        idcs, width, height = subplotgrid(Npl)
+        ffig = newfig(size=(width, height))
         for n in 1:Npl
-            ax = axs[n]
-            data, label = fstats[n]
-            multimode && (ndims(data) > 1) && (data = data')
-            ax.plot(z, data; kwargs...)
-            ax.set_xlabel("Distance (cm)")
-            ax.set_ylabel(label)
-            multimode && (ndims(data) > 1) && should_log10(data) && ax.semilogy()
-            multimode && (ndims(data) > 1) && ax.legend(modes, frameon=false)
+            data, ylabel = fstats[n]
+            scale = ((multimode && should_log10(data)) ? log10 : identity)
+            data = (multimode && ndims(data) > 1) ? data : data'
+            data = (multimode && should_log10(data)) ? max.(data, 1e-300) : data
+            ax = GLMakie.Axis(ffig[idcs[n]...]; xlabel="Distance (cm)", ylabel, yscale=scale)
+            for i in 1:size(data,1)
+                GLMakie.lines!(z, data[i,:], label=modes[i])
+            end
+            multimode && (ndims(data) > 1) && GLMakie.axislegend(framevisible=false)
         end
-        ffig.tight_layout()
+        GLMakie.DataInspector()
     end
     [pfig, ffig]
 end
@@ -298,68 +288,51 @@ end
 function _prop2D_sm(t, z, specx, It, Iω, speclabel, speclims, trange, dBmin, bpstr; kwargs...)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     num = id * "Propagation" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
-    pfig.set_size_inches(12, 4)
     Iω = Maths.normbymax(Iω)
-    _spec2D_log(axs[1], specx, z, Iω, dBmin, speclabel, speclims; kwargs...)
-
-    _time2D(axs[2], t, z, It, trange; kwargs...)
-    pfig.tight_layout()
-    return pfig
+    _prop2D_fig(num, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
 end
 
 # multi-mode 2D propagation plots
 function _prop2D_mm(modelabels, modes, t, z, specx, It, Iω,
                     speclabel, speclims, trange, dBmin, bpstr;
                     kwargs...)
-    pfigs = Figure[]
+    pfigs = []
     Iω = Maths.normbymax(Iω)
     id = "($(string(hash(gensym()); base=16)[1:4])) "
     for mi in modes
         num = id * "Propagation ($(modelabels[mi]))" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-        pfig, axs = plt.subplots(1, 2, num=num)
-        pfig.set_size_inches(12, 4)
-        _spec2D_log(axs[1], specx, z, Iω[:, mi, :], dBmin, speclabel, speclims; kwargs...)
-
-        _time2D(axs[2], t, z, It[:, mi, :], trange; kwargs...)
+        pfig = _prop2D_fig(num, specx, z, Iω[:, mi, :], dBmin, speclabel, speclims, t, It[:, mi, :], trange)
         push!(pfigs, pfig)
     end
 
     num = id * "Propagation (all modes)" * ((length(bpstr) > 0) ? ", $bpstr" : "")
-    pfig, axs = plt.subplots(1, 2, num=num)
-    pfig.set_size_inches(12, 4)
     Iωall = dropdims(sum(Iω, dims=2), dims=2)
-    _spec2D_log(axs[1], specx, z, Iωall, dBmin, speclabel, speclims; kwargs...)
-
     Itall = dropdims(sum(It, dims=2), dims=2)
-    _time2D(axs[2], t, z, Itall, trange; kwargs...)
-    pfig.tight_layout()
+    pfig = _prop2D_fig(num, specx, z, Iωall, dBmin, speclabel, speclims, t, Itall, trange)
     push!(pfigs, pfig)
-
     return pfigs
 end
 
-# a single logarithmic colour-scale spectral domain plot
-function _spec2D_log(ax, specx, z, I, dBmin, speclabel, speclims; kwargs...)
-    im = ax.pcolormesh(specx, z, 10*log10.(transpose(I)); shading="auto", kwargs...)
-    im.set_clim(dBmin, 0)
-    cb = plt.colorbar(im, ax=ax)
-    cb.set_label("SED (dB)")
-    ax.set_ylabel("Distance (cm)")
-    ax.set_xlabel(speclabel)
-    ax.set_xlim(speclims...)
+function _prop2D_fig(name, specx, z, Iω, dBmin, speclabel, speclims, t, It, trange)
+    pfig = newfig(size=(1000,400))
+    ax, hm = GLMakie.heatmap(pfig[1,1], specx, z, 10*log10.(Iω),
+                             colorrange=(dBmin,0), interpolate=true,
+                             lowclip=:white,
+                             axis=(; xlabel=speclabel, ylabel="Distance (cm)"))
+    GLMakie.xlims!(ax, speclims)
+    cb = GLMakie.Colorbar(pfig[1, 2], hm, label="SED (dB)")
+
+    Pfac, unit = power_unit(It)
+    ax, hm = GLMakie.heatmap(pfig[1,3], t*1e15, z, Pfac .* It,
+                             interpolate=true,
+                             lowclip=:white,
+                             axis=(; xlabel="Time (fs)", ylabel="Distance (cm)"))
+    GLMakie.xlims!(ax, trange.*1e15)
+    cb = GLMakie.Colorbar(pfig[1, 4], hm, label="Power ($unit)")
+    GLMakie.DataInspector()
+    pfig
 end
 
-# a single time-domain propagation plot
-function _time2D(ax, t, z, I, trange; kwargs...)
-    Pfac, unit = power_unit(I)
-    im = ax.pcolormesh(t*1e15, z, Pfac*transpose(I); shading="auto", kwargs...)
-    cb = plt.colorbar(im, ax=ax)
-    cb.set_label("Power ($unit)")
-    ax.set_xlim(trange.*1e15)
-    ax.set_xlabel("Time (fs)")
-    ax.set_ylabel("Distance (cm)")
-end
 
 """
     time_1D(output, zslice, y=:Pt, kwargs...)
@@ -410,26 +383,26 @@ function time_1D(output, zslice=maximum(output["z"]);
 
     yfac, unit = power_unit(abs2.(Et), y)
 
-    sfig = plt.figure()
+    xlabel = "Time (fs)"
+    ylabel = y == :Et ?  "Field ($unit)" : "Power ($unit)"
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), t*1e15, yfac*yt, zactual, modestrs; kwargs...)
+       sfig = _plot_slice_mm(t*1e15, yfac*yt, zactual, modestrs, xlabel, ylabel, fwlabel=true)
     else
+        sfig = newfig()
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
+        GLMakie.Axis(sfig[1, 1]; xlabel, ylabel)
         for iz in eachindex(zactual)
-            plt.plot(t*1e15, yfac*yt[:, iz]; label=label[iz], kwargs...)
+            fw = Maths.fwhm(t*1e15, yfac*yt[:, iz])
+            label=(label[iz] * @sprintf(" [%.2f %s]", fw, "fs"))
+            GLMakie.lines!(t*1e15, yfac*yt[:, iz]; label)
         end
     end
-    plt.legend(frameon=false)
-    add_fwhm_legends(plt.gca(), "fs")
-    plt.xlabel("Time (fs)")
-    plt.xlim(1e15.*trange)
-    ylab = y == :Et ?  "Field ($unit)" : "Power ($unit)"
-    plt.ylabel(ylab)
-    y == :Et || plt.ylim(ymin=0)
-    sfig.set_size_inches(8.5, 5)
-    sfig.tight_layout()
-    sfig
+    GLMakie.axislegend(framevisible=false)
+    GLMakie.xlims!((1e15.*trange)...)
+    y == :Et || GLMakie.ylims!(low=0)
+    GLMakie.DataInspector()
+    sfig  
 end
 
 # Automatically find power unit depending on scale of electric field.
@@ -486,42 +459,48 @@ function spec_1D(output, zslice=maximum(output["z"]), specaxis=:λ;
 
     specx .*= specxfac
 
-    sfig = plt.figure()
     if multimode && nmodes > 1
-        _plot_slice_mm(plt.gca(), specx, Iω, zactual, modestrs, log10; kwargs...)
+        sfig = _plot_slice_mm(specx, Iω, zactual, modestrs, speclabel, "Spectral energy density", log10)
     else
+        sfig = newfig()
         zs = [@sprintf("%.2f cm", zi*100) for zi in zactual]
         label = multimode ? zs.*" ($modestrs)" : zs
+        scale = (log10 ? Base.log10 : :identity)
+        GLMakie.Axis(sfig[1, 1], yscale = scale, xlabel=speclabel, ylabel="Spectral energy density")
         for iz in eachindex(zactual)
-            (log10 ? plt.semilogy : plt.plot)(specx, Iω[:, iz]; label=label[iz], kwargs...)
+            GLMakie.lines!(specx, Iω[:, iz], label=label[iz])
         end
     end
-    plt.legend(frameon=false)
-    plt.xlabel(speclabel)
-    plt.ylabel("Spectral energy density")
-    log10 && plt.ylim(3*maximum(Iω)*log10min, 3*maximum(Iω))
-    plt.xlim(speclims...)
-    sfig.set_size_inches(8.5, 5)
-    sfig.tight_layout()
+    GLMakie.axislegend(framevisible=false)
+    log10 && GLMakie.ylims!(3*maximum(Iω)*log10min, 3*maximum(Iω))
+    GLMakie.xlims!(speclims...)
+    GLMakie.DataInspector()
     sfig
 end
 
-dashes = [(0, (10, 1)),
-          (0, (5, 1)),
-          (0, (1, 0.5)),
-          (0, (1, 0.5, 1, 0.5, 3, 1)),
-          (0, (5, 1, 1, 1))]
-
-function _plot_slice_mm(ax, x, y, z, modestrs, log10=false, fwhm=false; kwargs...)
-    pfun = (log10 ? ax.semilogy : ax.plot)
+function _plot_slice_mm(x, y, z, modestrs, xlabel, ylabel, log10=false; fwlabel=false)
+    pfig = newfig()
+    scale = (log10 ? Base.log10 : identity)
+    GLMakie.Axis(pfig[1, 1], yscale = scale, xlabel=xlabel, ylabel=ylabel)
     for sidx = 1:size(y, 3) # iterate over z-slices
         zs = @sprintf("%.2f cm", z[sidx]*100)
-        line = pfun(x, y[:, 1, sidx]; label="$zs ($(modestrs[1]))", kwargs...)[1]
+        label = "$zs ($(modestrs[1]))"
+        if fwlabel
+            fw = Maths.fwhm(x, y[:, 1, sidx])
+            label *= @sprintf(" [%.2f %s]", fw, "fs")
+        end
+        line = GLMakie.lines!(x, y[:, 1, sidx]; label)
         for midx = 2:size(y, 2) # iterate over modes
-            pfun(x, y[:, midx, sidx], linestyle=dashes[midx], color=line.get_color(),
-                 label="$zs ($(modestrs[midx]))"; kwargs...)
+            label = "$zs ($(modestrs[midx]))"
+            if fwlabel
+                fw = Maths.fwhm(x, y[:, midx, sidx])
+                label *= @sprintf(" [%.2f %s]", fw, "fs")
+            end
+            GLMakie.lines!(x, y[:, midx, sidx]; label,
+                   color=line[:color], cycle=[:linestyle])
         end
     end
+    pfig
 end
 
 spectrogram(output::AbstractOutput, args...; kwargs...) = spectrogram(
@@ -542,6 +521,7 @@ end
 
 function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
                      trange, N, fw, λrange=(150e-9, 2000e-9), log=false, dBmin=-40,
+                     surface3d=false,
                      kwargs...)
     ω = Maths.rfftfreq(t)[2:end]
     tmin, tmax = extrema(trange)
@@ -549,18 +529,36 @@ function spectrogram(t::AbstractArray, Et::AbstractArray, specaxis=:λ;
     g = Maths.gabor(t, real(Et), tg, fw)
     g = g[2:end, :]
 
-    specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis)
     speclims, speclabel, specyfac = getspeclims(λrange, specaxis)
+    specy, Ig = getIω(ω, g*Maths.rfftnorm(t[2]-t[1]), specaxis,
+                      specrange=speclims./specyfac)
+    
+    Ig = Maths.normbymax(Ig)
+    log && (Ig = 10*log10.(Ig))
+    clims = (log ? (dBmin, 0) : extrema(Ig))
 
-    log && (Ig = 10*log10.(Maths.normbymax(Ig)))
-
-    fig = plt.figure()
-    plt.pcolormesh(tg.*1e15, specyfac*specy, Ig; shading="auto", kwargs...)
-    plt.ylim(speclims...)
-    plt.ylabel(speclabel)
-    plt.xlabel("Time (fs)")
-    log && plt.clim(dBmin, 0)
-    plt.colorbar()
+    fig = newfig()
+    if surface3d
+        ax, pl = GLMakie.surface(fig[1,1], tg.*1e15, specyfac*specy, Ig',
+                         colorrange=clims, colormap=:turbo,
+                         axis=(;type=GLMakie.Axis3, azimuth = pi/4, elevation=pi/4,
+                         protrusions=75, perspectiveness=0.0, viewmode=:stretch,
+                         xlabel="Time (fs)", ylabel=speclabel, ylabeloffset=80,
+                         xlabeloffset=80, zgridvisible=false, zlabelvisible=false,
+                         zticksvisible=false, zticklabelsvisible=false,
+                         yzpanelvisible=false, xzpanelvisible=false,
+                         ygridvisible=false, xgridvisible=false,
+                         zspinesvisible=false, zautolimitmargin=(0,0),
+                         xautolimitmargin=(0.0,0.0), yautolimitmargin=(0,0),
+                         xspinesvisible=false, yspinesvisible=false))
+    else
+        ax, pl = GLMakie.heatmap(fig[1,1], tg.*1e15, specyfac*specy, Ig',
+                                colorrange=clims, interpolate=true,
+                                axis=(; xlabel="Time (fs)", ylabel=speclabel))
+        GLMakie.ylims!(ax, speclims)
+    end
+    GLMakie.Colorbar(fig[1, 2], pl)
+    GLMakie.DataInspector()
     fig
 end
 
@@ -587,49 +585,24 @@ function energy(output; modes=nothing, bandpass=nothing, figsize=(7, 5))
     end
 
     z = output["z"]*100
+    println("$(size(e'))")
 
-    fig = plt.figure()
-    ax = plt.axes()
-    ax.plot(z, 1e6*e')
-    ax.set_xlim(extrema(z)...)
-    ax.set_ylim(ymin=0)
-    ax.set_xlabel("Distance (cm)")
-    ax.set_ylabel("Energy (μJ)")
-    rax = ax.twinx()
-    rax.plot(z, 100*(e/e0)', linewidth=0)
-    lims = ax.get_ylim()
-    rax.set_ylim(100/(1e6*e0).*lims)
-    rax.set_ylabel("Conversion efficiency (%)")
-    fig.set_size_inches(figsize...)
-    fig
-end
-
-
-function auto_fwhm_arrows(ax, x, y; color="k", arrowlength=nothing, hpad=0, linewidth=1,
-                                    text=nothing, units="fs", kwargs...)
-    left, right = Maths.level_xings(x, y; kwargs...)
-    fw = abs(right - left)
-    halfmax = maximum(y)/2
-    arrowlength = isnothing(arrowlength) ? 2*fw : arrowlength
-
-    ax.annotate("", xy=(left-hpad, halfmax),
-                xytext=(left-hpad-arrowlength, halfmax),
-                arrowprops=Dict("arrowstyle" => "->",
-                                "color" => color,
-                                "linewidth" => linewidth))
-    ax.annotate("", xy=(right+hpad, halfmax),
-                xytext=(right+hpad+arrowlength, halfmax),
-                arrowprops=Dict("arrowstyle" => "->",
-                                "color" => color,
-                                "linewidth" => linewidth))
-
-    if text == :left
-        ax.text(left-arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
-                ha="right", color=color)
-    elseif text == :right
-        ax.text(right+arrowlength/2, 1.1*halfmax, @sprintf("%.2f %s", fw, units),
-                color=color)
+    fig = newfig()
+    ax = GLMakie.Axis(fig[1, 1], xlabel="Distance (cm)", ylabel="Energy (μJ)")
+    rax = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel="Conversion efficiency (%)")
+    GLMakie.hidespines!(rax)
+    GLMakie.hidexdecorations!(rax)
+    for i in 1:size(e')[1]
+        GLMakie.lines!(ax, z, 1e6*e'[i,:])
     end
+
+    maxe = maximum(1e6*e)
+    GLMakie.xlims!(ax, extrema(z)...)
+    GLMakie.ylims!(ax, 0, maxe)
+    GLMakie.ylims!(rax, 0, 100*maxe/1e6/e0)
+    GLMakie.xlims!(rax, extrema(z)...)
+    GLMakie.DataInspector()
+    fig
 end
 
 function add_fwhm_legends(ax, unit)
