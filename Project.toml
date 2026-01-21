@@ -1,6 +1,6 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
 
 [deps]
