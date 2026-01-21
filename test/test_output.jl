@@ -47,6 +47,7 @@ using EllipsisNotation
         @test 100 == read(file["meta"]["meta1"])
         @test "src" == read(file["meta"]["meta2"])
     end
+    @test all(o["stats", "stat"] .== stat)
     @test all(yr .== o["y"])
     @test 100 == o["meta"]["meta1"]
     rm(fpath)
@@ -87,6 +88,7 @@ end
     @test o(extra, force=true) === nothing
     @test all(o.data["stats"]["stat"] .== stat)
     @test all(o.data["stats"]["stat2d"] .== stat)
+    @test all(o["stats", "stat"] .== stat)
     @test Utils.git_commit() == o.data["meta"]["git_commit"]
     # Need to strip out date from sourcecode to compare
     src = o.data["meta"]["sourcecode"]
