@@ -1,7 +1,7 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
+version = "0.6.1"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
-version = "0.6.0"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -81,7 +81,7 @@ LinearAlgebra = "1.9"
 Logging = "1.9"
 Memoize = "0.4.4"
 NumericalIntegration = "0.3.3"
-Optim = "1.4"
+Optim = "1.4, 2"
 Peaks = "0.3.2, 0.4, 0.5"
 PhysicalConstants = "0.2"
 Pkg = "1.9"

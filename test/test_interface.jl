@@ -137,7 +137,7 @@ end
 
 ##
 @testset "propagators" begin
-    # passing ϕ keyword argument and an equivalent propagator function should yield 
+    # passing ϕ keyword argument and an equivalent propagator function should yield
     # the same result.
     args = (100e-6, 0.1, :He, 1)
     kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
@@ -273,7 +273,7 @@ end
     ei2 = Processing.energy(o2)[1]
     @test ei2 ≈ e2
 
-    # Defining the energy 
+    # Defining the energy
     es = 0.5
     p = Pulses.LunaPulse(o1; scale_energy=es)
     o2 = prop_capillary(args...; pulses=p, kwargs...)
@@ -380,6 +380,29 @@ end
     # need higher tolerance here since the gaussian beam overlap introduces a bit of error
     @test sum(ei2) ≈ sum(eo1) + sum(eo12)
 
+end
+
+##
+@testset "Temperature" begin
+    # test that changing temperature changes results
+    args = (100e-6, 0.1, :He, 1)
+    kwargs = (λ0=800e-9, τfwhm=10e-15, energy=1e-12, trange=400e-15,
+              λlims=(200e-9, 4e-6), shotnoise=false)
+    o = prop_capillary(args...; temperature=300, kwargs...)
+    o2 = prop_capillary(args...; temperature=300, kwargs...)
+    o3 = prop_capillary(args...; temperature=400, kwargs...)
+    @test o["Eω"] == o2["Eω"]
+    @test o["Eω"] ≠ o3["Eω"]
+
+    # test with kerr/plasma off (only Raman depends on temperature here)
+    args = (100e-6, 0.1, :H2, 1)
+    kwargs = (λ0=800e-9, τfwhm=10e-15, energy=1e-12, trange=400e-15,
+              λlims=(200e-9, 4e-6), shotnoise=false, kerr=false, plasma=false)
+    o = prop_capillary(args...; temperature=300, kwargs...)
+    o2 = prop_capillary(args...; temperature=300, kwargs...)
+    o3 = prop_capillary(args...; temperature=400, kwargs...)
+    @test o["Eω"] == o2["Eω"]
+    @test o["Eω"] ≠ o3["Eω"]
 end
 
 ##

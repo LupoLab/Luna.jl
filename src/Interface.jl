@@ -383,7 +383,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
     check_orth(mode_s)
     density = makedensity(flength, gas, pressure, temperature)
     resp = makeresponse(grid, gas, raman, kerr, plasma, thg, pol, rotation, vibration,
-                        PPT_options, preionfrac)
+                        PPT_options, preionfrac, temperature)
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
                         power, energy, pulseshape, polarisation, propagator)
     inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
@@ -393,8 +393,9 @@ function prop_capillary_args(radius, flength, gas, pressure;
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
-        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
-        shotnoise, modes, model, loss, raman, kerr, plasma, PPT_options, saveN, filepath, filename)
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
+        shotnoise, modes, model, loss, raman, kerr, plasma, PPT_options,
+        temperature, saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
 end
@@ -531,7 +532,7 @@ function makedensity(flength, gas, pressure, temperature)
 end
 
 function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_options, preionfrac)
+                      rotation, vibration, PPT_options, preionfrac, temperature)
     out = Any[]
     if kerr
         if thg
@@ -546,7 +547,8 @@ function makeresponse(grid::Grid.RealGrid, gas, raman, kerr, plasma, thg, pol,
     end
     if raman
         @info("Including the Raman response (due to molecular gas choice).")
-        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
+        rr = Raman.raman_response(grid.to, gas;
+            rotation, vibration, temp=temperature)
         if thg
             push!(out, Nonlinear.RamanPolarField(grid.to, rr))
         else
@@ -588,9 +590,9 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol,
 end
 
 function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
-                      rotation, vibration, PPT_options, preionfrac)
+                      rotation, vibration, PPT_options, preionfrac, temperature)
     plasma && error("Plasma response for envelope fields has not been implemented yet.")
-    isnothing(thg) && (thg = false) 
+    isnothing(thg) && (thg = false)
     out = Any[]
     if kerr
         if thg
@@ -606,7 +608,8 @@ function makeresponse(grid::Grid.EnvGrid, gas, raman, kerr, plasma, thg, pol,
     end
     if raman
         @info("Including the Raman response (due to molecular gas choice).")
-        rr = Raman.raman_response(grid.to, gas, rotation=rotation, vibration=vibration)
+        rr = Raman.raman_response(grid.to, gas;
+            rotation, vibration, temp=temperature)
         push!(out, Nonlinear.RamanPolarEnv(grid.to, rr))
     end
     Tuple(out)
@@ -780,7 +783,7 @@ end
 function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol, c::Val{true})
     @info("Using mode-averaged propagation.")
     linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
-    
+
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
     βfun!, z -> Modes.Aeff(mode, z=z))
     linop, Eω, transform, FT
@@ -969,7 +972,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
     saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
-        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses, 
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
         shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
