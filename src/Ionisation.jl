@@ -3,7 +3,7 @@ import SpecialFunctions: gamma, dawson
 import HCubature: hquadrature
 import HDF5
 import FileWatching.Pidfile: mkpidlock
-import GSL: hypergeom
+import HypergeometricFunctions: pFq
 import Logging: @info
 import Luna.PhysData: c, ħ, electron, m_e, au_energy, au_time, au_Efield, wlfreq, polarisability_difference, polarisability, au_polarisability
 import Luna.PhysData: ionisation_potential, quantum_numbers
@@ -33,7 +33,7 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
 
     # Zenghu Chang: Fundamentals of Attosecond Optics (2011) p. 184
     # Section 4.2.3.1 Cycle-Averaged Rate
-    # ̄w_ADK(Fₐ) = √(3/π) √(Fₐ/F₀) w_ADK(Fₐ) where Fₐ is the field amplitude 
+    # ̄w_ADK(Fₐ) = √(3/π) √(Fₐ/F₀) w_ADK(Fₐ) where Fₐ is the field amplitude
     Ip_au = ionpot / au_energy
     F0_au = (2Ip_au)^(3/2)
     F0 = F0_au*au_Efield
@@ -59,7 +59,7 @@ function ionrate_fun!_ADK(ionpot::Float64, threshold=true; cycle_average=false)
         end
     end
 
-    return ionrate!  
+    return ionrate!
 end
 
 function ionrate_fun!_ADK(material::Symbol; kwargs...)
@@ -295,7 +295,7 @@ Create closure to calculate PPT ionisation rate.
 - `msum::Bool`: for l ≠ 0, whether or not to sum over different m states. Defaults to `true`.
 - `Cnl::Real` : Pre-calculated `Cₙₗ` constant. If not given, defaults to the approximate expression from
     the PPT papers.
-- `occupancy`: Occupancy of the state(s) from which ionisation is considered. Defaults to 2 for 
+- `occupancy`: Occupancy of the state(s) from which ionisation is considered. Defaults to 2 for
     a state with two electrons (spin up/down).
 
 # References
@@ -333,7 +333,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
         ns = Z/sqrt(2Ip_au)
         ls = ns-1
         Cnl2 = ismissing(Cnl) ? 2^(2ns)/(ns*gamma(ns + ls + 1)*gamma(ns - ls)) : Cnl^2
-    
+
         ω0 = 2π*c/λ0
         ω0_au = au_time*ω0
         E0_au = (2*Ip_au)^(3/2)
@@ -358,7 +358,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
             # lret = sqrt(3/(2π))*Cnl2*flm*Ip_au
             # lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
             # lret *= Am*exp(-2*E0_au*G/(3E_au))
-            # [2] eq. (A14) 
+            # [2] eq. (A14)
             lret = 4sqrt(2)/π*Cnl2
             lret *= (2*E0_au/(E_au*sqrt(1 + γ2))) ^ (2ns - mabs - 3/2)
             lret *= flm/factorial(mabs)
@@ -376,7 +376,7 @@ function ionrate_fun_PPT(ionpot::Float64, λ0, Z, l;
                     diff = n-v
                     x + exp(-α*diff)*φ(m, sqrt(β*diff))
                 end
-                    
+
             end
             lret *= s
             ret += occ(occupancy, m)*lret
@@ -409,14 +409,14 @@ function φ(m, x)
     if m == 0
         return dawson(x)
     end
-    
+
     if x <= 26
         mabs = abs(m)
         return (exp(-x^2)
             * sqrt(π)
             * x^(2mabs+1)
             * gamma(mabs+1)
-            * hypergeom(1/2, 3/2 + mabs, x^2)
+            * pFq((1/2,), (3/2 + mabs,), x^2)
             / (2*gamma(3/2 + mabs)))
     else
         i, _ = hquadrature(0, x) do y
@@ -427,7 +427,7 @@ function φ(m, x)
         return Float64(exp(-x^2) * i)
     end
 end
-    
+
 
 function ionrate_fun_PPT(material::Symbol, λ0;
                          stark_shift=true, dipole_corr=true, kwargs...)

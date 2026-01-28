@@ -67,7 +67,7 @@ end
     m = Capillary.MarcatiliMode(a, :HeB, 1.0, n=0, kind=:TM)
     @test Modes.N(m) ≈ N(m)[1]
     @test Modes.Aeff(m) ≈ Aeff(m)[1]
-    
+
     a0 = a
     aL = a/2
     L = 1
@@ -160,4 +160,12 @@ end
     Erω2 = Modes.to_space(Emω, xs, ms, components=components)
     @test all(Erω2 .== Erω!)
     @test all(Erω1 .== Erω!)
+end
+
+@testset "negative numbers" begin
+    m = Capillary.MarcatiliMode(125e-6; kind=:HE, n=-1, m=1)
+    @test m.n == -1
+    @test m.m == 1
+    @test isapprox(m.unm, 5.136, rtol=1e-4) # Number from Marcatili paper
+    @test Capillary.mode_string(m) == "HE₋₁₁"
 end
