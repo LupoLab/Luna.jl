@@ -403,6 +403,21 @@ end
     o3 = prop_capillary(args...; temperature=400, kwargs...)
     @test o["Eω"] == o2["Eω"]
     @test o["Eω"] ≠ o3["Eω"]
+
+    Eω, _, _, t300, _, _ = Interface.prop_capillary_args(args...; temperature=300, kwargs...)
+    _, _, _, t400, _, _ = Interface.prop_capillary_args(args...; temperature=400, kwargs...)
+    Raman300 = t300.resp[1]
+    Raman400 = t400.resp[1]
+    NonlinearRHS.to_time!(t300.Eto, Eω, t300.Eωo, inv(t300.FT))
+    ρ = t300.densityfun(0) # note: using same density to compare only NL response
+    Pto300 = zero(t300.Eto)
+    Pto300_2 = zero(t300.Eto)
+    Pto400 = zero(t300.Eto)
+    Raman300(Pto300, t300.Eto, ρ)
+    Raman300(Pto300_2, t300.Eto, ρ)
+    Raman400(Pto400, t300.Eto, ρ)
+    @test Pto300 ≠ Pto400
+    @test Pto300 == Pto300_2
 end
 
 ##

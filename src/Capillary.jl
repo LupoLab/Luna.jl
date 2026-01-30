@@ -1,5 +1,5 @@
 module Capillary
-import GSL: sf_bessel_zero_Jnu
+import FunctionZeros: besselj_zero
 import SpecialFunctions: besselj
 import StaticArrays: SVector
 import Cubature: hquadrature
@@ -138,7 +138,7 @@ MarcatiliMode(a; kwargs...) = MarcatiliMode(a, (ω; z) -> 1; kwargs...)
 
 """
     neff(m::MarcatiliMode, ω; z=0)
-    
+
 Calculate the complex effective index of Marcatili mode with dielectric core and arbitrary
 (metal or dielectric) cladding.
 
@@ -169,7 +169,7 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, ω, εco, vn, a) where 
                     + im*(c^3*m.unm^2)/(a^3*ω^3)*vn)
     else
         error("model must be :full or :reduced")
-    end 
+    end
 end
 
 # m.loss = Val{false}() (returns Float64)
@@ -182,7 +182,7 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, ω, εco, vn, a) where
         return real(1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2))
     else
         error("model must be :full or :reduced")
-    end 
+    end
 end
 
 function neff_wg(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, ω; z=0) where {Ta, Tcl, Tco}
@@ -220,7 +220,7 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg) where {Ta, T
         return complex((1 + (εco - 1)/2 - nwg))
     else
         error("model must be :full or :reduced")
-    end 
+    end
 end
 
 function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, Tcl, Tco}
@@ -230,7 +230,7 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, 
         return real((1 + (εco - 1)/2 - nwg))
     else
         error("model must be :full or :reduced")
-    end 
+    end
 end
 
 function get_vn(εcl, kind)
@@ -250,9 +250,12 @@ function get_unm(n, m, kind)
         if (n != 0)
             error("n=0 for TE or TM modes")
         end
-        sf_bessel_zero_Jnu(1, m)
+        besselj_zero(1, m)
     elseif kind == :HE
-        sf_bessel_zero_Jnu(n-1, m)
+        if n == 0
+            error("n ≠ 0 for HE modes")
+        end
+        besselj_zero(n-1, m)
     else
         error("kind must be :TE, :TM or :HE")
     end
@@ -304,7 +307,7 @@ function gradient(gas, L, p0, p1; T=roomtemp)
     γ = sellmeier_gas(gas)
     dspl = densityspline(gas, Pmin=p0==p1 ? 0 : min(p0, p1), Pmax=max(p0, p1); T)
     p(z) =  z > L ? p1 :
-            z <= 0 ? p0 : 
+            z <= 0 ? p0 :
             sqrt(p0^2 + z/L*(p1^2 - p0^2))
     dens(z) = dspl(p(z))
     coren(ω; z) = sqrt(1 + γ(wlfreq(ω)*1e6)*dens(z))
@@ -338,7 +341,7 @@ end
 
 #= Avoid repeated calculation of the waveguide part of the effective index for modes with
     constant core radius.
-    This is used by LinearOps.make_linop =# 
+    This is used by LinearOps.make_linop =#
 function neff_β_grid(grid,
                    mode::MarcatiliMode{<:Number, Tco, Tcl, LT} where {Tco, Tcl, LT},
                    λ0)

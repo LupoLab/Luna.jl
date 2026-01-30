@@ -2,13 +2,13 @@ using Luna
 import Test: @test, @testset
 import HCubature: hquadrature
 import SpecialFunctions: besselj
-import GSL: sf_bessel_zero_Jnu
+import FunctionZeros: besselj_zero
 
 @testset "On-axis intensity statistics" begin
     # Manually normalise the field distribution of HE11 to find scaling factor between
     # power and intensity
     a = 13e-6
-    unm = sf_bessel_zero_Jnu(0, 1)
+    unm = besselj_zero(0, 1)
     E(r) = besselj(0, unm*r/a)
     norm, err = hquadrature(0, a) do r
         2π*r * abs2(E(r))
@@ -38,4 +38,3 @@ import GSL: sf_bessel_zero_Jnu
 
     @test all(output["stats"]["peakintensity"] .≈ output["stats"]["peakpower"]/norm)
 end
-
