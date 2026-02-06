@@ -1,5 +1,8 @@
 module Antiresonant
 using Reexport
+using XLSX
+using DataFrames
+using CubicSplines
 import Logging: @warn
 import Printf: @sprintf
 import Luna: Capillary
@@ -303,5 +306,61 @@ function neff_real(m::VincettiMode, ω; z=0)
 end
 
 Aeff(m::VincettiMode, ω; z=0) = 0.48/8π * (m.m.unm*wlfreq(ω))^2/(m.m.coren(ω; z)-neff_real(m, ω))
+
+
+struct CustomMode{mT<:Capillary.MarcatiliMode, LT, interT} <: AbstractMode
+    m::mT
+    filepath::String
+    sheetname::String
+    interp_n::interT
+    loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
+end
+
+"""
+    CustomMode(args...; filepath, sheetname, loss=true, nrows=nothing, kwargs...)
+
+Create a custom mode with the effective index given by data from an Excel file. 
+The file should have a sheet with at least two columns: "FUT" (frequency in THz) 
+and "Effective mode index" (complex effective index as a string, e.g. "1.45+0.001im"). 
+The effective index is interpolated with a cubic spline for smooth derivatives.
+
+"""
+function CustomMode(args...; filepath, sheetname, loss=true, nrows=nothing, kwargs...)
+    xf = XLSX.readxlsx(filepath)
+    df_full = DataFrame(XLSX.gettable(xf[sheetname]))
+    if isnothing(nrows)
+        df = df_full
+    else
+        df = df_full[1:nrows, :]
+    end
+
+    ω = 2pi*df.FUT
+    ref = parse.(Complex{Float64},df."Effective mode index")
+    
+    # 3. Interpolation (Cubic Spline for smooth derivatives)
+    interp_n = CubicSpline(ω, real.(ref), extrapl=[1,], extrapr=[1,])
+    return CustomMode(Capillary.MarcatiliMode(args...; kwargs...), filepath, sheetname, interp_n, wraptype(loss))
+end
+
+function CustomMode(m::CustomMode; filepath, sheetname, loss=true)
+    CustomMode(m, filepath, sheetname, interp_n, wraptype(loss))
+end
+
+# Effective index is given by eq (15) in [1]
+neff(m::CustomMode, ω; z=0) = _neff(m, ω, m.loss; z=z)
+
+# All other mode properties are identical to a MarcatiliMode
+for fun in (:Aeff, :field, :N, :dimlimits)
+    @eval ($fun)(m::CustomMode, args...; kwargs...) = ($fun)(m.m, args...; kwargs...)
+end
+
+# load neff
+function _neff(m::CustomMode, ω, loss; z=0)
+    if loss == Val(true)
+        return m.interp_n(ω)
+    elseif loss == Val(false)
+        return real(m.interp_n(ω))
+    end
+end
 
 end # module
