@@ -157,7 +157,7 @@ Physics Reports 441(2–4), 47–189 (2007).
 
 """
 struct IonRatePPT{oT, CT} <: AbstractIonRate
-    Z::Int # Charge state
+    Z::Float64 # Charge state
     l::Int # Orbital angular momentum quantum number
     Δα::Float64 # Polarisbility difference between ground state and ion
     α_ion_au::Float64 # Polarisbility of the ion in atomic units
@@ -187,7 +187,7 @@ function IonRatePPT(material::Symbol, λ0; stark_shift=true, dipole_corr=true, k
     Δα = stark_shift ? polarisability_difference(material) : 0.0
     α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
-    IonRatePPT(ip, λ0, Z, l; Δα, α_ion, kwargs...)
+    IonRatePPT(ip, λ0, float(Z), l; Δα, α_ion, kwargs...)
 end
 
 function IonRatePPT(ip, λ0, Z, l; Δα=0, α_ion=0, sum_tol=1e-6,
@@ -206,7 +206,7 @@ function IonRatePPT(ip, λ0, Z, l; Δα=0, α_ion=0, sum_tol=1e-6,
     ω0 = 2π*c/λ0
     ω0_au = au_time*ω0
 
-    IonRatePPT(Z, l, Δα, α_ion_au, ω0_au, Cnl, ip, occupancy,
+    IonRatePPT(float(Z), l, Δα, α_ion_au, ω0_au, Cnl, ip, occupancy,
         msum, sum_integral, sum_tol, cycle_average)
 end
 
