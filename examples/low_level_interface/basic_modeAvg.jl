@@ -21,7 +21,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
 end
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.IonRateADK(ionpot)
 
 plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot)
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),

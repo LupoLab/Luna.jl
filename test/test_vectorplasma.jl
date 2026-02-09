@@ -16,14 +16,14 @@ import Test: @test, @testset, @test_throws
     dens0 = PhysData.density(gas, pres)
     densityfun(z) = dens0
     ionpot = PhysData.ionisation_potential(gas)
-    ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+    ionrate = Ionisation.IonRateADK(ionpot)
     # scalar modal
     modes = (
         Capillary.MarcatiliMode(a, gas, pres, n=1, m=1, kind=:HE, ϕ=0.0, loss=false),
     )
     nmodes = length(modes)
     plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to,
-                                    ionrate, ionpot)              
+                                    ionrate, ionpot)
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
                 plasma)
     inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
@@ -35,7 +35,7 @@ import Test: @test, @testset, @test_throws
     Luna.run(Eω, grid, linop, transform, FT, outscalar)
     # vector linear 0 degrees
     plasma = Nonlinear.PlasmaCumtrapz(grid.to, Array{Float64}(undef, length(grid.to), 2),
-                                      ionrate, ionpot)                  
+                                      ionrate, ionpot)
     responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
     Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes,

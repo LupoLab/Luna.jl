@@ -578,9 +578,9 @@ function makeplasma!(out, grid, gas, plasma::Symbol, pol,
                      PPT_options, preionfrac)
     ionpot = PhysData.ionisation_potential(gas)
     if plasma == :ADK
-        ionrate = Ionisation.ionrate_fun!_ADK(gas)
+        ionrate = Ionisation.IonRateADK(gas)
     elseif plasma == :PPT
-        ionrate = Ionisation.ionrate_fun!_PPTcached(gas, grid.referenceλ;
+        ionrate = Ionisation.IonRatePPTCached(gas, grid.referenceλ;
                                                     PPT_options...)
     else
         throw(DomainError(plasma, "Unknown ionisation rate $plasma."))

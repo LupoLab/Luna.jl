@@ -22,10 +22,10 @@ dens0 = PhysData.density(gas, pres)
 densityfun(z) = dens0
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.IonRateADK(ionpot)
 plasma = Nonlinear.PlasmaCumtrapz(grid.to, grid.to,
                                   ionrate, ionpot)
-                                  
+
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              plasma)
 
@@ -43,4 +43,3 @@ Luna.run(Eω, grid, linop, transform, FT, output)
 Plotting.pygui(true)
 Plotting.stats(output)
 Plotting.prop_2D(output, :λ, λrange=(500e-9,1800e-9), trange=(-500e-15,100e-15), dBmin=-30.0)
-
