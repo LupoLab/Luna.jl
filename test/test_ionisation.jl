@@ -66,6 +66,7 @@ outneg = ratefun.(-E)
 end
 
 ##
+Utils.clear_cache()
 # Check that PPT_options are indeed passed through properly
 @testset for gas in (:He, :Ne, :Ar, :Kr, :Xe)
     # select all non-default options--each of these will make a difference to the interpolant
@@ -76,6 +77,7 @@ end
         :sum_integral => true,
         :msum => false,
         :occupancy => 4,
+        :cache => false
     )
 
     λ0 = 800e-9
@@ -91,8 +93,8 @@ end
 
     ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
-    @test ir2.cspl.x == ir.cspl.x
-    @test ir2.cspl.y == ir.cspl.y
+    @test ir2.spline.x == ir.spline.x
+    @test ir2.spline.y == ir.spline.y
 
     # now same again with default options
     Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
@@ -114,8 +116,8 @@ end
     )
     ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
-    @test ir2.cspl.x == ir.cspl.x
-    @test ir2.cspl.y == ir.cspl.y
+    @test ir2.spline.x == ir.spline.x
+    @test ir2.spline.y == ir.spline.y
 end
 
 @testset "preionisation" begin

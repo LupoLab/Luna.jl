@@ -184,8 +184,8 @@ Other keyword arguments are identical to `IonRatePPT(ionpot::Float64, λ0, Z, l;
 """
 function IonRatePPT(material::Symbol, λ0; stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
-    Δα = stark_shift ? polarisability_difference(material) : 0
-    α_ion = dipole_corr ? polarisability(material, true) : 0
+    Δα = stark_shift ? polarisability_difference(material) : 0.0
+    α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
     IonRatePPT(ip, λ0, Z, l; Δα, α_ion, kwargs...)
 end
@@ -317,8 +317,8 @@ end
 function ionrate_PPT(material::Symbol, λ0, E;
                      stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
-    Δα = stark_shift ? polarisability_difference(material) : 0
-    α_ion = dipole_corr ? polarisability(material, true) : 0
+    Δα = stark_shift ? polarisability_difference(material) : 0.0
+    α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
     return ionrate_PPT(ip, λ0, Z, l, E; Δα, α_ion, kwargs...)
 end
@@ -361,8 +361,8 @@ end
 
 function IonRatePPTAccel(material::Symbol, λ0; stark_shift=true, dipole_corr=true, kwargs...)
     _, l, Z = quantum_numbers(material)
-    Δα = stark_shift ? polarisability_difference(material) : 0
-    α_ion = dipole_corr ? polarisability(material, true) : 0
+    Δα = stark_shift ? polarisability_difference(material) : 0.0
+    α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
     IonRatePPTAccel(ip, λ0, Z, l; Δα, α_ion, kwargs...)
 end
