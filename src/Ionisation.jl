@@ -194,11 +194,11 @@ function IonRatePPT(ip, λ0, Z, l; Δα=0, α_ion=0, sum_tol=1e-6,
     cycle_average=false, sum_integral=false, msum=true, Cnl=missing, occupancy=2)
 
     if ismissing(Δα)
-        Δα = 0
+        Δα = 0.0
     end
 
     if ismissing(α_ion)
-        α_ion = 0
+        α_ion = 0.0
     end
 
     α_ion_au = α_ion/au_polarisability
@@ -435,7 +435,7 @@ function makePPTcache(ionpot::Float64, λ0, Z, l;
     Emin = Emax/5000
 
     E = collect(range(Emin, stop=Emax, length=N));
-    @info @sprintf("Pre-calculating PPT rate rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
+    @info @sprintf("Pre-calculating PPT rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
     flush(stderr) # pre-calculating can take a while, so make sure this message is shown
     rate = ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
     @info "...PPT pre-calcuation done"
