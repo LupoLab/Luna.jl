@@ -316,7 +316,7 @@ In this case, all keyword arguments except for `λ0` are ignored.
     Note that plasma is only available for full-field simulations.
 - `PPT_options::Dict{Symbol, Any}`: when using the PPT ionisation rate for the
     plasma nonlinearity, this allows for fine-tuning of the options in calculating
-    the ionisation. See [`ionrate_fun_PPT`](@ref Ionisation.ionrate_fun_PPT) for possible
+    the ionisation. See [`IonRatePPTAccel`](@ref Ionisation.IonRatePPTAccel) for possible
     keyword arguments.
 - `preionfrac::Float64`: fraction of the gas that is pre-ionised before the pulse. Defaults to `0.0`.
     Note that this is a very simplistic model of pre-ionisation and should be used with
