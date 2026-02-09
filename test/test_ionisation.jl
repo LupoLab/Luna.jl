@@ -33,7 +33,7 @@ idx2 = ifun.(E) # indices found with brute-force method
 @test all(idx1 .== idx2)
 @test all(spl1.(E) .== spl2.(E))
 
-ratefun = Ionisation.IonRatePPTAccel(:He, 800e-9)
+ratefun = Ionisation.IonRatePPTAccel(:He, 800e-9; cache=false)
 out = ratefun.(E)
 @test all(isapprox.(out, rate, rtol=1e-2))
 
@@ -100,7 +100,8 @@ Utils.clear_cache()
     Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
-                                      λlims=(200e-9, 4e-6), trange=0.5e-12)
+                                      λlims=(200e-9, 4e-6), trange=0.5e-12,
+                                      PPT_options=Dict(:cache => false))
     end
 
     plasma = transform.resp[2]
@@ -113,6 +114,7 @@ Utils.clear_cache()
         :sum_integral => false,
         :msum => true,
         :occupancy => 2,
+        :cache => false
     )
     ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
