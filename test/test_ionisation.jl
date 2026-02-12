@@ -3,11 +3,11 @@ using Luna
 import NumericalIntegration: integrate, SimpsonEven
 import Logging: with_logger, NullLogger
 
-@test Ionisation.ionrate_ADK(:He, 1e10) ≈ 1.2416371415312408e-18
-@test Ionisation.ionrate_ADK(:He, 2e10) ≈ 1.0772390893742478
-@test Ionisation.ionrate_ADK(:HeB, 2e10) ≈ 1.0772390893742478
-@test Ionisation.ionrate_ADK(:Ar , 7e9) ≈ 2.4422306306649472e-08
-@test Ionisation.ionrate_ADK(:Ar , 8e9) ≈ 4.494711488416766e-05
+@test Ionisation.ionrate_ADK(:He, 1e10) ≈ 2*1.2416371415312408e-18
+@test Ionisation.ionrate_ADK(:He, 2e10) ≈ 2*1.0772390893742478
+@test Ionisation.ionrate_ADK(:HeB, 2e10) ≈ 2*1.0772390893742478
+@test Ionisation.ionrate_ADK(:Ar , 7e9) ≈ 2*2.4422306306649472e-08
+@test Ionisation.ionrate_ADK(:Ar , 8e9) ≈ 2*4.494711488416766e-05
 
 E = collect(range(1e9, 1e11; length=32))
 @test Ionisation.ionrate_ADK(:He, E) == Ionisation.ionrate_ADK(:He, -E)
@@ -21,7 +21,7 @@ N = 2^9
 E = collect(range(Emin, Emax, N))
 rate = Ionisation.ionrate_PPT.(:He, 800e-9, E)
 ifun(E0) =  E0 <= Emin ? 2 :
-            E0 >= Emax ? N : 
+            E0 >= Emax ? N :
             ceil(Int, (E0-Emin)/(Emax-Emin)*N) + 1
 ifun2(x0) = x0 <= E[1] ? 2 :
                 x0 >= E[end] ? length(E) :
@@ -33,17 +33,11 @@ idx2 = ifun.(E) # indices found with brute-force method
 @test all(idx1 .== idx2)
 @test all(spl1.(E) .== spl2.(E))
 
-ratefun! = Ionisation.ionrate_fun!_PPTaccel(:He, 800e-9)
-out = similar(E)
-ratefun!(out, E)
+ratefun = Ionisation.IonRatePPTAccel(:He, 800e-9; cache=false)
+out = ratefun.(E)
 @test all(isapprox.(out, rate, rtol=1e-2))
 
-outneg = similar(out)
-ratefun!(outneg, -E)
-@test out == outneg
-
-outneg = similar(out)
-ratefun!(outneg, -E)
+outneg = ratefun.(-E)
 @test out == outneg
 
 ##
@@ -60,7 +54,7 @@ ratefun!(outneg, -E)
     Et = sin.(t)
 
     adk_avg = zero(E0)
-    rf! = Ionisation.ionrate_fun!_ADK(gas)
+    rf! = Ionisation.IonRateADK(gas)
     out = zero(Et)
     for (idx, E0i) in enumerate(E0)
         rf!(out, E0i*Et)
@@ -82,10 +76,12 @@ end
         :sum_integral => true,
         :msum => false,
         :occupancy => 4,
+        :cache => false,
+        :N => 2^12
     )
 
     λ0 = 800e-9
-    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
+    Eω, grid, linop, transform, FT, output = begin
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
                                       λlims=(200e-9, 4e-6), trange=0.5e-12,
@@ -95,16 +91,17 @@ end
     plasma = transform.resp[2]
     ir = plasma.ratefunc
 
-    ir2 = Ionisation.ionrate_fun!_PPTaccel(gas, λ0; PPT_options...)
+    ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
-    @test ir2.cspl.x == ir.cspl.x
-    @test ir2.cspl.y == ir.cspl.y
+    @test ir2.spline.x == ir.spline.x
+    @test ir2.spline.y == ir.spline.y
 
-    # now same again with default options
-    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
+    # now same again with mostly default options (just fewer points, for speed)
+    Eω, grid, linop, transform, FT, output = begin
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
-                                      λlims=(200e-9, 4e-6), trange=0.5e-12)
+                                      λlims=(200e-9, 4e-6), trange=0.5e-12,
+                                      PPT_options=Dict(:cache => false, :N => 2^12))
     end
 
     plasma = transform.resp[2]
@@ -117,18 +114,22 @@ end
         :sum_integral => false,
         :msum => true,
         :occupancy => 2,
+        :cache => false,
+        :N => 2^12
     )
-    ir2 = Ionisation.ionrate_fun!_PPTaccel(gas, λ0; PPT_options...)
+    ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
-    @test ir2.cspl.x == ir.cspl.x
-    @test ir2.cspl.y == ir.cspl.y
+    @test ir2.spline.x == ir.spline.x
+    @test ir2.spline.y == ir.spline.y
 end
 
 @testset "preionisation" begin
     @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
                                             λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
-                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=1.01)
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=1.01,
+                                            PPT_options=Dict(:cache => false, :N => 2^12))
     @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
                                             λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
-                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=-0.001)
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=-0.001,
+                                            PPT_options=Dict(:cache => false, :N => 2^12))
 end
