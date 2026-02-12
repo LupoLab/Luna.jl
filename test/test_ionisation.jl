@@ -66,7 +66,6 @@ outneg = ratefun.(-E)
 end
 
 ##
-Utils.clear_cache()
 # Check that PPT_options are indeed passed through properly
 @testset for gas in (:He, :Ne, :Ar, :Kr, :Xe)
     # select all non-default options--each of these will make a difference to the interpolant
@@ -77,11 +76,12 @@ Utils.clear_cache()
         :sum_integral => true,
         :msum => false,
         :occupancy => 4,
-        :cache => false
+        :cache => false,
+        :N => 2^12
     )
 
     λ0 = 800e-9
-    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
+    Eω, grid, linop, transform, FT, output = begin
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
                                       λlims=(200e-9, 4e-6), trange=0.5e-12,
@@ -96,12 +96,12 @@ Utils.clear_cache()
     @test ir2.spline.x == ir.spline.x
     @test ir2.spline.y == ir.spline.y
 
-    # now same again with default options
-    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
+    # now same again with mostly default options (just fewer points, for speed)
+    Eω, grid, linop, transform, FT, output = begin
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
                                       λlims=(200e-9, 4e-6), trange=0.5e-12,
-                                      PPT_options=Dict(:cache => false))
+                                      PPT_options=Dict(:cache => false, :N => 2^12))
     end
 
     plasma = transform.resp[2]
@@ -114,7 +114,8 @@ Utils.clear_cache()
         :sum_integral => false,
         :msum => true,
         :occupancy => 2,
-        :cache => false
+        :cache => false,
+        :N => 2^12
     )
     ir2 = Ionisation.IonRatePPTAccel(gas, λ0; PPT_options...)
 
@@ -125,8 +126,10 @@ end
 @testset "preionisation" begin
     @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
                                             λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
-                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=1.01)
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=1.01,
+                                            PPT_options=Dict(:cache => false, :N => 2^12))
     @test_throws DomainError prop_capillary(265e-6, 0.01, :He, 0.1;
                                             λ0=800e-9, trange=70e-15, λlims=(100e-9,6e-6),
-                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=-0.001)
+                                            τfwhm=6e-15, energy=1.5e-3, preionfrac=-0.001,
+                                            PPT_options=Dict(:cache => false, :N => 2^12))
 end
