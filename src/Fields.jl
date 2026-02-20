@@ -772,6 +772,39 @@ prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, arg
 
 prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 
+"""
+    prop_gratings!(Eω, ω, Λ, L, m, θi)
+    prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
+
+Add the spectral phase acquired after passing through a four grating compressor
+with grating period `Λ`, grating separation `L`, diffraction order `m` and angle
+of incidence `θi`. The sampling axis of `Eω` can be given either as an
+`AbstractGrid` or the frequency axis `ω`.
+"""
+function prop_gratings!(Eω, ω, Λ, L, m, θi)
+    λ = PhysData.wlfreq.(ω)
+    mask = @. abs(m*λ/Λ + sin(θi)) <= 1
+    θm = @. asin(m*λ[mask]/Λ + sin(θi))
+    x = @. L*tan(θm)
+    ϕg = @. π - m*2*π*x/Λ
+    ϕ = zero(λ)
+    ϕ[mask] .= @. 2*(ω[mask]*L/PhysData.c + ϕg)
+    Eω .*= exp.(-1im.*ϕ)
+end
+
+prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi) = prop_gratings!(Eω, grid.ω, Λ, L, m, θi)
+
+"""
+    prop_gratings(Eω, ω, Λ, L, m, θi)
+    prop_gratings(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi)
+
+Return a copy of the frequency-domain field `Eω` with the additional spectral phase
+acquired after passing through a four grating compressor with grating period `Λ`, grating
+separation `L`, diffraction order `m` and angle of incidence `θi`.
+The sampling axis of `Eω` can be given either as an `AbstractGrid` or the frequency axis `ω`.
+"""
+prop_gratings(Eω, args...) = prop_gratings!(copy(Eω), args...)
+
 
 """
     optcomp_taylor(Eω, grid, λ0; order=2)
@@ -867,6 +900,49 @@ function optcomp_material(Eω, args...; kwargs...)
     end
     dout, out
 end
+
+
+"""
+    optcomp_gratings(Eω, grid, Λ, m, θi, min_separation, max_separation)
+
+Maximise the peak power of the field `Eω` by compression through a four grating
+compressor with grating period `Λ`, diffraction order `m` and angle of incidence `θi`.
+The optimum grating separation is returned, lying between `min_separation` and
+`max_separation`. 
+"""
+function optcomp_gratings(Eω::AbstractVecOrMat, grid, Λ, m, θi,
+                          min_separation, max_separation)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+    target = 1/maximum(ItFTL)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
+
+    function f(L)
+        # L is the grating separation
+        Eωp = copy(Eωnorm)
+        prop_gratings!(Eωp, grid.ω, Λ, L, m, θi)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1/maximum(Itp)
+    end
+
+    res = Optim.optimize(f, min_separation, max_separation)
+    res.minimizer, prop_gratings(Eω, grid, Λ, res.minimizer, m, θi)
+end
+
+function optcomp_gratings(Eω, args...)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    dout = zeros(size(cidcs))
+    for ci in cidcs
+        di, Eωi = optcomp_gratings(Eω[:, :, ci], args...)
+        out[:, :, ci] .= Eωi
+        dout[ci] = di
+    end
+    dout, out
+end
+
 
 """
     optfield_cep(Eω, grid)
