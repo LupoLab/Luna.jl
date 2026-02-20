@@ -87,6 +87,7 @@ function fft_provider_is_mkl()
 end
 
 function loadFFTwisdom()
+    FFTW.set_num_threads(FFTWthreads())
     if fft_provider_is_mkl()
         Logging.@info("FFTW provider is MKL; skipping wisdom loading")
         return
