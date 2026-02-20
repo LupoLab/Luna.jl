@@ -83,12 +83,10 @@ function FFTWthreads()
 end
 
 function fft_provider_is_mkl()
-    Preferences.load_preference("FFTW", "provider") == "mkl"
+    Preferences.load_preference("FFTW", "provider", nothing) === "mkl"
 end
 
 function loadFFTwisdom()
-    FFTW.set_num_threads(FFTWthreads())
-    Logging.@info("FFTW threads set to $(FFTWthreads())")
     if fft_provider_is_mkl()
         Logging.@info("FFTW provider is MKL; skipping wisdom loading")
         return
