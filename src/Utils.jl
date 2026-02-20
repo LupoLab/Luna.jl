@@ -9,6 +9,7 @@ import Luna: settings
 import Printf: @sprintf
 import Scratch: get_scratch!, clear_scratchspaces!
 import Luna
+import Preferences
 
 subzero = '\u2080'
 subscript(digit::Char) = string(Char(codepoint(subzero)+parse(Int, digit)))
@@ -81,8 +82,16 @@ function FFTWthreads()
     end
 end
 
+function fft_provider_is_mkl()
+    Preferences.load_preference("FFTW", "provider", nothing) === "mkl"
+end
+
 function loadFFTwisdom()
     FFTW.set_num_threads(FFTWthreads())
+    if fft_provider_is_mkl()
+        Logging.@info("FFTW provider is MKL; skipping wisdom loading")
+        return
+    end
     fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     isdir(cachedir()) || mkpath(cachedir())
@@ -97,6 +106,10 @@ function loadFFTwisdom()
 end
 
 function saveFFTwisdom()
+    if fft_provider_is_mkl()
+        Logging.@info("FFTW provider is MKL; skipping wisdom saving")
+        return
+    end
     fpath = joinpath(cachedir(), "FFTWcache_$(FFTWthreads())threads")
     lockpath = joinpath(cachedir(), "FFTWlock")
     mkpidlock(lockpath; stale_age=600) do
