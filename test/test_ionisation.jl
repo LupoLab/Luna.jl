@@ -81,7 +81,7 @@ end
     )
 
     λ0 = 800e-9
-    Eω, grid, linop, transform, FT, output = begin
+    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
                                       λlims=(200e-9, 4e-6), trange=0.5e-12,
@@ -97,7 +97,7 @@ end
     @test ir2.spline.y == ir.spline.y
 
     # now same again with mostly default options (just fewer points, for speed)
-    Eω, grid, linop, transform, FT, output = begin
+    Eω, grid, linop, transform, FT, output = with_logger(NullLogger()) do
         Interface.prop_capillary_args(100e-6, 1, gas, 1;
                                       λ0, τfwhm=10e-15, energy=1e-6,
                                       λlims=(200e-9, 4e-6), trange=0.5e-12,
