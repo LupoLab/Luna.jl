@@ -380,6 +380,7 @@ function IonRatePPTAccel(ionpot::Float64, λ0, Z, l;
     fname = string(h, base=16) * ".h5"
     fpath = joinpath(cachedir, fname)
     if cache && isfile(fpath)
+        lockpath = joinpath(cachedir, "pptlock")
         E, rate = mkpidlock(lockpath; stale_age) do
             @info @sprintf("Found cached PPT rate for %.2f eV, %.1f nm", ionpot / electron, 1e9λ0)
             HDF5.h5open(fpath, "r") do file
