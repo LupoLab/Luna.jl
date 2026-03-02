@@ -81,32 +81,47 @@ end
 end
 
 ##
+prop!(Eω, grid) = nothing # do-nothing propagator
 @testset "Input into higher-order modes" begin
-    args = (100e-6, 0.1, :He, 1)
-    kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
-               saveN=51, plasma=false)
-    pkwargs = (τfwhm=10e-15, energy=1e-12, λ0=800e-9)
-    @testset "input into $m, mode average" for m in (:HE11, :HE12, :TE01, :TE02, :TM01)
-        ip = Pulses.GaussPulse(;mode=m, pkwargs...)
-        o = prop_capillary(args...; pulses=ip, modes=m, kwargs...)
-        @test Processing.energy(o)[1] ≈ pkwargs.energy
-    end
-    @testset "input into $m, modal" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
-        ip = Pulses.GaussPulse(;mode=m, pkwargs...)
-        o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
-        @test Processing.energy(o)[midx, 1] ≈ pkwargs.energy
-    end
-    @testset "input into $m, modal circular" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
-        ip = Pulses.GaussPulse(;mode=m, polarisation=:circular, pkwargs...)
-        o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
-        @test Processing.energy(o)[2midx-1, 1] ≈ pkwargs.energy/2
-        @test Processing.energy(o)[2midx, 1] ≈ pkwargs.energy/2
-    end
-    modes = (:TE01, :TE02, :TE03, :TE04, :TM01, :TM02, :TM03, :TM04)
-    @testset "input into $m, modal" for (midx, m) in enumerate((modes))
-        ip = Pulses.GaussPulse(;mode=m, pkwargs...)
-        o = prop_capillary(args...; pulses=ip, modes=modes, kwargs...)
-        @test Processing.energy(o)[midx, 1] ≈ pkwargs.energy
+    @testset "propagator $prop" for prop in (nothing, prop!)
+        args = (100e-6, 0.1, :He, 1)
+        kwargs = (λ0=800e-9, shotnoise=false, trange=250e-15, λlims=(200e-9, 4e-6),
+                saveN=51, plasma=false, propagator=prop)
+        pkwargs = (τfwhm=10e-15, energy=1e-12, λ0=800e-9)
+        @testset "input into $m, mode average" for m in (:HE11, :HE12, :TE01, :TE02, :TM01)
+            ip = Pulses.GaussPulse(;mode=m, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes=m, kwargs...)
+            @test Processing.energy(o)[1] ≈ pkwargs.energy
+        end
+        @testset "input into $m, modal" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
+            ip = Pulses.GaussPulse(;mode=m, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
+            @test Processing.energy(o)[midx, 1] ≈ pkwargs.energy
+        end
+        @testset "input into $m, modal circular" for (midx, m) in enumerate((:HE11, :HE12, :HE13, :HE14))
+            ip = Pulses.GaussPulse(;mode=m, polarisation=:circular, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes=4, kwargs...)
+            @test Processing.energy(o)[2midx-1, 1] ≈ pkwargs.energy/2
+            @test Processing.energy(o)[2midx, 1] ≈ pkwargs.energy/2
+        end
+        modes = (:HE21, :HE22, :HE23, :HE24)
+        @testset "input into $m, modal" for (midx, m) in enumerate(modes)
+            ip = Pulses.GaussPulse(;mode=m, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes, kwargs...)
+            @test Processing.energy(o)[midx, 1] ≈ pkwargs.energy
+        end
+        @testset "input into $m, modal circular" for (midx, m) in enumerate(modes)
+            ip = Pulses.GaussPulse(;mode=m, polarisation=:circular, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes, kwargs...)
+            @test Processing.energy(o)[2midx-1, 1] ≈ pkwargs.energy/2
+            @test Processing.energy(o)[2midx, 1] ≈ pkwargs.energy/2
+        end
+        modes = (:TE01, :TE02, :TE03, :TE04, :TM01, :TM02, :TM03, :TM04)
+        @testset "input into $m, modal" for (midx, m) in enumerate((modes))
+            ip = Pulses.GaussPulse(;mode=m, pkwargs...)
+            o = prop_capillary(args...; pulses=ip, modes=modes, kwargs...)
+            @test Processing.energy(o)[midx, 1] ≈ pkwargs.energy
+        end
     end
 end
 
