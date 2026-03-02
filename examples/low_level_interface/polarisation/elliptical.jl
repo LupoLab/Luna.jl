@@ -51,7 +51,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
 end
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.IonRateADK(ionpot)
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
@@ -169,5 +169,3 @@ plt.plot(zout, Ss[3,:], label="S3")
 plt.plot(zout, Ss[4,:], label="S4")
 plt.plot(zout, Elipt, label="ε")
 plt.legend()
-
-

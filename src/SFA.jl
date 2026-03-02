@@ -51,7 +51,7 @@ strong-field approximation (SFA).
 function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
                     gate=true, nflat=1/2, nramp=1/4,
                     depletion=true,
-                    irf! = depletion ? Ionisation.ionrate_fun!_PPTcached(gas, λ0) : nothing,
+                    irf! = depletion ? Ionisation.IonRatePPTCached(gas, λ0) : nothing,
                     dipole=approx_dipole(gas))
     if gate
         return sfa_dipole_fast(t, Et, gas, λ0; nflat, nramp, depletion, irf!, dipole)
@@ -101,7 +101,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
             t_b_idcs = t_b_idcs[crop]
             τ = τ[crop]
         end
-        
+
         intA_this = intA[tidx] .- intA[t_b_idcs] # definite integral between t_b and t_r
         intAsq_this = intAsq[tidx] .- intAsq[t_b_idcs] # definite integral between t_b and t_r
 
@@ -130,7 +130,7 @@ function sfa_dipole(t, Et::Vector{<:Real}, gas, λ0;
         if gate
             integrand .*= sine_squared_gate.(τ, ω0, nflat, nramp)
         end
-        
+
         D[tidx] = 1im*integrate(t_b, integrand, SimpsonEven())
     end
 
@@ -140,7 +140,7 @@ end
 function sfa_dipole_fast(t, Et::Vector{<:Real}, gas, λ0;
                          nflat=1/2, nramp=1/4,
                          depletion=true,
-                         irf! = depletion ? Ionisation.ionrate_fun!_PPTcached(gas, λ0) : nothing,
+                         irf! = depletion ? Ionisation.IonRatePPTCached(gas, λ0) : nothing,
                          dipole=approx_dipole(gas))
 
     if depletion

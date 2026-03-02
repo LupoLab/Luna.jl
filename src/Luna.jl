@@ -36,7 +36,7 @@ end
 """
     set_fftw_threads(nthr)
 
-Set number of threads to be used by FFTW. If set to `0`, the number of threads used by 
+Set number of threads to be used by FFTW. If set to `0`, the number of threads used by
 FFTW is determined automatically (see [`Utils.FFTWthreads()`](@ref))
 """
 function set_fftw_threads(nthr=0)
@@ -284,7 +284,7 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     flush(stderr)
     Utils.loadFFTwisdom()
     x = xygrid.x
-    y = xygrid.y          
+    y = xygrid.y
     xr = Array{Float64}(undef, length(grid.t), length(y), length(x))
     FT = FFTW.plan_rfft(xr, (1, 2, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
@@ -307,7 +307,7 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     flush(stderr)
     Utils.loadFFTwisdom()
     x = xygrid.x
-    y = xygrid.y          
+    y = xygrid.y
     xr = Array{ComplexF64}(undef, length(grid.t), length(y), length(x))
     FT = FFTW.plan_fft(xr, (1, 2, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, length(grid.ω), length(y), length(x))
@@ -393,12 +393,14 @@ end
 # run some code for precompilation
 Logging.with_logger(Logging.NullLogger()) do
     prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
-                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
+                    PPT_options=Dict(:cache => false))
     prop_capillary(125e-6, 0.3, :He, (1.0, 0); λ0=800e-9, energy=1e-9,
-                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
+                    PPT_options=Dict(:cache => false))
     prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
                     τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
-                    modes=4)
+                    modes=4, PPT_options=Dict(:cache => false))
     p = Tools.capillary_params(120e-6, 10e-15, 800e-9, 125e-6, :He, P=1.0)
 
     # gnlse_sol.jl example but with N=1 and 100th of the fibre length

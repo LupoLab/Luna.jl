@@ -4,7 +4,7 @@ a = 50e-6
 b = 10e-6
 gas = :Ar
 pres = 5
-L = 15e-2 
+L = 15e-2
 
 τfwhm = 30e-15
 λ0 = 800e-9
@@ -22,7 +22,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
 end
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.IonRateADK(ionpot)
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
              #Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
