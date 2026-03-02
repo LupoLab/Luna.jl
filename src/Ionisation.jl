@@ -226,7 +226,7 @@ function (ir::IonRatePPT)(E)
     Up_au = E_au^2/(4*ir.ω0_au^2)
     Uit_au = Ip_au + Up_au
     v = Uit_au/ir.ω0_au
-    ret = 0
+    ret = 0.0
     mrange = ir.msum ? (-ir.l:ir.l) : (0:0)
     for m in mrange
         mabs = abs(m)
@@ -347,7 +347,7 @@ exists, load this rather than recalculate.
 Other keyword arguments are passed on to [`IonRatePPT`](@ref)
 """
 function IonRatePPTAccel(E, rate)
-        # first remove points where the rate is zero within floating-point
+    # first remove points where the rate is zero within floating-point
     # precision to avoid NaNs in the CSpline
     idcs = rate .> 0
     E = E[idcs]
@@ -380,9 +380,11 @@ function IonRatePPTAccel(ionpot::Float64, λ0, Z, l;
     fname = string(h, base=16) * ".h5"
     fpath = joinpath(cachedir, fname)
     if cache && isfile(fpath)
-        @info @sprintf("Found cached PPT rate for %.2f eV, %.1f nm", ionpot / electron, 1e9λ0)
-        E, rate = HDF5.h5open(fpath, "r") do file
-            (read(file["E"]), read(file["rate"]))
+        E, rate = mkpidlock(lockpath; stale_age) do
+            @info @sprintf("Found cached PPT rate for %.2f eV, %.1f nm", ionpot / electron, 1e9λ0)
+            HDF5.h5open(fpath, "r") do file
+                (read(file["E"]), read(file["rate"]))
+            end
         end
     else
         E, rate = makePPTcache(ionpot::Float64, λ0, Z, l;
