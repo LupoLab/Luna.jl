@@ -7,6 +7,7 @@ import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
 import Luna.PhysData: wlfreq
+import Luna.Nonlinear: SpectralResponse
 
 """
     to_time!(Ato, Aω, Aωo, IFTplan)
@@ -141,11 +142,39 @@ function Et_to_Pt!(Pt, Et, responses, density, idcs)
 end
 
 """
+    sp_Et_to_Pω!(Pω, F_E2E_ω, sp_resp, density)
+
+Apply all [`SpectralResponse`](@ref)s (e.g. TPA) to the frequency-domain
+cubic envelope product ``\\mathcal{F}\\{|E|^2 E\\}(\\omega)``. Adds contributions
+to the frequency-domain polarisation buffer `Pω` (same units as the Kerr
+contribution), **before** normalisation.
+
+This is the spectral counterpart of [`Et_to_Pt!`](@ref).
+"""
+function sp_Et_to_Pω!(Pω, F_E2E_ω, sp_resp, density)
+    for resp in sp_resp
+        resp(Pω, F_E2E_ω, density)
+    end
+end
+
+"""
+    sp_Et_to_Pω!(Pω, F_E2E_ω, sp_resp, density, idcs)
+
+Spatial-indexed version for 3D free-space (`TransFree`) and 2D column data.
+Loops over spatial indices, applying spectral responses to each 1D frequency slice.
+"""
+function sp_Et_to_Pω!(Pω, F_E2E_ω, sp_resp, density, idcs)
+    for i in idcs
+        sp_Et_to_Pω!(view(Pω, :, i), view(F_E2E_ω, :, i), sp_resp, density)
+    end
+end
+
+"""
     TransModal
 
 Transform E(ω) -> Pₙₗ(ω) for modal fields.
 """
-mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT}
+mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT, spT}
     ts::tsT
     full::Bool
     dimlimits::lT
@@ -169,6 +198,7 @@ mutable struct TransModal{tsT, lT, TT, FTT, rT, gT, dT, ddT, nT}
     atol::Float64
     mfcn::Int
     err::Array{ComplexF64,2}
+    sp_resp::spT # spectral responses (e.g. TPA), applied in ω domain before norm
 end
 
 function show(io::IO, t::TransModal)
@@ -179,7 +209,12 @@ function show(io::IO, t::TransModal)
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     full = "full: $(t.full)"
-    out = join(["TransModal", modes, pol, grid, samples, full, resp], "\n  ")
+    parts = ["TransModal", modes, pol, grid, samples, full, resp]
+    if !isempty(t.sp_resp)
+        sp = "spectral responses: "*join([string(typeof(ri)) for ri in t.sp_resp], "\n    ")
+        push!(parts, sp)
+    end
+    out = join(parts, "\n  ")
     print(io, out)
 end
 
@@ -211,8 +246,12 @@ function TransModal(tT, grid, ts::Modes.ToSpace, FT, resp, densityfun, norm!;
     Prωo = Array{ComplexF64,2}(undef, length(grid.ωo), ts.npol)
     Prmω = Array{ComplexF64,2}(undef, length(grid.ω), ts.nmodes)
     IFT = inv(FT)
+    # Split responses into time-domain and spectral (frequency-domain)
+    td_resp = Tuple(r for r in resp if !(r isa SpectralResponse))
+    sp_resp = Tuple(r for r in resp if r isa SpectralResponse)
     TransModal(ts, full, Modes.dimlimits(ts.ms[1]), Emω, Erω, Erωo, Er, Pr, Prω, Prωo, Prmω,
-               FT, resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn, similar(Prmω))
+               FT, td_resp, grid, densityfun, densityfun(0.0), norm!, 0, 0.0, rtol, atol, mfcn,
+               similar(Prmω), sp_resp)
 end
 
 function TransModal(grid::Grid.RealGrid, args...; kwargs...)
@@ -277,6 +316,17 @@ function Erω_to_Prω!(t, x)
     Et_to_Pt!(t.Pr, t.Er, t.resp, t.density)
     @. t.Pr *= t.grid.towin
     to_freq!(t.Prω, t.Prωo, t.Pr, t.FT)
+    # Spectral responses (e.g. TPA): add to Prω before ωwin and norm.
+    # Erω is stale (consumed by to_time! above), so reuse it for F{|E|²E}.
+    if !isempty(t.sp_resp)
+        @. t.Pr = abs2(t.Er) * t.Er
+        @. t.Pr *= t.grid.towin
+        to_freq!(t.Erω, t.Erωo, t.Pr, t.FT)
+        for col in axes(t.Prω, 2)
+            sp_Et_to_Pω!(view(t.Prω, :, col), view(t.Erω, :, col),
+                          t.sp_resp, t.density)
+        end
+    end
     @. t.Prω *= t.grid.ωwin
     t.norm!(t.Prω)
 end
@@ -320,7 +370,7 @@ end
 
 Transform E(ω) -> Pₙₗ(ω) for mode-averaged single-mode propagation.
 """
-struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
+struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT, spT}
     Pto::Vector{TT}
     Eto::Vector{TT}
     Eωo::Vector{ComplexF64}
@@ -331,13 +381,20 @@ struct TransModeAvg{TT, FTT, rT, gT, dT, nT, aT}
     densityfun::dT
     norm!::nT
     aeff::aT # function which returns effective area
+    sp_resp::spT # spectral responses (e.g. TPA), applied in ω domain before norm
+    A2A_ω::Vector{ComplexF64} # scratch buffer for F{|E|²E}(ω)
 end
 
 function show(io::IO, t::TransModeAvg)
     grid = "grid type: $(typeof(t.grid))"
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
-    out = join(["TransModeAvg", grid, samples, resp], "\n  ")
+    parts = ["TransModeAvg", grid, samples, resp]
+    if !isempty(t.sp_resp)
+        sp = "spectral responses: "*join([string(typeof(ri)) for ri in t.sp_resp], "\n    ")
+        push!(parts, sp)
+    end
+    out = join(parts, "\n  ")
     print(io, out)
 end
 
@@ -346,7 +403,12 @@ function TransModeAvg(TT, grid, FT, resp, densityfun, norm!, aeff)
     Eto = zeros(TT, length(grid.to))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, resp, grid, densityfun, norm!, aeff)
+    # Split responses into time-domain and spectral (frequency-domain)
+    td_resp = Tuple(r for r in resp if !(r isa SpectralResponse))
+    sp_resp = Tuple(r for r in resp if r isa SpectralResponse)
+    A2A_ω = isempty(sp_resp) ? ComplexF64[] : zeros(ComplexF64, length(grid.ω))
+    TransModeAvg(Pto, Eto, Eωo, Pωo, FT, td_resp, grid, densityfun, norm!, aeff,
+                 sp_resp, A2A_ω)
 end
 
 function TransModeAvg(grid::Grid.RealGrid, FT, resp, densityfun, norm!, aeff)
@@ -365,6 +427,14 @@ function (t::TransModeAvg)(nl, Eω, z)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z))
     @. t.Pto *= t.grid.towin
     to_freq!(nl, t.Pωo, t.Pto, t.FT)
+    # Spectral responses (e.g. TPA): add to nl before norm, so they go through
+    # the same normalisation pipeline as time-domain responses (Kerr, Raman).
+    if !isempty(t.sp_resp)
+        @. t.Pto = abs2(t.Eto) * t.Eto
+        @. t.Pto *= t.grid.towin
+        to_freq!(t.A2A_ω, t.Pωo, t.Pto, t.FT)
+        sp_Et_to_Pω!(nl, t.A2A_ω, t.sp_resp, t.densityfun(z))
+    end
     t.norm!(nl, z)
     for i in eachindex(nl)
         !t.grid.sidx[i] && continue
@@ -403,7 +473,7 @@ end
 
 Transform E(ω) -> Pₙₗ(ω) for radially symetric free-space propagation
 """
-struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
+struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT, spT}
     QDHT::HTT # Hankel transform (space to k-space)
     FT::FTT # Fourier transform (time to frequency)
     normfun::nT # Function which returns normalisation factor
@@ -415,6 +485,8 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT}
     Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
     Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
     idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
+    sp_resp::spT # spectral responses (e.g. TPA), applied in ω domain before norm
+    A2A_kω::Array{ComplexF64,2} # scratch buffer for F{|E|²E}(ω,kr)
 end
 
 function show(io::IO, t::TransRadial)
@@ -423,7 +495,12 @@ function show(io::IO, t::TransRadial)
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     nr = "radial points: $(t.QDHT.N)"
     R = "aperture: $(t.QDHT.R)"
-    out = join(["TransRadial", grid, samples, nr, R, resp], "\n  ")
+    parts = ["TransRadial", grid, samples, nr, R, resp]
+    if !isempty(t.sp_resp)
+        sp = "spectral responses: "*join([string(typeof(ri)) for ri in t.sp_resp], "\n    ")
+        push!(parts, sp)
+    end
+    out = join(parts, "\n  ")
     print(io, out)
 end
 
@@ -433,7 +510,14 @@ function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun)
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices(size(Pto)[2:end])
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs)
+    # Split responses into time-domain and spectral (frequency-domain)
+    td_resp = Tuple(r for r in responses if !(r isa SpectralResponse))
+    sp_resp = Tuple(r for r in responses if r isa SpectralResponse)
+    A2A_kω = isempty(sp_resp) ?
+        zeros(ComplexF64, (0, 0)) :
+        zeros(ComplexF64, (length(grid.ω), HT.N))
+    TransRadial(HT, FT, normfun, td_resp, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs,
+                sp_resp, A2A_kω)
 end
 
 """
@@ -470,6 +554,14 @@ function (t::TransRadial)(nl, Eω, z)
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
     to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
+    # Spectral responses (e.g. TPA): Eto still holds (t, r) field from above
+    if !isempty(t.sp_resp)
+        @. t.Pto = abs2(t.Eto) * t.Eto  # |E|²E in (t, r) — reuse Pto buffer
+        @. t.Pto *= t.grid.towin
+        mul!(t.Pto, t.QDHT, t.Pto)  # transform r -> k
+        to_freq!(t.A2A_kω, t.Pωo, t.Pto, t.FT)  # transform t -> ω
+        sp_Et_to_Pω!(nl, t.A2A_kω, t.sp_resp, t.densityfun(z), t.idcs)
+    end
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
@@ -523,7 +615,7 @@ function norm_radial(grid, q, nfun)
     return norm
 end
 
-mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
+mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT, spT}
     FT::FTT # 3D Fourier transform (space to k-space and time to frequency)
     normfun::nT # Function which returns normalisation factor
     resp::rT # nonlinear responses (tuple of callables)
@@ -536,6 +628,8 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT}
     Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
     scale::Float64 # scale factor to be applied during oversampling
     idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
+    sp_resp::spT # spectral responses (e.g. TPA), applied in ω domain before norm
+    A2A_kω::Array{ComplexF64, 3} # scratch buffer for F{|E|²E}(ω,ky,kx)
 end
 
 function show(io::IO, t::TransFree)
@@ -544,7 +638,12 @@ function show(io::IO, t::TransFree)
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     y = "y grid: $(minimum(t.xygrid.y)) to $(maximum(t.xygrid.y)), N=$(length(t.xygrid.y))"
     x = "x grid: $(minimum(t.xygrid.x)) to $(maximum(t.xygrid.x)), N=$(length(t.xygrid.x))"
-    out = join(["TransFree", grid, samples, y, x, resp], "\n  ")
+    parts = ["TransFree", grid, samples, y, x, resp]
+    if !isempty(t.sp_resp)
+        sp = "spectral responses: "*join([string(typeof(ri)) for ri in t.sp_resp], "\n    ")
+        push!(parts, sp)
+    end
+    out = join(parts, "\n  ")
     print(io, out)
 end
 
@@ -556,8 +655,14 @@ function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun)
     Pto = similar(Eto)
     Pωo = similar(Eωo)
     idcs = CartesianIndices((Ny, Nx))
-    TransFree(FT, normfun, responses, grid, xygrid, densityfun,
-              Pto, Eto, Eωo, Pωo, scale, idcs)
+    # Split responses into time-domain and spectral (frequency-domain)
+    td_resp = Tuple(r for r in responses if !(r isa SpectralResponse))
+    sp_resp = Tuple(r for r in responses if r isa SpectralResponse)
+    A2A_kω = isempty(sp_resp) ?
+        zeros(ComplexF64, (0, 0, 0)) :
+        zeros(ComplexF64, (length(grid.ω), Ny, Nx))
+    TransFree(FT, normfun, td_resp, grid, xygrid, densityfun,
+              Pto, Eto, Eωo, Pωo, scale, idcs, sp_resp, A2A_kω)
 end
 
 """
@@ -601,6 +706,15 @@ function (t::TransFree)(nl, Eωk, z)
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    # Spectral responses (e.g. TPA): add to nl before inline norm, so they go
+    # through the same normalisation as time-domain responses.
+    if !isempty(t.sp_resp)
+        @. t.Pto = abs2(t.Eto) * t.Eto
+        @. t.Pto *= t.grid.towin
+        mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+        copy_scale!(t.A2A_kω, t.Pωo, length(t.grid.ω), 1/t.scale)
+        sp_Et_to_Pω!(nl, t.A2A_kω, t.sp_resp, t.densityfun(z), t.idcs)
+    end
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 

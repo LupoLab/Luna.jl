@@ -1,6 +1,6 @@
 module Nonlinear
 import Luna
-import Luna.PhysData: ε_0, e_ratio
+import Luna.PhysData: ε_0, c, e_ratio
 import Luna: Maths, Utils
 import FFTW
 import LinearAlgebra: mul!, ldiv!
@@ -329,6 +329,145 @@ function (R::RamanPolar)(out, Et, ρ)
         out .+= reshape(R.Pout, size(Et))
     else
         out .+= R.Pout
+    end
+end
+
+"""
+    SpectralResponse
+
+Abstract type for nonlinear responses that operate in the frequency domain
+rather than the time domain.
+
+Unlike time-domain responses (Kerr, Raman, Plasma) with callable signature
+`response!(out_t, E_t, ρ)`, spectral responses have signature:
+
+    response!(out_ω, F_E2E_ω, ρ)
+
+where `F_E2E_ω` is ``\\mathcal{F}\\{|E|^2 E\\}(\\omega)`` and `out_ω` is the
+frequency-domain nonlinear polarisation (same units as FFT of time-domain P_NL).
+
+Spectral responses are **geometry-agnostic**: they operate on 1D frequency
+vectors regardless of whether the simulation is mode-averaged, modal, or
+3D free-space. All spatial integration and field normalisation is handled
+by the `Trans*` types in `NonlinearRHS`, exactly as for time-domain responses.
+The spectral response contribution enters `P_NL(ω)` **before** the
+normalisation step, so it goes through the same norm as Kerr.
+
+See also: [`TPAResponse`](@ref)
+"""
+abstract type SpectralResponse end
+
+"""
+    TPAResponse{cT}
+
+Two-photon absorption (TPA) response for envelope propagation.
+
+TPA is the imaginary part of the third-order susceptibility χ⁽³⁾. While the
+real part (Kerr effect) is frequency-independent and handled in the time domain,
+Im(χ⁽³⁾)(ω) varies strongly across deep-UV bandwidths and must be applied as
+a frequency-domain multiplier on ``\\mathcal{F}\\{|E|^2 E\\}(\\omega)``:
+
+    P_TPA(ω) = coeff(ω) × ρ × F{|E|²E}(ω)
+
+This produces output in the **same P_NL units** as the Kerr response, so the
+`Trans*` types' normalisation functions correctly convert both Kerr and TPA
+contributions to ∂A/∂z. This makes `TPAResponse` geometry-agnostic: it works
+identically for mode-averaged (`TransModeAvg`), modal (`TransModal`), and
+3D free-space (`TransFree`) propagation.
+
+The stored coefficient is:
+
+    coeff(ω) = -i × ε₀² × c² × β₂(ω) / (2ω)
+
+derived by requiring consistency with the Kerr nonlinear polarisation
+in Luna's propagation pipeline. In ``TransModeAvg``, the field is
+divided by ``\\mathrm{nlscale} = \\sqrt{\\varepsilon_0 c/2}`` before
+computing ``|E|^2 E``, and the norm function applies
+``-i\\omega^2/(4 \\cdot \\mathrm{nlscale} \\cdot c \\cdot \\beta)``.
+Tracing the standard relationship
+``\\beta_2 = 3\\omega \\, \\mathrm{Im}(\\chi^{(3)}) / (2 n_0^2 c^2)``
+through yields the ``\\varepsilon_0^2 c^2`` prefactor
+(from ``\\mathrm{nlscale}^4 = (\\varepsilon_0 c/2)^2``).
+The ``-i`` factor ensures TPA causes loss (negative real
+``\\partial A/\\partial z``) after the norm's own ``-i`` factor.
+
+# Construction
+```julia
+# From β₂(ω) values and frequency grid:
+tpa = Nonlinear.TPAResponse(grid.ω, PhysData.β₂_TPA.(grid.ω, :SiO2))
+
+# From a pre-computed coefficient array:
+tpa = Nonlinear.TPAResponse(coeff_ω)
+```
+
+# Usage
+Pass in the responses tuple alongside time-domain responses:
+```julia
+responses = (Nonlinear.Kerr_env(χ3), Nonlinear.TPAResponse(grid.ω, β₂_ω))
+```
+All `Trans*` types automatically route `SpectralResponse` subtypes to
+the frequency-domain path.
+
+# Notes
+- Only valid for envelope propagation (`EnvGrid`). Using with `RealGrid`
+  (carrier-resolved) is not physically meaningful.
+- Handles scalar (single-polarisation) fields. Vector TPA
+  (``(|E_x|^2 + |E_y|^2) E``) is a future extension.
+- The ``\\varepsilon_0^2 c^2`` prefactor arises from the ``\\mathrm{nlscale}``
+  field normalisation in the ``Trans*`` types — it is not related to a
+  ``\\gamma_3 = \\chi^{(3)}/n_0^2`` convention. In Luna, ``\\gamma_3`` is
+  the single-molecule third-order hyperpolarisability, and
+  ``\\chi^{(3)} = \\rho \\, \\gamma_3``.
+
+See also: [`PhysData.β₂_TPA`](@ref), [`SpectralResponse`](@ref)
+"""
+struct TPAResponse{cT} <: SpectralResponse
+    coeff_ω::cT
+end
+
+"""
+    TPAResponse(ω_grid, β₂_ω) → TPAResponse
+
+Construct a `TPAResponse` from an angular frequency grid `ω_grid` (rad/s)
+and a vector of β₂ values `β₂_ω` (m/W).
+
+Converts using:
+
+    coeff(ω) = -i × ε₀² × c² × β₂(ω) / (2ω)
+
+Sets coeff = 0 at ω = 0 to avoid the singularity (β₂ = 0 there anyway,
+since no material has a TPA edge at DC).
+"""
+function TPAResponse(ω_grid::AbstractVector, β₂_ω::AbstractVector)
+    length(ω_grid) == length(β₂_ω) || throw(
+        DimensionMismatch("ω_grid and β₂_ω must have the same length"))
+    coeff = zeros(ComplexF64, length(ω_grid))
+    for i in eachindex(ω_grid)
+        if ω_grid[i] != 0
+            coeff[i] = -im * ε_0^2 * c^2 * β₂_ω[i] / (2 * ω_grid[i])
+        end
+    end
+    return TPAResponse(coeff)
+end
+
+"""
+    (tpa::TPAResponse)(out_ω, F_E2E_ω, ρ)
+
+Add TPA contribution to the frequency-domain nonlinear polarisation `out_ω`.
+
+- `out_ω`: frequency-domain P_NL buffer (1D), modified in-place
+- `F_E2E_ω`: ``\\mathcal{F}\\{|E|^2 E\\}(\\omega)`` on the standard ω grid
+- `ρ`: density (scalar), same as passed to time-domain responses
+
+Adds: `out_ω[i] += ρ × coeff[i] × F_E2E_ω[i]`
+
+This signature mirrors the time-domain `(out_t, E_t, ρ)` pattern but
+operates in the frequency domain. The `Trans*` types handle all spatial
+looping and normalisation.
+"""
+function (tpa::TPAResponse)(out_ω, F_E2E_ω, ρ)
+    @inbounds for i in eachindex(out_ω)
+        out_ω[i] += ρ * tpa.coeff_ω[i] * F_E2E_ω[i]
     end
 end
 

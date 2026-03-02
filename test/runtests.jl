@@ -157,4 +157,9 @@ end
     include(joinpath(testdir, "test_gnlse.jl"))
 end
 
+@testset "TPA" begin
+    @info("================= test_tpa.jl")
+    include(joinpath(testdir, "test_tpa.jl"))
+end
+
 end

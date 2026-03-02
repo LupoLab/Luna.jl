@@ -687,6 +687,85 @@ function n2_glass(material::Symbol; λ=nothing)
 end
 
 """
+    TPA_params
+
+Material parameters for the empirical two-photon absorption coefficient model:
+
+    β₂(ω) = C × (2ℏω/eV − E_g)^α  [m/W]
+
+for 2ℏω > E_g (above the two-photon absorption edge), zero otherwise.
+
+### Fields per entry
+- `E_g`: optical bandgap in eV
+- `C`: pre-factor in m/W/eV^α
+- `α`: power-law exponent
+
+### Fitting procedure
+Fit `log(β₂)` vs `log(2ℏω/eV − E_g)` to measured data.
+
+### Units
+- Input ω: rad/s
+- Output β₂: m/W (SI)
+- E_g in eV; C in m/W/eV^α
+
+### References
+- Patankar et al., Appl. Opt. 56, 8309 (2017) (https://doi.org/10.1364/AO.56.008309)
+- Nikogosyan et al., Opt. Commun. 200, 109 (2001)
+- Van Stryland et al., Opt. Lett. 10, 490 (1985)
+- Taylor A J, Gibson R B and Roberts J P 1988 Opt. Lett. 13 814
+- Kittelmann O and Ringling J 1994 Opt. Lett. 19 2053
+"""
+const TPA_params = Dict(
+    :SiO2 => (E_g = 8.3,  C = 1e-13, α = 3.5), # Nikogosyan, Taylor, Patankar, Kittelmann
+    :MgF2 => (E_g = 10.8, C = 8.4e-14, α = 4.35), # Kittelmann, Patankar
+)
+
+"""
+    β₂_TPA(ω, material::Symbol; E_g=nothing, C=nothing, α=nothing) → Float64
+
+Return the degenerate two-photon absorption coefficient β₂ (m/W) at
+angular frequency `ω` (rad/s) for the given solid `material`.
+
+Uses the empirical power-law model:
+
+    β₂(ω) = C × (2ℏω/eV − E_g)^α × Θ(2ℏω − E_g)
+
+where E_g is the material bandgap in eV, C is the pre-factor (m/W/eV^α),
+α is the power-law exponent, and Θ is the Heaviside step function.
+Returns 0.0 for frequencies below the two-photon edge (2ℏω ≤ E_g).
+
+# Arguments
+- `ω`: angular frequency in rad/s (must be positive)
+- `material`: one of `:SiO2`, `:MgF2`
+
+# Keyword arguments (override material defaults)
+- `E_g`: bandgap energy in eV
+- `C`: pre-factor in m/W/eV^α
+- `α`: power-law exponent (dimensionless)
+"""
+function β₂_TPA(ω::Real, material::Symbol;
+                E_g=nothing, C=nothing, α=nothing)
+    haskey(TPA_params, material) || error(
+        "Unknown material for TPA: $material. Supported: $(keys(TPA_params))")
+    p = TPA_params[material]
+    E_g_eV = isnothing(E_g) ? p.E_g : E_g
+    C_val  = isnothing(C)   ? p.C   : C
+    α_val  = isnothing(α)   ? p.α   : α
+
+    # Two-photon energy in eV
+    two_photon_eV = 2 * ħ * abs(ω) / electron
+
+    excess_eV = two_photon_eV - E_g_eV
+    excess_eV <= 0 && return 0.0
+
+    isnan(C_val) && error(
+        "TPA parameters for :$material have not been fitted yet. " *
+        "See TPA_params docstring for fitting procedure.")
+
+    return C_val * excess_eV^α_val
+end
+
+"""
     density(material::Symbol, P=1.0, T=roomtemp)
 
 For a gas `material`, return the number density [m^-3] at pressure `P` [bar] and temperature `T` [K].

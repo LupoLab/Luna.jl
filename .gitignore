@@ -10,3 +10,6 @@ _git2_*
 docs/build
 *.info
 .vscode/spellright.dict
+.DS_Store
+.gitignore
+deps/build.log

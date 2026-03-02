@@ -357,7 +357,7 @@ save_modeinfo_maybe(output, t) = nothing
 
 function run(Eω, grid,
              linop, transform, FT, output;
-             min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
+             min_dz=0, max_dz=grid.zmax/2, init_dz=grid.zmax/4, z0=0.0,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
              status_period=1)
 

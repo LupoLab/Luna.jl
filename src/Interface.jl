@@ -856,11 +856,17 @@ end
 
 """
     prop_gnlse(γ, flength, βs; λ0, λlims, trange, kwargs...)
+    prop_gnlse(flength, βs; n2, Aeff, λ0, λlims, trange, kwargs...)
+    prop_gnlse(flength, βs; material, Aeff, λ0, λlims, trange, kwargs...)
 
 Simulate pulse propagation using the GNLSE.
 
+The first form takes the nonlinear coefficient `γ` directly. The second and third forms
+compute `γ` internally from `n2` (or a `material` lookup) and `Aeff`, which is required
+for two-photon absorption (TPA) support.
+
 # Mandatory arguments
-- `γ::Number`: The nonlinear coefficient.
+- `γ::Number`: The nonlinear coefficient (W⁻¹m⁻¹). Only for the first calling convention.
 - `flength::Number`: Length of the fibre.
 - `βs`: The Taylor expansion of the propagation constant about `λ0`.
 - `λ0`: (keyword argument) the reference wavelength for the simulation. For simple
@@ -868,6 +874,14 @@ Simulate pulse propagation using the GNLSE.
 - `λlims::Tuple{<:Number, <:Number}`: The wavelength limits for the simulation grid.
 - `trange::Number`: The total width of the time grid. To make the number of samples a
     power of 2, the actual grid used is usually bigger.
+
+# Nonlinear parameter specification (alternative to `γ`)
+When `γ` is not given as a positional argument, the nonlinear coefficient is computed from
+`n2` and `Aeff`. Exactly one of `n2` or `material` must be provided.
+- `n2::Real`: Nonlinear refractive index (m²/W).
+- `material::Symbol`: Material name (e.g. `:SiO2`), from which `n2` is looked up via
+    [`PhysData.n2`](@ref).
+- `Aeff::Real`: Effective mode area (m²). Required when using `n2` or `material`.
 
 # Grid options
 - `δt::Number`: Time step on the fine grid used for the nonlinear interaction. By default,
@@ -909,6 +923,18 @@ Note that the current GNLSE model is single mode only.
 - `τ1`: the Raman oscillator period.
 - `τ2`: the Raman damping time.
 
+# Two-photon absorption (TPA)
+TPA is only available when using the `n2`/`material` + `Aeff` calling convention (not when
+passing `γ` directly, since `Aeff` is needed to scale β₂ to mode-averaged units).
+- `tpa`: TPA specification. Can be:
+  - `nothing` or `false`: no TPA (default).
+  - `true`: auto-compute β₂(ω) from `material` via [`PhysData.β₂_TPA`](@ref).
+    Requires `material` to be specified.
+  - `AbstractVector`: pre-computed β₂(ω) values (m/W) sampled on the simulation
+    frequency grid `grid.ω`.
+  - callable `tpa(ω) → β₂`: a function returning the TPA coefficient β₂ (m/W)
+    at angular frequency ω.
+
 # Output options
 - `saveN::Integer`: Number of points along z at which to save the field.
 - `filepath`: If `nothing` (default), create a `MemoryOutput` to store the simulation results
@@ -932,11 +958,16 @@ end
 """
     prop_gnlse_args(γ, flength, βs; λ0, λlims, trange, kwargs...)
 
-Prepare to simulate pulse propagation using the GNLSE. This
-function takes the same arguments as `prop_gnlse` but instead or running the
-simulation and returning the output, it returns the required arguments for `Luna.run`,
-which is useful for repeated simulations in an indentical fibre with different initial
-conditions.
+Prepare to simulate pulse propagation using the GNLSE with a directly specified
+nonlinear coefficient `γ` (W⁻¹m⁻¹). This function takes the same arguments as
+`prop_gnlse` but instead of running the simulation and returning the output, it
+returns the required arguments for `Luna.run`.
+
+!!! note
+    TPA (`tpa` kwarg) is not supported in this calling convention because `γ` does
+    not carry enough information to determine `Aeff`. Use
+    `prop_gnlse(flength, βs; n2, Aeff, tpa, ...)` or
+    `prop_gnlse(flength, βs; material, Aeff, tpa, ...)` instead.
 """
 function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         δt=1, τfwhm=nothing, τw=nothing, ϕ=Float64[],
@@ -946,6 +977,7 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         shotnoise=true, shock=true,
                         loss=0.0, raman=true, fr=0.18,
                         ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
+                        tpa=nothing,
                         saveN=201, filepath=nothing,
                         scan=nothing, scanidx=nothing, filename=nothing)
     envelope = true
@@ -980,6 +1012,9 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
             error("unrecognised value for ramanmodel")
         end
     end
+    if !isnothing(tpa)
+        error("TPA requires Aeff for correct scaling. Use prop_gnlse(flength, βs; n2, Aeff, tpa, ...) or prop_gnlse(flength, βs; material, Aeff, tpa, ...) instead.")
+    end
     resp = Tuple(resp)
 
     inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
@@ -993,7 +1028,124 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
 
     saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
-        shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, saveN, filepath, filename)
+        shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, tpa, saveN, filepath, filename)
+
+    return Eω, grid, linop, transform, FT, output
+end
+
+"""
+    prop_gnlse_args(flength, βs; n2, Aeff, λ0, λlims, trange, kwargs...)
+    prop_gnlse_args(flength, βs; material, Aeff, λ0, λlims, trange, kwargs...)
+
+Prepare to simulate pulse propagation using the GNLSE with physically consistent
+nonlinear parameters. The nonlinear coefficient `γ` is computed internally from
+`n2` and `Aeff`, ensuring correct scaling for all nonlinear effects including TPA.
+
+# Nonlinear parameter specification (exactly one required)
+- `n2::Real` : nonlinear refractive index (m²/W)
+- `material::Symbol` : material name (e.g. `:SiO2`), from which `n2` is looked up
+  via [`PhysData.n2`](@ref)
+
+# Required keyword
+- `Aeff::Real` : effective mode area (m²)
+
+# TPA keyword
+- `tpa` : two-photon absorption specification:
+  - `nothing` or `false` : no TPA (default)
+  - `true` : auto-compute from `material` via [`PhysData.β₂_TPA`](@ref)
+  - `AbstractVector` : pre-computed β₂(ω) values (m/W) on `grid.ω`
+  - callable `tpa(ω) → β₂` : function returning β₂ (m/W)
+
+  In all cases, β₂ is scaled by `1/Aeff` internally to convert from intensity-based
+  to mode-averaged units.
+
+All other keyword arguments are the same as for `prop_gnlse_args(γ, flength, βs; ...)`.
+"""
+function prop_gnlse_args(flength, βs; λ0, λlims, trange,
+                        n2=nothing, Aeff=nothing, material::Union{Symbol,Nothing}=nothing,
+                        δt=1, τfwhm=nothing, τw=nothing, ϕ=Float64[],
+                        power=nothing, energy=nothing,
+                        pulseshape=:gauss, propagator=nothing,
+                        pulses=nothing,
+                        shotnoise=true, shock=true,
+                        loss=0.0, raman=true, fr=0.18,
+                        ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
+                        tpa=nothing,
+                        saveN=201, filepath=nothing,
+                        scan=nothing, scanidx=nothing, filename=nothing)
+    # Validate and resolve n2
+    if !isnothing(material)
+        !isnothing(n2) && error("cannot specify both n2 and material")
+        n2 = PhysData.n2(material)
+    elseif isnothing(n2)
+        error("must specify either n2 or material")
+    end
+    isnothing(Aeff) && error("Aeff must be provided")
+
+    envelope = true
+    thg = false
+    polarisation = :linear
+    grid = makegrid(flength, λ0, λlims, trange, envelope, thg, δt)
+    mode_s = SimpleFibre.SimpleMode(PhysData.wlfreq(λ0), βs; loss)
+    aeff = z -> 1.0
+    density = z -> 1.0
+    linop, βfun!, β1, αfun = LinearOps.make_const_linop(grid, mode_s, λ0)
+
+    # Compute γ from n2 and Aeff
+    k0 = 2π/λ0
+    γ = n2 * k0 / Aeff
+
+    # Kerr: same derivation as γ-based method
+    # factor of 4/3 compensates for the factor of 3/4 in Nonlinear.jl, as
+    # n2 and γ are usually defined for the envelope case already
+    χ3 = 4/3 * (1 - fr) * n2 / Aeff * (PhysData.ε_0*PhysData.c)
+    resp = Any[Nonlinear.Kerr_env(χ3)]
+    if raman
+        # factor of 2 here compensates for factor 1/2 in Nonlinear.jl as fr is
+        # defined for the envelope case already
+        χ3R = 2 * fr * n2 / Aeff * (PhysData.ε_0*PhysData.c)
+        if ramanmodel == :SiO2
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to, Raman.raman_response(grid.to, :SiO2,
+                                                                              χ3R * PhysData.ε_0)))
+        elseif ramanmodel == :sdo
+            if isnothing(τ1) || isnothing(τ2)
+                error("for :sdo ramanmodel you must specify τ1 and τ2")
+            end
+            push!(resp, Nonlinear.RamanPolarEnv(grid.to,
+                Raman.CombinedRamanResponse(grid.to,
+                    [Raman.RamanRespNormedSingleDampedOscillator(χ3R * PhysData.ε_0, 1/τ1, τ2)])))
+        else
+            error("unrecognised value for ramanmodel")
+        end
+    end
+
+    # Two-photon absorption: scale β₂ by 1/Aeff for mode-averaged propagation
+    if !isnothing(tpa) && tpa !== false
+        if tpa === true
+            isnothing(material) && error("tpa=true requires material to be specified")
+            β₂_ω = PhysData.β₂_TPA.(grid.ω, material)
+        elseif tpa isa AbstractVector
+            β₂_ω = tpa
+        else
+            β₂_ω = tpa.(grid.ω)
+        end
+        push!(resp, Nonlinear.TPAResponse(grid.ω, β₂_ω ./ Aeff))
+    end
+    resp = Tuple(resp)
+
+    inputs = makeinputs(mode_s, λ0, pulses, τfwhm, τw, ϕ,
+                        power, energy, pulseshape, polarisation, propagator)
+    inputs = shotnoise_maybe(inputs, mode_s, shotnoise)
+
+    norm! = NonlinearRHS.norm_mode_average_gnlse(grid, aeff; shock)
+    Eω, transform, FT = Luna.setup(grid, density, resp, inputs, βfun!, aeff, norm! = norm!)
+    stats = Stats.default(grid, Eω, mode_s, linop, transform)
+    output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
+
+    saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
+        λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
+        shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2, tpa, n2, Aeff, material,
+        saveN, filepath, filename)
 
     return Eω, grid, linop, transform, FT, output
 end
