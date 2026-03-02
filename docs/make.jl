@@ -8,6 +8,7 @@ makedocs(
     authors = "Christian Brahms and John C. Travers",
     pages = Any[
         "Home" => "index.md",
+        "Installation" => "installation.md",
         "The numerical model" => [
             "General description" => "model/model.md",
             "Modal decompositions" => "model/modal_decompositions.md",

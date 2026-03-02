@@ -42,6 +42,7 @@ FFTW is determined automatically (see [`Utils.FFTWthreads()`](@ref))
 function set_fftw_threads(nthr=0)
     settings["fftw_threads"] = nthr
     FFTW.set_num_threads(Utils.FFTWthreads())
+    Logging.@info("FFTW threads set to $(Utils.FFTWthreads())")
 end
 
 function __init__()

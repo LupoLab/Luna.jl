@@ -23,3 +23,28 @@ jobs:
         uses: julia-actions/julia-buildpkg@v1
       - name: Run tests
         uses: julia-actions/julia-runtest@v1
+  test-mkl:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1'
+      - name: Set FFTW provider to MKL
+        run: |
+          printf '[FFTW]\nprovider = "mkl"\n' > LocalPreferences.toml
+      - name: Install dependencies and build
+        env:
+          PYTHON:
+        uses: julia-actions/julia-buildpkg@v1
+      - name: Verify FFTW provider is MKL
+        run: |
+          julia --project -e '
+            using FFTW
+            prov = FFTW.fftw_provider
+            println("FFTW provider: ", prov)
+            @assert prov == "mkl" string("Expected MKL but got ", prov)
+          '
+      - name: Run tests
+        uses: julia-actions/julia-runtest@v1

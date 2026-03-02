@@ -503,8 +503,8 @@ end
 It(Et, grid::Grid.RealGrid) = abs2.(Maths.hilbert(Et))
 It(Et, grid::Grid.EnvGrid) = abs2.(Et)
 
-iFT(Eω, grid::Grid.RealGrid) = FFTW.irfft(Eω, length(grid.t), 1)
-iFT(Eω, grid::Grid.EnvGrid) = FFTW.ifft(Eω, 1)
+iFT(Eω, grid::Grid.RealGrid) = Maths._irfft_dim(Eω, length(grid.t), 1)
+iFT(Eω, grid::Grid.EnvGrid) = Maths._ifft_dim(Eω, 1)
 
 "Calculate energy from modal field E(t)"
 function energyfuncs(grid::Grid.RealGrid)

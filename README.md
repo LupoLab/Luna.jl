@@ -36,13 +36,34 @@ There are two ways of using Luna:
 For a short introduction on how to use the simple interface, see the [Quickstart](#quickstart) or [GNLSE](#gnlse) sections below. More information, including on the internals of Luna, can be found in the [Documentation](http://lupo-lab.com/Luna.jl).
 
 ## Installation
-Luna requires Julia v1.9 or later, which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
+Luna requires Julia v1.9 or later (we currently recommend v1.10), which can be obtained from [here](https://julialang.org/downloads/). In a Julia terminal, to install Luna simply enter the package manager with `]` and run `add Luna`:
 
 ```julia
 ]
 add Luna
 ```
 This will install and precompile Luna and all its dependencies.
+
+### Using Intel MKL for FFTs (Linux and Windows)
+By default, Luna uses [FFTW](http://www.fftw.org/) for fast Fourier transforms. On Linux and Windows, you can optionally switch to the Intel MKL backend, which can provide improved FFT performance on Intel hardware.
+
+To switch to MKL, run the following in a Julia session:
+```julia
+using FFTW
+FFTW.set_provider!("mkl")
+```
+This sets a preference that is stored in `LocalPreferences.toml` in your project directory. **You must restart Julia for the change to take effect.** After restarting, FFTW will use MKL for all FFT operations.
+
+To switch back to the default FFTW backend:
+```julia
+using FFTW
+FFTW.set_provider!("fftw")
+```
+Again, a restart is required.
+
+> [!NOTE]
+> MKL is only available on Linux and Windows. On macOS, FFTW is the only supported backend.
+> When using MKL, FFTW wisdom (plan caching) is not supported and will be skipped automatically.
 
 ## Quickstart
 To run a simple simulation of ultrafast pulse propagation in a gas-filled hollow capillary fibre, you can use `prop_capillary`. As an example, take a 3-metre length of HCF with 125 μm core radius, filled with 1 bar of helium gas, and driving pulses centred at 800 nm wavelength with 120 μJ of energy and 10 fs duration. We consider a frequency grid which spans from 120 nm to 4 μm and a time window of 1 ps.

@@ -369,11 +369,11 @@ end
 Calculate the field autocorrelation of `Et`.
 """
 function field_autocorrelation(Et, grid::EnvGrid; dims=1)
-    FFTW.fftshift(FFTW.ifft(abs2.(FFTW.fft(Et, dims)), dims), dims)
+    FFTW.fftshift(Maths._ifft_dim(abs2.(Maths._fft_dim(Et, dims)), dims), dims)
 end
 
 function field_autocorrelation(Et, grid::RealGrid; dims=1)
-    fac = FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Et, dims)), length(grid.t), dims), dims)
+    fac = FFTW.fftshift(Maths._irfft_dim(abs2.(Maths._rfft_dim(Et, dims)), length(grid.t), dims), dims)
     Maths.hilbert(fac, dim=dims)
 end
 
@@ -383,7 +383,7 @@ end
 Calculate the intensity autocorrelation of `Et` over `grid`.
 """
 function intensity_autocorrelation(Et, grid; dims=1)
-    real.(FFTW.fftshift(FFTW.irfft(abs2.(FFTW.rfft(Fields.It(Et, grid), dims)), length(grid.t), dims), dims))
+    real.(FFTW.fftshift(Maths._irfft_dim(abs2.(Maths._rfft_dim(Fields.It(Et, grid), dims)), length(grid.t), dims), dims))
 end
 
 """
@@ -815,8 +815,8 @@ prop_maybe(grid, Eω, propagator) = propagator(grid, Eω)
 Get the envelope electric field including the carrier wave from the frequency-domain field
 `Eω` sampled on `grid`.
 """
-envelope(grid::RealGrid, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(grid.t), 1))
-envelope(grid::EnvGrid, Eω) = FFTW.ifft(Eω, 1) .* exp.(im.*grid.ω0.*grid.t)
+envelope(grid::RealGrid, Eω) = Maths.hilbert(Maths._irfft_dim(Eω, length(grid.t), 1))
+envelope(grid::EnvGrid, Eω) = Maths._ifft_dim(Eω, 1) .* exp.(im.*grid.ω0.*grid.t)
 
 """
     makegrid(output)

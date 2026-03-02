@@ -552,20 +552,59 @@ end
 
 wigner(t, A::Vector{<:Real}; kwargs...) = wigner(t, hilbert(A); kwargs...)
 
+# MKL's FFTW compatibility layer cannot create partial-dimension FFT plans for 3D+ arrays.
+# For dim=1, we reshape to 2D (zero-copy), apply the FFT, and reshape back.
+# For other dims, we fall back to mapslices with 1D transforms.
+function _fft_dim(x::AbstractArray, dim::Integer)
+    ndims(x) <= 2 && return FFTW.fft(x, dim)
+    if dim == 1
+        sz = size(x)
+        return reshape(FFTW.fft(reshape(x, sz[1], :), 1), :, sz[2:end]...)
+    end
+    return mapslices(s -> FFTW.fft(vec(s)), x; dims=dim)
+end
+
+function _ifft_dim(x::AbstractArray, dim::Integer)
+    ndims(x) <= 2 && return FFTW.ifft(x, dim)
+    if dim == 1
+        sz = size(x)
+        return reshape(FFTW.ifft(reshape(x, sz[1], :), 1), :, sz[2:end]...)
+    end
+    return mapslices(s -> FFTW.ifft(vec(s)), x; dims=dim)
+end
+
+function _rfft_dim(x::AbstractArray, dim::Integer)
+    ndims(x) <= 2 && return FFTW.rfft(x, dim)
+    if dim == 1
+        sz = size(x)
+        return reshape(FFTW.rfft(reshape(x, sz[1], :), 1), :, sz[2:end]...)
+    end
+    return mapslices(s -> FFTW.rfft(vec(s)), x; dims=dim)
+end
+
+function _irfft_dim(x::AbstractArray, d::Integer, dim::Integer)
+    ndims(x) <= 2 && return FFTW.irfft(x, d, dim)
+    if dim == 1
+        sz = size(x)
+        return reshape(FFTW.irfft(reshape(x, sz[1], :), d, 1), d, sz[2:end]...)
+    end
+    return mapslices(s -> FFTW.irfft(vec(s), d), x; dims=dim)
+end
+
 """
     hilbert(x; dim=1)
 
 Compute the Hilbert transform, i.e. find the analytic signal from a real signal.
 """
 function hilbert(x::Array{T,N}; dim = 1) where T <: Real where N
-    xf = FFTW.fft(x, dim)
+    xf = _fft_dim(x, dim)
     n1 = size(xf, dim)÷2
     n2 = size(xf, dim)
     idxlo = CartesianIndices(size(xf)[1:dim - 1])
     idxhi = CartesianIndices(size(xf)[dim + 1:end])
     xf[idxlo, 2:n1, idxhi] .*= 2
     xf[idxlo, (n1+1):n2, idxhi] .= 0
-    return FFTW.ifft(xf, dim)
+    return _ifft_dim(xf, dim)
 end
 
 """
@@ -627,7 +666,7 @@ function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
-    xf = FFTW.rfft(x, dim)
+    xf = _rfft_dim(x, dim)
 
     len = size(xf, dim)
     newlen_t = factor * length(t)
@@ -648,14 +687,14 @@ function oversample(t, x::Array{<:Real, N}; factor::Int=4, dim=1) where N
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, 1:len, idxhi] .= factor .* xf
-    return to, FFTW.irfft(xfo, newlen_t, dim)
+    return to, _irfft_dim(xfo, newlen_t, dim)
 end
 
 function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     if factor == 1
         return t, x
     end
-    xf = FFTW.fftshift(FFTW.fft(x, dim), dim)
+    xf = FFTW.fftshift(_fft_dim(x, dim), dim)
 
     len = size(xf, dim)
     newlen = factor * length(t)
@@ -677,7 +716,7 @@ function oversample(t, x::Array{<:Complex,N}; factor::Int=4, dim=1) where N
     idxlo = CartesianIndices(size(xfo)[1:dim - 1])
     idxhi = CartesianIndices(size(xfo)[dim + 1:end])
     xfo[idxlo, startidx:endidx, idxhi] .= factor .* xf
-    return to, FFTW.ifft(FFTW.ifftshift(xfo, dim), dim)
+    return to, _ifft_dim(FFTW.ifftshift(xfo, dim), dim)
 end
 
 """
