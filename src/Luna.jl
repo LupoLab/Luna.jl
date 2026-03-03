@@ -36,7 +36,7 @@ end
 """
     set_fftw_threads(nthr)
 
-Set number of threads to be used by FFTW. If set to `0`, the number of threads used by 
+Set number of threads to be used by FFTW. If set to `0`, the number of threads used by
 FFTW is determined automatically (see [`Utils.FFTWthreads()`](@ref))
 """
 function set_fftw_threads(nthr=0)
@@ -307,14 +307,14 @@ function setup(grid::Grid.RealGrid, xygrid::Grid.FreeGrid,
     Utils.loadFFTwisdom()
     np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
     x = xygrid.x
-    y = xygrid.y          
-    xr = Array{Float64}(undef, length(grid.t), np, length(y), length(x))
+    y = xygrid.y
+    xr = Array{Float64}(undef, length(grid.t), np, length(x), length(y))
     FT = FFTW.plan_rfft(xr, (1, 3, 4), flags=settings["fftw_flag"])
-    Eωk = zeros(ComplexF64, length(grid.ω), np, length(y), length(x))
-    xr_xy = Array{Float64}(undef, length(grid.t), 2, length(y), length(x))
+    Eωk = zeros(ComplexF64, length(grid.ω), np, length(x), length(y))
+    xr_xy = Array{Float64}(undef, length(grid.t), 2, length(x), length(y))
     FT_xy = FFTW.plan_rfft(xr_xy, (1, 3, 4), flags=settings["fftw_flag"])
     doinputs_fs!(Eωk, grid, xygrid, FT_xy, inputs)
-    xo = Array{Float64}(undef, length(grid.to), np, length(y), length(x))
+    xo = Array{Float64}(undef, length(grid.to), np, length(x), length(y))
     FTo = FFTW.plan_rfft(xo, (1, 3, 4), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun, np > 1)
@@ -333,14 +333,14 @@ function setup(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid,
     Utils.loadFFTwisdom()
     np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
     x = xygrid.x
-    y = xygrid.y          
-    xr = Array{ComplexF64}(undef, length(grid.t), np, length(y), length(x))
+    y = xygrid.y
+    xr = Array{ComplexF64}(undef, length(grid.t), np, length(x), length(y))
     FT = FFTW.plan_fft(xr, (1, 3, 4), flags=settings["fftw_flag"])
-    Eωk = zeros(ComplexF64, length(grid.ω), np, length(y), length(x))
-    xr_xy = Array{ComplexF64}(undef, length(grid.t), 2, length(y), length(x))
+    Eωk = zeros(ComplexF64, length(grid.ω), np, length(x), length(y))
+    xr_xy = Array{ComplexF64}(undef, length(grid.t), 2, length(x), length(y))
     FT_xy = FFTW.plan_fft(xr_xy, (1, 3, 4), flags=settings["fftw_flag"])
     doinputs_fs!(Eωk, grid, xygrid, FT_xy, inputs)
-    xo = Array{ComplexF64}(undef, length(grid.to), np, length(y), length(x))
+    xo = Array{ComplexF64}(undef, length(grid.to), np, length(x), length(y))
     FTo = FFTW.plan_fft(xo, (1, 3, 4), flags=settings["fftw_flag"])
     transform = NonlinearRHS.TransFree(grid, xygrid, FTo,
                                        responses, densityfun, normfun, np > 1)
@@ -356,7 +356,7 @@ function setup(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid,
     x = xgrid.x
     np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
     tshape = (length(grid.t), np, length(x))
-    ωshape = (length(grid.ω), np, length(x))  
+    ωshape = (length(grid.ω), np, length(x))
     xr = Array{Float64}(undef, tshape)
     FT = FFTW.plan_rfft(xr, (1, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, ωshape)
@@ -379,7 +379,7 @@ function setup(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid,
     x = xgrid.x
     np = size(normfun(0), 2) # number of polarisation directions (1 or 2)
     tshape = (length(grid.t), np, length(x))
-    ωshape = (length(grid.ω), np, length(x))  
+    ωshape = (length(grid.ω), np, length(x))
     xr = Array{ComplexF64}(undef, tshape)
     FT = FFTW.plan_fft(xr, (1, 3), flags=settings["fftw_flag"])
     Eωk = zeros(ComplexF64, ωshape)

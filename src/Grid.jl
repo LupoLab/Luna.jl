@@ -45,7 +45,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
                             trange/δto, samples, δto*1e18)
     Logging.@info @sprintf("Requested time window: %.1f fs, actual time window: %.1f fs", trange*1e15, trange_even*1e15)
     δωo = 2π/trange_even # frequency spacing for fine grid
-    # Make fine grid 
+    # Make fine grid
     Nto = collect(range(0, length=samples))
     to = @. (Nto-samples/2)*δto # centre on 0
     Nωo = collect(range(0, length=Int(samples/2 +1)))
@@ -64,7 +64,7 @@ function RealGrid(zmax, referenceλ, λ_lims, trange, δt=1)
     t = @. (Nt-tsamples/2)*δt
 
     # Make apodisation windows
-    ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win) 
+    ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win)
 
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
@@ -143,17 +143,17 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     Logging.@info @sprintf("Samples needed: %.2f, samples: %d, δt = %.2f as",
     trange/δto, samples, δto*1e18)
     δωo = 2π/trange_even # frequency spacing for grid
-    # Make fine grid 
+    # Make fine grid
     No = collect(range(0, length=samples))
     to = @. (No-samples/2)*δto # time grid, centre on 0
     vo = @. (No-samples/2)*δωo # freq grid relative to ω0
     vo = FFTW.fftshift(vo)
     ωo = vo .+ ω0
-    
+
     ωmin = 2π*fmin
     ωmax = 2π*fmax
     ωmax_win = 2π*fmax_win
-    
+
     # Find cropping area for coarse grid (contains frequencies of interest + apodisation)
     if oversampling
         cropidx = findfirst(x -> x>=(ωmax_win-δωo), ωo)
@@ -167,16 +167,16 @@ function EnvGrid(zmax, referenceλ, λ_lims, trange; δt=1, thg=false)
     tsamples = length(v)
     Nt = collect(range(0, length=tsamples))
     t = @. (Nt - tsamples/2)*δt
-    
+
     ω = v .+ ω0 # True frequency grid
     # Indices to select real frequencies (for dispersion relation)
-    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win) 
-    
+    sidx = (ω .> ωmin/2) .& (ω .< ωmax_win)
+
     # Make apodisation windows
     ωwindow = Maths.planck_taper(ω, ωmin/2, ωmin, ωmax, ωmax_win)
     twindow = Maths.planck_taper(t, minimum(t), -trange/2, trange/2, maximum(t))
     towindow = Maths.planck_taper(to, minimum(to), -trange/2, trange/2, maximum(to))
-    
+
     # Check that grids are correct
     @assert δt/δto ≈ length(to)/length(t)
     @assert δt/δto ≈ minimum(vo)/minimum(v) # FFT grid -> sample at -fs/2 but not +fs/2
@@ -204,10 +204,13 @@ end
 
 """
     FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
+    FreeGrid(R, N; window_factor=0.1)
 
 Spatial grid for full 3D freespace propagation with `x`/`y` half-width `Rx`/`Ry` and
 `Nx`/`Ny` samples. `window_factor` determines by how much the grid size is extended to fit
 a filtering window.
+
+If only `R` and `N` are given, it is assumed that `Rx = Ry = R` and `Nx = Ny = N`.
 """
 function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
     Rxw = Rx * (1 + window_factor)
@@ -223,11 +226,11 @@ function FreeGrid(Rx, Nx, Ry, Ny; window_factor=0.1)
     y = @. (ny-Ny/2) * δy
     ky = 2π*FFTW.fftfreq(Ny, 1/δy)
 
-    r = sqrt.(reshape(y, (1, Ny)).^2 .+ reshape(x, (1, 1, Nx)).^2)
+    r = sqrt.(reshape(x, (1, Nx)).^2 .+ reshape(y, (1, 1, Ny)).^2)
 
     xwin = Maths.planck_taper(x, -Rxw, -Rx, Rx, Rxw)
     ywin = Maths.planck_taper(y, -Ryw, -Ry, Ry, Ryw)
-    xywin = reshape(ywin, (1, length(ywin))) .* reshape(xwin, (1, 1, length(xwin)))
+    xywin = reshape(xwin, (1, length(xwin))) .* reshape(ywin, (1, 1, length(ywin)))
 
     FreeGrid(x, y, kx, ky, r, xywin)
 end

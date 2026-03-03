@@ -28,8 +28,8 @@ end
 #===============    FREE SPACE     ===============#
 #=================================================#
 function transverse_k2(xygrid::Grid.FreeGrid)
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
     kperp2, idcs
 end
 
@@ -41,16 +41,16 @@ end
 
 function transverse_k2(xygrid::Hankel.QDHT)
     kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
     kperp2, idcs
 end
 
 
 """
-    make_const_linop(grid, xygrid, n, β1)
+    make_const_linop(grid, xygrid, n, β1, β0)
 
-Make constant linear operator for full 3D propagation. `n` is the refractive index (array)
-and β1 is 1/velocity of the reference frame.
+Make constant linear operator for free-space propagation. `n` is the refractive index (array),
+β1 is 1/velocity of the reference frame and β0 is the wavevector at the reference wavelength.
 """
 function make_const_linop(grid::Grid.AbstractGrid,
                           xygrid::Union{Grid.FreeGrid, Grid.Free2DGrid, Hankel.QDHT},
@@ -88,11 +88,11 @@ function make_const_linop(grid::Grid.AbstractGrid,
     make_const_linop(grid, xygrid, n, β1, β0)
 end
 
-function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns)
+function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
     nfunx, nfuny = nfuns
     # here nfunx(λ, δθ) also takes the angle and returns n_x(λ, θ)
     # nfuny(λ; z) just takes wavelength
-    out = zeros(ComplexF64, (length(grid.ω), 2, length(xygrid.ky), length(xygrid.kx)))
+    out = zeros(ComplexF64, (length(grid.ω), 2, length(xygrid.kx), length(xygrid.ky)))
     β1 = PhysData.dispersion_func(1, nfuny)(grid.referenceλ)
     for (iω, si) in enumerate(grid.sidx)
         if si
@@ -105,11 +105,11 @@ function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns)
                     k_xpol = nx*grid.ω[iω]/c
                     βsq_xpol = k_xpol^2 - kxi^2 - kyi^2
                     β_xpol = βsq_xpol < 0 ? -min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
-                    out[iω, 1, iky, ikx] = -im*(β_xpol - β1*grid.ω[iω])
-                    
+                    out[iω, 1, ikx, iky] = -im*(β_xpol - β1*grid.ω[iω])
+
                     βsq_ypol = ksq_ypol - kxi^2 - kyi^2
                     β_ypol = βsq_ypol < 0 ? -min(sqrt(abs(βsq_ypol)), 200) : sqrt(βsq_ypol)
-                    out[iω, 2, iky, ikx] = -im*(β_ypol - β1*grid.ω[iω])
+                    out[iω, 2, ikx, iky] = -im*(β_ypol - β1*grid.ω[iω])
                 end
             end
         end
@@ -124,8 +124,8 @@ Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` shoul
 refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
 """
 function make_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
     k2 = zero(grid.ω)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
@@ -136,8 +136,8 @@ function make_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
 end
 
 function make_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun; thg=false)
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
+    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
     k2 = zero(grid.ω)
     nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
     function linop!(out, z)
@@ -169,7 +169,7 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tu
                 βsq_xpol = k_xpol^2 - kxi^2
                 β_xpol = βsq_xpol < 0 ? -min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
                 out[iω, 1, ik] = -im*(β_xpol - β1*grid.ω[iω])
-                
+
                 βsq_ypol = ksq_ypol - kxi^2
                 β_ypol = βsq_ypol < 0 ? -min(sqrt(abs(βsq_ypol)), 200) : sqrt(βsq_ypol)
                 out[iω, 2, ik] = -im*(β_ypol - β1*grid.ω[iω])
@@ -363,7 +363,7 @@ getβ0_mode(grid::Grid.EnvGrid, mode, λ0, thg) = thg ? 0.0 : Modes.β(mode, wlf
 Make constant linear operator for mode-averaged propagation in mode `mode` with a reference
 wavelength `λ0`.
 """
-function make_const_linop(grid::Grid.AbstractGrid, mode::Modes.AbstractMode, λ0;               
+function make_const_linop(grid::Grid.AbstractGrid, mode::Modes.AbstractMode, λ0;
                           thg::Bool=thg_default(grid))
     checkthg(grid, thg)
     β1 = Modes.dispersion(mode, 1, wlfreq(λ0))
@@ -460,7 +460,7 @@ end
     make_const_linop(grid, modes, λ0; ref_mode=1)
 
 Make constant (z-invariant) linear operator for multimode propagation. The frame velocity is
-taken as the group velocity at wavelength `λ0` in the mode given by `ref_mode` (which 
+taken as the group velocity at wavelength `λ0` in the mode given by `ref_mode` (which
 indexes into `modes`)
 """
 function make_const_linop(grid::Grid.RealGrid, modes::Modes.ModeCollection, λ0; ref_mode=1)

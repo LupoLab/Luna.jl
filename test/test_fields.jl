@@ -81,7 +81,7 @@ end
     Eω = input(grid, FT)
     Et = FT \ Eω
     @test isapprox(energy_t(Et), energy, rtol=1e-14)
-    
+
     input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
@@ -124,7 +124,7 @@ end
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(Maths.fwhm(grid.t, It), τfwhm, rtol=1e-5)
-    
+
     input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
@@ -173,7 +173,7 @@ end
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
-    
+
     input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
@@ -208,7 +208,7 @@ end
     # non zero
     τ0 = -564e-15
 
-    #real 
+    #real
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
@@ -226,7 +226,7 @@ end
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(grid.t[argmax(It)], τ0, rtol=1e-15, atol=1e-15)
-    
+
     input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=ϕ)
     Eω = input(grid, FT)
     Et = FT \ Eω
@@ -275,7 +275,7 @@ end
     Et = FT \ Eω
     It = abs2.(Maths.hilbert(Et))
     @test isapprox(getceo(grid.t, Et, It, PhysData.wlfreq(λ0)), ϕCEO, rtol=1e-15, atol=1e-15)
-    
+
     input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
     Eω = input(grid, FT)
     Et = FT \ Eω
@@ -306,7 +306,7 @@ end
 
     # non zero
 
-    #real 
+    #real
     τfwhm = 30e-15
     λ0 = 800e-9
     energy = 1e-6
@@ -326,7 +326,7 @@ end
         Et = FT \ Eω
         It = abs2.(Maths.hilbert(Et))
         @test isapprox(abs(getceo(grid.t, Et, It, PhysData.wlfreq(λ0))), ϕCEO, rtol=1e-10)
-        
+
         input = Fields.SechField(λ0=λ0, τfwhm=τfwhm, energy=energy, ϕ=[ϕCEO])
         Eω = input(grid, FT)
         Et = FT \ Eω
@@ -388,14 +388,14 @@ end
     @test isapprox(mean(I[istart:iend]), Pavg, rtol=5e-16)
     # test coherence time
     @test isapprox(Processing.coherence_time(grid, Et), 3.35/(PhysData.c*(Δλ)/λ0^2*2π), rtol=1e-2)
-    idcs = sortperm(PhysData.wlfreq.(grid.ω)) 
+    idcs = sortperm(PhysData.wlfreq.(grid.ω))
     # test spectral width
     @test isapprox(Maths.fwhm(PhysData.wlfreq.(grid.ω)[idcs], abs2.(Eω[idcs])), Δλ, rtol=3e-3)
     # now do the same for a number of realisations
     Eωs = hcat([Fields.CWSech(λ0=λ0, Pavg=Pavg, Δλ=Δλ, rng=MersenneTwister(i))(grid, FT) for i = 1:5]...)
     Iωs = abs2.(Eωs)
     Iωav = mean(Iωs, dims=2)[:,1]
-    idcs = sortperm(PhysData.wlfreq.(grid.ω)) 
+    idcs = sortperm(PhysData.wlfreq.(grid.ω))
     # test average spectral width
     @test isapprox(Maths.fwhm(PhysData.wlfreq.(grid.ω)[idcs], Iωav[idcs], minmax=:max), Δλ, rtol=6e-4)
     Ets = FFTW.ifft(Eωs, 1)
@@ -652,7 +652,7 @@ end
     @test inputs[7].fields[1].energy/energy < 1e-20
     @test inputs[8].fields[1].energy/energy < 1e-20
 
-    # Now test that overlap integrals also work for diverging beams and produce 
+    # Now test that overlap integrals also work for diverging beams and produce
     # sensible results
     a = 100e-6
     w0 = 0.64a
@@ -753,7 +753,7 @@ end
 
     zr = π*w0^2/λ0
     w1 = w0*sqrt(1 + (propz/zr)^2)
-    
+
     R = 4w1
     N = 1024
 
@@ -786,13 +786,13 @@ end
 
     zr = π*w0^2/λ0
     w1 = w0*sqrt(1 + (propz/zr)^2)
-    
+
     R = 2w1
     N = 256
     grid = Grid.EnvGrid(1, λ0, (400e-9, 6e-6), 100e-15)
     xygrid = Grid.FreeGrid(R, N)
 
-    xr = Array{ComplexF64}(undef, length(grid.t), 2, length(xygrid.y), length(xygrid.x))
+    xr = Array{ComplexF64}(undef, length(grid.t), 2, length(xygrid.x), length(xygrid.y))
     FT = FFTW.plan_fft(xr, (1, 3, 4), flags=FFTW.ESTIMATE)
 
     Eωk = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz)(grid, xygrid, FT)

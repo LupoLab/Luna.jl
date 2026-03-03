@@ -247,7 +247,7 @@ end
     time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
 
 Extract the time-bandwidth product, after bandpassing if required. The TBP
-is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of 
+is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
@@ -595,7 +595,7 @@ end
 """
     getEω(output[, zslice])
 
-Get frequency-domain modal field from `output` with correct normalisation (i.e. 
+Get frequency-domain modal field from `output` with correct normalisation (i.e.
 `abs2.(Eω)`` gives angular-frequency spectral energy density in J/(rad/s)).
 """
 getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
@@ -630,7 +630,7 @@ fftnorm(grid::EnvGrid) = Maths.fftnorm(grid.t[2] - grid.t[1])
     getφ(ω, Eω, τ)
 
 Extract the unwrapped spectral phase from the field `Eω`, subtracting the linear phase ramp corresponding
-to a pulse in the middle of the time window defined by the `grid`. 
+to a pulse in the middle of the time window defined by the `grid`.
 """
 function getφ(grid::AbstractGrid, Eω)
     ω = grid.ω
@@ -721,7 +721,7 @@ If `relative` is `true`, `width` is relative bandwidth instead of the wavelength
 `ndims` determines how many dimensions of the array to sum over. For a field array with size
 `(Nω, N1, N2, ...)`, the first dimension is always assumed to be frequency. `ndim=1` means
 each field to be analysed is 1-dimensional, so the window iterates over all of `(N1, N2, ...)`.
-`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be 
+`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be
 summed over its second dimension before finding the central frequency. The window iterates
 over all other dimensions, `(N2, ...)`.
 
@@ -765,7 +765,7 @@ end
     PeakWindow(width, λmin, λmax; relative=false, ndims=1)
 
 An [`AutoWindow`](@ref) which uses the peak of the spectral energy density as the central
-frequency. 
+frequency.
 """
 function PeakWindow(width, λmin, λmax; relative=false, ndims=1)
     ω0fun = (ω, Iω) ->  ω[argmax(Iω)]
@@ -776,7 +776,7 @@ end
     CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
 
 An [`AutoWindow`](@ref) which uses the centroid (centre of mass or first moment) of the
-spectral energy density as the central frequency. Before calculating the centroid, the 
+spectral energy density as the central frequency. Before calculating the centroid, the
 SED is raised to the `power` given.
 """
 function CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
@@ -972,7 +972,7 @@ function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
             xs = coords == :polar ? (hypot(xi, yi), atan(yi, xi)) : (xi, yi)
             Modes.to_space!(Eωxy, Eωm, xs, tospace; z)
             # integrate over time/frequency and multiply by ε₀c/2 -> fluence
-            fluence[yidx, xidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
+            fluence[xidx, yidx] = PhysData.ε_0*PhysData.c/2*sum(energy_ω(Eωxy))
         end
     end
     fluence
@@ -1009,13 +1009,13 @@ end
 function getEtxy(Etm, modes, xs::Tuple{AbstractVector, AbstractVector}, z; components=:xy)
     tospace = Modes.ToSpace(modes; components)
     x1, x2 = xs
-    Etxy = zeros(eltype(Etm), (size(Etm, 1), length(x1), length(x2), tospace.npol))
+    Etxy = zeros(eltype(Etm), (size(Etm, 1), tospace.npol, length(x1), length(x2)))
     for (x2idx, x2i) in enumerate(x2)
         for (x1idx, x1i) in enumerate(x1)
-            @views Modes.to_space!(Etxy[:, x1idx, x2idx, :], Etm[.., 1], (x1i, x2i), tospace; z)
+            @views Modes.to_space!(Etxy[:, :, x1idx, x2idx], Etm[.., 1], (x1i, x2i), tospace; z)
         end
     end
-    Etxy    
+    Etxy
 end
 
 function polarisation_components(output)

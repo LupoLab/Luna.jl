@@ -572,11 +572,11 @@ end
 function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun, pol=false)
     Ny = length(xygrid.y)
     Nx = length(xygrid.x)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Ny, Nx))
-    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Ny, Nx))
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Nx, Ny))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Nx, Ny))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    idcs = CartesianIndices((Ny, Nx))
+    idcs = CartesianIndices((Nx, Ny))
     TransFree(FT, normfun, responses, grid, xygrid, densityfun,
               Pto, Eto, Eωo, Pωo, scale, idcs)
 end
@@ -617,10 +617,10 @@ and place the result in `nl`.
 function (t::TransFree)(nl, Eωk, z)
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx, ky) -> (t, x, y)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x, y) -> (ω, kx, ky)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
@@ -665,9 +665,9 @@ function norm_free(grid, xygrid, nfun)
     ω = grid.ω
     ωfirst = ω[findfirst(grid.sidx)]
     np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
-    out = zeros(Float64, (length(grid.ω), np, length(xygrid.ky), length(xygrid.kx)))
+    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
+    out = zeros(Float64, (length(grid.ω), np, length(xygrid.kx), length(xygrid.ky)))
     function norm(z)
         for ii in idcs
             for iω in eachindex(ω)
@@ -695,7 +695,7 @@ function norm_free(grid, xygrid, nfuns::Tuple)
     # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ+δθ)
     # nfuny(λ; z) just takes wavelength
     ω = grid.ω
-    out = zeros(Float64, (length(ω), 2, length(xygrid.ky), length(xygrid.kx)))
+    out = zeros(Float64, (length(ω), 2, length(xygrid.kx), length(xygrid.ky)))
     function norm(z)
         for iω in eachindex(ω)
             if ω[iω] == 0 || ~grid.sidx[iω]
@@ -711,16 +711,16 @@ function norm_free(grid, xygrid, nfuns::Tuple)
                     k_xpol = nx*grid.ω[iω]/c
                     βsq_xpol = k_xpol^2 - kxi^2 - kyi^2
                     if βsq_xpol < 0
-                        out[iω, 1, iky, ikx] = 1.0
+                        out[iω, 1, ikx, iky] = 1.0
                     else
-                        out[iω, 1, iky, ikx] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
+                        out[iω, 1, ikx, iky] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
                     end
 
                     βsq_ypol = ksq_ypol - kxi^2 - kyi^2
                     if βsq_ypol < 0
-                        out[iω, 2, iky, ikx] .= 1.0
+                        out[iω, 2, ikx, iky] .= 1.0
                     else
-                        out[iω, 2, iky, ikx] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
+                        out[iω, 2, ikx, iky] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
                     end
                 end
             end
@@ -801,7 +801,7 @@ function (t::TransFree2D)(nl, Eωk, z)
     # TODO: this can probably be combined with the case for TransFree
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx) -> (t, x)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
     mul!(t.Pωo, t.FT, t.Pto) # transform (t, x) -> (ω, kx)
