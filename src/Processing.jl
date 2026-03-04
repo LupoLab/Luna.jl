@@ -963,7 +963,7 @@ end
 
 function beam(grid, Eωm, modes, x, y; z=0, components=:xy)
     tospace = Modes.ToSpace(modes; components)
-    fluence = zeros(length(y), length(x))
+    fluence = zeros(length(x), length(y))
     _, energy_ω = Fields.energyfuncs(grid) # energyfuncs include correct FFT normalisation
     Eωxy = zeros(ComplexF64, (length(grid.ω), tospace.npol))
     coords = Modes.dimlimits(modes[1])[1]
