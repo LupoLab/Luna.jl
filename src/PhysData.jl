@@ -482,6 +482,16 @@ function crystal_internal_angle(nfun, ω, kx)
     δθ
 end
 
+"""
+    χ2(material)
+
+Return the second-order nonlinear susceptibility tensor for `material` as a
+3×6 matrix in SI units (m/V), using contracted notation
+`[xx, yy, zz, yz, xz, xy]`.
+
+Currently implemented materials:
+- `:BBO`
+"""
 function χ2(material)
     if material == :BBO
         # Shoji, I. et al. J. Opt. Soc. Am. B, JOSAB 16, 620–624 (1999)

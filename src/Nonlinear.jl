@@ -96,6 +96,20 @@ struct Chi2Field{χT}
     Pl::Vector{Float64} # polarisation in the lab frame
 end
 
+"""
+    Chi2Field(θ, ϕ, χ2)
+
+Construct a second-order nonlinear polarisation response for real, two-component
+electric fields in the lab frame.
+
+`θ` and `ϕ` (radians) define the crystal orientation relative to the lab frame.
+`χ2` must be a 3×6 second-order susceptibility tensor in contracted notation,
+with column order `[xx, yy, zz, yz, xz, xy]` (where mixed terms are multiplied by 2
+in [`field_products!`](@ref)).
+
+The returned callable adds \$ε_0 P_{NL}\$ to `out` when invoked as
+`response(out, E, ρ)`. Note that the density `ρ` is ignored.
+"""
 function Chi2Field(θ, ϕ, χ2)
     toCrystal = RotMatrix(RotZY(-ϕ, -θ)) # RotMatrix converts to static matrix
     toLab = RotMatrix(RotYZ(θ, ϕ))
@@ -184,7 +198,7 @@ We take the magnitude of the electric field to calculate the ionization
 rate and fraction, and then solve the plasma polarisation component-wise
 for the vector field.
 
-A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.  
+A similar approach was used in: C Tailliez et al 2020 New J. Phys. 22 103038.
 """
 function PlasmaVector!(Plas::PlasmaCumtrapz, E)
     Ex = E[:,1]
@@ -227,7 +241,7 @@ abstract type RamanPolar end
 "Raman polarisation response type for a carrier resolved field"
 struct RamanPolarField{TR, Tt, Thv, Tω, Tv, FTt, HTt} <: RamanPolar
     r::TR # Raman response
-    h::Tt # doubled buffer to hold response + padding 
+    h::Tt # doubled buffer to hold response + padding
     ht::Thv # buffer to hold time domain response
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
@@ -245,7 +259,7 @@ end
 "Raman polarisation response type for an envelope"
 struct RamanPolarEnv{TR, Tt, Thv, Tω, Tv, FTt} <: RamanPolar
     r::TR # Raman response
-    h::Tt # doubled buffer to hold response + padding 
+    h::Tt # doubled buffer to hold response + padding
     ht::Thv # buffer to hold time domain response
     hω::Tω # the frequency domain Raman response function
     Eω2::Tω # buffer to hold the Fourier transform of E^2
@@ -347,7 +361,7 @@ function (R::RamanPolar)(out, Et, ρ)
     # i.e. only the part corresponding to the original time grid
     # note that the response function time 0 is put into the first element of the response array
     # this ensures that causality is maintained, and no artificial delay between the field and
-    # the start of the response function occurs, at each convolution point.  
+    # the start of the response function occurs, at each convolution point.
     R.r(R.ht, ρ)
     R.hω .= R.FT * R.h
 
@@ -368,7 +382,7 @@ function (R::RamanPolar)(out, Et, ρ)
     for i = 1:length(E)
         R.Pout[i] = ρ*E[i]*R.P[i]
     end
-    
+
     # copy to output in dimensions requested
     if ndims(Et) > 1
         out .+= reshape(R.Pout, size(Et))
