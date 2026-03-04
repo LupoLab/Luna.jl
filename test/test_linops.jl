@@ -8,77 +8,35 @@ Nr = 256
 Nx = 128
 Ny = 64
 gas = :Ar
-pres = 1
-nfun = let rif=PhysData.ref_index_fun(gas, pres)
-    (ω; z) -> rif(wlfreq(ω))
-end
+pressure = 1
 
-@testset "radial, field" begin
-    grid = Grid.RealGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
-    q = Hankel.QDHT(R, Nr, dim=2)
-
-    linop = LinearOps.make_const_linop(grid, q, PhysData.ref_index_fun(gas, pres))
-    linopf = LinearOps.make_linop(grid, q, nfun)
-    out = similar(linop)
-
-    @test size(linop) == (length(grid.ω), 1, q.N)
-
-    linopf(out, 0.0)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-    linopf(out, 0.5)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-end
-
-@testset "radial, env" begin
-grid = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
-grid_thg = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12; thg=true)
-q = Hankel.QDHT(R, Nr, dim=2)
-
-for gi in (grid, grid_thg)
-    linop = LinearOps.make_const_linop(gi, q, PhysData.ref_index_fun(gas, pres))
-    linopf = LinearOps.make_linop(gi, q, nfun)
-    out = similar(linop)
-
-    linopf(out, 0.0)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-    linopf(out, 0.5)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-end
-end
-
-@testset "3D, field" begin
-    grid = Grid.RealGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+@testset "free space" begin
+    rgrid = Grid.RealGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+    egrid = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+    q = Hankel.QDHT(R, Nr, dim=3)
     xygrid = Grid.FreeGrid(R, Nx, R, Ny)
+    xgrid = Grid.Free2DGrid(R, Nx)
 
-    linop = LinearOps.make_const_linop(grid, xygrid, PhysData.ref_index_fun(gas, pres))
-    linopf = LinearOps.make_linop(grid, xygrid, nfun)
-    out = similar(linop)
+    getshape(grid, q::Hankel.QDHT, pol) = (length(grid.ω), pol ? 2 : 1, q.N)
+    getshape(grid, sg::Grid.Free2DGrid, pol) = (length(grid.ω), pol ? 2 : 1, length(sg.x))
+    getshape(grid, sg::Grid.FreeGrid, pol) = (length(grid.ω), pol ? 2 : 1, length(sg.x), length(sg.y))
 
-    @test size(linop) == (length(grid.ω), 1, Nx, Ny)
+    @testset "$(typeof(grid)), $(typeof(sg)), pol = $pol" for sg in (q, xgrid, xygrid),
+                                                              pol in (false, true),
+                                                              grid in (rgrid, egrid)
+        nfunλ = PhysData.ref_index_fun(gas, pressure)
+        if pol
+            nfun = (λ; z=0.0) -> (nfunλ(λ), nfunλ(λ))
+        else
+            nfun = (λ; z=0.0) -> nfunλ(λ)
+        end
+        nfunω = (ω; z) -> nfun(wlfreq(ω); z)
 
-    linopf(out, 0.0)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-    linopf(out, 0.5)
-    @test all(imag(out) .≈ imag(linop))
-    @test all(real(out) .≈ real(linop))
-end
-
-@testset "3D, env" begin
-    grid = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
-    grid_thg = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12; thg=true)
-    xygrid = Grid.FreeGrid(R, Nx, R, Ny)
-
-    for gi in (grid, grid_thg)
-        linop = LinearOps.make_const_linop(gi, xygrid, PhysData.ref_index_fun(gas, pres))
-        linopf = LinearOps.make_linop(gi, xygrid, nfun)
+        linop = LinearOps.make_const_linop(grid, sg, nfun)
+        linopf = LinearOps.make_linop(grid, sg, nfunω)
         out = similar(linop)
 
-        @test size(linop) == (length(gi.ω), 1, Nx, Ny)
+        @test size(linop) == getshape(grid, sg, pol)
 
         linopf(out, 0.0)
         @test all(imag(out) .≈ imag(linop))

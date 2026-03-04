@@ -204,7 +204,11 @@ function make_linop(grid::Grid.AbstractGrid,
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         β0 = getβ0_n(grid, nfunλ(z), thg)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z) .* grid.ω[grid.sidx] ./ c).^2
+        for (ii, si) in enumerate(grid.sidx)
+            if si
+                k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii] ./ c).^2
+            end
+        end
         fill_linop_matrix!(out, grid, β1, β0, k2, kperp2, idcs)
     end
 end
