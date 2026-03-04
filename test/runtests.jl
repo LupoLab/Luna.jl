@@ -92,6 +92,11 @@ end
     include(joinpath(testdir, "test_kerr.jl"))
 end
 
+@testset "Chi2" begin
+    @info("================= test_chi2.jl")
+    include(joinpath(testdir, "test_chi2.jl"))
+end
+
 @testset "LinearOps" begin
     @info("================= test_linops.jl")
     include(joinpath(testdir, "test_linops.jl"))
