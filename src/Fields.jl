@@ -421,10 +421,19 @@ function prop!(Eωk, z, grid, q::Hankel.QDHT)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
-function prop!(Eωk, z, grid, xygrid)
+function prop!(Eωk, z, grid, xygrid::Grid.FreeGrid)
     kzsq = ((grid.ω ./ PhysData.c).^2
             .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx), 1))
             .- reshape(xygrid.ky.^2, (1, 1, 1, length(xygrid.ky)))
+    )
+    kzsq[kzsq.<0] .= 0
+    kz = sqrt.(kzsq)
+    @. Eωk *= exp(-1im * z * (kz - grid.ω / PhysData.c))
+end
+
+function prop!(Eωk, z, grid, xygrid::Grid.Free2DGrid)
+    kzsq = ((grid.ω ./ PhysData.c).^2
+            .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx)))
     )
     kzsq[kzsq.<0] .= 0
     kz = sqrt.(kzsq)
