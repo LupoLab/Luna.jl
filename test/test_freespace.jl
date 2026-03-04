@@ -3,6 +3,8 @@
     2. Radial (QDHT), 2D cartesian and 3D cartesian spatial grids
     3. (For envelope) THG on/off
     4. Constant pressure and pressure gradient
+We also check that the spatial linear operators work correctly by testing the focusing
+of a Gaussian beam. (This cross-checks LinearOps vs Fields.prop!)
 =#
 using Luna
 import Luna.PhysData: wlfreq
