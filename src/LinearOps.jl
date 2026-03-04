@@ -7,6 +7,10 @@ import Luna.PhysData: wlfreq, c, crystal_internal_angle
 getω0(grid::Grid.EnvGrid) = grid.ω0
 getω0(grid::Grid.RealGrid) = 0.0
 
+#=================================================#
+#===============    FREE SPACE     ===============#
+#=================================================#
+
 function fill_linop_matrix!(out, grid, β1::Number, βref::Number, k2, kperp2, idcs)
     ω0 = getω0(grid)
     for ii in idcs
@@ -24,9 +28,6 @@ function fill_linop_matrix!(out, grid, β1::Number, βref::Number, k2, kperp2, i
     end
 end
 
-#=================================================#
-#===============    FREE SPACE     ===============#
-#=================================================#
 function transverse_k2(xygrid::Grid.FreeGrid)
     kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
     idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
@@ -49,8 +50,16 @@ end
 """
     make_const_linop(grid, xygrid, n, β1, β0)
 
-Make constant linear operator for free-space propagation. `n` is the refractive index (array),
-β1 is 1/velocity of the reference frame and β0 is the wavevector at the reference wavelength.
+Low-level constructor for a constant (z-invariant) free-space linear operator.
+
+Arguments:
+- `grid`: `Grid.AbstractGrid` (`RealGrid` or `EnvGrid`)
+- `xygrid`: transverse grid (`Grid.FreeGrid`, `Grid.Free2DGrid`, or `Hankel.QDHT`)
+- `n`: refractive-index table on `grid.ω`, with one column per polarisation
+- `β1`: inverse reference-frame velocity
+- `β0`: reference wavevector offset (typically zero for `RealGrid` and optional for `EnvGrid`)
+
+The output has shape `(Nω, Npol, N⊥...)`, where `N⊥...` matches the transverse grid.
 """
 function make_const_linop(grid::Grid.AbstractGrid,
                           xygrid::Union{Grid.FreeGrid, Grid.Free2DGrid, Hankel.QDHT},
@@ -71,6 +80,15 @@ checkthg(grid::Grid.RealGrid, thg) = thg || error("`thg` must be `true` for `Rea
 getβ0_n(grid::Grid.RealGrid, nfun, thg) = 0.0
 getβ0_n(grid::Grid.EnvGrid, nfun, thg) = thg ? 0.0 : grid.ω0/c * nfun(wlfreq(grid.ω0))[end]
 
+"""
+    make_const_linop(grid, xygrid, nfun; thg=thg_default(grid))
+
+Build a constant free-space operator from a refractive-index function `nfun`.
+
+`nfun(λ)` must return either a scalar index (single polarisation) or a vector/tuple of indices
+(e.g. both x and y polarisation). For `EnvGrid`, `thg=false` subtracts the reference propagation
+constant at `grid.ω0`; `thg=true` keeps the full phase.
+"""
 function make_const_linop(grid::Grid.AbstractGrid,
                           xygrid::Union{Grid.FreeGrid, Grid.Free2DGrid, Hankel.QDHT},
                           nfun, thg::Bool=thg_default(grid))
@@ -88,6 +106,15 @@ function make_const_linop(grid::Grid.AbstractGrid,
     make_const_linop(grid, xygrid, n, β1, β0)
 end
 
+"""
+    make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
+
+Constant full-3D free-space operator for crystal optics with two polarisation branches.
+
+`nfuns = (nfunx, nfuny)`, where `nfunx(λ, δθ)` is the refractive index for x-polarisation
+and `nfuny(λ)` is the refractive index for y-polarisation. The reference frame velocity
+is calculated from `nfuny(λ)`.
+"""
 function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
     nfunx, nfuny = nfuns
     # here nfunx(λ, δθ) also takes the angle and returns n_x(λ, θ)
@@ -120,38 +147,40 @@ end
 """
     make_linop(grid, xygrid, nfun)
 
-Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` should return the
-refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
+Create a z-dependent free-space linear operator closure.
+
+Applies to `xygrid::Grid.FreeGrid` (full 3D), `Grid.Free2DGrid` (x-z), and
+`Hankel.QDHT` (radial symmetry).
+
+Returns `linop!(out, z)`, which fills `out` in-place for propagation distance `z`.
+`nfun(ω; z)` may return one or multiple refractive indices; the last branch
+defines the reference-frame velocity and, for `EnvGrid` with `thg=false`, the
+reference phase subtraction at `grid.ω0`.
 """
-function make_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfun)
-    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
-    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
-    k2 = zero(grid.ω)
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
+function make_linop(grid::Grid.AbstractGrid,
+                    xygrid::Union{Grid.FreeGrid,Grid.Free2DGrid,Hankel.QDHT},
+                    nfun, thg::Bool=thg_default(grid))
+    checkthg(grid, thg)
+    kperp2, idcs = transverse_k2(xygrid)
+    ωfirst = grid.ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    k2 = zeros(Float64, (length(grid.ω), np))
+    nfunλ(z) = λ -> nfun(wlfreq(λ); z)[end]
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx] ./ c).^2
-        fill_linop_matrix!(out, grid, β1, 0.0, k2, kperp2, idcs)
+        β0 = getβ0_n(grid, nfun, thg)
+        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z) .* grid.ω[grid.sidx] ./ c).^2
+        fill_linop_matrix!(out, grid, β1, β0, k2, kperp2, idcs)
     end
 end
 
-function make_linop(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid, nfun; thg=false)
-    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
-    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
-    k2 = zero(grid.ω)
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)
-    function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./c).^2
-        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)
-        fill_linop_matrix!(out, grid, β1, βref, k2, kperp2, idcs)
-    end
-end
+"""
+    make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
 
-#=================================================#
-#============   FREE SPACE (2D)   ================#
-#=================================================#
+Constant free-space operator for 2D (`x-z`) crystal propagation with two polarisations.
 
+`nfuns = (nfunx, nfuny)` follows the same convention as the full-3D overload.
+"""
 function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
     nfunx, nfuny = nfuns
     # here nfunx(λ, δθ) also takes the angle and returns n_x(λ, θ)
@@ -179,85 +208,6 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tu
     out
 end
 
-"""
-    make_linop(grid, xgrid, nfun)
-
-Make z-dependent linear operator for free-space propagation. `nfun(ω; z)` should return the
-refractive index as a function of frequency `ω` and (kwarg) propagation distance `z`.
-"""
-function make_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfun)
-    kperp2 = xgrid.kx.^2
-    idcs = CartesianIndices(xgrid.kx)
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[1]
-    function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        for (ii, si) in enumerate(grid.sidx)
-            if si
-                k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii]./c).^2
-            end
-        end
-        fill_linop_matrix!(out, grid, β1, 0.0, k2, kperp2, idcs)
-    end
-end
-
-function make_linop(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid, nfun; thg=false)
-    kperp2 = xgrid.kx.^2
-    idcs = CartesianIndices(xgrid.kx)
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ); z)[1]
-    function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        for (ii, si) in enumerate(grid.sidx)
-            if si
-                k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii]./c).^2
-            end
-        end
-        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[end]
-        fill_linop_matrix!(out, grid, β1, βref, k2, kperp2, idcs)
-    end
-end
-
-#=================================================#
-#==============   RADIAL SYMMETRY   ==============#
-#=================================================#
-"""
-    make_linop(grid, q::QDHT, nfun)
-
-Make z-dependent linear operator for radial free-space propagation. `nfun(ω; z)` should
-return the refractive index as a function of frequency `ω` and (kwarg) propagation
-distance `z`.
-"""
-function make_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
-    kr2 = q.k.^2
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[end]
-    function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./c).^2
-        fill_linop_matrix!(out, grid, β1, 0.0, k2, kr2, eachindex(q.k))
-    end
-end
-
-function make_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
-    kr2 = q.k.^2
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
-    k2 = zeros(Float64, (length(grid.ω), np))
-    nfunλ(z) = λ -> nfun(wlfreq(λ), z=z)[end]
-    function linop!(out, z)
-        β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
-        k2[grid.sidx, :] .= (nfun.(grid.ω[grid.sidx]; z=z) .* grid.ω[grid.sidx]./c).^2
-        βref = thg ? 0.0 : grid.ω0/c * nfun(grid.ω0; z=z)[end]
-        fill_linop_matrix!(out, grid, β1, βref, k2, kr2, eachindex(q.k))
-    end
-end
 
 #=================================================#
 #===============   MODE AVERAGE   ================#
@@ -329,7 +279,7 @@ end
 
 
 """
-    neff_β_grid(grid, mode, λ0; ref_mode=1)
+    neff_β_grid(grid, mode, λ0)
 
 Create closures which return the effective index and propagation constant
 as a function of the frequency grid **index**, rather than the frequency itself.
@@ -344,6 +294,14 @@ function neff_β_grid(grid, mode, λ0)
     end
 end
 
+"""
+    make_linop(grid, mode, λ0; thg=false)
+
+Create z-dependent mode-averaged linear-operator closures.
+
+For `RealGrid`, returns `(linop!, βfun!)`; for `EnvGrid`, `thg=false` additionally
+subtracts the reference phase at `λ0`.
+"""
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff, β = neff_β_grid(grid, mode, λ0)
@@ -406,7 +364,9 @@ end
 
 Make constant (z-invariant) linear operator for multimode propagation. The frame velocity is
 taken as the group velocity at wavelength `λ0` in the mode given by `ref_mode` (which
-indexes into `modes`)
+indexes into `modes`).
+
+Returns an array of shape `(Nω, Nmodes)`.
 """
 function make_const_linop(grid::Grid.RealGrid, modes::Modes.ModeCollection, λ0; ref_mode=1)
     β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
@@ -449,7 +409,7 @@ end
 
 Create a closure that returns the effective index as a function of the frequency grid and mode
 **index**, rather than the mode and frequency themselves. Any [`Modes.AbstractMode`](@ref)
-may define its one method for `neff_grid` to accelerate repeated calculation on the same
+may define its own method for `neff_grid` to accelerate repeated calculation on the same
 frequency grid.
 """
 function neff_grid(grid, modes, λ0; ref_mode=1)
@@ -459,7 +419,15 @@ function neff_grid(grid, modes, λ0; ref_mode=1)
     _neff
 end
 
-function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
+"""
+    make_linop(grid, modes, λ0; ref_mode=1, thg=false)
+
+Create a z-dependent multimode linear-operator closure `linop!(out, z)`.
+
+The output is filled in-place with shape `(Nω, Nmodes)`. For `EnvGrid`, setting
+`thg=false` subtracts the reference phase of `modes[ref_mode]` at `λ0`.
+"""
+function make_linop(grid::Grid.RealGrid, modes::Modes.ModeCollection, λ0; ref_mode=1)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
     linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
@@ -476,7 +444,7 @@ function make_linop(grid::Grid.RealGrid, modes, λ0; ref_mode=1)
     end
 end
 
-function make_linop(grid::Grid.EnvGrid, modes, λ0; ref_mode=1, thg=false)
+function make_linop(grid::Grid.EnvGrid, modes::Modes.ModeCollection, λ0; ref_mode=1, thg=false)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
     linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
