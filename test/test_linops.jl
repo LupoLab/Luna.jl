@@ -21,9 +21,13 @@ pressure = 1
     getshape(grid, sg::Grid.Free2DGrid, pol) = (length(grid.ω), pol ? 2 : 1, length(sg.x))
     getshape(grid, sg::Grid.FreeGrid, pol) = (length(grid.ω), pol ? 2 : 1, length(sg.x), length(sg.y))
 
-    @testset "$(typeof(grid)), $(typeof(sg)), pol = $pol" for sg in (q, xgrid, xygrid),
+    @testset "$(typeof(grid)), $(typeof(sg)), pol = $pol, thg = $thg" for sg in (q, xgrid, xygrid),
                                                               pol in (false, true),
+                                                              thg in (false, true),
                                                               grid in (rgrid, egrid)
+        if grid isa Grid.RealGrid && ~thg
+            continue
+        end
         nfunλ = PhysData.ref_index_fun(gas, pressure)
         if pol
             nfun = (λ; z=0.0) -> (nfunλ(λ), nfunλ(λ))
@@ -32,8 +36,8 @@ pressure = 1
         end
         nfunω = (ω; z) -> nfun(wlfreq(ω); z)
 
-        linop = LinearOps.make_const_linop(grid, sg, nfun)
-        linopf = LinearOps.make_linop(grid, sg, nfunω)
+        linop = LinearOps.make_const_linop(grid, sg, nfun, thg)
+        linopf = LinearOps.make_linop(grid, sg, nfunω, thg)
         out = similar(linop)
 
         @test size(linop) == getshape(grid, sg, pol)
@@ -51,7 +55,7 @@ end
 a = 125e-6
 L = 1
 grid = Grid.RealGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12)
-coren, densityfun = Capillary.gradient(gas, L, pres, 0)
+coren, densityfun = Capillary.gradient(gas, L, pressure, 0)
 m = Capillary.MarcatiliMode(a, coren)
 dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version
 
@@ -75,7 +79,7 @@ L = 1
 # NO THG
 thg = false
 grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12; thg=thg)
-coren, densityfun = Capillary.gradient(gas, L, pres, 0)
+coren, densityfun = Capillary.gradient(gas, L, pressure, 0)
 m = Capillary.MarcatiliMode(a, coren)
 dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version...
 
@@ -96,7 +100,7 @@ end
 # WITH THG
 thg = true
 grid = Grid.EnvGrid(L, 800e-9, (400e-9, 2000e-9), 0.5e-12; thg=thg)
-coren, densityfun = Capillary.gradient(gas, L, pres, 0)
+coren, densityfun = Capillary.gradient(gas, L, pressure, 0)
 m = Capillary.MarcatiliMode(a, coren)
 dm = Modes.delegated(m) # delegated mode tricks make_linop into using the generic version...
 
