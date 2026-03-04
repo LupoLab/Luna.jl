@@ -39,9 +39,9 @@ function transverse_k2(xgrid::Grid.Free2DGrid)
     kperp2, idcs
 end
 
-function transverse_k2(xygrid::Hankel.QDHT)
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
+function transverse_k2(q::Hankel.QDHT)
+    kperp2 = @. q.k^2
+    idcs = CartesianIndices(q.k)
     kperp2, idcs
 end
 
@@ -225,61 +225,6 @@ end
 #=================================================#
 #==============   RADIAL SYMMETRY   ==============#
 #=================================================#
-"""
-    make_const_linop(grid, q::QDHT, n, β1)
-
-Make constant linear operator for radial free-space. `n` is the refractive index (array)
-and β1 is 1/velocity of the reference frame.
-"""
-function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT,
-                          n::AbstractVecOrMat, β1::Number)
-    out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
-    k2 = @. (n*grid.ω/c)^2
-    kr2 = q.k.^2
-    fill_linop_matrix!(out, grid, β1, 0.0, k2, kr2, eachindex(q.k))
-    return out
-end
-
-function make_const_linop(grid::Grid.RealGrid, q::Hankel.QDHT, nfun)
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst)) # 1 if single ref index, 2 if nx, ny
-    n = zeros(Float64, (length(grid.ω), np))
-    for (ii, si) in enumerate(grid.sidx)
-        if si
-            n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
-        end
-    end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
-    make_const_linop(grid, q, n, β1)
-end
-
-function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT, nfun; thg=false)
-    ωfirst = grid.ω[findfirst(grid.sidx)]
-    np = length(nfun(ωfirst)) # 1 if single ref index, 2 if nx, ny
-    n = zeros(Float64, (length(grid.ω), np))
-    for (ii, si) in enumerate(grid.sidx)
-        if si
-            n[ii, :] .= nfun(wlfreq(grid.ω[ii]))
-        end
-    end
-    β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
-    if thg
-        β0const = 0.0
-    else
-        β0const = grid.ω0/c * nfun(2π*c./grid.ω0)[1]
-    end
-    make_const_linop(grid, q, n, β1, β0const)
-end
-
-function make_const_linop(grid::Grid.EnvGrid, q::Hankel.QDHT,
-                          n::AbstractVecOrMat, β1::Number, β0ref::Number)
-    out = Array{ComplexF64}(undef, (length(grid.ω), size(n, 2), q.N))
-    k2 = @. (n*grid.ω/c)^2
-    kr2 = q.k.^2
-    fill_linop_matrix!(out, grid, β1, β0ref, k2, kr2, eachindex(q.k))
-    return out
-end
-
 """
     make_linop(grid, q::QDHT, nfun)
 

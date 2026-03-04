@@ -743,7 +743,7 @@ end
     end
 end
 
-# @testset "free-space inputs: radial" begin
+@testset "free-space inputs: radial" begin
     λ0 = 800e-9
     τfwhm = 10e-15
     energy = 1e-6
@@ -774,7 +774,7 @@ end
     w1q = 2Maths.rms_width(r, Ir)
 
     @test isapprox(w1q, w1; rtol=1e-3)
-# end
+end
 
 @testset "free-space inputs: full 3D" begin
     λ0 = 800e-9
