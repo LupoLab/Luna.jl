@@ -467,12 +467,14 @@ end
 # run some code for precompilation
 Logging.with_logger(Logging.NullLogger()) do
     prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
-                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
+                    PPT_options=Dict(:cache => false))
     prop_capillary(125e-6, 0.3, :He, (1.0, 0); λ0=800e-9, energy=1e-9,
-                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11)
+                    τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
+                    PPT_options=Dict(:cache => false))
     prop_capillary(125e-6, 0.3, :He, 1.0; λ0=800e-9, energy=1e-9,
                     τfwhm=10e-15, λlims=(150e-9, 4e-6), trange=1e-12, saveN=11,
-                    modes=4)
+                    modes=4, PPT_options=Dict(:cache => false))
     p = Tools.capillary_params(120e-6, 10e-15, 800e-9, 125e-6, :He, P=1.0)
 
     # gnlse_sol.jl example but with N=1 and 100th of the fibre length

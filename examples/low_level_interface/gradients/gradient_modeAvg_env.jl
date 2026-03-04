@@ -21,7 +21,7 @@ end
 energyfun, energyfunω = Fields.energyfuncs(grid)
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_ADK(ionpot)
+ionrate = Ionisation.IonRateADK(ionpot)
 
 responses = (Nonlinear.Kerr_env(PhysData.γ3_gas(gas)),)
 

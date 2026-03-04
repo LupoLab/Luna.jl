@@ -23,7 +23,7 @@ densityfun = let dens0=PhysData.density(gas, pres)
 end
 
 ionpot = PhysData.ionisation_potential(gas)
-ionrate = Ionisation.ionrate_fun!_PPTcached(gas, λ0)
+ionrate = Ionisation.IonRatePPTCached(gas, λ0)
 
 responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
              Nonlinear.PlasmaCumtrapz(grid.to, grid.to, ionrate, ionpot))
@@ -31,7 +31,7 @@ responses = (Nonlinear.Kerr_field(PhysData.γ3_gas(gas)),
 inputs = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=energy)
 
 Eω, transform, FT = Luna.setup(grid, densityfun, responses, inputs, modes, :y; full=false)
-                              
+
 linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 statsfun = Stats.default(grid, Eω, modes, linop, transform; gas=gas, windows=((150e-9, 300e-9),))
@@ -48,4 +48,3 @@ Plotting.time_1D(output, [5e-2, 9.8e-2])
 Plotting.time_1D(output, [5e-2, 9e-2], modes=:sum, bandpass=(150e-9, 300e-9))
 Plotting.spec_1D(output, [5e-2, 9.8e-2])
 Plotting.spec_1D(output, [5e-2, 9.8e-2], modes=:sum)
-
