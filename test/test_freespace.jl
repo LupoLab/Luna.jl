@@ -74,13 +74,7 @@ function testfocus(sg::Grid.FreeGrid, Eω, w0)
     @test maximum(abs.(Iy .- Iy_analytical)/norm(Ix)) < 2e-3
 end
 
-@testset "Constant pressure: $(typeof(grid)), $(typeof(sg)), pol = $pol, thg = $thg" for sg in (q, xgrid, xygrid),
-                                                            pol in (false, true),
-                                                            thg in (false, true),
-                                                            grid in (rgrid, egrid)
-    if grid isa Grid.RealGrid && ~thg
-        continue
-    end
+function runprop_const(grid, sg, thg, pol)
     nfunλ = PhysData.ref_index_fun(gas, pressure)
     if pol
         nfun = (λ; z=0.0) -> (nfunλ(λ), nfunλ(λ))
@@ -100,16 +94,10 @@ end
     Eω, transform, FT = Luna.setup(grid, sg, densityfun, normfun, responses, inputs)
     output = Output.MemoryOutput(0, grid.zmax, 21)
     Luna.run(Eω, grid, linop, transform, FT, output; init_dz=5e-3)
-    testfocus(sg, output["Eω"], w0)
+    output["Eω"]
 end
-##
-@testset "Gradient pressure: $(typeof(grid)), $(typeof(sg)), pol = $pol, thg = $thg" for sg in (q, xgrid, xygrid),
-                                                            pol in (false, true),
-                                                            thg in (false, true),
-                                                            grid in (rgrid, egrid)
-    if grid isa Grid.RealGrid && ~thg
-        continue
-    end
+
+function runprop_grad(grid, sg, thg, pol)
     nfunλ = PhysData.ref_index_fun(gas, pressure)
     if pol
         nfun = (λ; z=0.0) -> (nfunλ(λ), nfunλ(λ))
@@ -130,5 +118,30 @@ end
     Eω, transform, FT = Luna.setup(grid, sg, densityfun, normfun, responses, inputs)
     output = Output.MemoryOutput(0, grid.zmax, 21)
     Luna.run(Eω, grid, linop, transform, FT, output; init_dz=5e-3)
-    testfocus(sg, output["Eω"], w0)
+    output["Eω"]
+end
+
+@testset "Constant pressure: $(typeof(grid)), $(typeof(sg)), pol = $pol, thg = $thg" for sg in (q, xgrid, xygrid),
+                                                            pol in (false, true),
+                                                            thg in (false, true),
+                                                            grid in (rgrid, egrid)
+    if grid isa Grid.RealGrid && ~thg
+        continue
+    end
+    Eω = runprop_const(grid, sg, thg, pol)
+
+    testfocus(sg, Eω, w0)
+end
+##
+@testset "Gradient pressure: $(typeof(grid)), $(typeof(sg)), pol = $pol, thg = $thg" for sg in (q, xgrid, xygrid),
+                                                            pol in (false, true),
+                                                            thg in (false, true),
+                                                            grid in (rgrid, egrid)
+    if grid isa Grid.RealGrid && ~thg
+        continue
+    end
+    Eω = runprop_grad(grid, sg, thg, pol)
+
+    testfocus(sg, Eω, w0)
+
 end
