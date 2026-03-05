@@ -107,14 +107,9 @@ end
     include(joinpath(testdir, "test_modes.jl"))
 end
 
-@testset "Radial Propagation" begin
-    @info("================= test_radial.jl")
-    include(joinpath(testdir, "test_radial.jl"))
-end
-
-@testset "Full 3D Propagation" begin
-    @info("================= test_full_freespace.jl")
-    include(joinpath(testdir, "test_full_freespace.jl"))
+@testset "Free-space Propagation" begin
+    @info("================= test_freespace.jl")
+    include(joinpath(testdir, "test_freespace.jl"))
 end
 
 @testset "Antiresonant modes" begin
