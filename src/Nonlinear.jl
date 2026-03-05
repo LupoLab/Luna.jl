@@ -133,6 +133,20 @@ function (c::Chi2Field)(out, E, ρ)
     end
 end
 
+
+"""
+    field_products!(Enl, Ec)
+
+Fill the contracted second-order field-product vector `Enl` from crystal-frame
+field components `Ec`.
+
+The output ordering is
+`[Ex^2, Ey^2, Ez^2, 2EyEz, 2ExEz, 2ExEy]`, matching the 3x6 `χ2` tensor
+column order `[xx, yy, zz, yz, xz, xy]` used by [`Chi2Field`](@ref).
+
+Both `Enl` and `Ec` are mutated/read in place and are expected to have length 6
+and 3, respectively.
+"""
 function field_products!(Enl, Ec)
     Enl[1] = Ec[1]^2
     Enl[2] = Ec[2]^2
