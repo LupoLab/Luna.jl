@@ -92,8 +92,8 @@ function runprop_const(grid, sg, thg, pol)
     inputs = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz=-L)
 
     Eω, transform, FT = Luna.setup(grid, sg, densityfun, normfun, responses, inputs)
-    output = Output.MemoryOutput(0, grid.zmax, 21)
-    Luna.run(Eω, grid, linop, transform, FT, output; init_dz=5e-3)
+    output = Output.MemoryOutput(0, grid.zmax, 11)
+    Luna.run(Eω, grid, linop, transform, FT, output; init_dz=0.1)
     output["Eω"]
 end
 
