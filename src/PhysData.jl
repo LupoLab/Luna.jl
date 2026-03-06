@@ -469,7 +469,7 @@ function crystal_internal_angle(nfun, ω, kx)
     # External wavevector is kx = ω/c*sin(θ_i) with θ_i the AOI of the plane wave
     # Internal wavevector is kx2 = ω/c * n(θ+δθ) * sin(δθ)
     # Momentum conservation requires kx = kx2
-    # kx is given by the grid, so 
+    # kx is given by the grid, so
     # kx = ω/c * n(θ+δθ)*sin(δθ)
     # Solve this numerically
     try
@@ -601,7 +601,7 @@ function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtem
     ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
         function ngas(λ)
             res = funs[1](λ)
-            for ii in 2:length(gases) 
+            for ii in 2:length(gases)
                 res += funs[ii](λ)
             end
             return sqrt(1 + res)
@@ -656,7 +656,7 @@ end
 Calculate the dispersion of order `order` of a given `material` at a wavelength `λ`.
 
 For gases the pressure `P` (default:atmosphere) and the temperature `T` (default: room temp)
-can also be specified. `lookup::Bool` determines whether a lookup table or a Sellmeier 
+can also be specified. `lookup::Bool` determines whether a lookup table or a Sellmeier
 expansion is used for the refractive index (default is material dependent).
 
 # Examples
@@ -803,7 +803,7 @@ function n2_solid(material::Symbol; λ=nothing)
         # M. Bache, et al., Opt. Mater. Express, OME 3(3), 357–382 (2013).
         return 5.1e-20
     else
-        error("Unkown glass $material")
+        error("Unknown material $material")
     end
 end
 
@@ -1157,11 +1157,11 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 0,
               Δα = 10.2e-31, # [2]
-              # TODO τ2r = 
+              # TODO τ2r =
               dαdQ = 1.46e-20, # [1]
               Ωv = 3e14, # [1]
               μ = 1.3e-26, # [1]
-              # TODO τ2v = 
+              # TODO τ2v =
               )
     elseif material == :N2O
         rp = (kind = :molecular,
@@ -1173,10 +1173,10 @@ function raman_parameters(material)
               qJeven = 1, # [14]
               Δα = 28.1e-31, # [2] note that [14] uses twice this
               τ2r = 23.8e-12, # [14]
-              # TODO dαdQ =  
+              # TODO dαdQ =
               Ωv = 2*π*1285*100.0*c,
-              # TODO μ = 
-              # TODO τ2v = 
+              # TODO μ =
+              # TODO τ2v =
              )
     elseif material == :SiO2 # [18]
         rp = (kind = :intermediate,
@@ -1198,7 +1198,7 @@ function raman_parameters(material)
               Bρv = 384e6, # [16]
               Aρv = 0.0, # [16]
               Cv = 8220e6 # [16]
-             )    
+             )
     elseif material == :SF6
         rp = (kind = :molecular,
                 rotation = :none,
@@ -1207,7 +1207,7 @@ function raman_parameters(material)
                 Ωv = 2*π*775*100.0*c, # [6]
                 μ = (18.998403*m_u)/6,
                 τ2v = 6.6e-12, # [13]
-                )      
+                )
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -1275,7 +1275,7 @@ function lookup_mirror(type)
     elseif type == :PC1611
         dat = readdlm(joinpath(Utils.datadir(), "PC1611.txt"); skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] 
+        R = dat[:, 2]
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)
@@ -1292,7 +1292,7 @@ function lookup_mirror(type)
     elseif type == :PC1821
         dat = readdlm(joinpath(Utils.datadir(), "PC1821.txt"); skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] 
+        R = dat[:, 2]
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)
@@ -1309,7 +1309,7 @@ function lookup_mirror(type)
     elseif type == :HD120
         dat = readdlm(joinpath(Utils.datadir(), "HD120.csv"), ','; skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] # reflectivity per mirror 
+        R = dat[:, 2] # reflectivity per mirror
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)
