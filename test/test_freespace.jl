@@ -13,10 +13,10 @@ Luna.set_fftw_mode(:estimate)
 import LinearAlgebra: norm
 import Test: @test, @testset
 
-R = 0.3e-3
-Nr = 128
+R = 0.6e-3
+Nr = 64
 Nx = 64
-Ny = 128
+Ny = 32
 gas = :Ar
 pressure = 1
 
