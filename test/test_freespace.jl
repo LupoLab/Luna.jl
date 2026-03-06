@@ -52,7 +52,7 @@ function testfocus(q::Hankel.QDHT, Eω, w0)
     Eωr = q \ Eωfoc
     Ir = dropdims(sum(abs2.(Eωr); dims=(1, 2)); dims=(1, 2))
     Ir_analytical = Maths.gauss.(q.r, w0/2)
-    @test Ir/norm(Ir) ≈ Ir_analytical/norm(Ir_analytical) rtol=0.1
+    @test Ir/norm(Ir) ≈ Ir_analytical/norm(Ir_analytical) rtol=0.01
 end
 
 function testfocus(sg::Grid.Free2DGrid, Eω, w0)
@@ -60,7 +60,7 @@ function testfocus(sg::Grid.Free2DGrid, Eω, w0)
     Eωx = FFTW.ifft(Eωfoc, 3)
     Ix = dropdims(sum(abs2.(Eωx); dims=(1, 2)); dims=(1, 2))
     Ix_analytical = Maths.gauss.(sg.x, w0/2)
-    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=1e-2
+    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=0.001
 end
 
 function testfocus(sg::Grid.FreeGrid, Eω, w0)
@@ -69,9 +69,9 @@ function testfocus(sg::Grid.FreeGrid, Eω, w0)
     Iy = dropdims(sum(abs2.(Eωxy); dims=(1, 2, 3)); dims=(1, 2, 3))
     Ix = dropdims(sum(abs2.(Eωxy); dims=(1, 2, 4)); dims=(1, 2, 4))
     Ix_analytical = Maths.gauss.(sg.x, w0/2)
-    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=1e-2
     Iy_analytical = Maths.gauss.(sg.y, w0/2)
-    @test Ix/norm(Iy) ≈ Ix_analytical/norm(Iy_analytical) rtol=1e-2
+    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=0.001
+    @test Iy/norm(Iy) ≈ Iy_analytical/norm(Iy_analytical) rtol=0.001
 end
 
 function runprop_const(grid, sg, thg, pol)
