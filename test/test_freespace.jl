@@ -37,7 +37,7 @@ getshape(grid, sg::Grid.Free2DGrid, pol) = (length(grid.ω), pol ? 2 : 1, length
 getshape(grid, sg::Grid.FreeGrid, pol) = (length(grid.ω), pol ? 2 : 1, length(sg.x), length(sg.y))
 
 makekerr(grid::Grid.RealGrid, thg) = Nonlinear.Kerr_field(PhysData.γ3_gas(gas))
-makekerr(grid::Grid.EnvGrid, thg) = thg ? Nonlinear.Kerr_env(PhysData.γ3_gas(gas)) : Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), grid.ω0, grid.to)
+makekerr(grid::Grid.EnvGrid, thg) = thg ? Nonlinear.Kerr_env_thg(PhysData.γ3_gas(gas), grid.ω0, grid.to) : Nonlinear.Kerr_env(PhysData.γ3_gas(gas))
 
 makeconstnorm(grid, q::Hankel.QDHT, nfunλ) = NonlinearRHS.const_norm_radial(grid, q, nfunλ)
 makeconstnorm(grid, sg::Grid.Free2DGrid, nfunλ) = NonlinearRHS.const_norm_free2D(grid, sg, nfunλ)
@@ -143,5 +143,4 @@ end
     Eω = runprop_grad(grid, sg, thg, pol)
 
     testfocus(sg, Eω, w0)
-
 end

@@ -749,7 +749,7 @@ function show(io::IO, t::TransFree2D)
     samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
     resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
     x = "x grid: $(minimum(t.xgrid.x)) to $(maximum(t.xgrid.x)), N=$(length(t.xgrid.x))"
-    out = join(["TransFree", grid, samples, x, resp], "\n  ")
+    out = join(["TransFree2D", grid, samples, x, resp], "\n  ")
     print(io, out)
 end
 
