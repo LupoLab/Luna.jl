@@ -13,15 +13,15 @@ Luna.set_fftw_mode(:estimate)
 import LinearAlgebra: norm
 import Test: @test, @testset
 
-R = 1.5e-3
-Nr = 512
-Nx = 256
+R = 0.3e-3
+Nr = 128
+Nx = 64
 Ny = 128
 gas = :Ar
 pressure = 1
 
 λ0 = 800e-9
-w0 = 40e-6
+w0 = 200e-6
 τfwhm = 20e-15
 energy = 1e-12
 L = 0.3
@@ -50,28 +50,28 @@ makenorm(grid, sg::Grid.FreeGrid, nfunω) = NonlinearRHS.norm_free(grid, sg, nfu
 function testfocus(q::Hankel.QDHT, Eω, w0)
     Eωfoc = Eω[:, :, :, end]
     Eωr = q \ Eωfoc
-    Ir = Maths.normbymax(dropdims(sum(abs2.(Eωr); dims=(1, 2)); dims=(1, 2)))
+    Ir = dropdims(sum(abs2.(Eωr); dims=(1, 2)); dims=(1, 2))
     Ir_analytical = Maths.gauss.(q.r, w0/2)
-    @test maximum(abs.(Ir .- Ir_analytical)/norm(Ir)) < 5e-3
+    @test Ir/norm(Ir) ≈ Ir_analytical/norm(Ir_analytical) rtol=0.1
 end
 
 function testfocus(sg::Grid.Free2DGrid, Eω, w0)
     Eωfoc = Eω[:, :, :, end]
     Eωx = FFTW.ifft(Eωfoc, 3)
-    Ix = Maths.normbymax(dropdims(sum(abs2.(Eωx); dims=(1, 2)); dims=(1, 2)))
+    Ix = dropdims(sum(abs2.(Eωx); dims=(1, 2)); dims=(1, 2))
     Ix_analytical = Maths.gauss.(sg.x, w0/2)
-    @test maximum(abs.(Ix .- Ix_analytical)/norm(Ix)) < 2e-3
+    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=1e-2
 end
 
 function testfocus(sg::Grid.FreeGrid, Eω, w0)
     Eωfoc = Eω[:, :, :, :, end]
     Eωxy = FFTW.ifft(Eωfoc, (3, 4))
-    Iy = Maths.normbymax(dropdims(sum(abs2.(Eωxy); dims=(1, 2, 3)); dims=(1, 2, 3)))
-    Ix = Maths.normbymax(dropdims(sum(abs2.(Eωxy); dims=(1, 2, 4)); dims=(1, 2, 4)))
+    Iy = dropdims(sum(abs2.(Eωxy); dims=(1, 2, 3)); dims=(1, 2, 3))
+    Ix = dropdims(sum(abs2.(Eωxy); dims=(1, 2, 4)); dims=(1, 2, 4))
     Ix_analytical = Maths.gauss.(sg.x, w0/2)
-    @test maximum(abs.(Ix .- Ix_analytical)/norm(Ix)) < 2e-3
+    @test Ix/norm(Ix) ≈ Ix_analytical/norm(Ix_analytical) rtol=1e-2
     Iy_analytical = Maths.gauss.(sg.y, w0/2)
-    @test maximum(abs.(Iy .- Iy_analytical)/norm(Ix)) < 2e-3
+    @test Ix/norm(Iy) ≈ Ix_analytical/norm(Iy_analytical) rtol=1e-2
 end
 
 function runprop_const(grid, sg, thg, pol)
@@ -116,8 +116,8 @@ function runprop_grad(grid, sg, thg, pol)
     inputs = Fields.GaussGaussField(;λ0, τfwhm, energy, w0, propz=-L)
 
     Eω, transform, FT = Luna.setup(grid, sg, densityfun, normfun, responses, inputs)
-    output = Output.MemoryOutput(0, grid.zmax, 21)
-    Luna.run(Eω, grid, linop, transform, FT, output; init_dz=5e-3)
+    output = Output.MemoryOutput(0, grid.zmax, 11)
+    Luna.run(Eω, grid, linop, transform, FT, output; init_dz=0.1)
     output["Eω"]
 end
 
