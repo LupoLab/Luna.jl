@@ -380,14 +380,24 @@ function _runscan(f, scan::Scan{QueueExec})
     lockpath = qfile*"_lock"
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
+    qfile_created = false
     while true
         mkpidlock(lockpath; stale_age=120) do
             # first process to catch the pidlock creates the queue file
             if ~isfile(qfile)
+                if qfile_created
+                    # The queue file was already created, so another process
+                    # must have completed the scan and removed it. Signal
+                    # that we should stop by setting scanidx to nothing.
+                    global scanidx = nothing
+                    global qdata = fill(2, length(scan))
+                    return
+                end
                 HDF5.h5open(qfile, "cw") do file
                     file["qdata"] = zeros(Int, length(scan))
                 end
             end
+            qfile_created = true
             # read the queue data
             global qdata = HDF5.h5open(qfile) do file
                 read(file["qdata"])
@@ -405,8 +415,7 @@ function _runscan(f, scan::Scan{QueueExec})
         end # release pidlock
         if isnothing(scanidx) # no scan points left to start
             if all(qdata .> 1) # completely done--either all done or failed
-                # this point is only reached by one process
-                rm(qfile) # remove the queue file
+                rm(qfile; force=true) # remove the queue file
             end
             break # break out of the loop
         end
@@ -421,8 +430,10 @@ function _runscan(f, scan::Scan{QueueExec})
             @warn msg
         end
         mkpidlock(lockpath; stale_age=10) do # acquire lock on qfile again
-            HDF5.h5open(qfile, "r+") do file
-                file["qdata"][scanidx] = code # mark as done/failed
+            if isfile(qfile)
+                HDF5.h5open(qfile, "r+") do file
+                    file["qdata"][scanidx] = code # mark as done/failed
+                end
             end
         end
         Base.GC.gc()
