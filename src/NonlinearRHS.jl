@@ -415,7 +415,7 @@ function TransModeAvg(TT, grid, FT, resp, densityfun, norm!, aeff; noise_field=n
     if !isnothing(noise_field)
         Eωo_noise = zeros(ComplexF64, length(grid.ωo))
         Et_noise = zeros(TT, length(grid.to))
-        to_time!(Et_noise, noise_field, Eωo_noise, inv(FT))
+        to_time!(Et_noise, noise_field, Eωo_noise, FT)
         Et_nl = zeros(TT, length(grid.to))
     else
         Et_noise = nothing
