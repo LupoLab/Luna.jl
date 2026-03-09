@@ -523,20 +523,6 @@ function show(io::IO, t::TransRadial)
     print(io, out)
 end
 
-function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun, pol=false)
-    np = pol ? 2 : 1
-    Eωo = zeros(ComplexF64, (length(grid.ωo), np, HT.N))
-    Eto_r = zeros(TT, (length(grid.to), np, HT.N))
-    Pto_r = similar(Eto_r)
-    Eto_k = similar(Eto_r)
-    Pto_k = similar(Eto_r)
-    Pωo = similar(Eωo)
-    idcs = CartesianIndices(size(Pto_r)[3:end])
-    Tfwd = convert(Matrix{TT}, transpose(HT.T) .* HT.scaleRK)
-    Tbwd = convert(Matrix{TT}, transpose(HT.T) ./ HT.scaleRK)
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto_r, Pto_k, Eto_r, Eto_k, Eωo, Pωo, idcs,
-                Tfwd, Tbwd)
-
 """
     TransRadial(TT, grid, HT, FT, responses, densityfun, normfun; noise_field=nothing)
 
