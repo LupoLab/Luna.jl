@@ -10,3 +10,5 @@ _git2_*
 docs/build
 *.info
 .vscode/spellright.dict
+.DS_Store
+deps/build.log

@@ -321,6 +321,83 @@ function (s::ShotNoise)(grid::Grid.EnvGrid, FT=nothing)
 end
 
 """
+    generate_noise_field(grid::Grid.RealGrid; rng=GLOBAL_RNG, nmodes=1)
+
+Generate a one-photon-per-mode spectral noise field for the modified shot-noise model
+(Chen & Wise, arXiv:2410.20567).
+
+Returns a complex frequency-domain array with amplitude `√(ħω/δω) × √(2π)/(2δt)` and
+uniformly random spectral phase, matching the convention of [`ShotNoise`](@ref) for a
+real-valued field (rFFT normalisation). When `nmodes > 1`, returns an `(nω, nmodes)` array
+with independent noise per mode for multimode propagation.
+
+Unlike [`ShotNoise`](@ref), which is added to the input field at `z = 0`, this noise field
+is intended to be injected into the **nonlinear operator** at every propagation step via the
+`noise_field` keyword argument. The dispersion operator does not act on this noise,
+preventing artificial FWM phase-matching — the key advantage over the traditional shot-noise
+approach.
+
+The noise field is generated once before propagation and held constant throughout. Different
+random seeds (via `rng`) produce different noise realisations for ensemble/shot-to-shot
+statistics.
+
+# References
+- Chen & Wise, "A simple accurate way to model noise-seeded ultrafast nonlinear processes",
+  arXiv:2410.20567 (2024)
+"""
+function generate_noise_field(grid::Grid.RealGrid; rng=GLOBAL_RNG, nmodes=1)
+    # Frequency spacing on the angular-frequency grid
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    # One-photon-per-mode amplitude: √(ħω/δω), matching ShotNoise
+    amp = @. sqrt(PhysData.ħ * grid.ω / δω)
+    # Scale for rFFT convention (real-valued field, half-spectrum):
+    # factor √(2π)/(2δt) converts from angular-frequency density to DFT bins
+    rFFTamp = sqrt(2π) / 2δt * amp
+    # Uniformly random spectral phase ∈ [0, 2π)
+    # For multimode (nmodes > 1), generate independent noise per mode → (nω, nmodes)
+    if nmodes > 1
+        φ = 2π * rand(rng, length(grid.ω), nmodes)
+        rFFTamp .* exp.(1im .* φ)
+    else
+        φ = 2π * rand(rng, size(grid.ω)...)
+        @. rFFTamp * exp(1im * φ)
+    end
+end
+
+"""
+    generate_noise_field(grid::Grid.EnvGrid; rng=GLOBAL_RNG, nmodes=1)
+
+Generate a one-photon-per-mode spectral noise field for the modified shot-noise model
+(Chen & Wise, arXiv:2410.20567), for envelope-field propagation.
+
+Returns a complex frequency-domain array with amplitude `√(ħω/δω) × √(2π)/δt` and
+uniformly random spectral phase, matching the convention of [`ShotNoise`](@ref) for a
+complex envelope field (full FFT normalisation). Only frequency bins within `grid.sidx`
+(the signal window) receive non-zero noise.
+
+See [`generate_noise_field(::Grid.RealGrid)`](@ref) for details on the modified shot-noise
+model.
+"""
+function generate_noise_field(grid::Grid.EnvGrid; rng=GLOBAL_RNG, nmodes=1)
+    δω = grid.ω[2] - grid.ω[1]
+    δt = grid.t[2] - grid.t[1]
+    amp = zero(grid.ω)
+    # Only populate signal frequencies (grid.sidx masks out negative/out-of-band bins)
+    amp[grid.sidx] = @. sqrt(PhysData.ħ * grid.ω[grid.sidx] / δω)
+    # Scale for full FFT convention (complex envelope):
+    # factor √(2π)/δt converts from angular-frequency density to DFT bins
+    FFTamp = sqrt(2π) / δt * amp
+    if nmodes > 1
+        φ = 2π * rand(rng, length(grid.ω), nmodes)
+        FFTamp .* exp.(1im .* φ)
+    else
+        φ = 2π * rand(rng, size(grid.ω)...)
+        @. FFTamp * exp(1im * φ)
+    end
+end
+
+"""
     SpatioTemporalField(λ0, energy, ϕ, τ0, Ishape)
 
 Represents a spatiotemporal pulse with shape defined by `Ishape`.
