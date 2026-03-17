@@ -534,7 +534,7 @@ Construct a `TransRadial` to calculate the reciprocal-domain nonlinear polarisat
   via inverse FFT and inverse Hankel transform, and stored as `Et_noise`.
   Generate with [`Fields.generate_noise_field`](@ref Luna.Fields.generate_noise_field).
 """
-function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun; noise_field=nothing)
+function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun, pol=false; noise_field=nothing)
     np = pol ? 2 : 1
     Eωo = zeros(ComplexF64, (length(grid.ωo), np, HT.N))
     Eto_r = zeros(TT, (length(grid.to), np, HT.N))
