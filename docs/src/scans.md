@@ -222,6 +222,19 @@ Scans.SlurmExec(@__FILE__, 8; project="")
 ### Julia binary path
 The generated job script uses the full path to the currently running Julia binary (obtained from `Base.julia_cmd()`), rather than relying on `julia` being on `PATH`. This ensures the same Julia version is used on compute nodes. All paths (Julia binary, working directory, project path) are quoted to handle spaces.
 
+### Working directory
+By default, `SlurmExec` creates a subdirectory `<scanname>_slurm` inside the script's directory and places all Slurm-related files there: the generated `.sh` job script, stdout/stderr logs, and the queue file. This keeps the script directory clean when running large scans.
+
+```julia
+# Default: job files go into <scriptdir>/my_scan_slurm/
+Scans.SlurmExec(@__FILE__, 8)
+
+# Explicit working directory:
+Scans.SlurmExec(@__FILE__, 8; workdir="/tmp/my_slurm_run")
+```
+
+The `workdir` is automatically created if it does not exist.
+
 ### Full example
 A complete example with all options:
 ```julia
@@ -244,7 +257,7 @@ runscan(scan) do scanidx, energy, pressure
 end
 ```
 
-The generated Slurm job script will look like:
+The generated Slurm job script (written to `pressure_energy_slurm/pressure_energy.sh`) will look like:
 ```bash
 #!/bin/bash
 #SBATCH --ntasks=1
@@ -252,7 +265,7 @@ The generated Slurm job script will look like:
 #SBATCH -o %x_%a.stdout
 #SBATCH -e %x_%a.stderr
 #SBATCH --array=1-16
-#SBATCH --chdir "/path/to/script/directory"
+#SBATCH --chdir "/path/to/script/directory/pressure_energy_slurm"
 #SBATCH --mem=24G
 ulimit -v unlimited
 export JULIA_NUM_THREADS=1

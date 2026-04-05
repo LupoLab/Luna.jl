@@ -287,14 +287,17 @@ end
     @test ex.ncores == 4
     @test ex.memory == ""
     @test ex.nthreads == 1
+    @test ex.workdir == ""
     # project defaults to current active project
     @test ex.project == dirname(Base.active_project())
 
     # Full keyword args
-    ex2 = Scans.SlurmExec("/tmp/test.jl", 8; memory="24G", project="/custom/env", nthreads=2)
+    ex2 = Scans.SlurmExec("/tmp/test.jl", 8; memory="24G", project="/custom/env",
+                           nthreads=2, workdir="/tmp/mywork")
     @test ex2.memory == "24G"
     @test ex2.project == "/custom/env"
     @test ex2.nthreads == 2
+    @test ex2.workdir == "/tmp/mywork"
 
     # Opt out of project
     ex3 = Scans.SlurmExec("/tmp/test.jl", 4; project="")
@@ -324,11 +327,27 @@ end
 end
 
 ##
+@testset "Slurm workdir resolution" begin
+    # Default: auto-subdirectory based on scan name
+    ex = Scans.SlurmExec("/home/user/scripts/run.jl", 4)
+    @test Scans._resolve_slurm_workdir(ex, "my_scan") == "/home/user/scripts/my_scan_slurm"
+
+    # Explicit workdir
+    ex2 = Scans.SlurmExec("/home/user/scripts/run.jl", 4; workdir="/tmp/custom")
+    @test Scans._resolve_slurm_workdir(ex2, "my_scan") == "/tmp/custom"
+
+    # Spaces in script path
+    ex3 = Scans.SlurmExec("/path/with spaces/run.jl", 4)
+    @test Scans._resolve_slurm_workdir(ex3, "test") == "/path/with spaces/test_slurm"
+end
+
+##
 @testset "Slurm script generation" begin
     # Full options: memory, project, nthreads
     ex = Scans.SlurmExec("/path/with spaces/test.jl", 16;
                          memory="24G", project="/my project/env", nthreads=2)
-    lines = Scans._slurm_script_lines(ex)
+    workdir = "/path/with spaces/myscan_slurm"
+    lines = Scans._slurm_script_lines(ex, workdir)
     script = join(lines, "\n")
 
     # Shebang
@@ -338,8 +357,8 @@ end
     @test any(l -> l == "#SBATCH --cpus-per-task=2", lines)
     @test any(l -> l == "#SBATCH --array=1-16", lines)
     @test any(l -> l == "#SBATCH --mem=24G", lines)
-    # Quoted chdir for spaces
-    @test any(l -> l == "#SBATCH --chdir \"/path/with spaces\"", lines)
+    # Quoted chdir uses workdir, not script dir
+    @test any(l -> l == "#SBATCH --chdir \"/path/with spaces/myscan_slurm\"", lines)
     # ulimit
     @test any(l -> l == "ulimit -v unlimited", lines)
     # Thread pinning exports
@@ -356,7 +375,7 @@ end
 
     # Minimal options: no memory, empty project
     ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
-    lines_min = Scans._slurm_script_lines(ex_min)
+    lines_min = Scans._slurm_script_lines(ex_min, "/tmp/workdir")
     script_min = join(lines_min, "\n")
     # No --mem line
     @test !any(l -> startswith(l, "#SBATCH --mem"), lines_min)
@@ -373,6 +392,8 @@ end
     # Julia binary is still quoted
     @test startswith(lines_min[end], "\"")
     @test endswith(lines_min[end], "simple.jl --queue")
+    # chdir points to workdir
+    @test any(l -> l == "#SBATCH --chdir \"/tmp/workdir\"", lines_min)
 
     # ulimit comes before exports (correct ordering)
     idx_ulimit = findfirst(l -> l == "ulimit -v unlimited", lines)

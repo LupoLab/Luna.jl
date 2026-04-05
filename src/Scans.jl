@@ -80,7 +80,7 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1)
+    SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1, workdir="")
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks.
@@ -96,6 +96,10 @@ array tasks.
   `#SBATCH --cpus-per-task` and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
   `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in the job script. The default of `1`
   prevents over-subscription when many array tasks run concurrently on a shared node.
+- `workdir::String`: Working directory for the Slurm job. The generated `.sh` script,
+  stdout/stderr files, and queue file are all placed here. If `""` (the default), a
+  subdirectory `<scanname>_slurm` is automatically created inside the script's directory.
+  Pass an explicit path to use a custom directory.
 
 # Generated job script
 The generated SBATCH script includes:
@@ -116,10 +120,12 @@ The generated SBATCH script includes:
 # Examples
 ```julia
 # Minimal: uses current project, 1 thread per task, no memory limit
+# Job files go into <scriptdir>/my_scan_slurm/
 scan = Scan("my_scan", SlurmExec(@__FILE__, 8); energy=energies)
 
-# Full: 24 GB per task, custom project, 2 threads
-scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env", nthreads=2);
+# Full: 24 GB per task, custom project, 2 threads, custom workdir
+scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env",
+                                  nthreads=2, workdir="/tmp/my_slurm_run");
             energy=energies)
 ```
 """
@@ -129,10 +135,11 @@ struct SlurmExec <: AbstractExec
     memory::String
     project::String
     nthreads::Int
+    workdir::String
 end
 
-function SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1)
-    SlurmExec(scriptfile, ncores, memory, project, nthreads)
+function SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1, workdir="")
+    SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir)
 end
 
 """
@@ -505,16 +512,16 @@ function _parse_memory_for_heap_hint(memory::String)
 end
 
 """
-    _slurm_script_lines(exec::SlurmExec) -> Vector{String}
+    _slurm_script_lines(exec::SlurmExec, workdir::String) -> Vector{String}
 
-Build the lines of the SBATCH job script for a `SlurmExec`. This is separated from
-`runscan` to allow testing the generated script content without a Slurm installation.
+Build the lines of the SBATCH job script for a `SlurmExec` with the given resolved
+`workdir`. This is separated from `runscan` to allow testing the generated script content
+without a Slurm installation.
 """
-function _slurm_script_lines(exec::SlurmExec)
+function _slurm_script_lines(exec::SlurmExec, workdir::String)
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
     script = exec.scriptfile
-    dir = dirname(script)
     cores = exec.ncores
     nthreads = exec.nthreads
     lines = [
@@ -524,7 +531,7 @@ function _slurm_script_lines(exec::SlurmExec)
         "#SBATCH -o %x_%a.stdout",
         "#SBATCH -e %x_%a.stderr",
         "#SBATCH --array=1-$cores",
-        "#SBATCH --chdir \"$dir\"",
+        "#SBATCH --chdir \"$workdir\"",
     ]
     if !isempty(exec.memory)
         push!(lines, "#SBATCH --mem=$(exec.memory)")
@@ -555,14 +562,30 @@ function _slurm_script_lines(exec::SlurmExec)
     return lines
 end
 
+"""
+    _resolve_slurm_workdir(exec::SlurmExec, scanname::String) -> String
+
+Resolve the working directory for a Slurm scan. If `exec.workdir` is empty, returns
+`joinpath(dirname(exec.scriptfile), "\$(scanname)_slurm")`; otherwise returns `exec.workdir`.
+"""
+function _resolve_slurm_workdir(exec::SlurmExec, scanname::String)
+    if isempty(exec.workdir)
+        joinpath(dirname(exec.scriptfile), "$(scanname)_slurm")
+    else
+        exec.workdir
+    end
+end
+
 function runscan(f, scan::Scan{SlurmExec})
     script = scan.exec.scriptfile
     name = scan.name
+    workdir = _resolve_slurm_workdir(scan.exec, name)
+    mkpath(workdir)
     @info "Submitting slurm job for $script running on $(scan.exec.ncores) cores."
     # Adding the --queue command-line argument below means that when running the Slurm job,
     # the SlurmExec is ignored even if explicitly defined inside the script.
-    lines = _slurm_script_lines(scan.exec)
-    subfile = joinpath(dirname(script), "$name.sh")
+    lines = _slurm_script_lines(scan.exec, workdir)
+    subfile = joinpath(workdir, "$name.sh")
     @info "Writing job file to $subfile..."
     open(subfile, "w") do file
         for l in lines
