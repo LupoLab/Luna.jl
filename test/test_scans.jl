@@ -321,6 +321,14 @@ end
     Scans.SlurmExec("/tmp/test.jl", 4; memory="24G")
     Scans.SlurmExec("/tmp/test.jl", 4; memory="500")
     Scans.SlurmExec("/tmp/test.jl", 4; memory="100M")
+
+    # arraymode defaults to :queue
+    @test ex.arraymode == :queue
+    # Explicit batch mode
+    ex_batch = Scans.SlurmExec("/tmp/test.jl", 64; arraymode=:batch)
+    @test ex_batch.arraymode == :batch
+    # Invalid arraymode
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; arraymode=:invalid)
 end
 
 ##
@@ -417,4 +425,17 @@ end
     idx_ulimit = findfirst(l -> l == "ulimit -v unlimited", lines)
     idx_export = findfirst(l -> startswith(l, "export JULIA_NUM_THREADS"), lines)
     @test idx_ulimit < idx_export
+
+    # Batch mode: uses --batch instead of --queue
+    ex_batch = Scans.SlurmExec("/tmp/run.jl", 64; arraymode=:batch, project="")
+    lines_batch = Scans._slurm_script_lines(ex_batch, "/tmp/work")
+    juliacmd_batch = lines_batch[end]
+    @test occursin("--batch 64,\$SLURM_ARRAY_TASK_ID", juliacmd_batch)
+    @test !occursin("--queue", juliacmd_batch)
+
+    # Queue mode (default): uses --queue
+    ex_queue = Scans.SlurmExec("/tmp/run.jl", 8; project="")
+    lines_queue = Scans._slurm_script_lines(ex_queue, "/tmp/work")
+    @test endswith(lines_queue[end], "--queue")
+    @test !occursin("--batch", lines_queue[end])
 end

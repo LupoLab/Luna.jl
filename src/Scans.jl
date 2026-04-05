@@ -80,7 +80,7 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, workdir="")
+    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, workdir="", arraymode=:queue)
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks.
@@ -102,6 +102,12 @@ array tasks.
   stdout/stderr files, and queue file are all placed here. If `""` (the default), a
   subdirectory `<scanname>_slurm` is automatically created inside the script's directory.
   Pass an explicit path to use a custom directory.
+- `arraymode::Symbol`: How scan points are distributed across array tasks (default `:queue`).
+  - `:queue`: Array tasks dynamically pick up work from a shared file-based queue
+    ([`QueueExec`](@ref)). Good when tasks have varying run times.
+  - `:batch`: Each array task gets a pre-assigned chunk of scan points (via `--batch`).
+    With `ncores == length(scan)`, each task runs exactly one scan point. No queue file
+    or file locking is needed, giving complete memory isolation between tasks.
 
 # Generated job script
 The generated SBATCH script includes:
@@ -113,17 +119,20 @@ The generated SBATCH script includes:
   `julia`, ensuring the same Julia version is used on compute nodes.
 - All paths (Julia binary, `--chdir` directory, `--project` path) are quoted to handle
   spaces in paths.
-- Each array task runs the script with `--queue`, so internally a [`QueueExec`](@ref) is
-  used for file-based load balancing across array tasks.
+- Each array task runs the script with `--queue` or `--batch` depending on `arraymode`,
+  using the corresponding execution mode internally.
 
 !!! note
     `scriptfile` must **always** be `@__FILE__`
 
 # Examples
 ```julia
-# Minimal: uses current project, 1 thread per task, no memory limit
-# Job files go into <scriptdir>/my_scan_slurm/
+# Minimal: uses current project, 1 thread per task, queue mode (default)
 scan = Scan("my_scan", SlurmExec(@__FILE__, 8); energy=energies)
+
+# Batch mode: one array task per scan point, complete memory isolation
+scan = Scan("my_scan", SlurmExec(@__FILE__, length(energies); arraymode=:batch,
+                                  memory="24G"); energy=energies)
 
 # Full: 24 GB per task, custom project, 2 threads, custom workdir
 scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env",
@@ -138,6 +147,7 @@ struct SlurmExec <: AbstractExec
     project::String
     nthreads::Int
     workdir::String
+    arraymode::Symbol
 end
 
 function SlurmExec(scriptfile, ncores;
@@ -146,12 +156,14 @@ function SlurmExec(scriptfile, ncores;
                        isnothing(ap) ? "" : dirname(ap)
                    end,
                    nthreads=1,
-                   workdir="")
+                   workdir="",
+                   arraymode=:queue)
     nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
     if !isempty(memory) && !occursin(r"^\d+\s*[KMGT]?$"i, strip(memory))
         throw(ArgumentError("`memory` must match format \"<number>[K|M|G|T]\", got \"$memory\""))
     end
-    SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir)
+    arraymode in (:queue, :batch) || throw(ArgumentError("`arraymode` must be :queue or :batch, got :$arraymode"))
+    SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir, arraymode)
 end
 
 """
@@ -570,7 +582,12 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     if !isempty(exec.project)
         juliacmd *= " --project=\"$(exec.project)\""
     end
-    juliacmd *= " \"$(abspath(script))\" --queue"
+    juliacmd *= " \"$(abspath(script))\""
+    if exec.arraymode == :batch
+        juliacmd *= " --batch $cores,\$SLURM_ARRAY_TASK_ID"
+    else
+        juliacmd *= " --queue"
+    end
     push!(lines, juliacmd)
     return lines
 end

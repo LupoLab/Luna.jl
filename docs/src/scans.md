@@ -158,7 +158,7 @@ julia> HDF5.h5open("pressure_energy_example_collected.h5", "r") do fi
 Importantly, in our example here this file is less than one megabyte in size, whereas the `scanoutput` folder totals over 600 megabytes. To store the statistics as well, `stats` can be given as a special keyword argument to `scansave`. Because the arrays are not always the same size (see above), in the file these are stored in an array which is large enough to fit the longest and padded with `NaN`s. The number of actual statisics points available for each simulation is then stored in a special dataset `valid_length`.
 
 ## Execution on Slurm
-[`SlurmExec`](@ref Scans.SlurmExec) creates and submits a Slurm array job, where each array task processes scan points via a file-based queue (internally using [`QueueExec`](@ref Scans.QueueExec)). This means the array tasks automatically balance load among themselves -- if one simulation finishes early, that task picks up the next unprocessed scan point.
+[`SlurmExec`](@ref Scans.SlurmExec) creates and submits a Slurm array job. By default, array tasks process scan points via a file-based queue (`:queue` mode, internally using [`QueueExec`](@ref Scans.QueueExec)). Alternatively, `:batch` mode pre-assigns scan points to array tasks, giving each task its own fixed chunk with no shared state.
 
 ### Basic usage
 ```julia
@@ -235,18 +235,40 @@ Scans.SlurmExec(@__FILE__, 8; workdir="/tmp/my_slurm_run")
 
 The `workdir` is automatically created if it does not exist.
 
+### Array mode
+The `arraymode` keyword controls how scan points are distributed across Slurm array tasks:
+
+- **`:queue`** (default): Array tasks dynamically pick up work from a shared file-based queue. This provides automatic load balancing — if one simulation finishes early, that task picks up the next unprocessed scan point. Uses [`QueueExec`](@ref Scans.QueueExec) internally.
+
+- **`:batch`**: Each array task gets a pre-assigned chunk of scan points. With `ncores == length(scan)`, each task runs exactly one scan point. No queue file or file locking is needed, giving complete memory isolation between tasks. Uses [`BatchExec`](@ref Scans.BatchExec) internally.
+
+`:batch` mode is particularly useful when:
+- You want strict memory isolation (each scan point in its own process).
+- Simulations have similar run times, so load balancing is not critical.
+- You are running on a shared filesystem where file locking can be slow.
+
+```julia
+# Queue mode (default): 8 tasks share the workload dynamically
+Scans.SlurmExec(@__FILE__, 8)
+
+# Batch mode: one task per scan point, complete isolation
+Scans.SlurmExec(@__FILE__, length(energies); arraymode=:batch, memory="24G")
+```
+
 ### Full example
-A complete example with all options:
+A complete example with all options, using `:batch` mode for one task per scan point:
 ```julia
 using Luna
 
 energies = collect(range(50e-6, 200e-6; length=64))
 pressures = collect(0.6:0.4:1.4)
 
-exec = Scans.SlurmExec(@__FILE__, 16;
-                       memory="24G",    # 24 GB per task, GC hint at ~19 GB
-                       nthreads=1,       # single-threaded (default)
-                       project=".")      # use current directory as project
+N = length(energies) * length(pressures)  # total number of scan points
+exec = Scans.SlurmExec(@__FILE__, N;
+                       memory="24G",       # 24 GB per task, GC hint at ~19 GB
+                       nthreads=1,          # single-threaded (default)
+                       project=".",          # use current directory as project
+                       arraymode=:batch)    # one task per scan point
 
 scan = Scan("pressure_energy", exec; energy=energies)
 addvariable!(scan, :pressure, pressures)
@@ -264,7 +286,7 @@ The generated Slurm job script (written to `pressure_energy_slurm/pressure_energ
 #SBATCH --cpus-per-task=1
 #SBATCH -o %x_%a.stdout
 #SBATCH -e %x_%a.stderr
-#SBATCH --array=1-16
+#SBATCH --array=1-192
 #SBATCH --chdir "/path/to/script/directory/pressure_energy_slurm"
 #SBATCH --mem=24G
 ulimit -v unlimited
@@ -272,8 +294,9 @@ export JULIA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-"/path/to/julia" --heap-size-hint=19G --project="." "/path/to/script/directory/script.jl" --queue
+"/path/to/julia" --heap-size-hint=19G --project="." "/path/to/script/directory/script.jl" --batch 192,$SLURM_ARRAY_TASK_ID
 ```
+With `arraymode=:queue` (the default), the last line would instead end with `--queue`.
 
 ### Combining with SSHExec
 `SlurmExec` can be wrapped in [`SSHExec`](@ref Scans.SSHExec) to transfer the script to a remote Slurm cluster and submit it there:
