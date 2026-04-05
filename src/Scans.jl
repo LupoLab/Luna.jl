@@ -570,7 +570,7 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     if !isempty(exec.project)
         juliacmd *= " --project=\"$(exec.project)\""
     end
-    juliacmd *= " \"$(basename(script))\" --queue"
+    juliacmd *= " \"$(abspath(script))\" --queue"
     push!(lines, juliacmd)
     return lines
 end

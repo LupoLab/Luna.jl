@@ -272,7 +272,7 @@ export JULIA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-"/path/to/julia" --heap-size-hint=19G --project="." "script.jl" --queue
+"/path/to/julia" --heap-size-hint=19G --project="." "/path/to/script/directory/script.jl" --queue
 ```
 
 ### Combining with SSHExec

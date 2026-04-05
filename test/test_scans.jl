@@ -388,7 +388,8 @@ end
     @test occursin(julia_path, juliacmd)
     @test occursin("--heap-size-hint=19G", juliacmd)
     @test occursin("--project=\"/my project/env\"", juliacmd)
-    @test endswith(juliacmd, "\"test.jl\" --queue")
+    # Script path is absolute (so it can be found from the workdir)
+    @test endswith(juliacmd, "\"/path/with spaces/test.jl\" --queue")
 
     # Minimal options: no memory, empty project
     ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
@@ -408,7 +409,7 @@ end
     @test any(l -> l == "ulimit -v unlimited", lines_min)
     # Julia binary is still quoted
     @test startswith(lines_min[end], "\"")
-    @test endswith(lines_min[end], "\"simple.jl\" --queue")
+    @test endswith(lines_min[end], "\"/tmp/simple.jl\" --queue")
     # chdir points to workdir
     @test any(l -> l == "#SBATCH --chdir \"/tmp/workdir\"", lines_min)
 
