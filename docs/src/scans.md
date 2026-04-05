@@ -187,7 +187,7 @@ Setting `memory` does three things:
 2. Automatically sets Julia's `--heap-size-hint=19G` (80% of `--mem`), which tells the garbage collector to be more aggressive before reaching the limit.
 3. The generated script also includes `ulimit -v unlimited`, which prevents Julia from crashing at startup due to restrictive virtual memory limits. This is safe because it only affects the virtual address space limit (which Julia needs to be large), **not** the physical RAM limit enforced by Slurm's cgroups.
 
-The `memory` string supports `K`, `M`, `G`, and `T` suffixes, matching Slurm's `--mem` format.
+The `memory` string supports `K`, `M`, `G`, and `T` suffixes, matching Slurm's `--mem` format. A bare number (e.g. `"24000"`) is treated as megabytes, matching Slurm's default convention. Invalid values (e.g. `"bad"`, `"12.5G"`) will raise an `ArgumentError` at construction time.
 
 ### Thread pinning
 By default, `SlurmExec` sets `nthreads=1` and exports the following environment variables in the job script:
@@ -206,7 +206,7 @@ Scans.SlurmExec(@__FILE__, 8; nthreads=4, memory="24G")
 This sets `#SBATCH --cpus-per-task=4` and all thread environment variables to `4`.
 
 ### Julia project environment
-By default, `SlurmExec` automatically detects the active Julia project environment (via `Base.active_project()`) and passes `--project=<path>` to the Julia command in the job script. This ensures that Slurm workers use the same package versions as the submission script.
+By default, `SlurmExec` automatically detects the active Julia project environment (via `Base.active_project()`) and passes `--project=<path>` to the Julia command in the job script. This ensures that Slurm workers use the same package versions as the submission script. If no project is active (`Base.active_project()` returns `nothing`), the default is `""` and `--project` is omitted.
 
 ```julia
 # Uses current project automatically (the default):
@@ -272,7 +272,7 @@ export JULIA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-"/path/to/julia" --heap-size-hint=19G --project="." script.jl --queue
+"/path/to/julia" --heap-size-hint=19G --project="." "script.jl" --queue
 ```
 
 ### Combining with SSHExec

@@ -288,8 +288,10 @@ end
     @test ex.memory == ""
     @test ex.nthreads == 1
     @test ex.workdir == ""
-    # project defaults to current active project
-    @test ex.project == dirname(Base.active_project())
+    # project defaults to current active project (or "" if nothing)
+    ap = Base.active_project()
+    expected_project = isnothing(ap) ? "" : dirname(ap)
+    @test ex.project == expected_project
 
     # Full keyword args
     ex2 = Scans.SlurmExec("/tmp/test.jl", 8; memory="24G", project="/custom/env",
@@ -306,6 +308,19 @@ end
     # SSHExec wrapping
     ssh = Scans.SSHExec(ex2, "myhost", "scans")
     @test ssh.localexec === ex2
+
+    # Validation: nthreads must be >= 1
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; nthreads=0)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; nthreads=-1)
+
+    # Validation: memory format
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="bad")
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="24 G B")
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="12.5G")
+    # Valid memory formats should not throw
+    Scans.SlurmExec("/tmp/test.jl", 4; memory="24G")
+    Scans.SlurmExec("/tmp/test.jl", 4; memory="500")
+    Scans.SlurmExec("/tmp/test.jl", 4; memory="100M")
 end
 
 ##
@@ -314,7 +329,7 @@ end
     @test Scans._parse_memory_for_heap_hint("10M") == "8M"
     @test Scans._parse_memory_for_heap_hint("100G") == "80G"
     @test Scans._parse_memory_for_heap_hint("2T") == "1T"
-    @test Scans._parse_memory_for_heap_hint("500") == "400"
+    @test Scans._parse_memory_for_heap_hint("500") == "400M"
     @test Scans._parse_memory_for_heap_hint("500K") == "400K"
     # Edge cases
     @test Scans._parse_memory_for_heap_hint("1T") == ""  # floor(0.8) = 0 < 1
@@ -368,10 +383,12 @@ end
     @test any(l -> l == "export MKL_NUM_THREADS=2", lines)
     # Julia command (last line)
     juliacmd = lines[end]
-    @test startswith(juliacmd, "\"")  # Julia binary is quoted
+    # Julia command uses actual julia executable path (no backticks or stray quotes)
+    julia_path = first(Base.julia_cmd().exec)
+    @test occursin(julia_path, juliacmd)
     @test occursin("--heap-size-hint=19G", juliacmd)
     @test occursin("--project=\"/my project/env\"", juliacmd)
-    @test endswith(juliacmd, "test.jl --queue")
+    @test endswith(juliacmd, "\"test.jl\" --queue")
 
     # Minimal options: no memory, empty project
     ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
@@ -391,7 +408,7 @@ end
     @test any(l -> l == "ulimit -v unlimited", lines_min)
     # Julia binary is still quoted
     @test startswith(lines_min[end], "\"")
-    @test endswith(lines_min[end], "simple.jl --queue")
+    @test endswith(lines_min[end], "\"simple.jl\" --queue")
     # chdir points to workdir
     @test any(l -> l == "#SBATCH --chdir \"/tmp/workdir\"", lines_min)
 

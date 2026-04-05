@@ -80,7 +80,7 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1, workdir="")
+    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, workdir="")
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks.
@@ -88,11 +88,13 @@ array tasks.
 # Keyword arguments
 - `memory::String`: Memory per task, e.g. `"24G"`. Sets `#SBATCH --mem` and automatically
   derives `--heap-size-hint` (at 80% of `memory`) for the Julia process. Supports suffixes
-  `K`, `M`, `G`, `T`.
+  `K`, `M`, `G`, `T`. A bare number (e.g. `"24000"`) is treated as megabytes, matching
+  Slurm's default convention. Must match the format `digits[K|M|G|T]` when non-empty; an
+  `ArgumentError` is thrown otherwise.
 - `project::String`: Path to a Julia project environment. Defaults to the currently active
-  project (`dirname(Base.active_project())`), so Slurm workers use the same environment as
-  the submission script. Pass `""` to omit the `--project` flag.
-- `nthreads::Int`: Number of threads per array task (default `1`). Sets
+  project (`dirname(Base.active_project())`), or `""` if no project is active. Pass `""`
+  to omit the `--project` flag.
+- `nthreads::Int`: Number of threads per array task (default `1`, must be ≥ 1). Sets
   `#SBATCH --cpus-per-task` and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
   `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in the job script. The default of `1`
   prevents over-subscription when many array tasks run concurrently on a shared node.
@@ -138,7 +140,17 @@ struct SlurmExec <: AbstractExec
     workdir::String
 end
 
-function SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1, workdir="")
+function SlurmExec(scriptfile, ncores;
+                   memory="",
+                   project=let ap = Base.active_project()
+                       isnothing(ap) ? "" : dirname(ap)
+                   end,
+                   nthreads=1,
+                   workdir="")
+    nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
+    if !isempty(memory) && !occursin(r"^\d+\s*[KMGT]?$"i, strip(memory))
+        throw(ArgumentError("`memory` must match format \"<number>[K|M|G|T]\", got \"$memory\""))
+    end
     SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir)
 end
 
@@ -506,6 +518,8 @@ function _parse_memory_for_heap_hint(memory::String)
     isnothing(m) && return ""
     value = parse(Int, m.captures[1])
     unit = uppercase(m.captures[2])
+    # Slurm treats bare numbers as megabytes; mirror that for the heap hint
+    isempty(unit) && (unit = "M")
     hint = floor(Int, value * 0.8)
     hint < 1 && return ""
     return "$(hint)$(unit)"
@@ -519,8 +533,7 @@ Build the lines of the SBATCH job script for a `SlurmExec` with the given resolv
 without a Slurm installation.
 """
 function _slurm_script_lines(exec::SlurmExec, workdir::String)
-    cmd = split(string(Base.julia_cmd()))[1]
-    julia = strip(cmd, ['`', '\''])
+    julia = first(Base.julia_cmd().exec)
     script = exec.scriptfile
     cores = exec.ncores
     nthreads = exec.nthreads
@@ -557,7 +570,7 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     if !isempty(exec.project)
         juliacmd *= " --project=\"$(exec.project)\""
     end
-    juliacmd *= " $(basename(script)) --queue"
+    juliacmd *= " \"$(basename(script))\" --queue"
     push!(lines, juliacmd)
     return lines
 end
