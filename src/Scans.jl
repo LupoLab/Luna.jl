@@ -504,18 +504,19 @@ function _parse_memory_for_heap_hint(memory::String)
     return "$(hint)$(unit)"
 end
 
-function runscan(f, scan::Scan{SlurmExec})
-    # make submission file for slurm
+"""
+    _slurm_script_lines(exec::SlurmExec) -> Vector{String}
+
+Build the lines of the SBATCH job script for a `SlurmExec`. This is separated from
+`runscan` to allow testing the generated script content without a Slurm installation.
+"""
+function _slurm_script_lines(exec::SlurmExec)
     cmd = split(string(Base.julia_cmd()))[1]
     julia = strip(cmd, ['`', '\''])
-    script = scan.exec.scriptfile
+    script = exec.scriptfile
     dir = dirname(script)
-    cores = scan.exec.ncores
-    nthreads = scan.exec.nthreads
-    name = scan.name
-    @info "Submitting slurm job for $script running on $cores cores."
-    # Adding the --queue command-line argument below means that when running the Slurm job,
-    # the SlurmExec is ignored even if explicitly defined inside the script.
+    cores = exec.ncores
+    nthreads = exec.nthreads
     lines = [
         "#!/bin/bash",
         "#SBATCH --ntasks=1",
@@ -525,8 +526,8 @@ function runscan(f, scan::Scan{SlurmExec})
         "#SBATCH --array=1-$cores",
         "#SBATCH --chdir \"$dir\"",
     ]
-    if !isempty(scan.exec.memory)
-        push!(lines, "#SBATCH --mem=$(scan.exec.memory)")
+    if !isempty(exec.memory)
+        push!(lines, "#SBATCH --mem=$(exec.memory)")
     end
     # Prevent Julia startup crash from restrictive system ulimit on virtual memory.
     # This does NOT bypass Slurm's cgroup --mem limit (which tracks RSS, not VIRT).
@@ -540,18 +541,28 @@ function runscan(f, scan::Scan{SlurmExec})
     ])
     # Build Julia command (quote paths to handle spaces)
     juliacmd = "\"$julia\""
-    if !isempty(scan.exec.memory)
-        heaphint = _parse_memory_for_heap_hint(scan.exec.memory)
+    if !isempty(exec.memory)
+        heaphint = _parse_memory_for_heap_hint(exec.memory)
         if !isempty(heaphint)
             juliacmd *= " --heap-size-hint=$heaphint"
         end
     end
-    if !isempty(scan.exec.project)
-        juliacmd *= " --project=\"$(scan.exec.project)\""
+    if !isempty(exec.project)
+        juliacmd *= " --project=\"$(exec.project)\""
     end
     juliacmd *= " $(basename(script)) --queue"
     push!(lines, juliacmd)
-    subfile = joinpath(dir, "$name.sh")
+    return lines
+end
+
+function runscan(f, scan::Scan{SlurmExec})
+    script = scan.exec.scriptfile
+    name = scan.name
+    @info "Submitting slurm job for $script running on $(scan.exec.ncores) cores."
+    # Adding the --queue command-line argument below means that when running the Slurm job,
+    # the SlurmExec is ignored even if explicitly defined inside the script.
+    lines = _slurm_script_lines(scan.exec)
+    subfile = joinpath(dirname(script), "$name.sh")
     @info "Writing job file to $subfile..."
     open(subfile, "w") do file
         for l in lines

@@ -278,3 +278,104 @@ end
     @test all(startswith.(readdir(td), "newname"))
     end
 end
+
+##
+@testset "SlurmExec construction" begin
+    # Backward compatibility: positional args only
+    ex = Scans.SlurmExec("/tmp/test.jl", 4)
+    @test ex.scriptfile == "/tmp/test.jl"
+    @test ex.ncores == 4
+    @test ex.memory == ""
+    @test ex.nthreads == 1
+    # project defaults to current active project
+    @test ex.project == dirname(Base.active_project())
+
+    # Full keyword args
+    ex2 = Scans.SlurmExec("/tmp/test.jl", 8; memory="24G", project="/custom/env", nthreads=2)
+    @test ex2.memory == "24G"
+    @test ex2.project == "/custom/env"
+    @test ex2.nthreads == 2
+
+    # Opt out of project
+    ex3 = Scans.SlurmExec("/tmp/test.jl", 4; project="")
+    @test ex3.project == ""
+
+    # SSHExec wrapping
+    ssh = Scans.SSHExec(ex2, "myhost", "scans")
+    @test ssh.localexec === ex2
+end
+
+##
+@testset "heap-size-hint parsing" begin
+    @test Scans._parse_memory_for_heap_hint("24G") == "19G"
+    @test Scans._parse_memory_for_heap_hint("10M") == "8M"
+    @test Scans._parse_memory_for_heap_hint("100G") == "80G"
+    @test Scans._parse_memory_for_heap_hint("2T") == "1T"
+    @test Scans._parse_memory_for_heap_hint("500") == "400"
+    @test Scans._parse_memory_for_heap_hint("500K") == "400K"
+    # Edge cases
+    @test Scans._parse_memory_for_heap_hint("1T") == ""  # floor(0.8) = 0 < 1
+    @test Scans._parse_memory_for_heap_hint("") == ""
+    @test Scans._parse_memory_for_heap_hint("abc") == ""
+    @test Scans._parse_memory_for_heap_hint("12.5G") == ""  # no float support
+    # Case insensitive
+    @test Scans._parse_memory_for_heap_hint("24g") == "19G"
+    @test Scans._parse_memory_for_heap_hint("10m") == "8M"
+end
+
+##
+@testset "Slurm script generation" begin
+    # Full options: memory, project, nthreads
+    ex = Scans.SlurmExec("/path/with spaces/test.jl", 16;
+                         memory="24G", project="/my project/env", nthreads=2)
+    lines = Scans._slurm_script_lines(ex)
+    script = join(lines, "\n")
+
+    # Shebang
+    @test lines[1] == "#!/bin/bash"
+    # SBATCH directives
+    @test any(l -> l == "#SBATCH --ntasks=1", lines)
+    @test any(l -> l == "#SBATCH --cpus-per-task=2", lines)
+    @test any(l -> l == "#SBATCH --array=1-16", lines)
+    @test any(l -> l == "#SBATCH --mem=24G", lines)
+    # Quoted chdir for spaces
+    @test any(l -> l == "#SBATCH --chdir \"/path/with spaces\"", lines)
+    # ulimit
+    @test any(l -> l == "ulimit -v unlimited", lines)
+    # Thread pinning exports
+    @test any(l -> l == "export JULIA_NUM_THREADS=2", lines)
+    @test any(l -> l == "export OMP_NUM_THREADS=2", lines)
+    @test any(l -> l == "export OPENBLAS_NUM_THREADS=2", lines)
+    @test any(l -> l == "export MKL_NUM_THREADS=2", lines)
+    # Julia command (last line)
+    juliacmd = lines[end]
+    @test startswith(juliacmd, "\"")  # Julia binary is quoted
+    @test occursin("--heap-size-hint=19G", juliacmd)
+    @test occursin("--project=\"/my project/env\"", juliacmd)
+    @test endswith(juliacmd, "test.jl --queue")
+
+    # Minimal options: no memory, empty project
+    ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
+    lines_min = Scans._slurm_script_lines(ex_min)
+    script_min = join(lines_min, "\n")
+    # No --mem line
+    @test !any(l -> startswith(l, "#SBATCH --mem"), lines_min)
+    # No --heap-size-hint
+    @test !occursin("--heap-size-hint", lines_min[end])
+    # No --project
+    @test !occursin("--project", lines_min[end])
+    # cpus-per-task defaults to 1
+    @test any(l -> l == "#SBATCH --cpus-per-task=1", lines_min)
+    # Thread exports default to 1
+    @test any(l -> l == "export JULIA_NUM_THREADS=1", lines_min)
+    # ulimit is always present
+    @test any(l -> l == "ulimit -v unlimited", lines_min)
+    # Julia binary is still quoted
+    @test startswith(lines_min[end], "\"")
+    @test endswith(lines_min[end], "simple.jl --queue")
+
+    # ulimit comes before exports (correct ordering)
+    idx_ulimit = findfirst(l -> l == "ulimit -v unlimited", lines)
+    idx_export = findfirst(l -> startswith(l, "export JULIA_NUM_THREADS"), lines)
+    @test idx_ulimit < idx_export
+end
