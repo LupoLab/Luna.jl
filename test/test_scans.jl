@@ -422,7 +422,8 @@ end
                               project=".", memory="", nthreads=1)
     lines_rel = Scans._slurm_script_lines(ex_rel, "/home/user/scripts/test_slurm")
     juliacmd_rel = lines_rel[end]
-    @test occursin("--project=\"/home/user/scripts\"", juliacmd_rel)
+    resolved_project = abspath(joinpath("/home/user/scripts", "."))
+    @test occursin("--project=\"$resolved_project\"", juliacmd_rel)
 
     # Minimal options: no memory, empty project
     ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
