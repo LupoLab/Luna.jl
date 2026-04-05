@@ -83,17 +83,19 @@ end
     SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, workdir="", arraymode=:queue)
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
-array tasks.
+array tasks (`ncores` must be ≥ 1).
 
 # Keyword arguments
 - `memory::String`: Memory per task, e.g. `"24G"`. Sets `#SBATCH --mem` and automatically
   derives `--heap-size-hint` (at 80% of `memory`) for the Julia process. Supports suffixes
   `K`, `M`, `G`, `T`. A bare number (e.g. `"24000"`) is treated as megabytes, matching
-  Slurm's default convention. Must match the format `digits[K|M|G|T]` when non-empty; an
-  `ArgumentError` is thrown otherwise.
+  Slurm's default convention. Must match the strict format `<digits>[K|M|G|T]` when
+  non-empty (no internal whitespace); the value is normalized at construction time
+  (stripped and uppercased). An `ArgumentError` is thrown for invalid values.
 - `project::String`: Path to a Julia project environment. Defaults to the currently active
   project (`dirname(Base.active_project())`), or `""` if no project is active. Pass `""`
-  to omit the `--project` flag.
+  to omit the `--project` flag. Relative paths are resolved against `dirname(scriptfile)`
+  when generating the job script. Must not contain double quotes or newlines.
 - `nthreads::Int`: Number of threads per array task (default `1`, must be ≥ 1). Sets
   `#SBATCH --cpus-per-task` and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
   `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in the job script. The default of `1`
@@ -101,7 +103,8 @@ array tasks.
 - `workdir::String`: Working directory for the Slurm job. The generated `.sh` script,
   stdout/stderr files, and queue file are all placed here. If `""` (the default), a
   subdirectory `<scanname>_slurm` is automatically created inside the script's directory.
-  Pass an explicit path to use a custom directory.
+  Pass an explicit path to use a custom directory. Must not contain double quotes or
+  newlines.
 - `arraymode::Symbol`: How scan points are distributed across array tasks (default `:queue`).
   - `:queue`: Array tasks dynamically pick up work from a shared file-based queue
     ([`QueueExec`](@ref)). Good when tasks have varying run times.
@@ -158,9 +161,21 @@ function SlurmExec(scriptfile, ncores;
                    nthreads=1,
                    workdir="",
                    arraymode=:queue)
+    ncores >= 1 || throw(ArgumentError("`ncores` must be ≥ 1, got $ncores"))
     nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
-    if !isempty(memory) && !occursin(r"^\d+\s*[KMGT]?$"i, strip(memory))
-        throw(ArgumentError("`memory` must match format \"<number>[K|M|G|T]\", got \"$memory\""))
+    # Normalize and validate memory: strip whitespace, enforce strict format
+    memory = strip(memory)
+    if !isempty(memory)
+        m = match(r"^(\d+)([KMGT]?)$"i, memory)
+        isnothing(m) && throw(ArgumentError(
+            "`memory` must match format \"<number>[K|M|G|T]\", got \"$memory\""))
+        memory = m.captures[1] * uppercase(m.captures[2])
+    end
+    # Validate project and workdir: no quotes or newlines (shell injection prevention)
+    for (name, val) in [("project", project), ("workdir", workdir)]
+        if occursin(r"[\"\n\r]", val)
+            throw(ArgumentError("`$name` must not contain quotes or newlines, got \"$val\""))
+        end
     end
     arraymode in (:queue, :batch) || throw(ArgumentError("`arraymode` must be :queue or :batch, got :$arraymode"))
     SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir, arraymode)
@@ -532,9 +547,17 @@ function _parse_memory_for_heap_hint(memory::String)
     unit = uppercase(m.captures[2])
     # Slurm treats bare numbers as megabytes; mirror that for the heap hint
     isempty(unit) && (unit = "M")
-    hint = floor(Int, value * 0.8)
-    hint < 1 && return ""
-    return "$(hint)$(unit)"
+    units = ["K", "M", "G", "T"]
+    uidx = findfirst(==(unit), units)
+    isnothing(uidx) && return ""
+    # Compute 80% hint; if < 1 in current unit, downscale (e.g. 1T -> 800G)
+    while true
+        hint = floor(Int, value * 0.8)
+        hint >= 1 && return "$(hint)$(units[uidx])"
+        uidx == 1 && return ""
+        value *= 1024
+        uidx -= 1
+    end
 end
 
 """
@@ -580,7 +603,9 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
         end
     end
     if !isempty(exec.project)
-        juliacmd *= " --project=\"$(exec.project)\""
+        # Resolve relative project paths against the script directory, not the workdir
+        project = isabspath(exec.project) ? exec.project : abspath(joinpath(dirname(script), exec.project))
+        juliacmd *= " --project=\"$project\""
     end
     juliacmd *= " \"$(abspath(script))\""
     if exec.arraymode == :batch

@@ -279,6 +279,9 @@ end
     end
 end
 
+# Slurm tests only run on Unix (Slurm doesn't exist on Windows and paths differ)
+if !Sys.iswindows()
+
 ##
 @testset "SlurmExec construction" begin
     # Backward compatibility: positional args only
@@ -309,18 +312,29 @@ end
     ssh = Scans.SSHExec(ex2, "myhost", "scans")
     @test ssh.localexec === ex2
 
+    # Validation: ncores must be >= 1
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 0)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", -1)
+
     # Validation: nthreads must be >= 1
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; nthreads=0)
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; nthreads=-1)
 
-    # Validation: memory format
+    # Validation: memory format (no internal whitespace allowed)
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="bad")
-    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="24 G B")
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="24 G")
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; memory="12.5G")
     # Valid memory formats should not throw
     Scans.SlurmExec("/tmp/test.jl", 4; memory="24G")
     Scans.SlurmExec("/tmp/test.jl", 4; memory="500")
     Scans.SlurmExec("/tmp/test.jl", 4; memory="100M")
+    # Memory is normalized: lowercase -> uppercase, whitespace stripped
+    @test Scans.SlurmExec("/tmp/test.jl", 4; memory="24g").memory == "24G"
+    @test Scans.SlurmExec("/tmp/test.jl", 4; memory=" 24G ").memory == "24G"
+
+    # Validation: project and workdir must not contain quotes or newlines
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; project="path\"bad")
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; workdir="path\nbad")
 
     # arraymode defaults to :queue
     @test ex.arraymode == :queue
@@ -339,8 +353,11 @@ end
     @test Scans._parse_memory_for_heap_hint("2T") == "1T"
     @test Scans._parse_memory_for_heap_hint("500") == "400M"
     @test Scans._parse_memory_for_heap_hint("500K") == "400K"
+    # Unit downscaling: 1T -> 800G, 1G -> 800M, 1M -> 800K
+    @test Scans._parse_memory_for_heap_hint("1T") == "819G"
+    @test Scans._parse_memory_for_heap_hint("1G") == "819M"
+    @test Scans._parse_memory_for_heap_hint("1M") == "819K"
     # Edge cases
-    @test Scans._parse_memory_for_heap_hint("1T") == ""  # floor(0.8) = 0 < 1
     @test Scans._parse_memory_for_heap_hint("") == ""
     @test Scans._parse_memory_for_heap_hint("abc") == ""
     @test Scans._parse_memory_for_heap_hint("12.5G") == ""  # no float support
@@ -395,9 +412,17 @@ end
     julia_path = first(Base.julia_cmd().exec)
     @test occursin(julia_path, juliacmd)
     @test occursin("--heap-size-hint=19G", juliacmd)
+    # Absolute project path is passed through as-is
     @test occursin("--project=\"/my project/env\"", juliacmd)
     # Script path is absolute (so it can be found from the workdir)
     @test endswith(juliacmd, "\"/path/with spaces/test.jl\" --queue")
+
+    # Relative project path is resolved against script directory
+    ex_rel = Scans.SlurmExec("/home/user/scripts/test.jl", 4;
+                              project=".", memory="", nthreads=1)
+    lines_rel = Scans._slurm_script_lines(ex_rel, "/home/user/scripts/test_slurm")
+    juliacmd_rel = lines_rel[end]
+    @test occursin("--project=\"/home/user/scripts\"", juliacmd_rel)
 
     # Minimal options: no memory, empty project
     ex_min = Scans.SlurmExec("/tmp/simple.jl", 4; memory="", project="")
@@ -439,3 +464,5 @@ end
     @test endswith(lines_queue[end], "--queue")
     @test !occursin("--batch", lines_queue[end])
 end
+
+end # !Sys.iswindows()
