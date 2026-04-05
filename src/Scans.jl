@@ -80,9 +80,18 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores)
+    SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1)
 
-Execution mode which submits a scan to an slurm queue system claiming `ncores` cores.
+Execution mode which submits a scan to a Slurm queue system claiming `ncores` cores.
+
+# Keyword arguments
+- `memory::String`: Memory per task, e.g. `"24G"`. Sets `#SBATCH --mem` and automatically
+  derives `--heap-size-hint` (at 80% of `memory`) for the Julia process.
+- `project::String`: Path to a Julia project environment. Defaults to the currently active
+  project (`dirname(Base.active_project())`). Pass `""` to omit the `--project` flag.
+- `nthreads::Int`: Number of threads per task (default `1`). Sets `#SBATCH --cpus-per-task`
+  and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
+  `MKL_NUM_THREADS` in the job script.
 
 !!! note
     `scriptfile` must **always** be `@__FILE__`
@@ -90,6 +99,13 @@ Execution mode which submits a scan to an slurm queue system claiming `ncores` c
 struct SlurmExec <: AbstractExec
     scriptfile::String
     ncores::Int
+    memory::String
+    project::String
+    nthreads::Int
+end
+
+function SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1)
+    SlurmExec(scriptfile, ncores, memory, project, nthreads)
 end
 
 """
@@ -444,25 +460,70 @@ function _runscan(f, scan::Scan{QueueExec})
     end
 end
 
+"""
+    _parse_memory_for_heap_hint(memory::String) -> String
+
+Derive a `--heap-size-hint` value at ~80% of the Slurm `--mem` value.
+Supports suffixes `K`, `M`, `G`, `T` (case-insensitive). Returns an empty
+string if `memory` cannot be parsed.
+"""
+function _parse_memory_for_heap_hint(memory::String)
+    m = match(r"^(\d+)\s*([KMGT]?)$"i, strip(memory))
+    isnothing(m) && return ""
+    value = parse(Int, m.captures[1])
+    unit = uppercase(m.captures[2])
+    hint = floor(Int, value * 0.8)
+    hint < 1 && return ""
+    return "$(hint)$(unit)"
+end
+
 function runscan(f, scan::Scan{SlurmExec})
     # make submission file for slurm
+    cmd = split(string(Base.julia_cmd()))[1]
+    julia = strip(cmd, ['`', '\''])
     script = scan.exec.scriptfile
     dir = dirname(script)
     cores = scan.exec.ncores
+    nthreads = scan.exec.nthreads
     name = scan.name
     @info "Submitting slurm job for $script running on $cores cores."
-    # Adding the --queue command-line argument below means that when running the Condor job,
+    # Adding the --queue command-line argument below means that when running the Slurm job,
     # the SlurmExec is ignored even if explicitly defined inside the script.
     lines = [
         "#!/bin/bash",
         "#SBATCH --ntasks=1",
-        "#SBATCH --cpus-per-task=1",
+        "#SBATCH --cpus-per-task=$nthreads",
         "#SBATCH -o %x_%a.stdout",
         "#SBATCH -e %x_%a.stderr",
         "#SBATCH --array=1-$cores",
-        "#SBATCH --chdir $dir",
-        "julia $(basename(script)) --queue"
+        "#SBATCH --chdir \"$dir\"",
     ]
+    if !isempty(scan.exec.memory)
+        push!(lines, "#SBATCH --mem=$(scan.exec.memory)")
+    end
+    # Prevent Julia startup crash from restrictive system ulimit on virtual memory.
+    # This does NOT bypass Slurm's cgroup --mem limit (which tracks RSS, not VIRT).
+    push!(lines, "ulimit -v unlimited")
+    # Pin threads: prevent over-subscription when running concurrent array tasks
+    append!(lines, [
+        "export JULIA_NUM_THREADS=$nthreads",
+        "export OMP_NUM_THREADS=$nthreads",
+        "export OPENBLAS_NUM_THREADS=$nthreads",
+        "export MKL_NUM_THREADS=$nthreads",
+    ])
+    # Build Julia command (quote paths to handle spaces)
+    juliacmd = "\"$julia\""
+    if !isempty(scan.exec.memory)
+        heaphint = _parse_memory_for_heap_hint(scan.exec.memory)
+        if !isempty(heaphint)
+            juliacmd *= " --heap-size-hint=$heaphint"
+        end
+    end
+    if !isempty(scan.exec.project)
+        juliacmd *= " --project=\"$(scan.exec.project)\""
+    end
+    juliacmd *= " $(basename(script)) --queue"
+    push!(lines, juliacmd)
     subfile = joinpath(dir, "$name.sh")
     @info "Writing job file to $subfile..."
     open(subfile, "w") do file
