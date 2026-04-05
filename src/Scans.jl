@@ -82,19 +82,46 @@ end
 """
     SlurmExec(scriptfile, ncores; memory="", project=dirname(Base.active_project()), nthreads=1)
 
-Execution mode which submits a scan to a Slurm queue system claiming `ncores` cores.
+Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
+array tasks.
 
 # Keyword arguments
 - `memory::String`: Memory per task, e.g. `"24G"`. Sets `#SBATCH --mem` and automatically
-  derives `--heap-size-hint` (at 80% of `memory`) for the Julia process.
+  derives `--heap-size-hint` (at 80% of `memory`) for the Julia process. Supports suffixes
+  `K`, `M`, `G`, `T`.
 - `project::String`: Path to a Julia project environment. Defaults to the currently active
-  project (`dirname(Base.active_project())`). Pass `""` to omit the `--project` flag.
-- `nthreads::Int`: Number of threads per task (default `1`). Sets `#SBATCH --cpus-per-task`
-  and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
-  `MKL_NUM_THREADS` in the job script.
+  project (`dirname(Base.active_project())`), so Slurm workers use the same environment as
+  the submission script. Pass `""` to omit the `--project` flag.
+- `nthreads::Int`: Number of threads per array task (default `1`). Sets
+  `#SBATCH --cpus-per-task` and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
+  `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in the job script. The default of `1`
+  prevents over-subscription when many array tasks run concurrently on a shared node.
+
+# Generated job script
+The generated SBATCH script includes:
+- `ulimit -v unlimited` to prevent Julia startup crashes from restrictive virtual memory
+  limits (this does **not** bypass Slurm's cgroup `--mem` enforcement on physical RAM).
+- Thread-pinning environment variable exports (`JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
+  `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`).
+- The full path to the current Julia binary (from `Base.julia_cmd()`) rather than bare
+  `julia`, ensuring the same Julia version is used on compute nodes.
+- All paths (Julia binary, `--chdir` directory, `--project` path) are quoted to handle
+  spaces in paths.
+- Each array task runs the script with `--queue`, so internally a [`QueueExec`](@ref) is
+  used for file-based load balancing across array tasks.
 
 !!! note
     `scriptfile` must **always** be `@__FILE__`
+
+# Examples
+```julia
+# Minimal: uses current project, 1 thread per task, no memory limit
+scan = Scan("my_scan", SlurmExec(@__FILE__, 8); energy=energies)
+
+# Full: 24 GB per task, custom project, 2 threads
+scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env", nthreads=2);
+            energy=energies)
+```
 """
 struct SlurmExec <: AbstractExec
     scriptfile::String

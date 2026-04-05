@@ -68,6 +68,7 @@ Scans can be executed in several ways, which are defined via the various subtype
 - [`BatchExec`](@ref Scans.BatchExec): divide the scan into batches and run a specific batch (can be used to balance load between processes)
 - [`QueueExec`](@ref Scans.QueueExec): create a "queue file" which is used to balance load between several processes. This can be executed from multiple processes simultaneously. Alternatively, `QueueExec` can be made to spawn several subprocesses on the local machine which then use the queueing system to balance load between them.
 - [`CondorExec`](@ref Scans.CondorExec): create a submission file (aka job file) for an HTCondor batch system running on the current machine and submit it, claiming a specified number of nodes, to execute the scan using a `QueueExec`.
+- [`SlurmExec`](@ref Scans.SlurmExec): create and submit a Slurm array job. Supports per-task memory limits (`--mem`), automatic `--heap-size-hint`, thread pinning, Julia project auto-detection, and `ulimit -v unlimited` for safe Julia startup. See [Execution on Slurm](#execution-on-slurm) for details.
 - [`SSHExec`](@ref Scans.SSHExec): use one of the other `AbstractExec` types but first transfer the file to a remote host via SSH and then execute it. (**Note**: the remote machine must have Julia and Luna available with the same versions of both, and Julia must be available in a shell via the `julia` command.) For more details on how to set up execution over SSH, see [below](#execution-over-ssh).
 
 ### Command-line arguments
@@ -155,6 +156,119 @@ julia> HDF5.h5open("pressure_energy_example_collected.h5", "r") do fi
 (2049, 16, 3)
 ```
 Importantly, in our example here this file is less than one megabyte in size, whereas the `scanoutput` folder totals over 600 megabytes. To store the statistics as well, `stats` can be given as a special keyword argument to `scansave`. Because the arrays are not always the same size (see above), in the file these are stored in an array which is large enough to fit the longest and padded with `NaN`s. The number of actual statisics points available for each simulation is then stored in a special dataset `valid_length`.
+
+## Execution on Slurm
+[`SlurmExec`](@ref Scans.SlurmExec) creates and submits a Slurm array job, where each array task processes scan points via a file-based queue (internally using [`QueueExec`](@ref Scans.QueueExec)). This means the array tasks automatically balance load among themselves -- if one simulation finishes early, that task picks up the next unprocessed scan point.
+
+### Basic usage
+```julia
+using Luna
+
+scan = Scan("energy_scan", Scans.SlurmExec(@__FILE__, 8); energy=energies)
+addvariable!(scan, :pressure, pressures)
+
+outputdir = joinpath(@__DIR__, "scanoutput")
+runscan(scan) do scanidx, energy, pressure
+    prop_capillary(125e-6, 3, :He, pressure; λ0=800e-9, τfwhm=10e-15, energy,
+                   scan, scanidx, filepath=outputdir)
+end
+```
+Here, `8` is the number of Slurm array tasks (not the total number of scan points). The queue system ensures all scan points are processed even if there are more points than tasks.
+
+### Memory management
+When running many concurrent simulations, memory can be a concern. `SlurmExec` provides several features to help:
+
+```julia
+Scans.SlurmExec(@__FILE__, 8; memory="24G")
+```
+
+Setting `memory` does three things:
+1. Adds `#SBATCH --mem=24G` to the job script, so Slurm enforces a hard memory limit per task via cgroups.
+2. Automatically sets Julia's `--heap-size-hint=19G` (80% of `--mem`), which tells the garbage collector to be more aggressive before reaching the limit.
+3. The generated script also includes `ulimit -v unlimited`, which prevents Julia from crashing at startup due to restrictive virtual memory limits. This is safe because it only affects the virtual address space limit (which Julia needs to be large), **not** the physical RAM limit enforced by Slurm's cgroups.
+
+The `memory` string supports `K`, `M`, `G`, and `T` suffixes, matching Slurm's `--mem` format.
+
+### Thread pinning
+By default, `SlurmExec` sets `nthreads=1` and exports the following environment variables in the job script:
+```bash
+export JULIA_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+```
+This prevents over-subscription when many array tasks run concurrently on the same node. With `JULIA_NUM_THREADS=1`, FFTW also automatically uses a single thread (via Luna's `Utils.FFTWthreads()`).
+
+If your simulations benefit from multi-threading, increase `nthreads`:
+```julia
+Scans.SlurmExec(@__FILE__, 8; nthreads=4, memory="24G")
+```
+This sets `#SBATCH --cpus-per-task=4` and all thread environment variables to `4`.
+
+### Julia project environment
+By default, `SlurmExec` automatically detects the active Julia project environment (via `Base.active_project()`) and passes `--project=<path>` to the Julia command in the job script. This ensures that Slurm workers use the same package versions as the submission script.
+
+```julia
+# Uses current project automatically (the default):
+Scans.SlurmExec(@__FILE__, 8)
+
+# Explicit project path:
+Scans.SlurmExec(@__FILE__, 8; project="/home/user/MyProject")
+
+# Omit --project flag (use default Julia environment):
+Scans.SlurmExec(@__FILE__, 8; project="")
+```
+
+### Julia binary path
+The generated job script uses the full path to the currently running Julia binary (obtained from `Base.julia_cmd()`), rather than relying on `julia` being on `PATH`. This ensures the same Julia version is used on compute nodes. All paths (Julia binary, working directory, project path) are quoted to handle spaces.
+
+### Full example
+A complete example with all options:
+```julia
+using Luna
+
+energies = collect(range(50e-6, 200e-6; length=64))
+pressures = collect(0.6:0.4:1.4)
+
+exec = Scans.SlurmExec(@__FILE__, 16;
+                       memory="24G",    # 24 GB per task, GC hint at ~19 GB
+                       nthreads=1,       # single-threaded (default)
+                       project=".")      # use current directory as project
+
+scan = Scan("pressure_energy", exec; energy=energies)
+addvariable!(scan, :pressure, pressures)
+
+runscan(scan) do scanidx, energy, pressure
+    prop_capillary(125e-6, 3, :He, pressure; λ0=800e-9, τfwhm=10e-15, energy,
+                   scan, scanidx, filepath=joinpath(@__DIR__, "scanoutput"))
+end
+```
+
+The generated Slurm job script will look like:
+```bash
+#!/bin/bash
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH -o %x_%a.stdout
+#SBATCH -e %x_%a.stderr
+#SBATCH --array=1-16
+#SBATCH --chdir "/path/to/script/directory"
+#SBATCH --mem=24G
+ulimit -v unlimited
+export JULIA_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+"/path/to/julia" --heap-size-hint=19G --project="." script.jl --queue
+```
+
+### Combining with SSHExec
+`SlurmExec` can be wrapped in [`SSHExec`](@ref Scans.SSHExec) to transfer the script to a remote Slurm cluster and submit it there:
+```julia
+exec = Scans.SlurmExec(@__FILE__, 16; memory="24G")
+ssh_exec = Scans.SSHExec(exec, "cluster.example.com", "scans")
+scan = Scan("remote_scan", ssh_exec; energy=energies)
+```
 
 ## Execution over SSH
 Setup steps required:
