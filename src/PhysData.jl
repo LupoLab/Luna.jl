@@ -47,15 +47,18 @@ const m_u = ustrip(CODATA2014.m_u)
 "Atomic unit of electric polarisability"
 const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
-const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :ArB, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrBideauMehu, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
     :HeJ => "He",
     :Ar => "Ar",
     :ArB => "Ar",
+    :ArBideauMehu => "Ar",
     :Ne => "Neon",
+    :NeBideauMehu => "Neon",
     :Kr => "Krypton",
+    :KrBideauMehu => "Krypton",
     :Xe => "Xenon",
     :Air => "Air",
     :N2 => "Nitrogen",
@@ -139,6 +142,26 @@ function γ_QuanfuHe(A, B, C, dens)
 end
 
 """
+    γ_BideauMehu2(B1, C1, B2, C2, dens)
+
+2-term Sellmeier expression for Ne from Journal of Quantitative Spectroscopy and Radiative Transfer, volume 25, issue 5, May 1981, pages 395-402
+https://doi.org/10.1016/0022-4073(81)90057-1
+"""
+function γ_BideauMehu2(B1, C1, B2, C2, dens)
+    return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2))+1)^2 - 1)/dens
+end
+
+"""
+    γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
+
+3-term Sellmeier expression for Ar and Kr from Journal of Quantitative Spectroscopy and Radiative Transfer, volume 25, issue 5, May 1981, pages 395-402
+https://doi.org/10.1016/0022-4073(81)90057-1
+"""
+function γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
+    return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2) + B3/(C3-1/μm^2))+1)^2 - 1)/dens
+end
+
+"""
     sellmeier_gas(material::Symbol)
 
 Return function for linear polarisability γ, i.e. susceptibility of a single particle,
@@ -166,6 +189,12 @@ function sellmeier_gas(material::Symbol)
         B2 = 4018.63e-8
         C2 = 5.728e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :NeBideauMehu
+        B1 = 0.00128145
+        C1 = 184.6661
+        B2 = 0.0220486
+        C2 = 376.84
+        return γ_BideauMehu2(B1, C1, B2, C2, dens)
     elseif material == :Ar
         B1 = 0.00032323117217767093
         C1 = 0.0045416501944977915
@@ -180,12 +209,28 @@ function sellmeier_gas(material::Symbol)
         B2 = 34458.31e-8
         C2 = 8.066e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :ArBideauMehu
+        B1 = 2.50141e-3
+        C1 = 91.012
+        B2 = 5.00283e-4
+        C2 = 87.892
+        B3 = 5.22343e-2
+        C3 = 214.02
+        return γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     elseif material == :Kr
         B1 = 26102.88e-8
         C1 = 2.01e-6
         B2 = 56946.82e-8
         C2 = 10.043e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :KrBideauMehu
+        B1 = 0.00253637
+        C1 = 65.4742
+        B2 = 0.00273649
+        C2 = 73.698
+        B3 = 0.0620802
+        C3 = 181.08
+        return γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     elseif material == :Xe
         B1 = 103701.61e-8
         C1 = 12750e-6
