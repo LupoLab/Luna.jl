@@ -642,7 +642,7 @@ References:
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
-        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :ArB, :Kr, :Xe, :N2)
+        if material in (:He, :HeB, :HeJ, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrB, :KrBideauMehu,:Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
@@ -659,11 +659,11 @@ function γ3_gas(material::Symbol; source=nothing)
         # Table 1 in [3]
         if material in (:He, :HeB, :HeJ)
             fac = 1
-        elseif material == :Ne
+        elseif material in (:Ne, :NeBideauMehu)
             fac = 1.8
-        elseif material in (:Ar, :ArB)
+        elseif material in (:Ar, :ArB, :ArBideauMehu)
             fac = 23.5
-        elseif material == :Kr
+        elseif material in (:Kr, :KrB, :KrBideauMehu)
             fac = 64.0
         elseif material == :Xe
             fac = 188.2
@@ -785,11 +785,11 @@ Possible units are `:SI`, `:atomic` and `:eV`.
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeB, :HeJ)
         Ip = 0.9036
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         Ip = 0.7925
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         Ip = 0.5792
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         Ip = 0.5142
     elseif material == :Xe
         Ip = 0.4458
@@ -831,11 +831,11 @@ Return the quantum numbers of the `material` for use in the PPT ionisation rate.
 """
 function quantum_numbers(material)
     # Returns n, l, ion Z
-    if material in (:Ar, :ArB)
+    if material in (:Ar, :ArB, :ArBideauMehu)
         return 3, 1, 1
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return 2, 1, 1;
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         return 4, 1, 1
     elseif material == :Xe
         return 5, 1, 1
@@ -876,9 +876,9 @@ function polarisability(material, ion=false; unit=:SI)
     end
     if material in (:He, :HeB, :HeJ)
         return (ion ? 0.2811 : 1.3207)*factor
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return (ion ? 1.2417 : 2.376)*factor
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         return (ion ? 6.807 : 10.762)*factor
     else
         return missing
@@ -915,11 +915,11 @@ Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atom
 function Cnl_ADK(material)
     if material in (:He, :HeB, :HeJ)
         return 1.99
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return 1.31
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         return 1.9
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         return 2.17
     elseif material == :Xe
         return 2.27
