@@ -145,8 +145,7 @@ end
 """
     γ_BideauMehu2(B1, C1, B2, C2, dens)
 
-2-term Sellmeier expression for Ne from Journal of Quantitative Spectroscopy and Radiative Transfer, volume 25, issue 5, May 1981, pages 395-402
-https://doi.org/10.1016/0022-4073(81)90057-1
+2-term Sellmeier expression for Ne from https://doi.org/10.1016/0022-4073(81)90057-1
 """
 function γ_BideauMehu2(B1, C1, B2, C2, dens)
     return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2))+1)^2 - 1)/dens
@@ -155,8 +154,7 @@ end
 """
     γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
 
-3-term Sellmeier expression for Ar and Kr from Journal of Quantitative Spectroscopy and Radiative Transfer, volume 25, issue 5, May 1981, pages 395-402
-https://doi.org/10.1016/0022-4073(81)90057-1
+3-term Sellmeier expression for Ar and Kr from https://doi.org/10.1016/0022-4073(81)90057-1
 """
 function γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2) + B3/(C3-1/μm^2))+1)^2 - 1)/dens
