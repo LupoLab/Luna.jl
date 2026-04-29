@@ -47,7 +47,7 @@ const m_u = ustrip(CODATA2014.m_u)
 "Atomic unit of electric polarisability"
 const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
-const gas = (:Air, :He, :HeJ, :HeB, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrBideauMehu, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrB, :KrBideauMehu, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
@@ -58,6 +58,7 @@ const gas_str = Dict(
     :Ne => "Neon",
     :NeBideauMehu => "Neon",
     :Kr => "Krypton",
+    :KrB => "Krypton",
     :KrBideauMehu => "Krypton",
     :Xe => "Xenon",
     :Air => "Air",
@@ -218,6 +219,14 @@ function sellmeier_gas(material::Symbol)
         C3 = 214.02
         return γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     elseif material == :Kr
+        B1 = 7.156207185088921e-6
+        C1 = 0.016126479267946525
+        B2 = 0.00023020614937540427
+        C2 = 0.01348822574907029
+        B3 = 0.000604323109684193
+        C3 = 0.004204161467601559
+        return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
+    elseif material == :KrB
         B1 = 26102.88e-8
         C1 = 2.01e-6
         B2 = 56946.82e-8
