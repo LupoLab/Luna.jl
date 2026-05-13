@@ -349,7 +349,7 @@ function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=fa
     if includeLoss
         Lfiss = params.Lfiss
         mode = Capillary.MarcatiliMode(a, gas, pressure) 
-        attenuation = Modes.α(mode, PhysData.wlfreq(λp); z=Lfiss)
+        attenuation = 1.0 - Modes.α(mode, PhysData.wlfreq(λp); z=Lfiss)
     end
 
     return params.γ*(soliton_factor*Pp*attenuation)*(1/ωsol)
