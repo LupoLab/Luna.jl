@@ -334,6 +334,12 @@ function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=fa
     params = Tools.capillary_params(energy, τFWHM, λp, a, gas; P=pressure)
     ωsol = PhysData.wlfreq(λp)
 
+    if includeLoss # if include loss is true, decrease the energy for which the peak power is calculated 
+        Lfiss = params.Lfiss
+        mode = Capillary.MarcatiliMode(a, gas, pressure) 
+        energy = (1.0 - Modes.α(mode, PhysData.wlfreq(λp); z=Lfiss))*energy
+    end
+
     if input_pulse_shape == :sech
         Pp = Ppeak(τFWHM, energy, pulse_shape=:sech)
     elseif input_pulse_shape == :gauss
@@ -344,15 +350,7 @@ function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=fa
 
     soliton_factor = ((2*soliton_order-1)/soliton_order)^2 # ((2N-1)/N)^2
 
-    attenuation = 1.0 
-
-    if includeLoss
-        Lfiss = params.Lfiss
-        mode = Capillary.MarcatiliMode(a, gas, pressure) 
-        attenuation = 1.0 - Modes.α(mode, PhysData.wlfreq(λp); z=Lfiss)
-    end
-
-    return params.γ*(soliton_factor*Pp*attenuation)*(1/ωsol)
+    return params.γ*(soliton_factor*Pp)*(1/ωsol)
     
 end
 
