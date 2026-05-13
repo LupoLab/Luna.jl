@@ -328,7 +328,7 @@ end
 """
     Helper function to calculate the nonlinear contribution to the phase-mismatch Δβ, which is used in the phase-matching condition for RDW emission
 """
-function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; input_pulse_shape=:gauss, kwargs...)
+function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=false, input_pulse_shape=:gauss, kwargs...)
 
     energy = energyN(a, gas, pressure, τFWHM, λp, soliton_order)
     params = Tools.capillary_params(energy, τFWHM, λp, a, gas; P=pressure)
@@ -344,7 +344,15 @@ function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; input_pulse_sh
 
     soliton_factor = ((2*soliton_order-1)/soliton_order)^2 # ((2N-1)/N)^2
 
-    return params.γ*(soliton_factor*Pp)*(1/ωsol)
+    attenuation = 1.0 
+
+    if includeLoss
+        Lfiss = params.Lfiss
+        mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...) 
+        attenuation = α(mode, PhysData.wlfreq(λp); z=Lfiss)
+    end
+
+    return params.γ*(soliton_factor*Pp*attenuation)*(1/ωsol)
     
 end
 
@@ -386,7 +394,7 @@ end
     A helper function to pre-compute parameters for phase-matching
 """
 function make_PhaseMatching(a, gas, pressure, λp;
-                            include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, input_pulse_shape=:gauss,
+                            include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, includeLoss=false, input_pulse_shape=:gauss,
                             include_Δβion=false, ionisation_fraction=nothing, kwargs...)
 
     mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
@@ -405,7 +413,7 @@ function make_PhaseMatching(a, gas, pressure, λp;
         @assert ionisation_fraction >= 0 && ionisation_fraction <= 1 "Ionisation fraction must be between 0 and 1"
     end
 
-    ΔβnonlinCoeff = include_Δβnonlin ? Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; input_pulse_shape=input_pulse_shape) : 0.0
+    ΔβnonlinCoeff = include_Δβnonlin ? Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=includeLoss,input_pulse_shape=input_pulse_shape) : 0.0
     ΔβionCoeff = include_Δβion ? Δβion(a, gas, pressure, λp, ionisation_fraction; kwargs...) : 0.0
 
     return PhaseMatching(mode, ωsol, β0, β1, ΔβnonlinCoeff, ΔβionCoeff)
@@ -426,7 +434,7 @@ end
         λlims: limits for the root finding algorithm that looks for the phase-matching; by default these are set to the minimum wavelength just above the first resonance in the Sellmeier equation for the given gas and the maximum for the pump wavelength minus 1 nm
 """
 function λRDWfull(a, gas, pressure, λp;
-                  include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, input_pulse_shape=:gauss,
+                  include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, includeLoss=false, input_pulse_shape=:gauss,
                   include_Δβion=false, ionisation_fraction=nothing,
                   λlims=nothing, kwargs...)
 
@@ -448,7 +456,7 @@ function λRDWfull(a, gas, pressure, λp;
     end
 
     phase_matching = make_PhaseMatching(a, gas, pressure, λp;
-                                        include_Δβnonlin=include_Δβnonlin, soliton_order=soliton_order, τFWHM=τFWHM, input_pulse_shape=input_pulse_shape,
+                                        include_Δβnonlin=include_Δβnonlin, soliton_order=soliton_order, τFWHM=τFWHM, includeLoss=includeLoss, input_pulse_shape=input_pulse_shape,
                                         include_Δβion=include_Δβion, ionisation_fraction=ionisation_fraction, kwargs...)
 
     # if ionization effects are included, shrink λlims, because the dispersion curve gets lifted in the IR and a new phase-matched point appears near the pump
