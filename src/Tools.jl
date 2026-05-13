@@ -235,6 +235,8 @@ function pressureZDW(a::Number, gas::Symbol, λzd; Pmax=100, clad=:SiO2, kwargs.
     end
 end
 
+
+
 """
     Calculates the critical electron density for a given wavelength, which is the density at which the plasma frequency equals the frequency of the light
     Ref: https://doi.org/10.1016/j.physrep.2006.12.005, top of page 56
@@ -285,21 +287,65 @@ function Δβlin(a, gas, pressure, λp; kwargs...)
 end
 
 """
+    Calculate the estimated compression factor and quality factor of the soliton self-compression 
+    Schade et al. "Scaling rules for high quality soliton self-compression in hollow-core fibers" https://doi.org/10.1364/OE.426307
+    Arguments:
+        N: soliton order
+    Returns compression factor and compression quality (Fc, Q)
+"""
+function compression_estimation(a, gas, pressure, λp, τFWHM, N; include_ξ=false)
+
+    A(N) = (1/(2*N)+1.7/(N^2))
+    Q(N) = 3.7/(N + 2.2)
+    
+    ωsol = PhysData.wlfreq(λp)
+    mode = Capillary.MarcatiliMode(a, gas, pressure)
+    β2 = Modes.dispersion(mode, 2, ωsol)
+    β3 = Modes.dispersion(mode, 3, ωsol)
+    ξ = β3/(τFWHM*abs(β2))
+
+    Fc = 3/(A(N))
+
+    if include_ξ
+        Fc *= (1-N*ξ)
+    end
+
+    return Fc, Q(N)
+end
+
+function Ppeak(τFWHM, energy; pulse_shape=:sech)
+
+    if pulse_shape == :sech
+        return 0.88*(energy/τFWHM)
+    elseif pulse_shape == :gauss
+        return 0.94*(energy/τFWHM)
+    else
+        error("pulse_shape must be one of: :sech, :gauss")
+    end
+
+end
+
+"""
     Helper function to calculate the nonlinear contribution to the phase-mismatch Δβ, which is used in the phase-matching condition for RDW emission
 """
-function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; use_PpeakSelfCompressed=false)
+function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; input_pulse_shape=:gauss, kwargs...)
 
     energy = energyN(a, gas, pressure, τFWHM, λp, soliton_order)
     params = Tools.capillary_params(energy, τFWHM, λp, a, gas; P=pressure)
-    
-    if use_PpeakSelfCompressed
-        Ppeak_sc = params.P0*(4.6*soliton_order)
+    ωsol = PhysData.wlfreq(λp)
+
+    if input_pulse_shape == :sech
+        Pp = Ppeak(τFWHM, energy, pulse_shape=:sech)
+    elseif input_pulse_shape == :gauss
+        Pp = 0.936*Ppeak(τFWHM, energy, pulse_shape=:gauss) # 0.88/0.94
     else
-        Ppeak_sc = params.P0
+        error("input_pulse_shape must be one of: :sech, :gauss")
     end
 
-    ωsol = PhysData.wlfreq(λp)
-    return params.γ*Ppeak_sc*(1/ωsol) # γ*Pp*(1/ωsol)
+    soliton_factor = ((2*soliton_order-1)/soliton_order)^2 # ((2N-1)/N)^2
+
+    return params.γ*(soliton_factor*Pp)*(1/ωsol)
+    
 end
 
 """
@@ -340,7 +386,8 @@ end
     A helper function to pre-compute parameters for phase-matching
 """
 function make_PhaseMatching(a, gas, pressure, λp;
-                            include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, include_Δβion=false, ionisation_fraction=nothing, use_PpeakSelfCompressed=false, kwargs...)
+                            include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, input_pulse_shape=:gauss,
+                            include_Δβion=false, ionisation_fraction=nothing, kwargs...)
 
     mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
     ωsol = PhysData.wlfreq(λp)
@@ -358,7 +405,7 @@ function make_PhaseMatching(a, gas, pressure, λp;
         @assert ionisation_fraction >= 0 && ionisation_fraction <= 1 "Ionisation fraction must be between 0 and 1"
     end
 
-    ΔβnonlinCoeff = include_Δβnonlin ? Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; use_PpeakSelfCompressed) : 0.0
+    ΔβnonlinCoeff = include_Δβnonlin ? Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; input_pulse_shape=input_pulse_shape) : 0.0
     ΔβionCoeff = include_Δβion ? Δβion(a, gas, pressure, λp, ionisation_fraction; kwargs...) : 0.0
 
     return PhaseMatching(mode, ωsol, β0, β1, ΔβnonlinCoeff, ΔβionCoeff)
@@ -379,7 +426,8 @@ end
         λlims: limits for the root finding algorithm that looks for the phase-matching; by default these are set to the minimum wavelength just above the first resonance in the Sellmeier equation for the given gas and the maximum for the pump wavelength minus 1 nm
 """
 function λRDWfull(a, gas, pressure, λp;
-                  include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, include_Δβion=false, ionisation_fraction=nothing, use_PpeakSelfCompressed=false,
+                  include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, input_pulse_shape=:gauss,
+                  include_Δβion=false, ionisation_fraction=nothing,
                   λlims=nothing, kwargs...)
 
     if isnothing(λlims)
@@ -399,7 +447,9 @@ function λRDWfull(a, gas, pressure, λp;
         λlims = (λUVlim[gas], λp-10e-9) # pump wavelength minus 10 nm for safety
     end
 
-    phase_matching = make_PhaseMatching(a, gas, pressure, λp; include_Δβnonlin=include_Δβnonlin, soliton_order=soliton_order, τFWHM=τFWHM, include_Δβion=include_Δβion, ionisation_fraction=ionisation_fraction, use_PpeakSelfCompressed=use_PpeakSelfCompressed, kwargs...)
+    phase_matching = make_PhaseMatching(a, gas, pressure, λp;
+                                        include_Δβnonlin=include_Δβnonlin, soliton_order=soliton_order, τFWHM=τFWHM, input_pulse_shape=input_pulse_shape,
+                                        include_Δβion=include_Δβion, ionisation_fraction=ionisation_fraction, kwargs...)
 
     # if ionization effects are included, shrink λlims, because the dispersion curve gets lifted in the IR and a new phase-matched point appears near the pump
     if include_Δβion
@@ -428,6 +478,44 @@ function λRDWfull(a, gas, pressure, λp;
     end
 
     return PhysData.wlfreq(ωRDW)
+
+end
+
+function fλ(λ, material, pressure; temperature=PhysData.roomtemp)
+
+    χ1function = PhysData.χ1_fun(material, pressure, temperature)
+
+    return Maths.derivative(χ1function, λ, 2)
+
+end
+
+
+function δ(λ, zdw, material, pressure; kind=:HE, n=1, m=1)
+
+    unm = Capillary.get_unm(n, m, kind)
+
+    return ((unm^2*λ^3)/(8*π^3*PhysData.c^2))*((fλ(λ, material, pressure))/(fλ(zdw, material, pressure)) - 1)
+
+end
+
+function NmaxSelfFocusing(λp, zdw, gas, τFWHM, a; safetyFactor=10, pulseShape=:gauss, kind=:HE, n=1, m=1)
+    
+    pressure = pressureZDW(a, gas, zdw)
+    τ0 = τfw_to_τ0(τFWHM, pulseShape)
+
+    return sqrt((τ0^2*λp)/(safetyFactor*abs(δ(λp, zdw, gas, pressure; kind=kind, n=n, m=m))))
+
+end
+
+function NmaxIonisation(λp, zdw, gas, τFWHM, a; safetyFactor=10, pulseShape=:gauss, kind=:HE, n=1, m=1)
+
+    pressure = pressureZDW(a, gas, zdw)
+    τ0 = τfw_to_τ0(τFWHM, pulseShape)
+    ωpump = PhysData.wlfreq(λp)
+    _, _, n2 = getN0n0n2(ωpump, gas; P=pressure)
+    unm = Capillary.get_unm(n, m, kind)
+
+    return sqrt((τ0^2*n2*PhysData.PhysData.Ith(gas)*unm^2)/(safetyFactor*π*λp*abs(δ(λp, zdw, gas, pressure; kind=kind, n=n, m=m))*fλ(zdw, gas, pressure)))
 
 end
 

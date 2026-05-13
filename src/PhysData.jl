@@ -941,6 +941,17 @@ function lookup_glass(material::Symbol)
     return spl
 end
 
+
+function Ith(material; ionLevel=1)
+
+    Ip = ionisation_potential(material; unit=:eV)
+    Ith = 3.8e9*(Ip^4)/(ionLevel^2)
+
+    return Ith*1e4 # convert from W/cm^2 to W/m^2
+
+end
+
+
 """
     lookup_metal(material::Symbol)
 
