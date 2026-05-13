@@ -274,9 +274,9 @@ end
 """
     Helper function to calculate the linear contribution to the phase-mismatch Δβ, which is used in the phase-matching condition for RDW emission
 """
-function Δβlin(a, gas, pressure, λp; kwargs...)
+function Δβlin(a, gas, pressure, λp)
 
-    mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
+    mode = Capillary.MarcatiliMode(a, gas, pressure)
     ωsol = PhysData.wlfreq(λp)
     β1 = Modes.dispersion(mode, 1, ωsol)
     β0 = Modes.β(mode, ωsol)
@@ -328,7 +328,7 @@ end
 """
     Helper function to calculate the nonlinear contribution to the phase-mismatch Δβ, which is used in the phase-matching condition for RDW emission
 """
-function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=false, input_pulse_shape=:gauss, kwargs...)
+function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=false, input_pulse_shape=:gauss)
 
     energy = energyN(a, gas, pressure, τFWHM, λp, soliton_order)
     params = Tools.capillary_params(energy, τFWHM, λp, a, gas; P=pressure)
@@ -348,7 +348,7 @@ function Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=fa
 
     if includeLoss
         Lfiss = params.Lfiss
-        mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...) 
+        mode = Capillary.MarcatiliMode(a, gas, pressure) 
         attenuation = Modes.α(mode, PhysData.wlfreq(λp); z=Lfiss)
     end
 
@@ -359,12 +359,12 @@ end
 """
     Helper function to calculate the ionisation contribution to the phase-mismatch Δβ, which is used in the phase-matching condition for RDW emission
 """
-function Δβion(a, gas, pressure, λp, ionisation_fraction; kwargs...)
+function Δβion(a, gas, pressure, λp, ionisation_fraction)
     neutral_density = PhysData.density(gas, pressure)
     electron_density = ionisation_fraction*neutral_density
     critical_density = critical_electron_density(λp)
     ωsol = PhysData.wlfreq(λp)
-    mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
+    mode = Capillary.MarcatiliMode(a, gas, pressure)
     nlin = real.(Capillary.neff(mode, ωsol)) # taking the real part here, otherwise the ionisation term becomes complex
     return (1/(2*PhysData.c*nlin))*(electron_density/critical_density)*(ωsol^2)
 end
@@ -395,9 +395,9 @@ end
 """
 function make_PhaseMatching(a, gas, pressure, λp;
                             include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, includeLoss=false, input_pulse_shape=:gauss,
-                            include_Δβion=false, ionisation_fraction=nothing, kwargs...)
+                            include_Δβion=false, ionisation_fraction=nothing)
 
-    mode = Capillary.MarcatiliMode(a, gas, pressure; kwargs...)
+    mode = Capillary.MarcatiliMode(a, gas, pressure)
     ωsol = PhysData.wlfreq(λp)
     β1 = Modes.dispersion(mode, 1, ωsol)
     β0 = Modes.β(mode, ωsol)
@@ -414,7 +414,7 @@ function make_PhaseMatching(a, gas, pressure, λp;
     end
 
     ΔβnonlinCoeff = include_Δβnonlin ? Δβnonlin(a, gas, pressure, τFWHM, λp, soliton_order; includeLoss=includeLoss,input_pulse_shape=input_pulse_shape) : 0.0
-    ΔβionCoeff = include_Δβion ? Δβion(a, gas, pressure, λp, ionisation_fraction; kwargs...) : 0.0
+    ΔβionCoeff = include_Δβion ? Δβion(a, gas, pressure, λp, ionisation_fraction) : 0.0
 
     return PhaseMatching(mode, ωsol, β0, β1, ΔβnonlinCoeff, ΔβionCoeff)
 end
@@ -436,7 +436,7 @@ end
 function λRDWfull(a, gas, pressure, λp;
                   include_Δβnonlin=false, soliton_order=nothing, τFWHM=nothing, includeLoss=false, input_pulse_shape=:gauss,
                   include_Δβion=false, ionisation_fraction=nothing,
-                  λlims=nothing, kwargs...)
+                  λlims=nothing)
 
     if isnothing(λlims)
         λUVlim = Dict(
@@ -457,7 +457,7 @@ function λRDWfull(a, gas, pressure, λp;
 
     phase_matching = make_PhaseMatching(a, gas, pressure, λp;
                                         include_Δβnonlin=include_Δβnonlin, soliton_order=soliton_order, τFWHM=τFWHM, includeLoss=includeLoss, input_pulse_shape=input_pulse_shape,
-                                        include_Δβion=include_Δβion, ionisation_fraction=ionisation_fraction, kwargs...)
+                                        include_Δβion=include_Δβion, ionisation_fraction=ionisation_fraction)
 
     # if ionization effects are included, shrink λlims, because the dispersion curve gets lifted in the IR and a new phase-matched point appears near the pump
     if include_Δβion
