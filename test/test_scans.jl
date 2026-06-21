@@ -290,6 +290,7 @@ if !Sys.iswindows()
     @test ex.ncores == 4
     @test ex.memory == ""
     @test ex.nthreads == 1
+    @test ex.procs == 0
     @test ex.workdir == ""
     # project defaults to current active project (or "" if nothing)
     ap = Base.active_project()
@@ -343,6 +344,16 @@ if !Sys.iswindows()
     @test ex_batch.arraymode == :batch
     # Invalid arraymode
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; arraymode=:invalid)
+
+    # procs: concurrent workers per array task
+    @test Scans.SlurmExec("/tmp/test.jl", 4; procs=12).procs == 12
+    # procs must be >= 0; -1 (all cores) is unsupported for SlurmExec
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; procs=-1)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; procs=-2)
+    # procs > 0 is incompatible with batch mode (no worker pool)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; procs=12, arraymode=:batch)
+    # procs == 0 with batch mode is fine (default)
+    @test Scans.SlurmExec("/tmp/test.jl", 4; procs=0, arraymode=:batch).procs == 0
 end
 
 ##
@@ -364,6 +375,19 @@ end
     # Case insensitive
     @test Scans._parse_memory_for_heap_hint("24g") == "19G"
     @test Scans._parse_memory_for_heap_hint("10m") == "8M"
+end
+
+##
+@testset "worker heap flag division" begin
+    # Parent hint (bytes) divided evenly among workers
+    @test Scans._worker_heap_flag(12_000_000_000, 12) == ["--heap-size-hint=1000000000"]
+    @test Scans._worker_heap_flag(1_000, 4) == ["--heap-size-hint=250"]
+    # No hint set on parent -> no flag (workers keep their defaults)
+    @test Scans._worker_heap_flag(0, 12) == String[]
+    # Degenerate nproc -> no flag (avoid div-by-zero / nonsense)
+    @test Scans._worker_heap_flag(12_000_000_000, 0) == String[]
+    # Per-worker share rounds down to zero -> no flag
+    @test Scans._worker_heap_flag(5, 12) == String[]
 end
 
 ##
@@ -464,6 +488,24 @@ end
     lines_queue = Scans._slurm_script_lines(ex_queue, "/tmp/work")
     @test endswith(lines_queue[end], "--queue")
     @test !occursin("--batch", lines_queue[end])
+    # procs == 0 (default): bare --queue, no -p, cpus-per-task == nthreads
+    @test !occursin(" -p ", lines_queue[end])
+    @test any(l -> l == "#SBATCH --cpus-per-task=1", lines_queue)
+
+    # procs > 0: array task spawns workers via `--queue -p <procs>`
+    ex_procs = Scans.SlurmExec("/tmp/run.jl", 10; procs=12, project="")
+    lines_procs = Scans._slurm_script_lines(ex_procs, "/tmp/work")
+    # 10 array tasks, 12 cores each (one per worker), single thread per worker
+    @test any(l -> l == "#SBATCH --array=1-10", lines_procs)
+    @test any(l -> l == "#SBATCH --cpus-per-task=12", lines_procs)
+    @test endswith(lines_procs[end], "--queue -p 12")
+
+    # procs combines with nthreads: cpus-per-task = procs * nthreads
+    ex_pt = Scans.SlurmExec("/tmp/run.jl", 10; procs=12, nthreads=2, project="")
+    lines_pt = Scans._slurm_script_lines(ex_pt, "/tmp/work")
+    @test any(l -> l == "#SBATCH --cpus-per-task=24", lines_pt)
+    @test any(l -> l == "export JULIA_NUM_THREADS=2", lines_pt)
+    @test endswith(lines_pt[end], "--queue -p 12")
 end
 
 end # !Sys.iswindows()

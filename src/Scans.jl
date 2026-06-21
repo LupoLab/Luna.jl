@@ -80,10 +80,16 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, workdir="", arraymode=:queue)
+    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, procs=0, workdir="", arraymode=:queue)
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks (`ncores` must be ≥ 1).
+
+To maximise throughput when a cluster caps the number of *running jobs* but offers many
+cores, use `procs` to run several concurrent simulations within each array task. With
+`SlurmExec(@__FILE__, 10; procs=12)`, 10 array tasks (= 10 jobs) each spawn 12 worker
+processes that drain a shared queue, giving 120 concurrent single-threaded simulations. See
+the "Execution on Slurm" section of the documentation for a worked example.
 
 # Keyword arguments
 - `memory::String`: Memory per task, e.g. `"24G"`. Sets `#SBATCH --mem` and automatically
@@ -96,10 +102,23 @@ array tasks (`ncores` must be ≥ 1).
   project (`dirname(Base.active_project())`), or `""` if no project is active. Pass `""`
   to omit the `--project` flag. Relative paths are resolved against `dirname(scriptfile)`
   when generating the job script. Must not contain double quotes or newlines.
-- `nthreads::Int`: Number of threads per array task (default `1`, must be ≥ 1). Sets
-  `#SBATCH --cpus-per-task` and exports `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`,
-  `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in the job script. The default of `1`
-  prevents over-subscription when many array tasks run concurrently on a shared node.
+- `nthreads::Int`: Number of threads per array task (default `1`, must be ≥ 1). Exports
+  `JULIA_NUM_THREADS`, `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` in
+  the job script. The default of `1` prevents over-subscription when many simulations run
+  concurrently on a shared node.
+- `procs::Int`: Number of concurrent worker processes per array task (default `0`, must be
+  ≥ 0). Each array task runs `julia … --queue -p <procs>`, spawning `procs` workers that
+  pull from the shared file-based queue (see [`QueueExec`](@ref)). This lets one array task
+  process many scan points at once, which is the way to use many cores when the cluster
+  limits the number of running jobs. The default `0` keeps the previous behaviour: the array
+  task processes the queue in a single process. `procs = -1` is **not** supported here (the
+  core count must be fixed when the job script is generated). The workers automatically
+  inherit the parent's `--project` and a per-worker `--heap-size-hint` of
+  `heap-size-hint ÷ procs`, so the whole task stays within `--mem`. `procs` requires
+  `arraymode=:queue` (it is incompatible with `:batch`).
+- `#SBATCH --cpus-per-task` is set to `max(procs, 1) * nthreads`, i.e. one core per
+  concurrent worker times the threads each worker uses. (The coordinating parent process is
+  effectively idle while the workers run, so it needs no extra core.)
 - `workdir::String`: Working directory for the Slurm job. The generated `.sh` script,
   stdout/stderr files, and queue file are all placed here. If `""` (the default), a
   subdirectory `<scanname>_slurm` is automatically created inside the script's directory.
@@ -137,6 +156,9 @@ scan = Scan("my_scan", SlurmExec(@__FILE__, 8); energy=energies)
 scan = Scan("my_scan", SlurmExec(@__FILE__, length(energies); arraymode=:batch,
                                   memory="24G"); energy=energies)
 
+# Many sims per task: 10 jobs × 12 workers = 120 concurrent single-threaded sims
+scan = Scan("my_scan", SlurmExec(@__FILE__, 10; procs=12, memory="48G"); energy=energies)
+
 # Full: 24 GB per task, custom project, 2 threads, custom workdir
 scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env",
                                   nthreads=2, workdir="/tmp/my_slurm_run");
@@ -149,6 +171,7 @@ struct SlurmExec <: AbstractExec
     memory::String
     project::String
     nthreads::Int
+    procs::Int
     workdir::String
     arraymode::Symbol
 end
@@ -159,10 +182,16 @@ function SlurmExec(scriptfile, ncores;
                        isnothing(ap) ? "" : dirname(ap)
                    end,
                    nthreads=1,
+                   procs=0,
                    workdir="",
                    arraymode=:queue)
     ncores >= 1 || throw(ArgumentError("`ncores` must be ≥ 1, got $ncores"))
     nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
+    # `procs = -1` (all logical cores) is unsupported here because --cpus-per-task must be
+    # fixed when the job script is generated; require an explicit worker count.
+    procs >= 0 || throw(ArgumentError(
+        "`procs` must be ≥ 0, got $procs (`-1` is not supported for SlurmExec; pass an " *
+        "explicit number of workers per task)"))
     # Normalize and validate memory: strip whitespace, enforce strict format
     memory = strip(memory)
     if !isempty(memory)
@@ -178,7 +207,10 @@ function SlurmExec(scriptfile, ncores;
         end
     end
     arraymode in (:queue, :batch) || throw(ArgumentError("`arraymode` must be :queue or :batch, got :$arraymode"))
-    SlurmExec(scriptfile, ncores, memory, project, nthreads, workdir, arraymode)
+    # `procs` drives `--queue -p <procs>`, which only the queue array mode supports.
+    procs > 0 && arraymode == :batch && throw(ArgumentError(
+        "`procs > 0` requires `arraymode=:queue`; the :batch mode has no worker pool"))
+    SlurmExec(scriptfile, ncores, memory, project, nthreads, procs, workdir, arraymode)
 end
 
 """
@@ -444,12 +476,33 @@ function runscan(f, scan::Scan{BatchExec})
     end
 end
 
+"""
+    _worker_heap_flag(parent_hint, nproc) -> Vector{String}
+
+Build the `--heap-size-hint` flag for `addprocs` workers by dividing the parent process's
+heap-size hint (`parent_hint`, in bytes, e.g. from `Base.JLOptions().heap_size_hint`) evenly
+among `nproc` workers. This keeps all workers in one task collectively within the Slurm
+`--mem` limit. Returns an empty vector when no hint is set (`parent_hint == 0`) so worker
+defaults are left untouched.
+"""
+function _worker_heap_flag(parent_hint::Integer, nproc::Integer)
+    (parent_hint > 0 && nproc > 0) || return String[]
+    per = div(parent_hint, nproc)
+    per > 0 ? ["--heap-size-hint=$per"] : String[]
+end
+
 function runscan(f, scan::Scan{QueueExec})
     if scan.exec.nproc == 0
         _runscan(f, scan)
     else
         nproc = (scan.exec.nproc == -1) ? Base.Sys.CPU_THREADS : scan.exec.nproc
-        procs = addprocs(nproc)
+        # Propagate the parent's project (so workers find Luna in a project environment) and
+        # a per-worker share of the heap-size hint (so N workers stay within one --mem limit).
+        exeflags = String[]
+        ap = Base.active_project()
+        isnothing(ap) || push!(exeflags, "--project=$(dirname(ap))")
+        append!(exeflags, _worker_heap_flag(Base.JLOptions().heap_size_hint, nproc))
+        procs = addprocs(nproc; exeflags)
         @everywhere eval(:(using Luna))
         futures = Future[]
         for p in procs
@@ -572,10 +625,14 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     script = exec.scriptfile
     cores = exec.ncores
     nthreads = exec.nthreads
+    # One core per concurrent worker (`procs`), times the threads each worker uses. The
+    # coordinating parent process is effectively idle while the workers run, so it needs no
+    # extra core. `procs == 0` (single-process queue) keeps the previous `cpus = nthreads`.
+    cpus_per_task = max(exec.procs, 1) * nthreads
     lines = [
         "#!/bin/bash",
         "#SBATCH --ntasks=1",
-        "#SBATCH --cpus-per-task=$nthreads",
+        "#SBATCH --cpus-per-task=$cpus_per_task",
         "#SBATCH -o %x_%a.stdout",
         "#SBATCH -e %x_%a.stderr",
         "#SBATCH --array=1-$cores",
@@ -612,6 +669,9 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
         juliacmd *= " --batch $cores,\$SLURM_ARRAY_TASK_ID"
     else
         juliacmd *= " --queue"
+        # Run `procs` concurrent workers per task that share the queue file (constructor
+        # guarantees procs > 0 implies arraymode == :queue).
+        exec.procs > 0 && (juliacmd *= " -p $(exec.procs)")
     end
     push!(lines, juliacmd)
     return lines

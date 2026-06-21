@@ -68,7 +68,7 @@ Scans can be executed in several ways, which are defined via the various subtype
 - [`BatchExec`](@ref Scans.BatchExec): divide the scan into batches and run a specific batch (can be used to balance load between processes)
 - [`QueueExec`](@ref Scans.QueueExec): create a "queue file" which is used to balance load between several processes. This can be executed from multiple processes simultaneously. Alternatively, `QueueExec` can be made to spawn several subprocesses on the local machine which then use the queueing system to balance load between them.
 - [`CondorExec`](@ref Scans.CondorExec): create a submission file (aka job file) for an HTCondor batch system running on the current machine and submit it, claiming a specified number of nodes, to execute the scan using a `QueueExec`.
-- [`SlurmExec`](@ref Scans.SlurmExec): create and submit a Slurm array job. Supports per-task memory limits (`--mem`), automatic `--heap-size-hint`, thread pinning, Julia project auto-detection, and `ulimit -v unlimited` for safe Julia startup. See [Execution on Slurm](#execution-on-slurm) for details.
+- [`SlurmExec`](@ref Scans.SlurmExec): create and submit a Slurm array job. Supports per-task memory limits (`--mem`), automatic `--heap-size-hint`, thread pinning, Julia project auto-detection, `ulimit -v unlimited` for safe Julia startup, and the `procs` option to run many concurrent simulations per array task (to maximise throughput when the number of running jobs is capped). See [Execution on Slurm](#execution-on-slurm) for details.
 - [`SSHExec`](@ref Scans.SSHExec): use one of the other `AbstractExec` types but first transfer the file to a remote host via SSH and then execute it. (**Note**: the remote machine must have Julia and Luna available with the same versions of both, and Julia must be available in a shell via the `julia` command.) For more details on how to set up execution over SSH, see [below](#execution-over-ssh).
 
 ### Command-line arguments
@@ -204,6 +204,93 @@ If your simulations benefit from multi-threading, increase `nthreads`:
 Scans.SlurmExec(@__FILE__, 8; nthreads=4, memory="24G")
 ```
 This sets `#SBATCH --cpus-per-task=4` and all thread environment variables to `4`.
+
+### Running many simulations per array task (maximising throughput)
+On many clusters the number of *simultaneously running jobs* is capped (e.g. 10), even though
+each job can request many cores. Because each array task counts as a job, the basic usage
+above — one simulation per array task — leaves most of your cores idle: with a 10-job cap you
+would only ever run 10 simulations at once, no matter how many cores you can access.
+
+The `procs` keyword fixes this. It makes each array task launch `julia … --queue -p <procs>`,
+spawning `procs` worker processes that all pull from the *same* shared queue file. So you get
+two layers of parallelism at once:
+
+1. **across array tasks** — the `ncores` array tasks (= the jobs you are allowed to run), and
+2. **within each task** — the `procs` workers per task.
+
+All `ncores × procs` workers share one queue file (in the Slurm working directory) and
+dynamically load-balance the whole scan: a worker that finishes early simply picks up the next
+unprocessed scan point. `#SBATCH --cpus-per-task` is automatically set to `procs * nthreads`
+(one core per concurrent worker, times the threads each worker uses).
+
+`procs` and `nthreads` are independent knobs:
+- `procs` — how many simulations run **concurrently** in one task. Use this for
+  embarrassingly-parallel scans of single-threaded simulations.
+- `nthreads` — how many threads **each** simulation uses. Use this only if an individual
+  simulation benefits from multi-threading.
+
+For embarrassingly-parallel scans, keep `nthreads=1` (the default) and raise `procs`.
+
+#### Worked example
+Suppose you can access **128 cores** but the cluster only lets you run **10 jobs** at a time,
+and you have a scan with **400 points**. Request 10 array tasks, each running 12 concurrent
+single-threaded simulations (10 × 12 = 120 cores, well within 128):
+```julia
+using Luna
+
+energies  = collect(range(50e-6, 200e-6; length=20))
+pressures = collect(0.5:0.5:10.0)            # 20 × 20 = 400 scan points
+
+exec = Scans.SlurmExec(@__FILE__, 10;        # 10 array tasks = 10 running jobs
+                       procs=12,             # 12 concurrent simulations per task
+                       nthreads=1,           # each simulation single-threaded (default)
+                       memory="48G")         # per task, shared across the 12 workers
+
+scan = Scan("big_scan", exec; energy=energies)
+addvariable!(scan, :pressure, pressures)
+
+outputdir = joinpath(@__DIR__, "scanoutput")
+runscan(scan) do scanidx, energy, pressure
+    prop_capillary(125e-6, 3, :He, pressure; λ0=800e-9, τfwhm=10e-15, energy,
+                   scan, scanidx, filepath=outputdir)
+end
+```
+This runs **120 concurrent simulations** that together drain all 400 scan points. The key
+lines of the generated job script are:
+```bash
+#SBATCH --cpus-per-task=12
+#SBATCH --array=1-10
+#SBATCH --mem=48G
+...
+"/path/to/julia" --heap-size-hint=38G --project="..." "/path/to/script.jl" --queue -p 12
+```
+
+#### Worker memory and project
+Each array task gets a single `--mem` cgroup limit that is shared by all `procs` workers.
+`SlurmExec` handles this automatically: the worker processes inherit the parent's `--project`
+(so they find the same package versions) and a **per-worker** `--heap-size-hint` equal to the
+task's hint divided by `procs`. This keeps all the workers in a task collectively within
+`--mem`. You therefore size `memory` for the whole task (all `procs` workers together), not
+per simulation.
+
+!!! note
+    `procs` requires `arraymode=:queue` (the default); it is incompatible with `:batch`, which
+    pre-assigns one chunk per task and has no worker pool. `procs=-1` ("all logical cores") is
+    not supported for `SlurmExec` because the core count must be fixed when the job script is
+    generated — pass an explicit number of workers.
+
+### Tips for large scans
+- **Warm up precompilation first.** Before submitting, run `using Luna` once on the cluster
+  (`julia --project -e 'using Luna'`) so the precompile cache is built. Otherwise the many
+  workers may all try to precompile at the same time on first use.
+- **Restarting after an interruption.** The shared queue file tracks each scan point as
+  todo / in-progress / done / failed and is removed automatically once the scan completes
+  fully. If a run is cancelled or crashes, the file remains and points left mid-flight stay
+  marked in-progress (they are not retried). For a clean restart, delete the leftover
+  `qfile_*.h5` (and `qfile_*_lock`) in the working directory before resubmitting; scan points
+  whose output files already exist have already been computed.
+- **Monitoring progress.** Each completed simulation writes one numbered output file, so you
+  can track progress by counting the files in your output directory against `length(scan)`.
 
 ### Julia project environment
 By default, `SlurmExec` automatically detects the active Julia project environment (via `Base.active_project()`) and passes `--project=<path>` to the Julia command in the job script. This ensures that Slurm workers use the same package versions as the submission script. If no project is active (`Base.active_project()` returns `nothing`), the default is `""` and `--project` is omitted.
