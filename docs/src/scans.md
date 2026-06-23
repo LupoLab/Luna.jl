@@ -289,6 +289,13 @@ per simulation.
   marked in-progress (they are not retried). For a clean restart, delete the leftover
   `qfile_*.h5` (and `qfile_*_lock`) in the working directory before resubmitting; scan points
   whose output files already exist have already been computed.
+- **Late-starting array tasks won't re-run a finished scan.** When a cluster caps the number
+  of *running* jobs, trailing array tasks can start only after the earlier ones have already
+  drained the queue and removed the queue file. To stop such a task from re-creating the queue
+  and running the whole scan again, the scan leaves a completion marker (`qfile_*.done`)
+  next to the queue file when it finishes; any task that finds this marker exits without doing
+  anything. Each fresh `SlurmExec` submission deletes the marker automatically, so re-running a
+  scan works as expected.
 - **Monitoring progress.** Each completed simulation writes one numbered output file, so you
   can track progress by counting the files in your output directory against `length(scan)`.
 

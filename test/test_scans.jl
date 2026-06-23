@@ -252,6 +252,30 @@ end
 end # if ~("GITHUB_ACTIONS" in keys(ENV))
 
 ##
+@testset "queue marker prevents re-running a completed scan" begin
+    @test Scans._donefile("a.h5") == "a.done"
+    mktempdir() do td
+        qf = joinpath(td, "qfile.h5")
+        energies = collect(range(5e-6, 20e-6; length=4))
+        # First run completes the whole scan (trivial work, no propagation needed).
+        scan = Scan("scantest_marker", Scans.QueueExec(0, qf); energy=energies)
+        run1 = Int[]
+        runscan((scanidx, energy) -> push!(run1, scanidx), scan)
+        @test sort(run1) == collect(1:4)         # whole scan ran exactly once
+        @test !isfile(qf)                         # queue file removed on completion
+        @test isfile(Scans._donefile(qf))         # completion marker created
+
+        # A fresh runscan over the same queue file simulates a late-starting task: it must
+        # see the marker and do nothing rather than re-create the queue and re-run everything.
+        scan2 = Scan("scantest_marker", Scans.QueueExec(0, qf); energy=energies)
+        run2 = Int[]
+        runscan((scanidx, energy) -> push!(run2, scanidx), scan2)
+        @test isempty(run2)                       # marker stops the re-run
+        @test !isfile(qf)                         # no stray queue file left behind
+    end
+end
+
+##
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
     energies = collect(range(5e-6, 10e-6; length=4))
     scan = Scan("scantest_autofilename", Scans.LocalExec(); energy=energies)

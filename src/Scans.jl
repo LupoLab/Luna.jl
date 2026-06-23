@@ -58,6 +58,13 @@ Possible values for `nproc` are:
 
 If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is
 stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
+
+When the scan finishes, a marker file (the queue file path with its extension replaced by
+`.done`) is created next to the queue file. A process that starts up afterwards and finds this
+marker (but no queue file) will stop instead of re-creating the queue and re-running the whole scan — this
+matters when array tasks on a cluster start after the scan has already completed. To re-run a
+completed scan with the same name, delete this marker first (`SlurmExec` does this
+automatically on each submission).
 """
 struct QueueExec <: AbstractExec
     nproc::Int
@@ -516,14 +523,34 @@ function runscan(f, scan::Scan{QueueExec})
     end
 end
 
+"""
+    _default_queuefile(name) -> String
+
+Default file name for the queue file of a scan named `name`, used when `QueueExec` is given
+no explicit `queuefile`. Kept as a helper so the executor and the Slurm submit path agree on
+the name (and hence on the [`_donefile`](@ref) marker name).
+"""
+_default_queuefile(name::AbstractString) = "qfile_$(string(hash(name); base=16)).h5"
+
+"""
+    _donefile(qfile) -> String
+
+Path of the completion marker that sits next to the queue file `qfile` (the queue file path
+with its extension replaced by `.done`; the marker is an empty flag file, not an HDF5 file).
+The marker is created when a scan finishes (see `_runscan`) and signals to any later process
+that the scan is already done, so it must not re-create the queue file and re-run the whole
+scan.
+"""
+_donefile(qfile::AbstractString) = first(splitext(qfile)) * ".done"
+
 function _runscan(f, scan::Scan{QueueExec})
     if isempty(scan.exec.queuefile)
-        h = string(hash(scan.name); base=16)
-        qfile = "qfile_$h.h5"
+        qfile = _default_queuefile(scan.name)
     else
         qfile = scan.exec.queuefile
     end
     lockpath = qfile*"_lock"
+    donefile = _donefile(qfile)
 
     combos = vec(collect(Iterators.product(scan.arrays...)))
     qfile_created = false
@@ -531,10 +558,12 @@ function _runscan(f, scan::Scan{QueueExec})
         mkpidlock(lockpath; stale_age=120) do
             # first process to catch the pidlock creates the queue file
             if ~isfile(qfile)
-                if qfile_created
-                    # The queue file was already created, so another process
-                    # must have completed the scan and removed it. Signal
-                    # that we should stop by setting scanidx to nothing.
+                if qfile_created || isfile(donefile)
+                    # Either we already created the queue file (so another process must have
+                    # completed the scan and removed it), or a completion marker is present (a
+                    # process that finished the scan left it, even if that was a previous run).
+                    # Either way there is nothing to do: signal stop by setting scanidx to
+                    # nothing rather than re-creating the queue file and re-running everything.
                     global scanidx = nothing
                     global qdata = fill(2, length(scan))
                     return
@@ -561,6 +590,10 @@ function _runscan(f, scan::Scan{QueueExec})
         end # release pidlock
         if isnothing(scanidx) # no scan points left to start
             if all(qdata .> 1) # completely done--either all done or failed
+                # Create the completion marker *before* removing the queue file so there is
+                # never a moment where neither exists (which would let a late-starting process
+                # re-create the queue and re-run the whole scan).
+                touch(donefile)
                 rm(qfile; force=true) # remove the queue file
             end
             break # break out of the loop
@@ -696,6 +729,12 @@ function runscan(f, scan::Scan{SlurmExec})
     name = scan.name
     workdir = _resolve_slurm_workdir(scan.exec, name)
     mkpath(workdir)
+    # Clear any completion marker left by a previous run of this scan so that this fresh
+    # submission starts cleanly; otherwise every array task would see the marker and exit
+    # immediately, doing nothing. A partial queue file (from a crashed run) is left in place
+    # so the array tasks resume rather than restart. The array tasks run with --chdir workdir
+    # and the default queue-file name, so the marker lives next to it in workdir.
+    rm(joinpath(workdir, _donefile(_default_queuefile(name))); force=true)
     @info "Submitting slurm job for $script running on $(scan.exec.ncores) cores."
     # Adding the --queue command-line argument below means that when running the Slurm job,
     # the SlurmExec is ignored even if explicitly defined inside the script.
