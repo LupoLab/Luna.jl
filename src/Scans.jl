@@ -87,7 +87,7 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, procs=0, workdir="", arraymode=:queue)
+    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, procs=0, workdir="", arraymode=:queue, time="", partition="")
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks (`ncores` must be ≥ 1).
@@ -137,6 +137,13 @@ the "Execution on Slurm" section of the documentation for a worked example.
   - `:batch`: Each array task gets a pre-assigned chunk of scan points (via `--batch`).
     With `ncores == length(scan)`, each task runs exactly one scan point. No queue file
     or file locking is needed, giving complete memory isolation between tasks.
+- `time::String`: Wall-clock time limit per array task, setting `#SBATCH --time`. Accepts any
+  Slurm time format, e.g. `"30"` (minutes), `"HH:MM:SS"` or `"D-HH:MM:SS"`. Empty (the
+  default) omits the directive, but note that many clusters reject a job with no time limit
+  (`sbatch: error: Requested time limit is invalid`), so set it to stay within the cluster's
+  maximum runtime.
+- `partition::String`: Slurm partition/queue, setting `#SBATCH --partition`. Empty (the
+  default) omits the directive and lets Slurm pick the default partition.
 
 # Generated job script
 The generated SBATCH script includes:
@@ -163,8 +170,10 @@ scan = Scan("my_scan", SlurmExec(@__FILE__, 8); energy=energies)
 scan = Scan("my_scan", SlurmExec(@__FILE__, length(energies); arraymode=:batch,
                                   memory="24G"); energy=energies)
 
-# Many sims per task: 10 jobs × 12 workers = 120 concurrent single-threaded sims
-scan = Scan("my_scan", SlurmExec(@__FILE__, 10; procs=12, memory="48G"); energy=energies)
+# Many sims per task: 10 jobs × 12 workers = 120 concurrent single-threaded sims,
+# with a 2-hour wall-clock limit per task
+scan = Scan("my_scan", SlurmExec(@__FILE__, 10; procs=12, memory="48G", time="2:00:00");
+            energy=energies)
 
 # Full: 24 GB per task, custom project, 2 threads, custom workdir
 scan = Scan("my_scan", SlurmExec(@__FILE__, 8; memory="24G", project="/path/to/env",
@@ -181,6 +190,8 @@ struct SlurmExec <: AbstractExec
     procs::Int
     workdir::String
     arraymode::Symbol
+    time::String
+    partition::String
 end
 
 function SlurmExec(scriptfile, ncores;
@@ -191,7 +202,9 @@ function SlurmExec(scriptfile, ncores;
                    nthreads=1,
                    procs=0,
                    workdir="",
-                   arraymode=:queue)
+                   arraymode=:queue,
+                   time="",
+                   partition="")
     ncores >= 1 || throw(ArgumentError("`ncores` must be ≥ 1, got $ncores"))
     nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
     # `procs = -1` (all logical cores) is unsupported here because --cpus-per-task must be
@@ -207,8 +220,18 @@ function SlurmExec(scriptfile, ncores;
             "`memory` must match format \"<number>[K|M|G|T]\", got \"$memory\""))
         memory = m.captures[1] * uppercase(m.captures[2])
     end
-    # Validate project and workdir: no quotes or newlines (shell injection prevention)
-    for (name, val) in [("project", project), ("workdir", workdir)]
+    # Normalize and validate the wall-clock time limit. Slurm accepts "minutes",
+    # "minutes:seconds", "hours:minutes:seconds", "days-hours", "days-hours:minutes" and
+    # "days-hours:minutes:seconds"; many clusters reject a job with no limit at all.
+    time = strip(time)
+    if !isempty(time)
+        occursin(r"^(\d+-\d+(:\d+){0,2}|\d+(:\d+){0,2})$", time) || throw(ArgumentError(
+            "`time` must be a Slurm time limit such as \"30\", \"HH:MM:SS\" or \"D-HH:MM:SS\", " *
+            "got \"$time\""))
+    end
+    partition = strip(partition)
+    # Validate project, workdir, partition: no quotes or newlines (shell injection prevention)
+    for (name, val) in [("project", project), ("workdir", workdir), ("partition", partition)]
         if occursin(r"[\"\n\r]", val)
             throw(ArgumentError("`$name` must not contain quotes or newlines, got \"$val\""))
         end
@@ -217,7 +240,8 @@ function SlurmExec(scriptfile, ncores;
     # `procs` drives `--queue -p <procs>`, which only the queue array mode supports.
     procs > 0 && arraymode == :batch && throw(ArgumentError(
         "`procs > 0` requires `arraymode=:queue`; the :batch mode has no worker pool"))
-    SlurmExec(scriptfile, ncores, memory, project, nthreads, procs, workdir, arraymode)
+    SlurmExec(scriptfile, ncores, memory, project, nthreads, procs, workdir, arraymode,
+              time, partition)
 end
 
 """
@@ -682,6 +706,12 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     ]
     if !isempty(exec.memory)
         push!(lines, "#SBATCH --mem=$(exec.memory)")
+    end
+    if !isempty(exec.time)
+        push!(lines, "#SBATCH --time=$(exec.time)")
+    end
+    if !isempty(exec.partition)
+        push!(lines, "#SBATCH --partition=$(exec.partition)")
     end
     # Prevent Julia startup crash from restrictive system ulimit on virtual memory.
     # This does NOT bypass Slurm's cgroup --mem limit (which tracks RSS, not VIRT).

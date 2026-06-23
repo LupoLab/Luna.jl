@@ -365,6 +365,22 @@ if !Sys.iswindows()
     @test Scans.SlurmExec("/tmp/test.jl", 4; memory="24g").memory == "24G"
     @test Scans.SlurmExec("/tmp/test.jl", 4; memory=" 24G ").memory == "24G"
 
+    # time / partition default to empty (directive omitted)
+    exdef = Scans.SlurmExec("/tmp/test.jl", 4)
+    @test exdef.time == ""
+    @test exdef.partition == ""
+    # Valid Slurm time formats are accepted and stored (whitespace stripped)
+    @test Scans.SlurmExec("/tmp/test.jl", 4; time="30").time == "30"
+    @test Scans.SlurmExec("/tmp/test.jl", 4; time="00:30:00").time == "00:30:00"
+    @test Scans.SlurmExec("/tmp/test.jl", 4; time="7-00:00:00").time == "7-00:00:00"
+    @test Scans.SlurmExec("/tmp/test.jl", 4; time=" 1:00:00 ").time == "1:00:00"
+    @test Scans.SlurmExec("/tmp/test.jl", 4; partition="gpu").partition == "gpu"
+    # Validation: bad time format throws
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; time="soon")
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; time="1h")
+    # Validation: partition must not contain quotes/newlines (shell injection guard)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; partition="a\nb")
+
     # Validation: project and workdir must not contain quotes or newlines
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; project="path\"bad")
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; workdir="path\nbad")
@@ -502,6 +518,15 @@ end
     @test endswith(lines_min[end], "\"/tmp/simple.jl\" --queue")
     # chdir points to workdir
     @test any(l -> l == "#SBATCH --chdir \"/tmp/workdir\"", lines_min)
+    # No --time / --partition unless requested
+    @test !any(l -> startswith(l, "#SBATCH --time"), lines_min)
+    @test !any(l -> startswith(l, "#SBATCH --partition"), lines_min)
+
+    # time and partition directives appear when set
+    ex_tp = Scans.SlurmExec("/tmp/simple.jl", 4; time="00:30:00", partition="gpu")
+    lines_tp = Scans._slurm_script_lines(ex_tp, "/tmp/workdir")
+    @test any(l -> l == "#SBATCH --time=00:30:00", lines_tp)
+    @test any(l -> l == "#SBATCH --partition=gpu", lines_tp)
 
     # ulimit comes before exports (correct ordering)
     idx_ulimit = findfirst(l -> l == "ulimit -v unlimited", lines)
