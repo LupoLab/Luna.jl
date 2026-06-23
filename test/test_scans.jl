@@ -336,6 +336,14 @@ if !Sys.iswindows()
     # SSHExec wrapping
     ssh = Scans.SSHExec(ex2, "myhost", "scans")
     @test ssh.localexec === ex2
+    @test ssh.hostname == "myhost"
+    # remotehostname defaults to hostname...
+    @test ssh.remotehostname == "myhost"
+    # ...but can differ (SSH target vs the name the remote reports for itself)
+    ssh2 = Scans.SSHExec(ex2, "dmog.hw.ac.uk", "scans";
+                         remotehostname="login1.pri.dmog.alces.network")
+    @test ssh2.hostname == "dmog.hw.ac.uk"
+    @test ssh2.remotehostname == "login1.pri.dmog.alces.network"
 
     # Validation: ncores must be >= 1
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 0)

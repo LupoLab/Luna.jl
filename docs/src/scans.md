@@ -400,6 +400,17 @@ ssh_exec = Scans.SSHExec(exec, "cluster.example.com", "scans")
 scan = Scan("remote_scan", ssh_exec; energy=energies)
 ```
 
+On some clusters the address you `ssh` to is not the name the login node reports for itself
+via `Base.gethostname()`. Luna uses that name to recognise when it is already on the remote (so
+it submits the job instead of SSHing onwards); if it does not match, the remote SSHes into
+itself in an endless loop. When they differ, give the connection address as `hostname` and the
+remote's self-reported name as `remotehostname`:
+```julia
+ssh_exec = Scans.SSHExec(exec, "dmog.hw.ac.uk", "scans";
+                         remotehostname="login1.pri.dmog.alces.network")
+```
+Find the remote's name by running `julia -e 'println(Base.gethostname())'` on the login node.
+
 ## Execution over SSH
 Setup steps required:
 - On the remote machine, add Julia to your path upon loading even over SSH: add `export PATH=/opt/julia-1.5.1/bin:$PATH` or similar to your `.bashrc` file **above** the usual check for interactive running.

@@ -221,18 +221,26 @@ function SlurmExec(scriptfile, ncores;
 end
 
 """
-    SSHExec(localexec, scriptfile, hostname, subdir; files=String[])
+    SSHExec(localexec, hostname, subdir; files=String[], remotehostname=hostname)
 
-Execution mode which transfers the `scriptfile` file to the host given by `hostname` via SSH
-and executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
+Execution mode which transfers the script file to the host given by `hostname` via SSH and
+executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
 subdirectory (relative to the home directory) where scans are stored on the remote host. A
 subfolder with automatically chosen name will be created in `subdir` to store this scan.
 
 Optional keyword argument `files` is a list of auxiliary files to transfer to the remote host
 along with the script. These files will be placed in the same directory as the scan script.
 
+`hostname` is the address used for `ssh`/`scp` (so it must be reachable from the machine you
+submit from). `remotehostname` is the value `Base.gethostname()` returns *on the remote host*;
+it is how Luna recognises that it is already running there and should submit the job rather than
+SSH onwards. By default these are assumed identical. On clusters where the login node reports a
+different name than the address you connect to (e.g. you `ssh dmog.hw.ac.uk` but the node calls
+itself `login1.pri.dmog.alces.network`), pass `remotehostname` explicitly — otherwise the
+remote will not recognise itself and will SSH into itself in an endless loop.
+
 !!! note
-    `scriptfile` must **always** be `@__FILE__`
+    The `localexec`'s script file must **always** be set with `@__FILE__`.
 """
 struct SSHExec{eT} <: AbstractExec
     localexec::eT
@@ -240,14 +248,15 @@ struct SSHExec{eT} <: AbstractExec
     hostname::String
     subdir::String
     files::Vector{String}
+    remotehostname::String
 end
 
-function SSHExec(le::CondorExec, hostname, subdir; files=String[])
-    SSHExec(le, le.scriptfile, hostname, subdir, files)
+function SSHExec(le::CondorExec, hostname, subdir; files=String[], remotehostname=hostname)
+    SSHExec(le, le.scriptfile, hostname, subdir, files, remotehostname)
 end
 
-function SSHExec(le::SlurmExec, hostname, subdir; files=String[])
-    SSHExec(le, le.scriptfile, hostname, subdir, files)
+function SSHExec(le::SlurmExec, hostname, subdir; files=String[], remotehostname=hostname)
+    SSHExec(le, le.scriptfile, hostname, subdir, files, remotehostname)
 end
 
 struct Scan{eT}
@@ -793,7 +802,7 @@ function changexec(scan, newexec)
 end
 
 function runscan(f, scan::Scan{<:SSHExec})
-    if gethostname() == scan.exec.hostname
+    if gethostname() == scan.exec.remotehostname
         # running on the machine defined in the SSH Exec? just run the scan
         runscan(f, changexec(scan, scan.exec.localexec))
     else
