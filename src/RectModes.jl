@@ -39,7 +39,7 @@ RectMode(a::Number, args...; kwargs...) = RectMode(z->a, args...; kwargs...)
 RectMode(afun, b::Number, args...; kwargs...) = RectMode(afun, z->b, args...; kwargs...)
 RectMode(a::Number, b::Number, args...; kwargs...) = RectMode(z->a, z->b, args...; kwargs...)
 
-"convenience constructor assunming single gas filling and specified cladding"
+"convenience constructor assuming single gas filling and specified cladding"
 function RectMode(afun, bfun, gas, P, clad; n=1, m=1, pol=:x, T=roomtemp)
     rfg = ref_index_fun(gas, P, T)
     rfs = ref_index_fun(clad)

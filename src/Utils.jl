@@ -25,7 +25,7 @@ function git_commit()
         LibGit2.isdirty(repo) && (commit *= " (dirty)")
         return commit
     catch
-        "unavailable (Luna is not checkout out for development)"
+        "unavailable (Luna is not checked out for development)"
     end
 end
 
@@ -36,7 +36,7 @@ function git_branch()
         branch = split(n, "/")[end]
         return branch
     catch
-        "unavailable (Luna is not checkout out for development)"
+        "unavailable (Luna is not checked out for development)"
     end
 end
 
