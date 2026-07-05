@@ -238,7 +238,11 @@ function makeexec(args::Vector{String})
 end
 
 # Enable parsing of command-line arguments of the form "1:5" to a UnitRange
-parse_item(::Type{UnitRange{Int}}, x::AbstractString) = eval(Meta.parse(x))
+function parse_item(::Type{UnitRange{Int}}, x::AbstractString)
+    parts = split(x, ":")
+    length(parts) == 2 || throw(ArgumentError("Invalid format for UnitRange{Int}: $x. Expected start:stop"))
+    return parse(Int, parts[1]):parse(Int, parts[2])
+end
 
 # Enable parsing of command-line arguments of the form "1,5" to a Tuple of integers
 parse_item(::Type{Tuple{Int, Int}}, x::AbstractString) = Tuple(parse(Int, xi) for xi in split(x, ","))
