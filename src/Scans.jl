@@ -528,18 +528,31 @@ function runscan(f, scan::Scan{<:SSHExec})
         scriptfile = basename(script)
         name = scan.name
         folder = Dates.format(Dates.now(), "yyyymmdd_HHMMSS") * "_$name"
-        @info "Making directory \$HOME/$subdir/$folder"
-        read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
+
+        # subdir/folder/scriptfile end up as literal text inside a command string
+        # that ssh hands to the remote shell for interpretation, and scp's
+        # host:path argument is parsed by scp's own shell-like splitting -
+        # shell-escape each component before splicing it in, and use the Cmd
+        # array constructor (not a raw backtick with a bare $host), so a
+        # scan name or subdir containing shell metacharacters can't inject
+        # commands into the remote shell.
+        subdir_esc = Base.shell_escape_posixly(subdir)
+        folder_esc = Base.shell_escape_posixly(folder)
+        scriptfile_esc = Base.shell_escape_posixly(scriptfile)
+        remotedir = "\$HOME/$subdir_esc/$folder_esc"
+
+        @info "Making directory $remotedir"
+        read(Cmd(["ssh", host, "mkdir -p $remotedir"]))
         @info "Transferring file..."
-        read(`scp $script $host:\~/$subdir/$folder`)
+        read(Cmd(["scp", script, "$host:$remotedir"]))
         if length(scan.exec.files) > 0
             @info "Transferring auxiliary files..."
             for fi in scan.exec.files
-                read(`scp $fi $host:\~/$subdir/$folder`)
+                read(Cmd(["scp", fi, "$host:$remotedir"]))
             end
         end
         @info "Running Luna script on remote host $host"
-        read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
+        read(Cmd(["ssh", host, "julia", "$remotedir/$scriptfile_esc"]), String)
     end
 end
 
