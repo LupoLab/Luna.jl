@@ -24,7 +24,7 @@ end
 function rot(θ)
     @SMatrix [ cos(θ)  sin(θ) ;
               -sin(θ)  cos(θ) ]
-end 
+end
 
 "rotate Jonesmatrix J by θ"
 function rotate(J, θ)

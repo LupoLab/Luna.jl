@@ -56,7 +56,7 @@ Possible values for `nproc` are:
 - `-1`: spawn as many subprocesses as the number of logical cores on the CPU
     (`Base.Sys.CPU_THREADS`)
 
-If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is 
+If `queuefile` is given, the queuefile is stored at that path. If omitted, the queuefile is
 stored in `Utils.cachedir()`. Note that the queuefile is deleted at the end of the scan.
 """
 struct QueueExec <: AbstractExec
@@ -93,12 +93,15 @@ struct SlurmExec <: AbstractExec
 end
 
 """
-    SSHExec(localexec, scriptfile, hostname, subdir)
+    SSHExec(localexec, scriptfile, hostname, subdir; files=String[])
 
 Execution mode which transfers the `scriptfile` file to the host given by `hostname` via SSH
 and executes the scan on that host with a mode defined by `localexec`. `subdir` gives the
 subdirectory (relative to the home directory) where scans are stored on the remote host. A
 subfolder with automatically chosen name will be created in `subdir` to store this scan.
+
+Optional keyword argument `files` is a list of auxiliary files to transfer to the remote host
+along with the script. These files will be placed in the same directory as the scan script.
 
 !!! note
     `scriptfile` must **always** be `@__FILE__`
@@ -108,14 +111,15 @@ struct SSHExec{eT} <: AbstractExec
     scriptfile::String
     hostname::String
     subdir::String
+    files::Vector{String}
 end
 
-function SSHExec(le::CondorExec, hostname, subdir)
-    SSHExec(le, le.scriptfile, hostname, subdir)
+function SSHExec(le::CondorExec, hostname, subdir; files=String[])
+    SSHExec(le, le.scriptfile, hostname, subdir, files)
 end
 
-function SSHExec(le::SlurmExec, hostname, subdir)
-    SSHExec(le, le.scriptfile, hostname, subdir)
+function SSHExec(le::SlurmExec, hostname, subdir; files=String[])
+    SSHExec(le, le.scriptfile, hostname, subdir, files)
 end
 
 struct Scan{eT}
@@ -163,7 +167,7 @@ size(s::Scan) = (length(s.arrays) == 0) ? (0,) : Tuple(length.(s.arrays))
     addvariable!(scan, variable::Symbol, array)
     addvariable!(scan; kwargs...)
 
-Add scan variable(s) to the `scan`, either as a single pair of `Symbol` and array, or as a 
+Add scan variable(s) to the `scan`, either as a single pair of `Symbol` and array, or as a
 sequence of keyword arguments.
 """
 function addvariable!(scan, variable::Symbol, array)
@@ -528,6 +532,12 @@ function runscan(f, scan::Scan{<:SSHExec})
         read(`ssh $host "mkdir -p \$HOME/$subdir/$folder"`)
         @info "Transferring file..."
         read(`scp $script $host:\~/$subdir/$folder`)
+        if length(scan.exec.files) > 0
+            @info "Transferring auxiliary files..."
+            for fi in scan.exec.files
+                read(`scp $fi $host:\~/$subdir/$folder`)
+            end
+        end
         @info "Running Luna script on remote host $host"
         read(`ssh $host julia \$HOME/$subdir/$folder/$scriptfile`, String)
     end
