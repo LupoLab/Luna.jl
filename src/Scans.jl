@@ -87,7 +87,7 @@ struct CondorExec <: AbstractExec
 end
 
 """
-    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, procs=0, workdir="", arraymode=:queue, time="", partition="")
+    SlurmExec(scriptfile, ncores; memory="", project=<active project>, nthreads=1, procs=0, workdir="", arraymode=:queue, time="", partition="", cpus=0)
 
 Execution mode which submits a scan to a Slurm queue system as an array job with `ncores`
 array tasks (`ncores` must be ≥ 1).
@@ -123,9 +123,14 @@ the "Execution on Slurm" section of the documentation for a worked example.
   inherit the parent's `--project` and a per-worker `--heap-size-hint` of
   `heap-size-hint ÷ procs`, so the whole task stays within `--mem`. `procs` requires
   `arraymode=:queue` (it is incompatible with `:batch`).
-- `#SBATCH --cpus-per-task` is set to `max(procs, 1) * nthreads`, i.e. one core per
-  concurrent worker times the threads each worker uses. (The coordinating parent process is
-  effectively idle while the workers run, so it needs no extra core.)
+- `cpus::Int`: Explicit `#SBATCH --cpus-per-task` override (default `0` = automatic,
+  see below). Use this to allocate cores to FFTW's native pthreads while keeping Julia
+  single-threaded — the safe threaded-FFT configuration on Julia ≥ 1.12, where the
+  Julia-task FFTW callback can segfault: `SlurmExec(...; nthreads=1, cpus=10)` together
+  with `Luna.set_fftw_threads(10)` at the top of the scan script.
+- `#SBATCH --cpus-per-task` is set to `max(procs, 1) * nthreads` when `cpus == 0`, i.e.
+  one core per concurrent worker times the threads each worker uses. (The coordinating
+  parent process is effectively idle while the workers run, so it needs no extra core.)
 - `workdir::String`: Working directory for the Slurm job. The generated `.sh` script,
   stdout/stderr files, and queue file are all placed here. If `""` (the default), a
   subdirectory `<scanname>_slurm` is automatically created inside the script's directory.
@@ -192,6 +197,7 @@ struct SlurmExec <: AbstractExec
     arraymode::Symbol
     time::String
     partition::String
+    cpus::Int
 end
 
 function SlurmExec(scriptfile, ncores;
@@ -204,8 +210,10 @@ function SlurmExec(scriptfile, ncores;
                    workdir="",
                    arraymode=:queue,
                    time="",
-                   partition="")
+                   partition="",
+                   cpus=0)
     ncores >= 1 || throw(ArgumentError("`ncores` must be ≥ 1, got $ncores"))
+    cpus >= 0 || throw(ArgumentError("`cpus` must be ≥ 0, got $cpus"))
     nthreads >= 1 || throw(ArgumentError("`nthreads` must be ≥ 1, got $nthreads"))
     # `procs = -1` (all logical cores) is unsupported here because --cpus-per-task must be
     # fixed when the job script is generated; require an explicit worker count.
@@ -241,7 +249,7 @@ function SlurmExec(scriptfile, ncores;
     procs > 0 && arraymode == :batch && throw(ArgumentError(
         "`procs > 0` requires `arraymode=:queue`; the :batch mode has no worker pool"))
     SlurmExec(scriptfile, ncores, memory, project, nthreads, procs, workdir, arraymode,
-              time, partition)
+              time, partition, cpus)
 end
 
 """
@@ -694,7 +702,7 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String)
     # One core per concurrent worker (`procs`), times the threads each worker uses. The
     # coordinating parent process is effectively idle while the workers run, so it needs no
     # extra core. `procs == 0` (single-process queue) keeps the previous `cpus = nthreads`.
-    cpus_per_task = max(exec.procs, 1) * nthreads
+    cpus_per_task = exec.cpus > 0 ? exec.cpus : max(exec.procs, 1) * nthreads
     lines = [
         "#!/bin/bash",
         "#SBATCH --ntasks=1",

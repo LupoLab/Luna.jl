@@ -347,6 +347,16 @@ if !Sys.iswindows()
 
     # Validation: ncores must be >= 1
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 0)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; cpus=-1)
+
+    # cpus: default 0 -> automatic (procs x nthreads); explicit value overrides.
+    exc0 = Scans.SlurmExec("/tmp/test.jl", 4; nthreads=2)
+    lines0 = Scans._slurm_script_lines(exc0, "/tmp")
+    @test any(l -> l == "#SBATCH --cpus-per-task=2", lines0)
+    exc1 = Scans.SlurmExec("/tmp/test.jl", 4; nthreads=1, cpus=10)
+    lines1 = Scans._slurm_script_lines(exc1, "/tmp")
+    @test any(l -> l == "#SBATCH --cpus-per-task=10", lines1)
+    @test any(l -> l == "export JULIA_NUM_THREADS=1", lines1)
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", -1)
 
     # Validation: nthreads must be >= 1

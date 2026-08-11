@@ -74,11 +74,17 @@ function sourcecode()
 end
 
 function FFTWthreads()
-    if Threads.nthreads() == 1
-        1
-    else
-        settings["fftw_threads"] == 0 ? 4*Threads.nthreads() : settings["fftw_threads"]
-    end
+    # An explicit `fftw_threads` setting always wins — including with a single
+    # Julia thread. In that case FFTW.jl never installs its Julia-task
+    # threading callback (providers.jl registers it only when
+    # `Threads.nthreads() > 1`), so libfftw3 falls back to its own native
+    # pthreads pool: the combination `JULIA_NUM_THREADS=1` +
+    # `Luna.set_fftw_threads(n)` therefore gives threaded FFTs without the
+    # partr callback, which segfaults inside `spawnloop`/`spawn_apply` on
+    # Julia ≥ 1.12 (observed with FFTW.jl 1.10 on x64 Linux).
+    nthr = settings["fftw_threads"]
+    nthr > 0 && return nthr
+    Threads.nthreads() == 1 ? 1 : 4*Threads.nthreads()
 end
 
 function loadFFTwisdom()
