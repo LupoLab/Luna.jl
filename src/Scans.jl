@@ -6,6 +6,7 @@ import Base: length, size
 import Luna: Utils
 import FileWatching.Pidfile: mkpidlock
 import HDF5
+import Distributed
 import Distributed: @spawnat, addprocs, rmprocs, fetch, Future, @everywhere
 import Dates
 
@@ -552,6 +553,22 @@ function runscan(f, scan::Scan{QueueExec})
         append!(exeflags, _worker_heap_flag(Base.JLOptions().heap_size_hint, nproc))
         procs = addprocs(nproc; exeflags)
         @everywhere eval(:(using Luna))
+        # A closure defined at the top level (Main) is serialised together
+        # with its code, so workers need nothing extra — but a closure defined
+        # inside a package (e.g. a package that wraps `runscan`) is serialised
+        # by reference and can only be deserialised if that package is loaded
+        # on the worker. Load exactly the closure's root package.
+        froot = Base.moduleroot(parentmodule(typeof(f)))
+        if !(froot === Main || froot === Base || froot === Core ||
+             froot === Base.moduleroot(@__MODULE__))
+            fname = nameof(froot)
+            try
+                Distributed.remotecall_eval(Main, procs, :(using $fname))
+            catch err
+                @warn "could not load the scan closure's package $fname on " *
+                      "the scan workers; expect a deserialisation error" err
+            end
+        end
         futures = Future[]
         for p in procs
             fut = @spawnat p _runscan(f, scan)
