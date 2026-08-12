@@ -25,6 +25,18 @@ import Logging: with_logger, NullLogger
 end
 
 ##
+# Queue-mode scans use the default (CWD-relative) queue file, so a completion
+# marker left behind by a previous run of the same-named scan would turn them
+# into no-ops — that is precisely the marker's purpose for late-starting
+# cluster tasks. Clear any leftover queue state before and after every testset
+# that runs such a scan, so the tests are self-isolating and leave no litter.
+function clear_queue_state(scanname)
+    qf = Scans._default_queuefile(scanname)
+    for f in (qf, qf*"_lock", Scans._donefile(qf))
+        rm(f; force=true)
+    end
+end
+
 args_execs = Dict(["-l"] => Scans.LocalExec,
                   ["-r", "1:6"] => Scans.RangeExec,
                   ["-b", "2,1"] => Scans.BatchExec,
@@ -36,13 +48,24 @@ for _ in eachindex(ARGS)
 end
 push!(ARGS, arg...)
 
+# A stale marker would make the -q case a silent no-op (skipping the per-point
+# assertions); clearing is harmless for the non-queue execs.
+clear_queue_state("scantest_cmdlineargs")
 v = collect(1:10)
 scan = Scan("scantest_cmdlineargs"; var=v)
 @test scan.exec isa exec
+ran = Int[]
 runscan(scan) do scanidx, vi
     @test vi == v[scanidx]
+    push!(ran, scanidx)
     sleep(rand()) # avoid two processes finishing at precisely the same time
 end
+# Full coverage asserted where the semantics are unambiguous — in particular
+# the queue case, which would run NOTHING if a stale marker were present.
+if scan.exec isa Scans.LocalExec || scan.exec isa Scans.QueueExec
+    @test sort(ran) == collect(1:10)
+end
+clear_queue_state("scantest_cmdlineargs")
 end
 
 ##
@@ -145,6 +168,7 @@ end
 ##
 if ~("GITHUB_ACTIONS" in keys(ENV))
 @testset "multi-process queue scan" begin
+    clear_queue_state("scantest_queue_multiproc")
     ps = addprocs(2)
     @everywhere using Luna
     function worker()
@@ -170,9 +194,11 @@ if ~("GITHUB_ACTIONS" in keys(ENV))
         @test count(i2 .== scanidx) == 1 # check that all indices have been run exactly once
     end
     rmprocs(ps)
+    clear_queue_state("scantest_queue_multiproc")
 end
 ##
 @testset "multi-process queue scan with error" begin
+    clear_queue_state("scantest_queue_multiproc_err")
     ps = addprocs(2)
     @everywhere using Luna
     @everywhere import Logging: with_logger, NullLogger
@@ -206,14 +232,15 @@ end
         # check that all indices have been run once, except for the one with an error
         @test count(i2 .== scanidx) == 1
     end
-    h = string(hash(scanname); base=16)
-    qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
-    @test !isfile(qfile) # check that scan completed fully and removed the queue file
+    # The default queue file is CWD-relative; completion must have removed it.
+    @test !isfile(Scans._default_queuefile(scanname))
     rmprocs(ps)
+    clear_queue_state(scanname)
 end
 
 ##
 @testset "multi-process queue scan via exec" begin
+    clear_queue_state("scantest_queue_multiproc_exec")
     energies = collect(range(5e-6, 20e-6; length=16))
     scan = Scan("scantest_queue_multiproc_exec", Scans.QueueExec(4); energy=energies)
     td = joinpath(tempdir(), tempname())
@@ -229,10 +256,12 @@ end
     # should be exactly 2 files per scanidx: output .h5 and "scanidx_on_procid"
     @test length(readdir(td)) == 2length(energies)
     rm(td; recursive=true)
+    clear_queue_state("scantest_queue_multiproc_exec")
 end
 
 # do it again to make sure we can run multiple multi-process scans in one session
 @testset "multi-process queue scan via exec--again" begin
+    clear_queue_state("scantest_queue_multiproc_exec_again")
     energies = collect(range(5e-6, 20e-6; length=16))
     scan = Scan("scantest_queue_multiproc_exec_again", Scans.QueueExec(4); energy=energies)
     td = joinpath(tempdir(), tempname())
@@ -248,6 +277,7 @@ end
     # should be exactly 2 files per scanidx: output .h5 and "scanidx_on_procid"
     @test length(readdir(td)) == 2length(energies)
     rm(td; recursive=true)
+    clear_queue_state("scantest_queue_multiproc_exec_again")
 end
 end # if ~("GITHUB_ACTIONS" in keys(ENV))
 
@@ -272,6 +302,55 @@ end # if ~("GITHUB_ACTIONS" in keys(ENV))
         runscan((scanidx, energy) -> push!(run2, scanidx), scan2)
         @test isempty(run2)                       # marker stops the re-run
         @test !isfile(qf)                         # no stray queue file left behind
+    end
+end
+
+##
+@testset "queue maxpoints limits points per process" begin
+    # Validation and defaults
+    @test Scans.QueueExec().maxpoints == 0
+    @test Scans.QueueExec(0, ""; maxpoints=3).maxpoints == 3
+    @test_throws ArgumentError Scans.QueueExec(0, ""; maxpoints=-1)
+    # Command-line parsing: --queue --maxpoints N builds the matching QueueExec
+    exq = Scans.makeexec(["--queue", "--maxpoints", "1"])
+    @test exq isa Scans.QueueExec
+    @test exq.maxpoints == 1
+    @test exq.nproc == 0
+    @test Scans.makeexec(["--queue"]).maxpoints == 0
+    exqm = Scans.makeexec(["--queue", "-m", "3", "-p", "2"])
+    @test exqm.maxpoints == 3
+    @test exqm.nproc == 2
+
+    mktempdir() do td
+        # maxpoints=1, relaunched until done: simulates SlurmExec `instances` mode, where
+        # each scan point runs in a fresh OS process and a shell loop respawns processes
+        # until the completion marker appears.
+        qf = joinpath(td, "qfile_max1.h5")
+        energies = collect(range(5e-6, 20e-6; length=5))
+        ran = Int[]
+        nlaunches = 0
+        while !isfile(Scans._donefile(qf)) && nlaunches < 20 # bound in case of a bug
+            scan = Scan("scantest_maxpoints", Scans.QueueExec(0, qf; maxpoints=1);
+                        energy=energies)
+            runscan((scanidx, energy) -> push!(ran, scanidx), scan)
+            nlaunches += 1
+        end
+        @test sort(ran) == collect(1:5)   # every point ran exactly once
+        # 5 single-point runs + 1 final run that found the queue drained, wrote the
+        # completion marker and removed the queue file
+        @test nlaunches == 6
+        @test isfile(Scans._donefile(qf))
+        @test !isfile(qf)
+
+        # maxpoints=2: one process takes exactly two points then stops, queue survives
+        qf2 = joinpath(td, "qfile_max2.h5")
+        ran2 = Int[]
+        scan2 = Scan("scantest_maxpoints2", Scans.QueueExec(0, qf2; maxpoints=2);
+                     energy=energies)
+        runscan((scanidx, energy) -> push!(ran2, scanidx), scan2)
+        @test length(ran2) == 2
+        @test isfile(qf2)                 # pending points remain queued
+        @test !isfile(Scans._donefile(qf2))
     end
 end
 
@@ -412,6 +491,16 @@ if !Sys.iswindows()
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; procs=12, arraymode=:batch)
     # procs == 0 with batch mode is fine (default)
     @test Scans.SlurmExec("/tmp/test.jl", 4; procs=0, arraymode=:batch).procs == 0
+
+    # instances: one-shot simulation processes per array task
+    @test Scans.SlurmExec("/tmp/test.jl", 4).instances == 0 # default off
+    @test Scans.SlurmExec("/tmp/test.jl", 4; instances=2).instances == 2
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; instances=-1)
+    # instances needs the shared queue (no queue to respawn against in batch mode)
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; instances=2,
+                                               arraymode=:batch)
+    # instances and procs are alternative concurrency mechanisms, not composable
+    @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 4; instances=2, procs=2)
 end
 
 ##
@@ -433,6 +522,12 @@ end
     # Case insensitive
     @test Scans._parse_memory_for_heap_hint("24g") == "19G"
     @test Scans._parse_memory_for_heap_hint("10m") == "8M"
+    # Shared among nshare concurrent processes (SlurmExec `instances`): hint = 80%/nshare
+    @test Scans._parse_memory_for_heap_hint("100G", 2) == "40G"
+    @test Scans._parse_memory_for_heap_hint("24G", 2) == "9G"
+    @test Scans._parse_memory_for_heap_hint("24G", 1) == "19G" # nshare=1 == old behaviour
+    # Sub-unit shares downscale to the next unit (1G across 2 -> 409M)
+    @test Scans._parse_memory_for_heap_hint("1G", 2) == "409M"
 end
 
 ##
@@ -573,6 +668,41 @@ end
     @test any(l -> l == "#SBATCH --cpus-per-task=24", lines_pt)
     @test any(l -> l == "export JULIA_NUM_THREADS=2", lines_pt)
     @test endswith(lines_pt[end], "--queue -p 12")
+end
+
+##
+@testset "Slurm instances mode script generation" begin
+    ex = Scans.SlurmExec("/tmp/run.jl", 10; instances=2, memory="100G", project="")
+    lines = Scans._slurm_script_lines(ex, "/tmp/work", "my_scan")
+    script = join(lines, "\n")
+    # The respawn loop keys off the queue-completion marker, whose name must match what
+    # `_runscan` derives from the scan name (tasks chdir into workdir, so a bare name works).
+    donefile = Scans._donefile(Scans._default_queuefile("my_scan"))
+    @test any(l -> l == "DONEFILE=\"$donefile\"", lines)
+    # One background loop per instance, each running one-shot single-point processes
+    @test any(l -> l == "for i in \$(seq 1 2); do", lines)
+    @test occursin("--queue --maxpoints 1", script)
+    # A crashing process must not hot-loop
+    @test occursin("|| sleep 10", script)
+    # The task waits for all instance loops before exiting
+    @test lines[end] == "wait"
+    # No plain (drain-the-queue) julia invocation and no worker pool
+    @test !occursin(r"--queue$"m, script)
+    @test !occursin(" -p ", script)
+    # Heap hint is divided among the instances: 80% of 100G across 2 -> 40G
+    @test occursin("--heap-size-hint=40G", script)
+    # Default cpus-per-task covers all instances
+    @test any(l -> l == "#SBATCH --cpus-per-task=2", lines)
+    # instances combines with nthreads for the cpu request
+    ex_nt = Scans.SlurmExec("/tmp/run.jl", 10; instances=2, nthreads=3, project="")
+    lines_nt = Scans._slurm_script_lines(ex_nt, "/tmp/work", "my_scan")
+    @test any(l -> l == "#SBATCH --cpus-per-task=6", lines_nt)
+    # Explicit cpus still overrides (FFTW-pthreads configuration)
+    ex_cpu = Scans.SlurmExec("/tmp/run.jl", 10; instances=2, cpus=10, project="")
+    lines_cpu = Scans._slurm_script_lines(ex_cpu, "/tmp/work", "my_scan")
+    @test any(l -> l == "#SBATCH --cpus-per-task=10", lines_cpu)
+    # The scan name is required to derive the marker name
+    @test_throws ArgumentError Scans._slurm_script_lines(ex, "/tmp/work")
 end
 
 end # !Sys.iswindows()

@@ -68,7 +68,7 @@ Scans can be executed in several ways, which are defined via the various subtype
 - [`BatchExec`](@ref Scans.BatchExec): divide the scan into batches and run a specific batch (can be used to balance load between processes)
 - [`QueueExec`](@ref Scans.QueueExec): create a "queue file" which is used to balance load between several processes. This can be executed from multiple processes simultaneously. Alternatively, `QueueExec` can be made to spawn several subprocesses on the local machine which then use the queueing system to balance load between them.
 - [`CondorExec`](@ref Scans.CondorExec): create a submission file (aka job file) for an HTCondor batch system running on the current machine and submit it, claiming a specified number of nodes, to execute the scan using a `QueueExec`.
-- [`SlurmExec`](@ref Scans.SlurmExec): create and submit a Slurm array job. Supports per-task memory limits (`--mem`), automatic `--heap-size-hint`, thread pinning, Julia project auto-detection, `ulimit -v unlimited` for safe Julia startup, and the `procs` option to run many concurrent simulations per array task (to maximise throughput when the number of running jobs is capped). See [Execution on Slurm](#execution-on-slurm) for details.
+- [`SlurmExec`](@ref Scans.SlurmExec): create and submit a Slurm array job. Supports per-task memory limits (`--mem`), automatic `--heap-size-hint`, thread pinning, Julia project auto-detection, `ulimit -v unlimited` for safe Julia startup, and two ways to run many concurrent simulations per array task when the number of running jobs is capped: `procs` (persistent worker processes) and `instances` (a fresh single-point process per simulation, so memory is returned to the OS after every point). See [Execution on Slurm](#execution-on-slurm) for details.
 - [`SSHExec`](@ref Scans.SSHExec): use one of the other `AbstractExec` types but first transfer the file to a remote host via SSH and then execute it. (**Note**: the remote machine must have Julia and Luna available with the same versions of both, and Julia must be available in a shell via the `julia` command.) For more details on how to set up execution over SSH, see [below](#execution-over-ssh).
 
 ### Command-line arguments
@@ -278,6 +278,58 @@ per simulation.
     pre-assigns one chunk per task and has no worker pool. `procs=-1` ("all logical cores") is
     not supported for `SlurmExec` because the core count must be fixed when the job script is
     generated — pass an explicit number of workers.
+
+#### One process per scan point (`instances`)
+The `procs` workers are **persistent**: each runs many simulations over its lifetime. For
+scans of *large* simulations this can be a problem, because Julia's allocator does not
+reliably return freed heap pages to the operating system — a worker that runs big
+propagations back-to-back grows its resident memory over time (heap fragmentation) even
+though every single propagation fits comfortably, and can eventually push the task over its
+`--mem` limit and get OOM-killed. The only guaranteed way to return the memory is process
+exit.
+
+The `instances` keyword provides exactly that. With
+```julia
+Scans.SlurmExec(@__FILE__, 10; instances=2, memory="100G", time="36:00:00")
+```
+each array task runs 2 background shell loops, each of which repeatedly launches
+```bash
+julia … script.jl --queue --maxpoints 1
+```
+— a **fresh Julia process** that takes exactly one point from the shared queue, writes its
+output, and exits, returning all of its memory to the OS. The loops respawn processes until
+the scan's completion marker (`qfile_*.done`) appears; the final respawn in each loop finds
+the queue drained and exits. The generated job script looks like:
+```bash
+DONEFILE="qfile_<hash>.done"
+for i in $(seq 1 2); do
+    (
+        until [ -f "$DONEFILE" ]; do
+            "/path/to/julia" --heap-size-hint=40G … "script.jl" --queue --maxpoints 1 || sleep 10
+        done
+    ) &
+done
+wait
+```
+The `--heap-size-hint` derived from `memory` is divided by `instances` (all instances share
+one `--mem` cgroup), and `#SBATCH --cpus-per-task` defaults to `instances * nthreads`. Size
+`memory` for **all instances together**, i.e. `instances ×` the peak footprint of one
+simulation plus margin.
+
+Compared to `procs`, `instances` costs one Julia startup, package load, and FFTW planning
+per scan point — negligible against simulations that run for minutes to hours, which are
+exactly the ones with the memory problem. Use `procs` for many small, fast points; use
+`instances` for few large, slow ones.
+
+The underlying `--maxpoints` mechanism is also available directly (see
+[`QueueExec`](@ref Scans.QueueExec)): `julia script.jl --queue --maxpoints N` makes any
+queue-mode run exit after `N` points, so you can build the same respawn pattern by hand
+outside Slurm.
+
+!!! note
+    `instances` requires `arraymode=:queue` and is mutually exclusive with `procs` — both
+    answer "how many simulations run concurrently in one task", one with persistent workers,
+    the other with one-shot processes.
 
 ### Tips for large scans
 - **Warm up precompilation first.** Before submitting, run `using Luna` once on the cluster
