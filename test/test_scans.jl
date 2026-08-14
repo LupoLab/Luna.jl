@@ -684,8 +684,15 @@ end
     @test occursin("--queue --maxpoints 1", script)
     # A crashing process must not hot-loop
     @test occursin("|| sleep 10", script)
-    # The task waits for all instance loops before exiting
-    @test lines[end] == "wait"
+    # The task waits for all instance loops, then makes one final (non-backgrounded)
+    # pass to settle the queue state — the loops can exit while the last points are
+    # still finishing elsewhere, so the completion marker may not have been written yet.
+    @test lines[end-1] == "wait"
+    @test occursin("--queue --maxpoints 1", lines[end])
+    @test !occursin("&", lines[end])
+    # The loop exits on the completion marker OR the "nothing startable" marker; the
+    # latter is what stops a queue stranded by a killed process from respawning forever.
+    @test any(l -> occursin("[ -f \"\$DONEFILE\" ] || [ -f \"\$NOWORKFILE\" ]", l), lines)
     # No plain (drain-the-queue) julia invocation and no worker pool
     @test !occursin(r"--queue$"m, script)
     @test !occursin(" -p ", script)
