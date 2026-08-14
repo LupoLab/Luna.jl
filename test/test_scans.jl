@@ -706,3 +706,40 @@ end
 end
 
 end # !Sys.iswindows()
+##
+@testset "stranded queue entry still stops the instances respawn loop" begin
+    # Regression for the 2026-08-14 hang: an entry left at in-progress (1) by a killed
+    # process can never be claimed (claiming looks for 0) and never satisfies the
+    # `all(qdata .> 1)` completion test, so the completion marker is never written. The
+    # SlurmExec `instances` loop keyed only on that marker respawned forever.
+    @test Scans._noworkfile("a.h5") == "a.nowork"
+    mktempdir() do td
+        qf = joinpath(td, "qfile_strand.h5")
+        energies = collect(range(5e-6, 20e-6; length=4))
+        # Run the scan with maxpoints=1 until nothing startable remains, then strand one
+        # entry by hand to emulate a killed process, and check a fresh process still
+        # signals "no work" (which is what lets the shell loop exit).
+        for _ in 1:5
+            scan = Scan("scantest_strand", Scans.QueueExec(0, qf; maxpoints=1);
+                        energy=energies)
+            runscan((scanidx, energy) -> nothing, scan)
+            isfile(Scans._donefile(qf)) && break
+        end
+        @test isfile(Scans._donefile(qf))
+        @test isfile(Scans._noworkfile(qf))   # written alongside the completion marker
+
+        # Now the stranded case: rebuild a queue with one entry stuck at in-progress.
+        rm(Scans._donefile(qf); force=true)
+        rm(Scans._noworkfile(qf); force=true)
+        HDF5.h5open(qf, "cw") do f
+            f["qdata"] = [2, 2, 1, 2]   # entry 3 claimed by a process that died
+        end
+        ran = Int[]
+        scan = Scan("scantest_strand", Scans.QueueExec(0, qf; maxpoints=1); energy=energies)
+        runscan((scanidx, energy) -> push!(ran, scanidx), scan)
+        @test isempty(ran)                       # nothing is startable
+        @test !isfile(Scans._donefile(qf))       # scan did NOT complete, marker withheld
+        @test isfile(Scans._noworkfile(qf))      # but the loop-exit signal IS written
+        @test isfile(qf)                         # queue kept for diagnosis/repair
+    end
+end
