@@ -891,6 +891,14 @@ function _slurm_script_lines(exec::SlurmExec, workdir::String, scanname::String=
             "    ) &",
             "done",
             "wait",
+            # The loops above exit as soon as nothing is startable, which can be while the
+            # last points are still finishing in other instances — so the process that
+            # would write the completion marker may never run. One final pass once every
+            # instance has finished settles the queue state, restoring the documented
+            # invariant that a fully completed scan leaves a `.done` marker (and removes
+            # the queue file). It finds no startable point by construction, so it costs
+            # one Julia startup and runs no simulation.
+            juliacmd * " --queue --maxpoints 1",
         ])
         return lines
     else
