@@ -12,14 +12,18 @@ const B = [[0.161],
 # Step size fractions
 const nodes = [0.161, 0.327, 0.9, 0.9800255409045097, 1, 1]
 
-# Weights for 5th order method
-const b5 = [0.001780011052226, 0.000816434459657, -0.007880878010262, 0.144711007173263,         
-            -0.582357165452555, 0.458082105929187, 1/66]
+# Weights for 5th order method. These are also the final Butcher row B[6]: Tsit5 is FSAL, so
+# stage 7 is the RHS evaluated at exactly this solution, and the dense-output polynomial
+# reproduces it at σ=1 (sum(interpC, dims=1) == b5).
+const b5 = [0.09646076681806523, 0.01, 0.4798896504144996, 1.379008574103742,
+            -3.290069515436081, 2.324710524099774, 0]
+# Error estimate, (4th order) - (5th order). Tsitouras tabulates the pair this way round
+# rather than giving the embedded weights directly, so this is the published data and b4 is
+# derived from it. Being a difference of two weight vectors, it must sum to zero.
+const errest = [0.001780011052226, 0.000816434459657, -0.007880878010262, 0.144711007173263,
+                -0.582357165452555, 0.458082105929187, -1/66]
 # Weights for 4th order method
-const b4 = [0.09646076681806523, 0.01, 0.4798896504144996, 1.379008574103742,
-                -3.290069515436081, 2.324710524099774, 0]
-# Error estimate
-const errest = b5 .- b4
+const b4 = b5 .+ errest
 
 #Interpolation coefficients
 const interpC = hcat(

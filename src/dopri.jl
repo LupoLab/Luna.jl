@@ -10,12 +10,14 @@ const B = [[1/5],
 # Step size fractions
 const nodes = [1/5, 3/10, 4/5, 8/9, 1, 1]
 
-# Weights for 5th order method
-const b5 = [5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40]
-# Weights for 4th order method
-const b4 = [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0]
-# Error estimate
-const errest = b5 .- b4
+# Weights for 5th order method. These are also the final Butcher row B[6]: DOPRI5 is FSAL,
+# so stage 7 is the RHS evaluated at exactly this solution, and the dense-output polynomial
+# at σ=1 reproduces it too (sum(interpC, dims=1) == b5). Propagated when locextrap=true.
+const b5 = [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0]
+# Weights for the embedded 4th order method. Propagated when locextrap=false.
+const b4 = [5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40]
+# Error estimate: (4th order) - (5th order).
+const errest = b4 .- b5
 
 #Interpolation coefficients
 const interpC = hcat(
