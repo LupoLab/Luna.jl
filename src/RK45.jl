@@ -106,7 +106,8 @@ mutable struct Stepper{T<:AbstractArray, F, nT}
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
-    ok::Bool  # true if current step was successful
+    ok::Bool  # true if current step was successful. Also means "an FSAL move is owed"
+              # (see step!), so nothing may write it after step! has returned.
     err::Float64  # error metric to be compared to tol
     errlast::Float64  # error of the most recent successful step
     norm::nT # function to calculate error metric, defaults to RK45.weaknorm
@@ -143,7 +144,8 @@ mutable struct PreconStepper{T<:AbstractArray, F, P, nT}
     max_dt::Float64  # maximum value for dt (default Inf)
     min_dt::Float64  # minimum value for dt (default 0)
     locextrap::Bool  # true if using local extrapolation
-    ok::Bool  # true if current step was successful
+    ok::Bool  # true if current step was successful. Also means "an FSAL move is owed"
+              # (see step!), so nothing may write it after step! has returned.
     err::Float64  # error metric to be compared to tol
     errlast::Float64  # error of the most recent successful step
     norm::nT  # function to calculate error metric, defaults to RK45.weaknorm
@@ -165,15 +167,28 @@ function PreconStepper(f!, linop, y0, t, dt;
 end
 
 function step!(s)
+    # FSAL: k7 of the previous step is k1 of this one. The move is deferred to here
+    # (rather than done at the end of step!) because the completed step's dense output is
+    # consumed between step! returning and this call, and the interpolant's k1 weight is
+    # nonzero (interpC column 1; b1(1) = 35/384) -- moving it any earlier degrades every
+    # interpolated save from 4th to 2nd order. s.ok is false before the first step (ks[2:7]
+    # are `similar`, i.e. undef) and after a rejected step (k1 must survive for the retry).
+    # For the PreconStepper this must also stay ahead of evaluate!'s rebase of ks[1] into
+    # the new anchor frame, which it does by construction.
+    s.ok && (s.ks[1] .= s.ks[end])
     evaluate!(s)
 
-    if s.locextrap
-        s.yn .= s.y
-        for jj = 1:7
-            b5[jj] == 0 || (s.yn .+= s.dt*b5[jj].*s.ks[jj])
-        end
+    # Propagate the 5th-order solution (local extrapolation, the default) or the embedded
+    # 4th-order one. Both are formed explicitly rather than reusing the stage-6
+    # accumulation evaluate! happens to leave in yn -- which is the 5th-order solution --
+    # so this does not depend on the RHS leaving its input array alone. For locextrap the
+    # two are bit-identical anyway: b5[1:6] == B[6], b5[7] == 0, same accumulation order.
+    bprop = s.locextrap ? b5 : b4
+    s.yn .= s.y
+    for jj = 1:7
+        bprop[jj] == 0 || (s.yn .+= s.dt*bprop[jj].*s.ks[jj])
     end
-    
+
     fill!(s.yerr, 0)
     for ii = 1:7
         errest[ii] == 0 || (@. s.yerr += s.dt*s.ks[ii]*errest[ii])
@@ -183,7 +198,6 @@ function step!(s)
     stepcontrolPI!(s)
     if s.ok
         s.tn = s.t + s.dt
-        s.ks[1] .= s.ks[end]
     else
         s.yn .= s.y
     end
