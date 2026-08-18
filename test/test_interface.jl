@@ -423,7 +423,7 @@ end
     _, _, _, t400, _, _ = Interface.prop_capillary_args(args...; temperature=400, kwargs...)
     Raman300 = t300.resp[1]
     Raman400 = t400.resp[1]
-    NonlinearRHS.to_time!(t300.Eto, Eω, t300.Eωo, inv(t300.FT))
+    NonlinearRHS.to_time!(t300.Eto, Eω, t300.Eωo, t300.FT)
     ρ = t300.densityfun(0) # note: using same density to compare only NL response
     Pto300 = zero(t300.Eto)
     Pto300_2 = zero(t300.Eto)

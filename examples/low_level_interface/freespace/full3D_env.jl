@@ -48,11 +48,11 @@ zout = output.data["z"]
 Eout = output.data["Eω"]
 
 println("Transforming...")
-Eωyx = FFTW.fftshift(FFTW.ifft(Eout, (2, 3)), 1);
-Etyx = FFTW.ifft(Eout, (1, 2, 3))
+Eωyx = FFTW.fftshift(FFTW.ifft(Eout, (3, 4)), 1);
+Etyx = FFTW.ifft(Eout, (1, 3, 4))
 println("...done")
 
-Eout = FFTW.fftshift(Eout, (2, 3))
+Eout = FFTW.fftshift(Eout, (3, 4))
 
 Ilog = log10.(Maths.normbymax(abs2.(Eωyx)))
 
@@ -60,14 +60,14 @@ Iωyx = abs2.(Eωyx);
 
 Iyx = zeros(Float64, (length(y), length(x), length(zout)));
 energy = zeros(length(zout));
-for ii = 1:size(Etyx, 4)
-    energy[ii] = energyfun(Etyx[:, :, :, ii]);
-    Iyx[:, :, ii] = (grid.ω[2]-grid.ω[1]) .* sum(Iωyx[:, :, :, ii], dims=1);
+for ii = 1:size(Etyx, 5)
+    energy[ii] = energyfun(Etyx[:, 1, :, :, ii]);
+    Iyx[:, :, ii] = (grid.ω[2]-grid.ω[1]) .* sum(Iωyx[:, 1, :, :, ii], dims=1);
 end
 
 ω0idx = argmin(abs.(grid.ω .- 2π*PhysData.c/λ0))
 
-E0ωyx = FFTW.ifft(Eω[ω0idx, :, :], (1, 2));
+E0ωyx = FFTW.ifft(Eω[ω0idx, 1, :, :], (1, 2));
 
 Iωyx = abs2.(Eωyx);
 Iωyxlog = log10.(Maths.normbymax(Iωyx));
@@ -82,14 +82,14 @@ plt.ylabel("Y")
 plt.title("I(ω=ω0, x, y, z=0)")
 
 plt.figure()
-plt.pcolormesh(x, y, (abs2.(Eωyx[ω0idx, :, :, end])))
+plt.pcolormesh(x, y, (abs2.(Eωyx[ω0idx, 1, :, :, end])))
 plt.colorbar()
 plt.xlabel("X")
 plt.ylabel("Y")
 plt.title("I(ω=ω0, x, y, z=L)")
 
 plt.figure()
-plt.pcolormesh(zout, ω.*1e-15/2π, Iωyxlog[:, N÷2+1, N÷2+1, :])
+plt.pcolormesh(zout, ω.*1e-15/2π, Iωyxlog[:, 1, N÷2+1, N÷2+1, :])
 plt.xlabel("Z (m)")
 plt.ylabel("f (PHz)")
 plt.title("I(ω, x=0, y=0, z)")

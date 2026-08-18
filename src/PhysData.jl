@@ -7,6 +7,7 @@ import CSV
 import DelimitedFiles: readdlm
 import Polynomials
 import Luna: Maths, Utils
+import Roots: fzero
 
 include("data/lookup_tables.jl")
 
@@ -66,8 +67,9 @@ const gas_str = Dict(
     :N2O => "NitrousOxide",
     :D2 => "Deuterium"
 )
-const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si, :MgF2, :ADPo, :ADPe, :KDPo, :KDPe, :CaCO3)
-const metal = (:Ag,:Al)
+const glass = (:SiO2, :BK7, :KBr, :CaF2, :BaF2, :Si)
+const crystal = (:ADP, :KPD, :BBO, :CaCO3, :MgF2, :LBO, :quartz)
+const metal = (:Ag, :Al)
 
 """
     wlfreq(ωλ)
@@ -297,43 +299,6 @@ function sellmeier_glass(material::Symbol)
              + 0.0030434748/(1-(1.13475115/μm)^2)
              + 1.54133408/(1-(1104/μm)^2)
              ))
-    elseif material == :MgF2
-        return μm -> @. sqrt(complex(1
-            + 0.27620
-            + 0.60967/(1-(0.08636/μm)^2)
-            + 0.0080/(1-(18.0/μm)^2)
-            + 2.14973/(1-(25.0/μm)^2)
-            ))
-    elseif material == :CaCO3
-        return μm -> @. sqrt(complex(1
-            + 0.73358749
-            + 0.96464345/(1-1.94325203e-2/μm^2)
-            + 1.82831454/(1-120/μm^2)
-            ))
-    elseif material == :ADPo
-        return μm -> @. sqrt(complex(
-            2.302842
-            + 15.102464*μm^2/(μm^2-400)
-            + 0.011125165/(μm^2-0.01325366)
-        ))
-    elseif material == :ADPe
-        return μm -> @. sqrt(complex(
-            2.163510
-            + 5.919896*μm^2/(μm^2-400)
-            + 0.009616676/(μm^2-0.01298912)
-        ))
-    elseif material == :KDPo
-        return μm -> @. sqrt(complex(
-            2.259276
-            + 13.00522*μm^2/(μm^2-400)
-            + 0.01008956/(μm^2-0.0129426)
-        ))
-    elseif material == :KDPe
-        return μm -> @. sqrt(complex(
-            2.132668
-            + 3.2279924*μm^2/(μm^2-400)
-            + 0.008637494/(μm^2-0.0122810)
-        ))
     else
         throw(DomainError(material, "Unknown glass $material"))
     end
@@ -345,8 +310,9 @@ end
 Sellmeier for crystals. Returns function of wavelength in μm which in turn returns the
 refractive index directly. Possible values for `axis` depend on the type of crystal.
 """
-function sellmeier_crystal(material, axis)
+function sellmeier_crystal(material, axis=nothing)
     if material == :BBO
+        isnothing(axis) && (axis = :o)
         if axis == :o
             return μm -> sqrt(complex(1
                 + 0.90291/(1-0.003926/μm^2)
@@ -362,9 +328,100 @@ function sellmeier_crystal(material, axis)
         else
             throw(DomainError(axis, "Unknown BBO axis $axis"))
         end
+    elseif material == :MgF2
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.27620
+                + 0.60967/(1-(0.08636/μm)^2)
+                + 0.0080/(1-(18.0/μm)^2)
+                + 2.14973/(1-(25.0/μm)^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.25385
+                + 0.66405/(1-(0.08504/μm)^2)
+                + 1.0899/(1-(22.2/μm)^2)
+                + 0.1816/(1-(24.4/μm)^2)
+                + 2.1227/(1-(40.6/μm)^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown MgF2 axis $axis"))
+        end
+    elseif material == :quartz
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                1
+                + 0.28604141
+                + 1.07044083/(1-1.00585997e-2/μm^2)
+                + 1.10202242/(1-100/μm^2)
+                ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                1
+                + 0.28851804
+                + 1.09509924/(1-1.02101864e-2/μm^2)
+                + 1.15662475/(1-100/μm^2)
+                ))
+        else
+            throw(DomainError(axis, "Unknown quartz axis $axis"))
+        end
+    elseif material == :CaCO3
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(1
+                + 0.73358749
+                + 0.96464345/(1-1.94325203e-2/μm^2)
+                + 1.82831454/(1-120/μm^2)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(1
+                + 0.35859695
+                + 0.82427830/(1-1.06689543e-2/μm^2)
+                + 0.14429128/(1-120/μm^2)
+            ))
+        else
+            throw(DomainError(axis, "Unknown CaCO3 axis $axis"))
+        end
+    elseif material == :ADP
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.302842
+                + 15.102464*μm^2/(μm^2-400)
+                + 0.011125165/(μm^2-0.01325366)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.163510
+                + 5.919896*μm^2/(μm^2-400)
+                + 0.009616676/(μm^2-0.01298912)
+            ))
+        else
+            throw(DomainError(axis, "Unknown ADP axis $axis"))
+        end
+    elseif material == :KDP
+        isnothing(axis) && (axis = :o)
+        if axis == :o
+            return μm -> @. sqrt(complex(
+                2.259276
+                + 13.00522*μm^2/(μm^2-400)
+                + 0.01008956/(μm^2-0.0129426)
+            ))
+        elseif axis == :e
+            return μm -> @. sqrt(complex(
+                2.132668
+                + 3.2279924*μm^2/(μm^2-400)
+                + 0.008637494/(μm^2-0.0122810)
+            ))
+        else
+            throw(DomainError(axis, "Unknown KDP axis $axis"))
+        end
     elseif material == :LBO
         # C Chen et al., J Opt. Soc. Am. 6, 616-621 (1989)
         # F. Hanson and D. Dick., Opt. Lett. 16, 205-207 (1991).
+        isnothing(axis) && (axis = :x)
         if axis == :x
             return μm -> sqrt(complex(
                 2.45768
@@ -396,6 +453,57 @@ function ref_index_fun_uniax(material; axes=(:o, :e))
     n_e = sellmeier_crystal(material, axes[2])
     n(λ, θ) = sqrt(1/((cos(θ)/n_o(λ*1e6))^2+(sin(θ)/n_e(λ*1e6))^2))
     return n
+end
+
+function ref_index_fun_xy(material, θ; ordinary=:o, extraordinary=:e)
+    # y polarisation: ordinary polarisation
+    no = ref_index_fun(material; axis=ordinary)
+    # x polarisation: extraordinary polarisation, need extra δθ argument
+    ne = ref_index_fun_uniax(material; axes=(ordinary, extraordinary))
+    nfunx(λ, δθ=0) = real(ne(λ, θ+δθ))
+    nfuny(λ) = real(no(λ))
+    nfunx, nfuny
+end
+
+function crystal_internal_angle(nfun, ω, kx)
+    # External wavevector is kx = ω/c*sin(θ_i) with θ_i the AOI of the plane wave
+    # Internal wavevector is kx2 = ω/c * n(θ+δθ) * sin(δθ)
+    # Momentum conservation requires kx = kx2
+    # kx is given by the grid, so
+    # kx = ω/c * n(θ+δθ)*sin(δθ)
+    # Solve this numerically
+    try
+        global δθ = fzero(0.0) do δθi
+            ω/c * nfun(wlfreq(ω), δθi)*sin(δθi) - kx
+        end
+    catch
+        error("Crystal index could not be found for λ=$(1e9wlfreq(ω)) nm, kx=$kx")
+    end
+    δθ
+end
+
+"""
+    χ2(material)
+
+Return the second-order nonlinear susceptibility tensor for `material` as a
+3×6 matrix in SI units (m/V), using contracted notation
+`[xx, yy, zz, yz, xz, xy]`.
+
+Currently implemented materials:
+- `:BBO`
+"""
+function χ2(material)
+    if material == :BBO
+        # Shoji, I. et al. J. Opt. Soc. Am. B, JOSAB 16, 620–624 (1999)
+        χ2 = 2e-12.*[ # note factor of 2 to convert d to χ2
+            0 0 0 0 0.03 2.2;
+            2.2 -2.2 0 -0.08 0 0;
+            0.04 0.04 0.04 0 0 0
+        ]
+    else
+        error("Unknown material for χ2: $material")
+    end
+    return χ2
 end
 
 """
@@ -432,12 +540,12 @@ end
 
 
 """
-    ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
+    ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
 
 Get refractive index for any material at wavelength given in SI units.
 """
-function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing)
-    return ref_index_fun(material, P, T; lookup=lookup)(λ)
+function ref_index(material, λ, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
+    return ref_index_fun(material, P, T; lookup, axis)(λ)
 end
 
 """
@@ -445,10 +553,14 @@ end
 
 Get function which returns refractive index.
 """
-function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
+function ref_index_fun(material::Symbol, P=1.0, T=roomtemp;
+                       lookup=nothing, axis=nothing)
     if material in gas
         χ1 = χ1_fun(material, P, T)
         return λ -> sqrt(1 + complex(χ1(λ)))
+    elseif ~isnothing(axis)
+        sell = sellmeier_crystal(material, axis)
+        return λ -> sell(λ*1e6)
     elseif material in glass
         if isnothing(lookup)
             lookup = (material == :SiO2)
@@ -460,6 +572,9 @@ function ref_index_fun(material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
             sell = sellmeier_glass(material)
             return λ -> sell(λ*1e6)
         end
+    elseif material in crystal
+        sell = sellmeier_crystal(material, axis)
+        return λ -> sell(λ*1e6)
     elseif material in metal
         nmetal = let spl = lookup_metal(material)
             function nmetal(λ)
@@ -481,11 +596,12 @@ end
 Get function which returns refractive index for gas mixture. `gases` is a `Tuple` of gas
 identifiers (`Symbol`s) and `P` is a `Tuple` of equal length containing pressures.
 """
-function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp; lookup=nothing) where N
+function ref_index_fun(gases::NTuple{N, Symbol}, P::NTuple{N, Number}, T=roomtemp;
+                       lookup=nothing, axis=nothing) where N
     ngas = let funs=[χ1_fun(gi, Pi, T) for (gi, Pi) in zip(gases, P)]
         function ngas(λ)
             res = funs[1](λ)
-            for ii in 2:length(gases) 
+            for ii in 2:length(gases)
                 res += funs[ii](λ)
             end
             return sqrt(1 + res)
@@ -515,8 +631,7 @@ end
 """
     dispersion_func(order, n)
 
-Get a function that calculates dispersion of order `order` for a refractive index given by
-`n(λ)`.
+Get a function that calculates dispersion of order `order` for a refractive index given by `n(λ)`.
 """
 function dispersion_func(order, n)
     β(ω) = @. ω/c * real(n(wlfreq(ω)))
@@ -525,22 +640,23 @@ function dispersion_func(order, n)
 end
 
 """
-    dispersion_func(order, material, P=1, T=roomtemp; lookup=nothing)
+    dispersion_func(order, material, P=1, T=roomtemp; lookup=nothing, axis=nothing)
 
 Get a function to calculate dispersion. Arguments are the same as for [`dispersion`](@ref).
 """
-function dispersion_func(order, material::Symbol, P=1.0, T=roomtemp; lookup=nothing)
-    n = ref_index_fun(material, P, T, lookup=lookup)
+function dispersion_func(order, material::Symbol, P=1.0, T=roomtemp;
+                         lookup=nothing, axis=nothing)
+    n = ref_index_fun(material, P, T; lookup, axis)
     dispersion_func(order, n)
 end
 
 """
-    dispersion(order, material, λ, P=1.0, T=roomtemp; lookup=nothing)
+    dispersion(order, material, λ, P=1.0, T=roomtemp; lookup=nothing, axis=nothing)
 
 Calculate the dispersion of order `order` of a given `material` at a wavelength `λ`.
 
 For gases the pressure `P` (default:atmosphere) and the temperature `T` (default: room temp)
-can also be specified. `lookup::Bool` determines whether a lookup table or a Sellmeier 
+can also be specified. `lookup::Bool` determines whether a lookup table or a Sellmeier
 expansion is used for the refractive index (default is material dependent).
 
 # Examples
@@ -549,8 +665,9 @@ julia> dispersion(2, :BK7, 400e-9) * 1e30 * 1e-3 # convert to fs^2/mm
 122.03632107303108
 ```
 """
-function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp; lookup=nothing)
-    return dispersion_func(order, material, P, T; lookup=lookup).(λ)
+function dispersion(order, material::Symbol, λ, P=1.0, T=roomtemp;
+                    lookup=nothing, axis=nothing)
+    return dispersion_func(order, material, P, T; lookup, axis).(λ)
 end
 
 """
@@ -657,8 +774,8 @@ function γ3_gas(material::Symbol; source=nothing)
 end
 
 function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
-    if material in glass
-        n2 = n2_glass(material, λ=1030e-9)
+    if material in glass || material in crystal
+        n2 = n2_solid(material, λ=1030e-9)
         n0 = real(ref_index(material, 1030e-9))
         return 4/3 * n2 * (ε_0*c*n0^2)
     end
@@ -666,13 +783,14 @@ function χ3(material::Symbol, P=1.0, T=roomtemp; source=nothing)
 end
 
 function n2(material::Symbol, P=1.0, T=roomtemp; λ=nothing, source=nothing)
-    material in glass && return n2_glass(material::Symbol, λ=λ)
+    material in glass && return n2_solid(material::Symbol, λ=λ)
+    material in crystal && return n2_solid(material::Symbol, λ=λ)
     λ = isnothing(λ) ? 800e-9 : λ
     n0 = ref_index(material, λ, P, T)
     return @. 3/4 * χ3(material, P, T, source=source) / (ε_0*c*n0^2)
 end
 
-function n2_glass(material::Symbol; λ=nothing)
+function n2_solid(material::Symbol; λ=nothing)
     if material == :SiO2
         return 2.7e-20
     elseif material == :MgF2
@@ -681,8 +799,11 @@ function n2_glass(material::Symbol; λ=nothing)
     elseif material == :CaCO3
         # Kabaciński et al., 10.1364/OE.27.011018
         return 3.22e-20
+    elseif material == :BBO
+        # M. Bache, et al., Opt. Mater. Express, OME 3(3), 357–382 (2013).
+        return 5.1e-20
     else
-        error("Unkown glass $material")
+        error("Unknown material $material")
     end
 end
 
@@ -1036,11 +1157,11 @@ function raman_parameters(material)
               qJodd = 1,
               qJeven = 0,
               Δα = 10.2e-31, # [2]
-              # TODO τ2r = 
+              # TODO τ2r =
               dαdQ = 1.46e-20, # [1]
               Ωv = 3e14, # [1]
               μ = 1.3e-26, # [1]
-              # TODO τ2v = 
+              # TODO τ2v =
               )
     elseif material == :N2O
         rp = (kind = :molecular,
@@ -1052,10 +1173,10 @@ function raman_parameters(material)
               qJeven = 1, # [14]
               Δα = 28.1e-31, # [2] note that [14] uses twice this
               τ2r = 23.8e-12, # [14]
-              # TODO dαdQ =  
+              # TODO dαdQ =
               Ωv = 2*π*1285*100.0*c,
-              # TODO μ = 
-              # TODO τ2v = 
+              # TODO μ =
+              # TODO τ2v =
              )
     elseif material == :SiO2 # [18]
         rp = (kind = :intermediate,
@@ -1077,7 +1198,7 @@ function raman_parameters(material)
               Bρv = 384e6, # [16]
               Aρv = 0.0, # [16]
               Cv = 8220e6 # [16]
-             )    
+             )
     elseif material == :SF6
         rp = (kind = :molecular,
                 rotation = :none,
@@ -1086,7 +1207,7 @@ function raman_parameters(material)
                 Ωv = 2*π*775*100.0*c, # [6]
                 μ = (18.998403*m_u)/6,
                 τ2v = 6.6e-12, # [13]
-                )      
+                )
     else
         throw(DomainError(material, "Unknown material $material"))
     end
@@ -1154,7 +1275,7 @@ function lookup_mirror(type)
     elseif type == :PC1611
         dat = readdlm(joinpath(Utils.datadir(), "PC1611.txt"); skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] 
+        R = dat[:, 2]
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)
@@ -1171,7 +1292,7 @@ function lookup_mirror(type)
     elseif type == :PC1821
         dat = readdlm(joinpath(Utils.datadir(), "PC1821.txt"); skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] 
+        R = dat[:, 2]
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)
@@ -1188,7 +1309,7 @@ function lookup_mirror(type)
     elseif type == :HD120
         dat = readdlm(joinpath(Utils.datadir(), "HD120.csv"), ','; skipstart=1)
         λR = dat[:, 1] * 1e-9
-        R = dat[:, 2] # reflectivity per mirror 
+        R = dat[:, 2] # reflectivity per mirror
         rspl = Maths.BSpline(λR, sqrt.(R/100))
         λGDD = dat[:, 3] * 1e-9
         ω = wlfreq.(λGDD)

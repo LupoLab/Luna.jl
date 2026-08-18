@@ -1,12 +1,10 @@
 import Test: @test, @testset, @test_throws
-import FunctionZeros: besselj_zero
-import SpecialFunctions: besselj
-import HCubature: hquadrature
-import LinearAlgebra: norm
-import FFTW
 using Luna
+import Luna.Capillary: besselj_zero, besselj, hquadrature
+import LinearAlgebra: norm
 import Luna: Hankel
 import Luna.PhysData: wlfreq
+import FFTW
 
 
 @testset "delegation" begin
@@ -398,8 +396,8 @@ end # testset "makemodes"
         N, _ = hquadrature(r -> r*mode(r), 0, a)
         N *= 2π # azimuthal integral
         # mode(0) = 1.0, so peak fluence is just energy/N
-        @test isapprox(fluence[1, length(x)÷2+1], energy/N, rtol=1e-6)
-        @test isapprox(energy/N .* mode.(x), fluence[1, :], rtol=1e-6)
+        @test isapprox(fluence[length(x)÷2+1, 1], energy/N, rtol=1e-6)
+        @test isapprox(energy/N .* mode.(x), fluence[:, 1], rtol=1e-6)
     end
 
     out = prop_capillary(a, flength, gas, pressure;
@@ -432,6 +430,6 @@ end # testset "makemodes"
     t, Etxy_grid = Processing.getEtxy(out, xs, flength; oversampling=1)
     @testset "comparing at $x1, $x2" for (x1idx, x1) in enumerate(xs[1]), (x2idx, x2) in enumerate(xs[2])
         _, Etthis = Processing.getEtxy(out, (x1, x2), flength; oversampling=1)
-        @test Etthis ≈ Etxy_grid[:, x1idx, x2idx, :]
+        @test Etthis ≈ Etxy_grid[:, :, x1idx, x2idx]
     end
 end # testset "spatial field and fluence"

@@ -16,6 +16,13 @@ end
     @test PhysData.ref_index(:SiO2, PhysData.eV_to_m(0.91018)) ≈ 1.44621
     @test real(PhysData.ref_index(:SiO2, PhysData.eV_to_m(121.6))) ≈ 0.9865
     @test imag(PhysData.ref_index(:SiO2, PhysData.eV_to_m(121.6))) ≈ 0.0085
+    # Comparisons with ref index info
+    @test isapprox(PhysData.ref_index(:CaCO3, 800e-9), 1.6488; rtol=1e-4)
+    @test isapprox(PhysData.ref_index(:CaCO3, 800e-9; axis=:e), 1.4819; rtol=1e-4)
+    @test isapprox(PhysData.ref_index(:MgF2, 800e-9), 1.3751; rtol=1e-4)
+    @test isapprox(PhysData.ref_index(:MgF2, 800e-9; axis=:e), 1.3867; rtol=1e-4)
+    @test isapprox(PhysData.ref_index(:BBO, 800e-9), 1.6604; rtol=1e-4)
+    @test isapprox(PhysData.ref_index(:BBO, 800e-9; axis=:e), 1.5455; rtol=1e-4)
 end
 
 @testset "Function equivalence" begin

@@ -6,29 +6,30 @@ import Base: show
 import LinearAlgebra: mul!, ldiv!
 import NumericalIntegration: integrate, SimpsonEven
 import Luna: PhysData, Modes, Maths, Grid
-import Luna.PhysData: wlfreq
+import Luna.PhysData: wlfreq, c, crystal_internal_angle
+using EllipsisNotation
 
 """
     to_time!(Ato, Aω, Aωo, IFTplan)
 
 Transform ``A(ω)`` on normal grid to ``A(t)`` on oversampled time grid.
 """
-function to_time!(Ato::Array{<:Real, D}, Aω, Aωo, IFTplan) where D
+function to_time!(Ato::Array{<:Real, D}, Aω, Aωo, FT) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = (No-1)/(N-1) # Scale factor makes up for difference in FFT array length
     fill!(Aωo, 0)
     copy_scale!(Aωo, Aω, N, scale)
-    mul!(Ato, IFTplan, Aωo)
+    ldiv!(Ato, FT, Aωo)
 end
 
-function to_time!(Ato::Array{<:Complex, D}, Aω, Aωo, IFTplan) where D
+function to_time!(Ato::Array{<:Complex, D}, Aω, Aωo, FT) where D
     N = size(Aω, 1)
     No = size(Aωo, 1)
     scale = No/N # Scale factor makes up for difference in FFT array length
     fill!(Aωo, 0)
     copy_scale_both!(Aωo, Aω, N÷2, scale)
-    mul!(Ato, IFTplan, Aωo)
+    ldiv!(Ato, FT, Aωo)
 end
 
 """
@@ -81,7 +82,7 @@ function copy_scale_both!(dest::Vector, source::Vector, N, scale)
 end
 
 function copy_scale!(dest, source, N, scale)
-    (size(dest)[2:end] == size(source)[2:end] 
+    (size(dest)[2:end] == size(source)[2:end]
      || error("dest and source must be same size except along first dimension"))
     idcs = CartesianIndices(size(dest)[2:end])
     _cpsc_core(dest, source, N, scale, idcs)
@@ -96,7 +97,7 @@ function _cpsc_core(dest, source, N, scale, idcs)
 end
 
 function copy_scale_both!(dest, source, N, scale)
-    (size(dest)[2:end] == size(source)[2:end] 
+    (size(dest)[2:end] == size(source)[2:end]
      || error("dest and source must be same size except along first dimension"))
     idcs = CartesianIndices(size(dest)[2:end])
     _cpscb_core(dest, source, N, scale, idcs)
@@ -142,7 +143,7 @@ end
 
 function Et_to_Pt!(Pt, Et, responses, density, idcs)
     for i in idcs
-        Et_to_Pt!(view(Pt, :, i), view(Et, :, i), responses, density)
+        Et_to_Pt!(view(Pt, .., i), view(Et, .., i), responses, density)
     end
 end
 
@@ -305,13 +306,13 @@ end
 
 function Erω_to_Prω!(t, x)
     Modes.to_space!(t.Erω, t.Emω, x, t.ts, z=t.z)
-    to_time!(t.Er, t.Erω, t.Erωo, inv(t.FT))
+    to_time!(t.Er, t.Erω, t.Erωo, t.FT)
     # Modified shot-noise model: project noise modes to real space at this spatial point,
     # convert to oversampled time domain, and combine with field in a separate buffer (Er_nl)
     # so the propagating field (Er) is never contaminated.
     if !isnothing(t.Emω_noise)
         Modes.to_space!(t.Erω, t.Emω_noise, x, t.ts, z=t.z)
-        to_time!(t.Er_noise, t.Erω, t.Erωo, inv(t.FT))
+        to_time!(t.Er_noise, t.Erω, t.Erωo, t.FT)
         @. t.Er_nl = t.Er + t.Er_noise
         Et_to_Pt!(t.Pr, t.Er_nl, t.resp, t.density)
     else
@@ -330,13 +331,13 @@ function (t::TransModal)(nl, Eω, z)
         val, err = Cubature.hcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            ll, ul, 
+            ll, ul,
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     else
         val, err = Cubature.pcubature_v(
             length(Eω)*2,
             (x, fval) -> pointcalc!(fval, x, t),
-            (ll[1],), (ul[1],), 
+            (ll[1],), (ul[1],),
             reltol=t.rtol, abstol=t.atol, maxevals=t.mfcn, error_norm=Cubature.L2)
     end
     t.err .= reshape(reinterpret(ComplexF64, err), size(nl))
@@ -414,7 +415,7 @@ function TransModeAvg(TT, grid, FT, resp, densityfun, norm!, aeff; noise_field=n
     if !isnothing(noise_field)
         Eωo_noise = zeros(ComplexF64, length(grid.ωo))
         Et_noise = zeros(TT, length(grid.to))
-        to_time!(Et_noise, noise_field, Eωo_noise, inv(FT))
+        to_time!(Et_noise, noise_field, Eωo_noise, FT)
         Et_nl = zeros(TT, length(grid.to))
     else
         Et_noise = nothing
@@ -434,7 +435,7 @@ end
 const nlscale = sqrt(PhysData.ε_0*PhysData.c/2)
 
 function (t::TransModeAvg)(nl, Eω, z)
-    to_time!(t.Eto, Eω, t.Eωo, inv(t.FT))
+    to_time!(t.Eto, Eω, t.Eωo, t.FT)
     sc = nlscale*sqrt(t.aeff(z))
     @. t.Eto /= sc
     # Modified shot-noise model: compute field+noise in a separate buffer (Et_nl) so that
@@ -499,11 +500,15 @@ struct TransRadial{TT, HTT, FTT, nT, rT, gT, dT, iT, eT, nlT}
     resp::rT # nonlinear responses (tuple of callables)
     grid::gT # time grid
     densityfun::dT # callable which returns density
-    Pto::Array{TT,2} # Buffer array for NL polarisation on oversampled time grid
-    Eto::Array{TT,2} # Buffer array for field on oversampled time grid
-    Eωo::Array{ComplexF64,2} # Buffer array for field on oversampled frequency grid
-    Pωo::Array{ComplexF64,2} # Buffer array for NL polarisation on oversampled frequency grid
+    Pto_r::Array{TT, 3} # Buffer array for NL polarisation on oversampled time grid
+    Pto_k::Array{TT, 3} # Buffer array for NL polarisation on oversampled time grid
+    Eto_r::Array{TT, 3} # Buffer array for field on oversampled time grid
+    Eto_k::Array{TT, 3} # Buffer array for field on oversampled time grid
+    Eωo::Array{ComplexF64, 3} # Buffer array for field on oversampled frequency grid
+    Pωo::Array{ComplexF64, 3} # Buffer array for NL polarisation on oversampled frequency grid
     idcs::iT # CartesianIndices for Et_to_Pt! to iterate over
+    Tfwd::Matrix{TT} # forward Hankel transform matrix
+    Tbwd::Matrix{TT} # backward Hankel transform matrix
     Et_noise::eT # time-domain noise for modified shot-noise model, or nothing
     Et_nl::nlT # buffer for field+noise passed to Et_to_Pt!, or nothing
 end
@@ -529,24 +534,30 @@ Construct a `TransRadial` to calculate the reciprocal-domain nonlinear polarisat
   via inverse FFT and inverse Hankel transform, and stored as `Et_noise`.
   Generate with [`Fields.generate_noise_field`](@ref Luna.Fields.generate_noise_field).
 """
-function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun; noise_field=nothing)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), HT.N))
-    Eto = zeros(TT, (length(grid.to), HT.N))
-    Pto = similar(Eto)
+function TransRadial(TT, grid, HT, FT, responses, densityfun, normfun, pol=false; noise_field=nothing)
+    np = pol ? 2 : 1
+    Eωo = zeros(ComplexF64, (length(grid.ωo), np, HT.N))
+    Eto_r = zeros(TT, (length(grid.to), np, HT.N))
+    Pto_r = similar(Eto_r)
+    Eto_k = similar(Eto_r)
+    Pto_k = similar(Eto_r)
     Pωo = similar(Eωo)
-    idcs = CartesianIndices(size(Pto)[2:end])
+    idcs = CartesianIndices(size(Pto_r)[3:end])
+    Tfwd = convert(Matrix{TT}, transpose(HT.T) .* HT.scaleRK)
+    Tbwd = convert(Matrix{TT}, transpose(HT.T) ./ HT.scaleRK)
     # Precompute time-domain noise in real space: ω→t via to_time!, then k→r via QDHT⁻¹
     if !isnothing(noise_field)
-        Eωo_noise = zeros(ComplexF64, (length(grid.ωo), HT.N))
-        Et_noise = zeros(TT, (length(grid.to), HT.N))
-        to_time!(Et_noise, noise_field, Eωo_noise, inv(FT))
+        Eωo_noise = zeros(ComplexF64, (length(grid.ωo), np, HT.N))
+        Et_noise = zeros(TT, (length(grid.to), np, HT.N))
+        to_time!(Et_noise, noise_field, Eωo_noise, FT)
         ldiv!(Et_noise, HT, Et_noise)
-        Et_nl = zeros(TT, (length(grid.to), HT.N))
+        Et_nl = zeros(TT, (length(grid.to), np, HT.N))
     else
         Et_noise = nothing
         Et_nl = nothing
     end
-    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto, Eto, Eωo, Pωo, idcs, Et_noise, Et_nl)
+    TransRadial(HT, FT, normfun, responses, grid, densityfun, Pto_r, Pto_k, Eto_r, Eto_k, Eωo, Pωo, idcs,
+                Tfwd, Tbwd, Et_noise, Et_nl)
 end
 
 function TransRadial(grid::Grid.RealGrid, args...; kwargs...)
@@ -564,19 +575,28 @@ Calculate the reciprocal-domain (ω-k-space) nonlinear response due to the field
 place the result in `nl`
 """
 function (t::TransRadial)(nl, Eω, z)
-    to_time!(t.Eto, Eω, t.Eωo, inv(t.FT)) # transform ω -> t
-    ldiv!(t.Eto, t.QDHT, t.Eto) # transform k -> r
-    # Modified shot-noise: compute field+noise in separate buffer (Et_nl) so the
-    # propagating field (Eto) is never contaminated.
-    if !isnothing(t.Et_noise)
-        @. t.Et_nl = t.Eto + t.Et_noise
-        Et_to_Pt!(t.Pto, t.Et_nl, t.resp, t.densityfun(z), t.idcs)
-    else
-        Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs)
+    to_time!(t.Eto_k, Eω, t.Eωo, t.FT) # transform ω -> t
+    # transform Eto k -> r
+    # iterate over polarisation directions (either 1:2 or just 1)
+    for ip in axes(t.Eto_k, 2)
+        mul!(view(t.Eto_r, :, ip, :), view(t.Eto_k, :, ip, :), t.Tbwd)
     end
-    @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pto, t.QDHT, t.Pto) # transform r -> k
-    to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform t -> ω
+    # Modified shot-noise: compute field+noise in separate buffer (Et_nl) so the
+    # propagating field is never contaminated.
+    # Note that if noise_field is nothing, we pass t.Eto_r straight without copying
+    # to the buffer t.Et_nl first
+    if !isnothing(t.Et_noise)
+        @. t.Et_nl = t.Eto_r + t.Et_noise
+        Et_to_Pt!(t.Pto_r, t.Et_nl, t.resp, t.densityfun(z), t.idcs)
+    else
+        Et_to_Pt!(t.Pto_r, t.Eto_r, t.resp, t.densityfun(z), t.idcs)
+    end
+    @. t.Pto_r *= t.grid.towin # apodisation
+    # transform Pto r -> k
+    for ip in axes(t.Pto_k, 2)
+        mul!(view(t.Pto_k, :, ip, :), view(t.Pto_r, :, ip, :), t.Tfwd)
+    end
+    to_freq!(nl, t.Pωo, t.Pto_k, t.FT) # transform t -> ω
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
@@ -584,7 +604,7 @@ end
     const_norm_radial(ω, q, nfun)
 
 Make function to return normalisation factor for radial symmetry without re-calculating at
-every step. 
+every step.
 """
 function const_norm_radial(grid, q, nfun)
     nfunω = (ω; z) -> nfun(wlfreq(ω))
@@ -599,30 +619,33 @@ end
 """
     norm_radial(ω, q, nfun)
 
-Make function to return normalisation factor for radial symmetry. 
+Make function to return normalisation factor for radial symmetry.
 
 !!! note
     Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
 """
 function norm_radial(grid, q, nfun)
     ω = grid.ω
-    out = zeros(Float64, (length(ω), q.N))
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    out = zeros(Float64, (length(ω), np, q.N))
     kr2 = q.k.^2
-    k2 = zeros(Float64, length(ω))
     function norm(z)
-        k2[grid.sidx] .= (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         for ir = 1:q.N
             for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ir] = 1.0
+                if ω[iω] == 0 || ~grid.sidx[iω]
+                    out[iω, :, ir] .= 1.0
                     continue
                 end
-                βsq = k2[iω] - kr2[ir]
-                if βsq <= 0
-                    out[iω, ir] = 1.0
-                    continue
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    k2 = (real(n)*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kr2[ir]
+                    if βsq <= 0
+                        out[iω, ip, ir] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
                 end
-                out[iω, ir] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
             end
         end
         return out
@@ -648,10 +671,10 @@ mutable struct TransFree{TT, FTT, nT, rT, gT, xygT, dT, iT, eT, nlT}
     grid::gT # time grid
     xygrid::xygT
     densityfun::dT # callable which returns density
-    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
-    Eto::Array{TT, 3} # buffer for oversampled time-domain field
-    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
-    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    Pto::Array{TT, 4} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 4} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 4} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 4} # buffer for oversampled frequency-domain NL polarisation
     scale::Float64 # scale factor to be applied during oversampling
     idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
     Et_noise::eT # time-domain noise for modified shot-noise model, or nothing
@@ -669,7 +692,7 @@ function show(io::IO, t::TransFree)
 end
 
 """
-    TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun; noise_field=nothing)
+    TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun, pol=false; noise_field=nothing)
 
 Construct a `TransFree` to calculate the reciprocal-domain nonlinear polarisation for 3D
 free-space propagation.
@@ -680,24 +703,24 @@ free-space propagation.
   time domain `(nto, ny, nx)` via `copy_scale!` and 3D inverse FFT, and stored as `Et_noise`.
   Generate with [`Fields.generate_noise_field`](@ref Luna.Fields.generate_noise_field).
 """
-function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun;
+function TransFree(TT, scale, grid, xygrid, FT, responses, densityfun, normfun, pol=false;
                    noise_field=nothing)
     Ny = length(xygrid.y)
     Nx = length(xygrid.x)
-    Eωo = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
-    Eto = zeros(TT, (length(grid.to), Ny, Nx))
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Nx, Ny))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Nx, Ny))
     Pto = similar(Eto)
     Pωo = similar(Eωo)
-    idcs = CartesianIndices((Ny, Nx))
+    idcs = CartesianIndices((Nx, Ny))
     # Precompute time-domain noise in real space:
-    # copy_scale! into oversampled spectral grid, then 3D IFFT: (ω,ky,kx) → (t,y,x)
+    # copy_scale! into oversampled spectral grid, then 3D IFFT: (ω,kx,ky) → (t,x,y)
     if !isnothing(noise_field)
-        Eωo_noise = zeros(ComplexF64, (length(grid.ωo), Ny, Nx))
+        Eωo_noise = zeros(ComplexF64, (length(grid.ωo), Nx, Ny))
         N = length(grid.ω)
         copy_scale!(Eωo_noise, noise_field, N, scale)
-        Et_noise = zeros(TT, (length(grid.to), Ny, Nx))
+        Et_noise = zeros(TT, (length(grid.to), Nx, Ny))
         ldiv!(Et_noise, FT, Eωo_noise)
-        Et_nl = zeros(TT, (length(grid.to), Ny, Nx))
+        Et_nl = zeros(TT, (length(grid.to), Nx, Ny))
     else
         Et_noise = nothing
         Et_nl = nothing
@@ -729,7 +752,7 @@ and place the result in `nl`.
 function (t::TransFree)(nl, Eωk, z)
     fill!(t.Eωo, 0)
     copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, ky, kx) -> (t, y, x)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx, ky) -> (t, x, y)
     # Modified shot-noise: compute field+noise in separate buffer (Et_nl) so the
     # propagating field (Eto) is never contaminated.
     if !isnothing(t.Et_noise)
@@ -739,7 +762,7 @@ function (t::TransFree)(nl, Eωk, z)
         Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs)
     end
     @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, y, x) -> (ω, ky, kx)
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x, y) -> (ω, kx, ky)
     copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
@@ -760,6 +783,18 @@ function const_norm_free(grid, xygrid, nfun)
     return norm
 end
 
+function const_norm_free(grid, xygrid, nfuns::Tuple)
+    nfunx, nfuny = nfuns
+    nfunzx = (λ, δθ; z) -> nfunx(λ, δθ)
+    nfunzy = (λ; z) -> nfuny(λ)
+    normfun = norm_free(grid, xygrid, (nfunzx, nfunzy))
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
 """
     norm_free(grid, xygrid, nfun)
 
@@ -770,24 +805,247 @@ Make function to return normalisation factor for 3D propagation.
 """
 function norm_free(grid, xygrid, nfun)
     ω = grid.ω
-    kperp2 = @. (xygrid.kx^2)' + xygrid.ky^2
-    idcs = CartesianIndices((length(xygrid.ky), length(xygrid.kx)))
-    k2 = zero(grid.ω)
-    out = zeros(Float64, (length(grid.ω), length(xygrid.ky), length(xygrid.kx)))
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    kperp2 = @. xygrid.kx^2 + (xygrid.ky^2)'
+    idcs = CartesianIndices((length(xygrid.kx), length(xygrid.ky)))
+    out = zeros(Float64, (length(grid.ω), np, length(xygrid.kx), length(xygrid.ky)))
     function norm(z)
-        k2[grid.sidx] = (nfun.(grid.ω[grid.sidx]; z=z).*grid.ω[grid.sidx]./PhysData.c).^2
         for ii in idcs
             for iω in eachindex(ω)
-                if ω[iω] == 0
-                    out[iω, ii] = 1.0
+                if ω[iω] == 0 || ~grid.sidx[iω]
+                    out[iω, :, ii] .= 1.0
                     continue
                 end
-                βsq = k2[iω] - kperp2[ii]
-                if βsq <= 0
-                    out[iω, ii] = 1.0
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    k2 = (real(n)*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kperp2[ii]
+                    if βsq <= 0
+                        out[iω, ip, ii] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                end
+            end
+        end
+        return out
+    end
+end
+
+function norm_free(grid, xygrid, nfuns::Tuple)
+    nfunx, nfuny = nfuns
+    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ+δθ)
+    # nfuny(λ; z) just takes wavelength
+    ω = grid.ω
+    out = zeros(Float64, (length(ω), 2, length(xygrid.kx), length(xygrid.ky)))
+    function norm(z)
+        for iω in eachindex(ω)
+            if ω[iω] == 0 || ~grid.sidx[iω]
+                out[iω, :, :, :] .= 1.0
+                continue
+            end
+            ny = nfuny(wlfreq(ω[iω]); z)
+            ksq_ypol = (ny*ω[iω]/c)^2
+            for (ikx, kxi) in enumerate(xygrid.kx)
+                δθ = crystal_internal_angle((λ, δθ) -> nfunx(λ, δθ; z), ω[iω], kxi)
+                nx = nfunx(wlfreq(ω[iω]), δθ; z)
+                for (iky, kyi) in enumerate(xygrid.ky)
+                    k_xpol = nx*grid.ω[iω]/c
+                    βsq_xpol = k_xpol^2 - kxi^2 - kyi^2
+                    if βsq_xpol < 0
+                        out[iω, 1, ikx, iky] = 1.0
+                    else
+                        out[iω, 1, ikx, iky] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
+                    end
+
+                    βsq_ypol = ksq_ypol - kxi^2 - kyi^2
+                    if βsq_ypol < 0
+                        out[iω, 2, ikx, iky] .= 1.0
+                    else
+                        out[iω, 2, ikx, iky] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
+                    end
+                end
+            end
+        end
+        return out
+    end
+end
+
+mutable struct TransFree2D{TT, FTT, nT, rT, gT, xgT, dT, iT}
+    FT::FTT # 2D Fourier transform (space to k-space and time to frequency)
+    normfun::nT # Function which returns normalisation factor
+    resp::rT # nonlinear responses (tuple of callables)
+    grid::gT # time grid
+    xgrid::xgT
+    densityfun::dT # callable which returns density
+    Pto::Array{TT, 3} # buffer for oversampled time-domain NL polarisation
+    Eto::Array{TT, 3} # buffer for oversampled time-domain field
+    Eωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain field
+    Pωo::Array{ComplexF64, 3} # buffer for oversampled frequency-domain NL polarisation
+    scale::Float64 # scale factor to be applied during oversampling
+    idcs::iT # iterating over these slices Eto/Pto into Vectors, one at each position
+end
+
+function show(io::IO, t::TransFree2D)
+    grid = "grid type: $(typeof(t.grid))"
+    samples = "time grid size: $(length(t.grid.t)) / $(length(t.grid.to))"
+    resp = "responses: "*join([string(typeof(ri)) for ri in t.resp], "\n    ")
+    x = "x grid: $(minimum(t.xgrid.x)) to $(maximum(t.xgrid.x)), N=$(length(t.xgrid.x))"
+    out = join(["TransFree2D", grid, samples, x, resp], "\n  ")
+    print(io, out)
+end
+
+function TransFree2D(TT, scale, grid, xgrid, FT, responses, densityfun, normfun, pol=false)
+    Nx = length(xgrid.x)
+    Eωo = zeros(ComplexF64, (length(grid.ωo), pol ? 2 : 1, Nx))
+    Eto = zeros(TT, (length(grid.to), pol ? 2 : 1, Nx))
+    Pto = similar(Eto)
+    Pωo = similar(Eωo)
+    idcs = CartesianIndices(size(Pto)[3:end])
+    TransFree2D(FT, normfun, responses, grid, xgrid, densityfun,
+              Pto, Eto, Eωo, Pωo, scale, idcs)
+end
+
+"""
+    TransFree2D(grid, xygrid, FT, responses, densityfun, normfun)
+
+Construct a `TransFree2D` to calculate the reciprocal-domain nonlinear polarisation.
+
+# Arguments
+- `grid::AbstractGrid` : the grid used in the simulation
+- `xgrid` : the spatial grid (instances of [`Grid.FreeGrid`](@ref))
+- `FT::FFTW.Plan` : the 2D (t-x) Fourier transform for the oversampled time grid
+- `responses` : `Tuple` of response functions
+- `densityfun` : callable which returns the gas density as a function of `z`
+- `normfun` : normalisation factor as fctn of `z`, can be created via [`norm_free`](@ref)
+"""
+function TransFree2D(grid::Grid.RealGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = (No-1)/(N-1)
+    TransFree2D(Float64, scale, grid, args...)
+end
+
+function TransFree2D(grid::Grid.EnvGrid, args...)
+    N = length(grid.ω)
+    No = length(grid.ωo)
+    scale = No/N
+    TransFree2D(ComplexF64, scale, grid, args...)
+end
+
+"""
+    (t::TransFree2D)(nl, Eω, z)
+
+Calculate the reciprocal-domain (ω-kx-space) nonlinear response due to the field `Eω`
+and place the result in `nl`.
+"""
+function (t::TransFree2D)(nl, Eωk, z)
+    # TODO: this can probably be combined with the case for TransFree
+    fill!(t.Eωo, 0)
+    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
+    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx) -> (t, x)
+    Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
+    @. t.Pto *= t.grid.towin # apodisation
+    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x) -> (ω, kx)
+    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
+end
+
+"""
+    const_norm_free2D(grid, xgrid, nfun)
+
+Make function to return normalisation factor for 3D propagation without re-calculating at
+every step.
+"""
+function const_norm_free2D(grid, xgrid, nfun)
+    nfunω = (ω; z) -> nfun(wlfreq(ω))
+    normfun = norm_free2D(grid, xgrid, nfunω)
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+function const_norm_free2D(grid, xgrid, nfuns::Tuple)
+    nfunx, nfuny = nfuns
+    nfunzx = (λ, δθ; z) -> nfunx(λ, δθ)
+    nfunzy = (λ; z) -> nfuny(λ)
+    normfun = norm_free2D(grid, xgrid, (nfunzx, nfunzy))
+    out = copy(normfun(0.0))
+    function norm(z)
+        return out
+    end
+    return norm
+end
+
+"""
+    norm_free2D(grid, xgrid, nfun)
+
+Make function to return normalisation factor for 3D propagation.
+
+!!! note
+    Here, `nfun(ω; z)` needs to take frequency `ω` and a keyword argument `z`.
+"""
+function norm_free2D(grid, xgrid, nfun)
+    kperp2 = xgrid.kx.^2
+    ω = grid.ω
+    ωfirst = ω[findfirst(grid.sidx)]
+    np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
+    out = zeros(Float64, (length(ω), np, length(xgrid.kx)))
+    function norm(z)
+        for ii in eachindex(xgrid.kx)
+            for iω in eachindex(ω)
+                if ω[iω] == 0 || ~grid.sidx[iω]
+                    out[iω, :, ii] .= 1.0
                     continue
                 end
-                out[iω, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                for (ip, n) in enumerate(nfun(ω[iω]; z))
+                    k2 = (real(n)*ω[iω]/PhysData.c)^2
+                    βsq = k2 - kperp2[ii]
+                    if βsq <= 0
+                        out[iω, ip, ii] = 1.0
+                        continue
+                    end
+                    out[iω, ip, ii] = sqrt(βsq)/(PhysData.μ_0*ω[iω])
+                end
+            end
+        end
+        return out
+    end
+end
+
+function norm_free2D(grid, xgrid, nfuns::Tuple)
+    nfunx, nfuny = nfuns
+    # here nfunx(λ, δθ; z) also takes the angle and returns n_x(λ, θ+δθ)
+    # nfuny(λ; z) just takes wavelength
+    ω = grid.ω
+    out = zeros(Float64, (length(ω), 2, length(xgrid.kx)))
+    function norm(z)
+        for iω in eachindex(ω)
+            if ω[iω] == 0 || ~grid.sidx[iω]
+                out[iω, :, :] .= 1.0
+                continue
+            end
+            ny = nfuny(wlfreq(ω[iω]); z)
+            ksq_ypol = (ny*ω[iω]/c)^2
+            for (ik, kxi) in enumerate(xgrid.kx)
+                δθ = crystal_internal_angle((λ, δθ) -> nfunx(λ, δθ; z), ω[iω], kxi)
+                nx = nfunx(wlfreq(ω[iω]), δθ; z)
+                k_xpol = nx*grid.ω[iω]/c
+                βsq_xpol = k_xpol^2 - kxi^2
+                if βsq_xpol < 0
+                    out[iω, 1, ik] = 1.0
+                else
+                    out[iω, 1, ik] = sqrt(βsq_xpol)/(PhysData.μ_0*ω[iω])
+                end
+
+                βsq_ypol = ksq_ypol - kxi^2
+                if βsq_ypol < 0
+                    out[iω, 2, ik] .= 1.0
+                else
+                    out[iω, 2, ik] = sqrt(βsq_ypol)/(PhysData.μ_0*ω[iω])
+                end
             end
         end
         return out

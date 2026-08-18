@@ -138,7 +138,7 @@ function (p::PulseField)(grid, FT)
         Pt = It(Et, grid)
         Et .*= sqrt(p.power)/sqrt(maximum(Pt))
     end
-        
+
     FT * Et
 end
 
@@ -416,6 +416,7 @@ struct SpatioTemporalField{iT} <: AbstractField
     τ0::Float64
     Ishape::iT
     propz::Float64
+    θ::Float64
 end
 
 "Gaussian temporal-spatial field defined radially"
@@ -436,10 +437,10 @@ superGaussian parameter `m=1` and Gaussian shaped spatial profile with waist `w0
 propagation distance from the waist of `propz`,
 and other parameters as defined for [`TimeField`](@ref).
 """
-function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0.0)
+function GaussGaussField(;λ0, τfwhm, energy, w0, ϕ=0.0, τ0=0.0, m=1, propz=0.0, θ=0.0)
     SpatioTemporalField(λ0, energy, ϕ, τ0,
                         (t, xs) -> GaussGauss(t, xs, τfwhm, m, w0),
-                        propz)
+                        propz, θ)
 end
 
 function make_Etr(s::SpatioTemporalField, grid::Grid.RealGrid, spacegrid)
@@ -454,9 +455,9 @@ function make_Etr(s::SpatioTemporalField, grid::Grid.EnvGrid, spacegrid)
     sqrt.(s.Ishape(t, spacegrid.r)) .* exp.(im .* (s.ϕ .+ Δω.*t))
 end
 
-transform(spacegrid::Hankel.QDHT, FT, Etr) = spacegrid * (FT * Etr)
-
+transform(q::Hankel.QDHT, FT, Etr) = q * (FT * Etr)
 transform(spacegrid::Grid.FreeGrid, FT, Etr) = FT * Etr
+transform(spacegrid::Grid.Free2DGrid, FT, Etr) = FT * Etr
 
 """
     (s::SpatioTemporalField)(grid, spacegrid, FT)
@@ -465,9 +466,10 @@ Get the field for the provided `grid`, `spacegrid` function
 and Fourier transform `FT`
 """
 function (s::SpatioTemporalField)(grid, spacegrid, FT)
-    Etr = make_Etr(s, grid, spacegrid)
-    energy_t = Fields.energyfuncs(grid, spacegrid)[1]
+    Etr = make_Etr(s, grid, spacegrid) # (t, r) or (t, x) or (t, x, y)
+    energy_t = energyfuncs(grid, spacegrid)[1]
     Etr .*= sqrt(s.energy)/sqrt(energy_t(Etr))
+    Etr = rotate(Etr, s.θ)
     Eωk = transform(spacegrid, FT, Etr)
     if s.propz != 0.0
         prop!(Eωk, s.propz, grid, spacegrid)
@@ -475,16 +477,39 @@ function (s::SpatioTemporalField)(grid, spacegrid, FT)
     Eωk
 end
 
+function rotate(Etr::AbstractArray{T, 2}, θ) where T
+    Etr = permutedims(
+        cat(Etr .* sin(θ), Etr .* cos(θ); dims=3),
+        (1, 3, 2)
+    )
+end
+
+function rotate(Etr::AbstractArray{T, 3}, θ) where T
+    Etr = permutedims(
+        cat(Etr .* sin(θ), Etr .* cos(θ); dims=4),
+        (1, 4, 2, 3)
+    )
+end
+
 function prop!(Eωk, z, grid, q::Hankel.QDHT)
-    kzsq = @. (grid.ω/PhysData.c)^2 - (q.k^2)'
+    kzsq = (grid.ω/PhysData.c).^2 .- reshape(q.k.^2, (1, 1, length(q.k)))
     kzsq[kzsq .< 0] .= 0
     kz = sqrt.(kzsq)
     @. Eωk *= exp(-1im * z * (kz - grid.ω/PhysData.c))
 end
 
-function prop!(Eωk, z, grid, xygrid)
+function prop!(Eωk, z, grid, xygrid::Grid.FreeGrid)
     kzsq = ((grid.ω ./ PhysData.c).^2
-            .- reshape(xygrid.ky.^2, (1, length(xygrid.ky), 1))
+            .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx), 1))
+            .- reshape(xygrid.ky.^2, (1, 1, 1, length(xygrid.ky)))
+    )
+    kzsq[kzsq.<0] .= 0
+    kz = sqrt.(kzsq)
+    @. Eωk *= exp(-1im * z * (kz - grid.ω / PhysData.c))
+end
+
+function prop!(Eωk, z, grid, xygrid::Grid.Free2DGrid)
+    kzsq = ((grid.ω ./ PhysData.c).^2
             .- reshape(xygrid.kx.^2, (1, 1, length(xygrid.kx)))
     )
     kzsq[kzsq.<0] .= 0
@@ -525,7 +550,7 @@ function int2D(field1, field2, lowerlim, upperlim)
     end
     val
 end
-    
+
 function normalised_field(fieldfunc, rmax)
     scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0, 0.0), (rmax, 2π)))
     return let scale=scale, fieldfunc=fieldfunc
@@ -543,7 +568,7 @@ end
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
 
 Create an element of an input field tuple (for use in `Luna.setup`) based on coupling
-field `E` into a `mode`. The index `i` species the mode index. The temporal fields are 
+field `E` into a `mode`. The index `i` species the mode index. The temporal fields are
 initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
 same keyword arguments.
 """
@@ -648,7 +673,7 @@ function energyfuncs(grid::Grid.RealGrid, xygrid::Grid.FreeGrid)
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
     function energy_t(Et)
         Eta = Maths.hilbert(Et)
-        return  prefac_t * sum(abs2.(Eta)) 
+        return  prefac_t * sum(abs2.(Eta))
     end
 
     δω = grid.ω[2] - grid.ω[1]
@@ -669,7 +694,7 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     δt = grid.t[2] - grid.t[1]
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
     function energy_t(Et)
-        return  prefac_t * sum(abs2.(Et)) 
+        return  prefac_t * sum(abs2.(Et))
     end
 
     δω = grid.ω[2] - grid.ω[1]
@@ -679,6 +704,43 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     δky = xygrid.ky[2] - xygrid.ky[1]
     Δky = length(xygrid.ky)*δky
     prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2) * 2π*δky/(Δky^2)
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
+
+function energyfuncs(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid)
+    δx = xgrid.x[2] - xgrid.x[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δt
+    function energy_t(Et)
+        Eta = Maths.hilbert(Et)
+        return  prefac_t * sum(abs2.(Eta))
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = grid.ω[end]
+    δkx = xgrid.kx[2] - xgrid.kx[1]
+    Δkx = length(xgrid.kx)*δkx
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2)
+    energy_ω(Eω) = prefac * sum(abs2.(Eω))
+
+    return energy_t, energy_ω
+end
+
+function energyfuncs(grid::Grid.EnvGrid, xgrid::Grid.Free2DGrid)
+    δx = xgrid.x[2] - xgrid.x[1]
+    δt = grid.t[2] - grid.t[1]
+    prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δt
+    function energy_t(Et)
+        return  prefac_t * sum(abs2.(Et))
+    end
+
+    δω = grid.ω[2] - grid.ω[1]
+    Δω = length(grid.ω)*δω
+    δkx = xgrid.kx[2] - xgrid.kx[1]
+    Δkx = length(xgrid.kx)*δkx
+    prefac = PhysData.c*PhysData.ε_0/2 * 2π*δω/(Δω^2) * 2π*δkx/(Δkx^2)
     energy_ω(Eω) = prefac * sum(abs2.(Eω))
 
     return energy_t, energy_ω
@@ -747,13 +809,14 @@ a certain `thickness` of a `material`. If the central wavelength `λ0` is given,
 delay at this wavelength.  Keyword arguments `P` (pressure), `T` (temperature)
 and `lookup` (whether to use lookup table instead of Sellmeier expansion).
 """
-function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing)
-    n = PhysData.ref_index_fun(material, P, T; lookup=lookup)
-    β1 = PhysData.dispersion_func(1, n)
-    function prop!(Eω, ω, thickness, λ0=nothing)
+function propagator_material(material; P=1, T=PhysData.roomtemp, lookup=nothing, axis=nothing)
+    n = PhysData.ref_index_fun(material, P, T; lookup, axis)
+    β1fun = PhysData.dispersion_func(1, n)
+    function prop!(Eω, ω, thickness, λ0=nothing; β1=nothing)
         β = ω./PhysData.c .* n.(wlfreq.(ω))
         if !isnothing(λ0)
-            β .-= β1(λ0) .* (ω .- wlfreq(λ0))
+            β1 = isnothing(β1) ? β1fun(λ0) : β1
+            β .-= β1 .* (ω .- wlfreq(λ0))
         end
         β[.!isfinite.(β)] .= 0
         Eω .*= exp.(-1im.*real(β).*thickness)
@@ -854,7 +917,7 @@ prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
     optcomp_taylor(Eω, grid, λ0; order=2)
 
 Maximise the peak power of the field `Eω` by adding Taylor-expanded spectral phases up to
-order `order`. 
+order `order`.
 """
 function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2, boundfac=8)
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
@@ -904,7 +967,7 @@ _It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
 """
     optcomp_material(Eω, grid, material, λ0; kwargs...)
 
-Maximise the peak power of the field `Eω` by linear propagation through the `material`. 
+Maximise the peak power of the field `Eω` by linear propagation through the `material`.
 Keyword arguments `kwargs` are the same as for [`prop_material`](@ref).
 """
 function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,

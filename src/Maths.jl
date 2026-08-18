@@ -11,6 +11,7 @@ import Luna: settings
 import Roots: fzero
 import Dierckx
 import Peaks
+import NumericalIntegration: integrate
 
 #= Pre-created finite difference methods for speed.
    Use (order+6)th order central finite differences with 2 adaptive steps up to
@@ -150,7 +151,7 @@ end
 Find crossings of the curve `y` on the axis `x` with the value `level * maximum(y)`.
 
 `method` can be `:spline`, `:linear` or `:nearest`. `:spline` uses a [`CSpline`](@ref).
-`:linear` finds the closest values either side of the crossing point and interpolates linearly. 
+`:linear` finds the closest values either side of the crossing point and interpolates linearly.
 `:nearest` just uses the closest values either side of the crossing point.
 
 If `baseline` is true, the width is not taken at
@@ -233,7 +234,7 @@ end
 """
     linterpx(x1, x2, y1, y2, val)
 
-Given two points on a straight line, `(x1, y1)` and `(x2, y2)`, calculate the value of `x` 
+Given two points on a straight line, `(x1, y1)` and `(x2, y2)`, calculate the value of `x`
 at which this straight line intercepts with `val`.
 
 # Examples
@@ -323,7 +324,7 @@ end
 function cumtrapz!(out, y::Union{SubArray, Vector}, x)
     out[1] = 0
     for i in 2:length(y)
-        out[i] = out[i-1]+ 1//2*(y[i-1] + y[i])*_dx(x, i)
+        out[i] = out[i-1] + 1//2*(y[i-1] + y[i])*_dx(x, i)
     end
 end
 
@@ -346,8 +347,28 @@ Calculate the cumulative trapezoidal integral of `y`.
 """
 function cumtrapz(y, x; dim=1)
     out = similar(y)
-    cumtrapz!(out, y, x; dim=dim) 
+    cumtrapz!(out, y, x; dim=dim)
     return out
+end
+
+"""
+    integrateNd(x, y; dim=1)
+
+Integrate a multi-dimensional array `y` over `x` along array dimension `dim` using the
+trapezoidal method.
+"""
+function integrateNd(x, y; dim=1)
+    idxlo = CartesianIndices(size(y)[1:dim - 1])
+    idxhi = CartesianIndices(size(y)[dim + 1:end])
+    outshape = collect(size(y))
+    outshape[dim] = 1
+    out = zeros(eltype(y), Tuple(outshape))
+    for hi in idxhi
+        for lo in idxlo
+            out[lo, 1, hi] = integrate(x, y[lo, :, hi])
+        end
+    end
+    out
 end
 
 """
@@ -500,7 +521,7 @@ function wigner(t, A::Vector{<:Complex}; downsample=1, crop=1)
         startidx = 1
         endidx = length(t)
     end
-        
+
     A = A[startidx:downsample:endidx]
     t = t[startidx:downsample:endidx]
 
@@ -770,7 +791,7 @@ function make_spline_ifun(x, ifun)
             xmin = minimum(x)
             N = length(x)
             ffast(x0) = x0 <= xmin ? 2 :
-                        x0 >= xmax ? N : 
+                        x0 >= xmax ? N :
                         ceil(Int, (x0-xmin)/(xmax-xmin)*(N-1))+1
             ifun = ffast
         else
@@ -785,7 +806,7 @@ end
     CSpline
 
 Simple cubic spline, see e.g.:
-http://mathworld.wolfram.com/CubicSpline.html Boundary        
+http://mathworld.wolfram.com/CubicSpline.html Boundary
 conditions extrapolate with initially constant gradient
 """
 struct CSpline{Tx,Ty,Vx<:AbstractVector{Tx},Vy<:AbstractVector{Ty}, fT}
@@ -841,9 +862,9 @@ function (c::CSpline)(x0)
     x0 == c.x[i] && return c.y[i]
     x0 == c.x[i-1] && return c.y[i-1]
     t = (x0 - c.x[i - 1])/(c.x[i] - c.x[i - 1])
-    (c.y[i - 1] 
-        + c.D[i - 1]*t 
-        + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2 
+    (c.y[i - 1]
+        + c.D[i - 1]*t
+        + (3*(c.y[i] - c.y[i - 1]) - 2*c.D[i - 1] - c.D[i])*t^2
         + (2*(c.y[i - 1] - c.y[i]) + c.D[i - 1] + c.D[i])*t^3)
 end
 
@@ -1184,11 +1205,11 @@ function fpbspl!(h, hh, t, k, x, l)
             li = l+i
             lj = li-j
             if t[li] != t[lj]
-                f = hh[i]/(t[li] - t[lj]) 
+                f = hh[i]/(t[li] - t[lj])
                 h[i] = h[i] + f*(t[li] - x)
                 h[i+1] = f*(x - t[lj])
             else
-                h[i+1] = 0.0 
+                h[i+1] = 0.0
             end
         end
     end
@@ -1201,7 +1222,7 @@ end
 Find the full width of a peak in `y` over `x` centred at index `pki`.
 
 The default `level=0.5` requests the full width at half maximum. Setting `level` to something
-different computes the corresponding width. E.g. `level=0.1` for the 10% width. 
+different computes the corresponding width. E.g. `level=0.1` for the 10% width.
 
 `skipnonmono=true` skips peaks which are not monotonically increaing/decreasing before/after the peak.
 
