@@ -47,15 +47,19 @@ const m_u = ustrip(CODATA2014.m_u)
 "Atomic unit of electric polarisability"
 const au_polarisability = electron^2*ustrip(CODATA2014.a_0)^2/au_energy
 
-const gas = (:Air, :He, :HeJ, :HeB, :Ne, :Ar, :ArB, :Kr, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
+const gas = (:Air, :He, :HeJ, :HeB, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrB, :KrBideauMehu, :Xe, :N2, :H2, :O2, :CH4, :SF6, :N2O, :D2)
 const gas_str = Dict(
     :He => "He",
     :HeB => "He",
     :HeJ => "He",
     :Ar => "Ar",
     :ArB => "Ar",
+    :ArBideauMehu => "Ar",
     :Ne => "Neon",
+    :NeBideauMehu => "Neon",
     :Kr => "Krypton",
+    :KrB => "Krypton",
+    :KrBideauMehu => "Krypton",
     :Xe => "Xenon",
     :Air => "Air",
     :N2 => "Nitrogen",
@@ -139,6 +143,24 @@ function γ_QuanfuHe(A, B, C, dens)
 end
 
 """
+    γ_BideauMehu2(B1, C1, B2, C2, dens)
+
+2-term Sellmeier expression for Ne from https://doi.org/10.1016/0022-4073(81)90057-1
+"""
+function γ_BideauMehu2(B1, C1, B2, C2, dens)
+    return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2))+1)^2 - 1)/dens
+end
+
+"""
+    γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
+
+3-term Sellmeier expression for Ar and Kr from https://doi.org/10.1016/0022-4073(81)90057-1
+"""
+function γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
+    return μm -> (((B1/(C1-1/μm^2) + B2/(C2-1/μm^2) + B3/(C3-1/μm^2))+1)^2 - 1)/dens
+end
+
+"""
     sellmeier_gas(material::Symbol)
 
 Return function for linear polarisability γ, i.e. susceptibility of a single particle,
@@ -166,6 +188,12 @@ function sellmeier_gas(material::Symbol)
         B2 = 4018.63e-8
         C2 = 5.728e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :NeBideauMehu
+        B1 = 0.00128145
+        C1 = 184.6661
+        B2 = 0.0220486
+        C2 = 376.84
+        return γ_BideauMehu2(B1, C1, B2, C2, dens)
     elseif material == :Ar
         B1 = 0.00032323117217767093
         C1 = 0.0045416501944977915
@@ -180,12 +208,36 @@ function sellmeier_gas(material::Symbol)
         B2 = 34458.31e-8
         C2 = 8.066e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :ArBideauMehu
+        B1 = 2.50141e-3
+        C1 = 91.012
+        B2 = 5.00283e-4
+        C2 = 87.892
+        B3 = 5.22343e-2
+        C3 = 214.02
+        return γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     elseif material == :Kr
+        B1 = 7.156207185088921e-6
+        C1 = 0.016126479267946525
+        B2 = 0.00023020614937540427
+        C2 = 0.01348822574907029
+        B3 = 0.000604323109684193
+        C3 = 0.004204161467601559
+        return γ_JCT(B1/dens, C1, B2/dens, C2, B3/dens, C3)
+    elseif material == :KrB
         B1 = 26102.88e-8
         C1 = 2.01e-6
         B2 = 56946.82e-8
         C2 = 10.043e-3
         return γ_Börzsönyi(B1/dens, C1, B2/dens, C2)
+    elseif material == :KrBideauMehu
+        B1 = 0.00253637
+        C1 = 65.4742
+        B2 = 0.00273649
+        C2 = 73.698
+        B3 = 0.0620802
+        C3 = 181.08
+        return γ_BideauMehu3(B1, C1, B2, C2, B3, C3, dens)
     elseif material == :Xe
         B1 = 103701.61e-8
         C1 = 12750e-6
@@ -588,7 +640,7 @@ References:
 function γ3_gas(material::Symbol; source=nothing)
     # TODO: More Bishop/Shelton; Wahlstrand updated values.
     if source === nothing
-        if material in (:He, :HeB, :HeJ, :Ne, :Ar, :ArB, :Kr, :Xe, :N2)
+        if material in (:He, :HeB, :HeJ, :Ne, :NeBideauMehu, :Ar, :ArB, :ArBideauMehu, :Kr, :KrB, :KrBideauMehu,:Xe, :N2)
             source = :Lehmeier
         elseif material in (:H2, :CH4, :SF6, :D2)
             source = :Shelton
@@ -605,11 +657,11 @@ function γ3_gas(material::Symbol; source=nothing)
         # Table 1 in [3]
         if material in (:He, :HeB, :HeJ)
             fac = 1
-        elseif material == :Ne
+        elseif material in (:Ne, :NeBideauMehu)
             fac = 1.8
-        elseif material in (:Ar, :ArB)
+        elseif material in (:Ar, :ArB, :ArBideauMehu)
             fac = 23.5
-        elseif material == :Kr
+        elseif material in (:Kr, :KrB, :KrBideauMehu)
             fac = 64.0
         elseif material == :Xe
             fac = 188.2
@@ -731,11 +783,11 @@ Possible units are `:SI`, `:atomic` and `:eV`.
 function ionisation_potential(material; unit=:SI)
     if material in (:He, :HeB, :HeJ)
         Ip = 0.9036
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         Ip = 0.7925
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         Ip = 0.5792
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         Ip = 0.5142
     elseif material == :Xe
         Ip = 0.4458
@@ -777,11 +829,11 @@ Return the quantum numbers of the `material` for use in the PPT ionisation rate.
 """
 function quantum_numbers(material)
     # Returns n, l, ion Z
-    if material in (:Ar, :ArB)
+    if material in (:Ar, :ArB, :ArBideauMehu)
         return 3, 1, 1
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return 2, 1, 1;
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         return 4, 1, 1
     elseif material == :Xe
         return 5, 1, 1
@@ -822,9 +874,9 @@ function polarisability(material, ion=false; unit=:SI)
     end
     if material in (:He, :HeB, :HeJ)
         return (ion ? 0.2811 : 1.3207)*factor
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return (ion ? 1.2417 : 2.376)*factor
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         return (ion ? 6.807 : 10.762)*factor
     else
         return missing
@@ -861,11 +913,11 @@ Ammosov, M. V., Delone, N. B. & Krainov, V. P. Tunnel Ionization Of Complex Atom
 function Cnl_ADK(material)
     if material in (:He, :HeB, :HeJ)
         return 1.99
-    elseif material == :Ne
+    elseif material in (:Ne, :NeBideauMehu)
         return 1.31
-    elseif material in (:Ar, :ArB)
+    elseif material in (:Ar, :ArB, :ArBideauMehu)
         return 1.9
-    elseif material == :Kr
+    elseif material in (:Kr, :KrB, :KrBideauMehu)
         return 2.17
     elseif material == :Xe
         return 2.27
@@ -888,6 +940,17 @@ function lookup_glass(material::Symbol)
     end
     return spl
 end
+
+
+function Ith(material; ionLevel=1)
+
+    Ip = ionisation_potential(material; unit=:eV)
+    Ith = 3.8e9*(Ip^4)/(ionLevel^2)
+
+    return Ith*1e4 # convert from W/cm^2 to W/m^2
+
+end
+
 
 """
     lookup_metal(material::Symbol)
