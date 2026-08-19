@@ -659,6 +659,8 @@ function spectral_phase(output, args...)
     spectral_phase(ω, Eω, τ)
 end
 
+Base.@deprecate getφ(args...) spectral_phase(args...) false
+
 """
     getEt(output[, zslice]; kwargs...)
 
