@@ -330,7 +330,10 @@ In this case, all keyword arguments except for `λ0` are ignored.
 - `PPT_options::Dict{Symbol, Any}`: when using the PPT ionisation rate for the
     plasma nonlinearity, this allows for fine-tuning of the options in calculating
     the ionisation. See [`IonRatePPTAccel`](@ref Ionisation.IonRatePPTAccel) for possible
-    keyword arguments.
+    keyword arguments. By default the barrier-suppression correction `bsi` is `:auto`, which
+    enables the over-the-barrier correction (Zhang et al., 2014) for any atomic species that has
+    tabulated coefficients and is a no-op otherwise; pass `:bsi => :none` to disable it, or
+    `:bsi => :tonglin` to select the Tong & Lin (2005) correction instead.
 - `preionfrac::Float64`: fraction of the gas that is pre-ionised before the pulse. Defaults to `0.0`.
     Note that this is a very simplistic model of pre-ionisation and should be used with
     caution.
