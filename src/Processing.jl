@@ -596,7 +596,7 @@ end
     getEω(output[, zslice])
 
 Get frequency-domain modal field from `output` with correct normalisation (i.e.
-`abs2.(Eω)`` gives angular-frequency spectral energy density in J/(rad/s)).
+`abs2.(Eω)` gives angular-frequency spectral energy density in J/(rad/s)).
 """
 getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
 getEω(grid, output) = getEω(grid, output["Eω"])
