@@ -624,6 +624,403 @@ Etcomp = FT \ Eωcomp
 @test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=1e-3)
 end
 
+@testset "Gratings" begin
+# Common grating parameters: 1200 lines/mm, order -1, Littrow angle at 1030 nm
+λ0 = 1030e-9
+Λ = 1/(1200e3) # grating period in metres
+m = -1
+θi = Fields.littrow_angle(λ0, Λ; m)
+
+# -- littrow_angle gives the right answer --
+@test isapprox(θi, asin(λ0/(2Λ)))
+
+# -- grating_GDD matches Treacy formula --
+θm_ref = asin(m*λ0/Λ + sin(θi))
+GDD_per_L = -m^2*λ0^3 / (π * PhysData.c^2 * Λ^2 * cos(θm_ref)^3)
+@test isapprox(Fields.grating_GDD(λ0, Λ, m, θi), GDD_per_L)
+
+# Helper: compute phase from the code's formula for independent GDD reference
+function _grating_phase(ω, L, Λ, m, θi)
+    λ = PhysData.wlfreq(ω)
+    sinθm = m*λ/Λ + sin(θi)
+    2*(ω*L/PhysData.c)*cos(asin(sinθm))
+end
+
+_grating_GDD(ω0, L, Λ, m, θi) = Maths.derivative(ω -> _grating_phase(ω, L, Λ, m, θi), ω0, 2)
+
+ω0 = PhysData.wlfreq(λ0)
+
+# -- GDD matches Treacy formula --
+GDD_num = _grating_GDD(ω0, 1.0, Λ, m, θi)
+@test isapprox(GDD_num, GDD_per_L, rtol=1e-4)
+
+# -- Sign test: gratings should add negative chirp --
+τfwhm = 50e-15
+grid = Grid.RealGrid(1, λ0, (900e-9, 1200e-9), 10e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+
+Eωgrat = Fields.prop_gratings(Eω, grid, Λ, 5e-3, m, θi, λ0)
+Et = FT \ Eωgrat
+gab = Maths.gabor(grid.t, Et, [-200e-15, 200e-15], 50e-15)
+ω0g = Maths.moment(grid.ω, abs2.(gab))
+@test ω0g[1] > ω0g[2] # negative chirp: frequency decreases with time
+
+# -- Out-of-band zeroing test --
+λgrid = PhysData.wlfreq.(grid.ω)
+inmask = @. abs(m*λgrid/Λ + sin(θi)) <= 1
+@test all(Eωgrat[.!inmask] .== 0)
+
+# -- Spectral magnitude preservation (phase-only within bandwidth) --
+@test isapprox(abs.(Eωgrat[inmask]), abs.(Eω[inmask]), rtol=1e-10)
+
+# -- GDD magnitude vs Treacy formula for two separations --
+grid = Grid.RealGrid(1, λ0, (900e-9, 1200e-9), 20e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+Eω = input(grid, FT)
+
+@testset "Treacy GDD, L=$L" for L in [5e-3, 0.02]
+    Eωgrat = Fields.prop_gratings(Eω, grid, Λ, L, m, θi, λ0)
+    ϕs, Eωcomp = Fields.optcomp_taylor(Eωgrat, grid, λ0)
+    GDD_expected = GDD_per_L * L
+    @test isapprox(ϕs[3], -GDD_expected, rtol=0.02)
+end
+
+# -- optcomp_gratings: compress a chirped pulse --
+# Use narrow-bandwidth pulse (200 fs) to minimise higher-order dispersion effects
+τfwhm = 200e-15
+grid = Grid.RealGrid(1, λ0, (950e-9, 1100e-9), 10e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+
+# Apply known positive GDD, then compress with gratings
+L_target = 5e-3
+GDD_applied = abs(GDD_per_L) * L_target
+Eωchirped = Fields.prop_taylor(Eω, grid, [0, 0, GDD_applied], λ0)
+
+L_opt, Eωcomp = Fields.optcomp_gratings(Eωchirped, grid, Λ, m, θi, 0.0, 0.05; λ0=λ0)
+@test isapprox(L_opt, L_target, rtol=0.05)
+
+Etcomp = FT \ Eωcomp
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=0.05)
+
+# -- optcomp_gratings: auto-estimate (no explicit bounds) --
+L_opt_auto, Eωcomp_auto = Fields.optcomp_gratings(Eωchirped, grid, Λ, m, θi; λ0=λ0)
+@test isapprox(L_opt_auto, L_target, rtol=0.05)
+
+# -- optcomp_gratings: round-trip (apply gratings then undo) --
+# Apply gratings, add double positive GDD, then use optcomp_gratings to recompress
+τfwhm = 200e-15
+grid = Grid.RealGrid(1, λ0, (950e-9, 1100e-9), 10e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+
+L_applied = 5e-3
+GDD_grating = GDD_per_L * L_applied
+Eωchirped = Fields.prop_taylor(
+    Fields.prop_gratings(Eω, grid, Λ, L_applied, m, θi, λ0),
+    grid, [0, 0, -2*GDD_grating], λ0)
+
+L_opt, Eωcomp = Fields.optcomp_gratings(Eωchirped, grid, Λ, m, θi, 0.0, 0.05; λ0=λ0)
+@test isapprox(L_opt, L_applied, rtol=0.05)
+Etcomp = FT \ Eωcomp
+@test isapprox(Maths.fwhm(grid.t, abs2.(Maths.hilbert(Etcomp))), τfwhm; rtol=0.05)
+end
+
+@testset "Prisms" begin
+# ---- Helper function tests ----
+
+# Brewster angle for fused silica at 800 nm
+λ0 = 800e-9
+n_SiO2 = real(PhysData.ref_index_fun(:SiO2)(λ0))
+θB = Fields.brewster_angle(:SiO2, λ0)
+@test isapprox(θB, atan(n_SiO2))
+@test isapprox(rad2deg(θB), 55.47, atol=0.1)  # well-known value for fused silica
+
+# Minimum deviation apex angle for Brewster-cut fused silica prism
+α_md = Fields.mindev_apex(:SiO2, λ0)
+@test isapprox(α_md, 2*atan(1/n_SiO2))
+@test isapprox(rad2deg(α_md), 69.05, atol=0.1)  # well-known value
+
+# Also test with BK7 at 1030 nm
+n_BK7 = real(PhysData.ref_index_fun(:BK7)(1030e-9))
+θB_BK7 = Fields.brewster_angle(:BK7, 1030e-9)
+@test isapprox(θB_BK7, atan(n_BK7))
+
+# ---- prism_pair_GDD: negative GDD for angular dispersion (no insertion) ----
+α = Fields.mindev_apex(:SiO2, λ0)
+θi = Fields.brewster_angle(:SiO2, λ0)
+GDD_per_L = Fields.prism_pair_GDD(λ0, :SiO2, α, θi)
+@test GDD_per_L < 0  # angular dispersion gives negative GDD
+
+# GDD should be negative and on the order of -100 to -1000 fs²/m for SiO2 at 800 nm
+@test -1e-24 < GDD_per_L < -1e-28  # between ~-100 and -1e-4 fs²/m
+
+# Helper: compute phase from ray tracing for independent GDD reference
+# Geometry (A1, A2) and reference (D_ref, d_input) are PRE-COMPUTED and
+# passed explicitly to ensure consistency across numerical derivative evaluations.
+function _prism_phase_fixed(ω_val, A1, A2, n_func, α, θi, l1; D_ref, d_input, double_pass=true)
+    ϕ, mask = Fields._prism_pair_phase([ω_val], n_func, α, θi, l1, A1, A2;
+                                        D_ref=D_ref, d_input=d_input, double_pass=double_pass)
+    mask[1] ? ϕ[1] : 0.0
+end
+
+# Pre-compute fixed geometry and reference for L=1.0, l1=0
+n_SiO2_ref = real(PhysData.ref_index_fun(:SiO2)(λ0))
+_, _, _A1_ref, _A2_ref = Fields._prism_apex_positions(α, θi, n_SiO2_ref, 0.0, 0.0; L=1.0)
+_ref_res = Fields._trace_ray(n_SiO2_ref, α, θi, _A1_ref, _A2_ref, 0.0)
+_D_ref_fixed = _ref_res.D
+_ha_ref = α / 2
+_d_input_fixed = cos(θi) * [cos(_ha_ref), -sin(_ha_ref)] + sin(θi) * [sin(_ha_ref), cos(_ha_ref)]
+_n_func_SiO2 = PhysData.ref_index_fun(:SiO2)
+
+_prism_GDD(ω0_val, L, material, α_val, θi_val) = begin
+    n_c = real(PhysData.ref_index_fun(material)(PhysData.wlfreq(ω0_val)))
+    _, _, A1, A2 = Fields._prism_apex_positions(α_val, θi_val, n_c, 0.0, 0.0; L=L)
+    ref = Fields._trace_ray(n_c, α_val, θi_val, A1, A2, 0.0)
+    ha = α_val / 2
+    d_input = cos(θi_val) * [cos(ha), -sin(ha)] + sin(θi_val) * [sin(ha), cos(ha)]
+    n_func = PhysData.ref_index_fun(material)
+    Maths.derivative(
+        ω -> _prism_phase_fixed(ω, A1, A2, n_func, α_val, θi_val, 0.0;
+                                 D_ref=ref.D, d_input=d_input),
+        ω0_val, 2)
+end
+
+ω0 = PhysData.wlfreq(λ0)
+
+# GDD from phase second derivative should match prism_pair_GDD * L
+GDD_num = _prism_GDD(ω0, 1.0, :SiO2, α, θi)
+@test isapprox(GDD_num, GDD_per_L, rtol=0.02)
+
+# ---- Analytical validation against Keller formula (Eq. 3.20) ----
+# For Brewster/mindev double-pass: GDD/L = -4λ³(dn/dλ)²/(πc²)
+dndλ = Maths.derivative(λv -> real(PhysData.ref_index_fun(:SiO2)(λv)), λ0, 1)
+GDD_keller = -4 * λ0^3 * dndλ^2 / (π * PhysData.c^2)
+@test isapprox(GDD_per_L, GDD_keller, rtol=0.01)
+
+# ---- Sign test: prisms should add negative chirp (no insertion) ----
+τfwhm = 50e-15
+grid = Grid.RealGrid(1, λ0, (500e-9, 1200e-9), 10e-12)
+x = Array{Float64}(undef, length(grid.t))
+FT = FFTW.plan_rfft(x, 1)
+input = Fields.GaussField(λ0=λ0, τfwhm=τfwhm, energy=1e-6)
+Eω = input(grid, FT)
+
+L_test = 0.5  # 50 cm separation
+Eωprism = Fields.prop_prisms(Eω, grid, :SiO2, α, L_test, θi, 0.0, 0.0, λ0)
+Et = FT \ Eωprism
+gab = Maths.gabor(grid.t, Et, [-200e-15, 200e-15], 50e-15)
+ω0g = Maths.moment(grid.ω, abs2.(gab))
+@test ω0g[1] > ω0g[2]  # negative chirp: frequency decreases with time
+
+# ---- TIR masking: frequencies with total internal reflection are zeroed ----
+# Use a steep apex angle to force TIR at some frequencies
+α_steep = deg2rad(80.0)
+Eωsteep = Fields.prop_prisms(Eω, grid, :SiO2, α_steep, L_test, θi, 0.0, 0.0, λ0)
+# At least some frequencies should be masked (zeroed)
+n_func_test = PhysData.ref_index_fun(:SiO2)
+n_center_steep = real(n_func_test(λ0))
+_, _, A1s, A2s = Fields._prism_apex_positions(α_steep, θi, n_center_steep, 0.0, 0.0; L=L_test)
+_, mask_steep = Fields._prism_pair_phase(grid.ω, n_func_test, α_steep, θi, 0.0, A1s, A2s)
+@test any(.!mask_steep)   # some frequencies should be masked
+@test all(Eωsteep[.!mask_steep] .== 0)  # those frequencies are zeroed
+
+# ---- Spectral magnitude preservation (phase-only within bandwidth) ----
+n_center_normal = real(n_func_test(λ0))
+_, _, A1n, A2n = Fields._prism_apex_positions(α, θi, n_center_normal, 0.0, 0.0; L=L_test)
+_, mask_normal = Fields._prism_pair_phase(grid.ω, n_func_test, α, θi, 0.0, A1n, A2n)
+Eωprism_noλ0 = Fields.prop_prisms(Eω, grid, :SiO2, α, L_test, θi, 0.0, 0.0)
+@test isapprox(abs.(Eωprism_noλ0[mask_normal]), abs.(Eω[mask_normal]), rtol=1e-10)
+
+# ---- GDD magnitude vs numerical derivative for two separations ----
+grid2 = Grid.RealGrid(1, λ0, (600e-9, 1100e-9), 20e-12)
+x2 = Array{Float64}(undef, length(grid2.t))
+FT2 = FFTW.plan_rfft(x2, 1)
+Eω2 = input(grid2, FT2)
+
+@testset "Prism GDD, L=$L" for L in [0.3, 0.8]
+    Eωp = Fields.prop_prisms(Eω2, grid2, :SiO2, α, L, θi, 0.0, 0.0, λ0)
+    ϕs, Eωcomp = Fields.optcomp_taylor(Eωp, grid2, λ0)
+    GDD_expected = GDD_per_L * L
+    @test isapprox(ϕs[3], -GDD_expected, rtol=0.1)
+end
+
+# ---- Material insertion adds positive GDD ----
+# Use L_lightcon convention so that l1/l2 are independently specified;
+# with Keller L the glass path in Prism 1 and Prism 2 cancel geometrically.
+l_insert = 10e-3  # 10 mm insertion per prism
+L_lc = 600e-3     # 600 mm Lightcon separation
+n_insert_ref = real(PhysData.ref_index_fun(:SiO2)(λ0))
+_n_func_ins = PhysData.ref_index_fun(:SiO2)
+# No insertion
+_, _, _A1_no, _A2_no = Fields._prism_apex_positions(α, θi, n_insert_ref, 0.0, 0.0; L_lightcon=L_lc)
+_ref_no = Fields._trace_ray(n_insert_ref, α, θi, _A1_no, _A2_no, 0.0)
+GDD_no_insert = Maths.derivative(ω -> _prism_phase_fixed(ω, _A1_no, _A2_no,
+                                                          _n_func_ins, α, θi, 0.0;
+                                                          D_ref=_ref_no.D, d_input=_d_input_fixed),
+                                  ω0, 2)
+# With insertion
+_, _, _A1_ins, _A2_ins = Fields._prism_apex_positions(α, θi, n_insert_ref, l_insert, l_insert; L_lightcon=L_lc)
+_ref_ins = Fields._trace_ray(n_insert_ref, α, θi, _A1_ins, _A2_ins, l_insert)
+GDD_with_insert = Maths.derivative(ω -> _prism_phase_fixed(ω, _A1_ins, _A2_ins,
+                                                            _n_func_ins, α, θi, l_insert;
+                                                            D_ref=_ref_ins.D, d_input=_d_input_fixed),
+                                    ω0, 2)
+# With insertion, GDD should be more positive (less negative)
+@test GDD_with_insert > GDD_no_insert
+
+# ---- Lightcon calculator verification (1030 nm, SiO2, lookup=false) ----
+# Reference values from Lightcon toolbox calculator:
+#   https://toolbox.lightcon.com/tools/prismpair
+# lambda = 1030 nm, L_lightcon = 600 mm, l1 = l2 = 10 mm, double pass
+# n(1030nm) = 1.450473, Brewster = 55.409°, apex = 69.183°
+# w = 570.804 mm, h = 229.165 mm
+# d1 = 11.354 mm, d_free = 598.520 mm, d2 = 11.354 mm
+# GDD = -543.513 fs², TOD = 2204.753 fs³
+
+@testset "Lightcon verification" begin
+    λ_lc = 1030e-9
+    # Use lookup=false to get raw Sellmeier (matches reference code's Sellmeier)
+    n_func_lc = PhysData.ref_index_fun(:SiO2, 1, PhysData.roomtemp; lookup=false)
+    n_lc = real(n_func_lc(λ_lc))
+    θi_lc = Fields.brewster_angle(:SiO2, λ_lc; lookup=false)
+    α_lc = Fields.mindev_apex(:SiO2, λ_lc; lookup=false)
+
+    @test isapprox(n_lc, 1.450473, atol=0.001)
+    @test isapprox(rad2deg(θi_lc), 55.409, atol=0.1)
+    @test isapprox(rad2deg(α_lc), 69.183, atol=0.1)
+
+    # Geometry conversion: L_lightcon → (w, h)
+    L_lc_val = 600e-3  # 600 mm
+    l1_lc = 10e-3
+    l2_lc = 10e-3
+    w, h = Fields._wh_from_L_lightcon(L_lc_val, α_lc, θi_lc, n_lc, l1_lc, l2_lc)
+    @test isapprox(w * 1e3, 570.804, atol=1.0)  # within 1 mm
+    @test isapprox(h * 1e3, 229.165, atol=1.0)
+
+    # Verify L_lightcon round-trip
+    L_lc_rt = Fields._L_lightcon_from_wh(w, h, α_lc)
+    @test isapprox(L_lc_rt, L_lc_val, rtol=1e-6)
+
+    # Path lengths at center wavelength
+    A1_lc = [0.0, 0.0]
+    A2_lc = [w, -h]
+    res_lc = Fields._trace_ray(n_lc, α_lc, θi_lc, A1_lc, A2_lc, l1_lc)
+    @test isapprox(res_lc.d1_phys * 1e3, 11.354, atol=0.1)
+    @test isapprox(res_lc.d_free * 1e3, 598.520, atol=1.0)
+    @test isapprox(res_lc.d2_phys * 1e3, 11.354, atol=0.1)
+    @test isapprox(res_lc.l2_actual * 1e3, l2_lc * 1e3, atol=0.5)
+
+    # GDD/TOD from spectral phase (double pass)
+    ω_lc = PhysData.wlfreq(λ_lc)
+    # Fixed reference for consistent derivatives
+    ref_lc = Fields._trace_ray(n_lc, α_lc, θi_lc, A1_lc, A2_lc, l1_lc)
+    D_ref_lc = ref_lc.D
+    ha_lc = α_lc / 2
+    d_input_lc = cos(θi_lc) * [cos(ha_lc), -sin(ha_lc)] + sin(θi_lc) * [sin(ha_lc), cos(ha_lc)]
+    function _phase_lc(ω_val)
+        ϕ, mask = Fields._prism_pair_phase([ω_val], n_func_lc, α_lc, θi_lc, l1_lc,
+                                            A1_lc, A2_lc; double_pass=true,
+                                            D_ref=D_ref_lc, d_input=d_input_lc)
+        mask[1] ? ϕ[1] : 0.0
+    end
+    GDD_lc = Maths.derivative(_phase_lc, ω_lc, 2)
+    GDD_lc_fs2 = GDD_lc * 1e30
+    @test isapprox(GDD_lc_fs2, -543.513, atol=15.0)  # within 15 fs²
+
+    # Single vs double pass: ratio should be 2
+    function _phase_lc_sp(ω_val)
+        ϕ, mask = Fields._prism_pair_phase([ω_val], n_func_lc, α_lc, θi_lc, l1_lc,
+                                            A1_lc, A2_lc; double_pass=false,
+                                            D_ref=D_ref_lc, d_input=d_input_lc)
+        mask[1] ? ϕ[1] : 0.0
+    end
+    GDD_sp = Maths.derivative(_phase_lc_sp, ω_lc, 2)
+    @test isapprox(GDD_lc / GDD_sp, 2.0, rtol=0.01)
+end
+
+# ---- prop_prisms with L_lightcon keyword ----
+@testset "L_lightcon keyword" begin
+    λ_k = 1030e-9
+    α_k = Fields.mindev_apex(:SiO2, λ_k; lookup=false)
+    θi_k = Fields.brewster_angle(:SiO2, λ_k; lookup=false)
+
+    grid_k = Grid.RealGrid(1, λ_k, (800e-9, 1300e-9), 10e-12)
+    xk = Array{Float64}(undef, length(grid_k.t))
+    FTk = FFTW.plan_rfft(xk, 1)
+    input_k = Fields.GaussField(λ0=λ_k, τfwhm=200e-15, energy=1e-6)
+    Eω_k = input_k(grid_k, FTk)
+
+    # Compare L_lightcon keyword to equivalent (w,h) directly
+    L_lc_test = 600e-3
+    l1_k = 10e-3
+    l2_k = 10e-3
+    n_func_k = PhysData.ref_index_fun(:SiO2, 1, PhysData.roomtemp; lookup=false)
+    n_k = real(n_func_k(λ_k))
+    w_k, h_k = Fields._wh_from_L_lightcon(L_lc_test, α_k, θi_k, n_k, l1_k, l2_k)
+
+    Eω_lc = Fields.prop_prisms(Eω_k, grid_k, :SiO2, α_k, 0.0, θi_k, l1_k, l2_k, λ_k;
+                                L_lightcon=L_lc_test, lookup=false)
+    Eω_wh = Fields.prop_prisms(Eω_k, grid_k, :SiO2, α_k, 0.0, θi_k, l1_k, l2_k, λ_k;
+                                w=w_k, h=h_k, lookup=false)
+    @test isapprox(Eω_lc, Eω_wh, rtol=1e-6)
+end
+
+# ---- optcomp_prisms: compress a chirped pulse (explicit bounds) ----
+τfwhm_test = 200e-15
+grid3 = Grid.RealGrid(1, λ0, (600e-9, 1100e-9), 10e-12)
+x3 = Array{Float64}(undef, length(grid3.t))
+FT3 = FFTW.plan_rfft(x3, 1)
+input3 = Fields.GaussField(λ0=λ0, τfwhm=τfwhm_test, energy=1e-6)
+Eω3 = input3(grid3, FT3)
+
+# Apply known positive GDD, then compress with prisms
+L_target = 0.3  # 30 cm
+GDD_applied = abs(GDD_per_L) * L_target
+Eωchirped = Fields.prop_taylor(Eω3, grid3, [0, 0, GDD_applied], λ0)
+
+L_opt, Eωcomp = Fields.optcomp_prisms(Eωchirped, grid3, :SiO2, α, θi, 0.0, 0.0,
+                                       0.05, 1.5; λ0=λ0)
+@test isapprox(L_opt, L_target, rtol=0.15)
+
+Etcomp = FT3 \ Eωcomp
+@test isapprox(Maths.fwhm(grid3.t, abs2.(Maths.hilbert(Etcomp))), τfwhm_test; rtol=0.15)
+
+# ---- optcomp_prisms: auto-estimate (no explicit bounds) ----
+L_opt_auto, Eωcomp_auto = Fields.optcomp_prisms(Eωchirped, grid3, :SiO2, α, θi, 0.0, 0.0;
+                                                  λ0=λ0)
+@test isapprox(L_opt_auto, L_target, rtol=0.15)
+
+# ---- optcomp_prisms: round-trip (apply prisms then undo) ----
+τfwhm_rt = 200e-15
+grid4 = Grid.RealGrid(1, λ0, (600e-9, 1100e-9), 10e-12)
+x4 = Array{Float64}(undef, length(grid4.t))
+FT4 = FFTW.plan_rfft(x4, 1)
+input4 = Fields.GaussField(λ0=λ0, τfwhm=τfwhm_rt, energy=1e-6)
+Eω4 = input4(grid4, FT4)
+
+L_applied = 0.4  # 40 cm
+GDD_prism = GDD_per_L * L_applied
+Eωchirped_rt = Fields.prop_taylor(
+    Fields.prop_prisms(Eω4, grid4, :SiO2, α, L_applied, θi, 0.0, 0.0, λ0),
+    grid4, [0, 0, -2*GDD_prism], λ0)
+
+L_opt_rt, Eωcomp_rt = Fields.optcomp_prisms(Eωchirped_rt, grid4, :SiO2, α, θi, 0.0, 0.0,
+                                              0.05, 1.5; λ0=λ0)
+# Wider tolerance (0.25) due to prism TOD that Taylor compensation does not capture
+@test isapprox(L_opt_rt, L_applied, rtol=0.25)
+Etcomp_rt = FT4 \ Eωcomp_rt
+@test isapprox(Maths.fwhm(grid4.t, abs2.(Maths.hilbert(Etcomp_rt))), τfwhm_rt; rtol=0.15)
+end
+
 @testset "Gaussian beam initialisation" begin
     a = 16e-6
     gas = :Kr

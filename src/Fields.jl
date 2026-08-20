@@ -849,6 +849,819 @@ prop_mode!(Eω, grid::Grid.AbstractGrid, args...) = prop_mode!(Eω, grid.ω, arg
 
 prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
 
+"""
+    littrow_angle(λ, Λ; m=-1)
+
+Calculate the Littrow angle of incidence (in radians) for wavelength `λ` (in metres),
+grating period `Λ` (in metres) and diffraction order `m` (dimensionless integer, default -1).
+
+At Littrow, the diffracted beam returns along the incident direction (`θm = -θi`).
+"""
+littrow_angle(λ, Λ; m=-1) = asin(-m*λ/(2Λ))
+
+"""
+    grating_GDD(λ, Λ, m, θi)
+
+Calculate the group-delay dispersion per unit separation (in s²/m) of a double-pass
+grating pair using the Treacy formula, for wavelength `λ` (in metres), grating period `Λ`
+(in metres), diffraction order `m` (dimensionless integer) and angle of incidence `θi`
+(in radians).
+"""
+function grating_GDD(λ, Λ, m, θi)
+    θm = asin(m*λ/Λ + sin(θi))
+    -m^2*λ^3 / (π * PhysData.c^2 * Λ^2 * cos(θm)^3)
+end
+
+"""
+    prop_gratings!(Eω, ω, Λ, L, m, θi, λ0=nothing)
+    prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi, λ0=nothing)
+
+Add the spectral phase acquired after passing through a four grating compressor
+with grating period `Λ` (in metres), grating separation `L` (in metres),
+diffraction order `m` (dimensionless integer) and angle of incidence `θi`
+(in radians). The sampling axis of `Eω` can be given either as an
+`AbstractGrid` or the angular frequency axis `ω` (in rad/s).
+
+If the central wavelength `λ0` (in metres) is given, the overall phase and group
+delay at `λ0` are removed so that only the dispersive part of the phase remains.
+
+Frequency components outside the grating diffraction bandwidth are set to zero.
+"""
+function prop_gratings!(Eω, ω, Λ, L, m, θi, λ0=nothing)
+    λ = PhysData.wlfreq.(ω)
+    mask = @. abs(m*λ/Λ + sin(θi)) <= 1
+    θm = @. asin(m*λ[mask]/Λ + sin(θi))
+    ϕ = zero(λ)
+    ϕ[mask] .= @. 2*ω[mask]*L*cos(θm)/PhysData.c
+    if !isnothing(λ0)
+        # Remove constant phase and group delay at λ0
+        ω0 = wlfreq(λ0)
+        ϕ_at(ω_val) = 2*ω_val*L*cos(asin(m*wlfreq(ω_val)/Λ + sin(θi)))/PhysData.c
+        ϕ0 = ϕ_at(ω0)
+        dϕdω = Maths.derivative(ϕ_at, ω0, 1)
+        ϕ[mask] .-= ϕ0 .+ dϕdω .* (ω[mask] .- ω0)
+    end
+    # Apply phase to in-band and zero out-of-band frequencies
+    # transfer is 0 for out-of-band (zeroing those components) and exp(-iϕ) for in-band
+    transfer = zeros(ComplexF64, length(ω))
+    transfer[mask] .= exp.(-1im.*ϕ[mask])
+    Eω .*= transfer
+    Eω
+end
+
+prop_gratings!(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi, λ0=nothing) = prop_gratings!(Eω, grid.ω, Λ, L, m, θi, λ0)
+
+"""
+    prop_gratings(Eω, ω, Λ, L, m, θi, λ0=nothing)
+    prop_gratings(Eω, grid::Grid.AbstractGrid, Λ, L, m, θi, λ0=nothing)
+
+Return a copy of the frequency-domain field `Eω` with the additional spectral phase
+acquired after passing through a four grating compressor with grating period `Λ` (in
+metres), grating separation `L` (in metres), diffraction order `m` (dimensionless integer)
+and angle of incidence `θi` (in radians). The sampling axis of `Eω` can be given either as
+an `AbstractGrid` or the angular frequency axis `ω` (in rad/s).
+
+If the central wavelength `λ0` (in metres) is given, the overall phase and group
+delay at `λ0` are removed so that only the dispersive part of the phase remains.
+
+Frequency components outside the grating diffraction bandwidth are set to zero.
+"""
+prop_gratings(Eω, args...) = prop_gratings!(copy(Eω), args...)
+
+
+#= ======================================================================
+   Prism pair compression — full numerical ray tracing
+   
+   A double-pass prism pair compressor consists of two identical prisms in an
+   anti-parallel configuration. A retroreflecting mirror sends the beam back
+   through both prisms, doubling the accumulated spectral phase and eliminating
+   spatial chirp.
+   
+   The spectral phase is computed by full 2D ray tracing through both prisms,
+   verified against the Lightcon toolbox calculator
+   (https://toolbox.lightcon.com/tools/prismpair).
+   
+   ## Prism Orientation
+   
+   - Prism 1 (apex up): apex pointing upward; beam enters through the left
+     (input) face and exits through the right (output) face.
+   - Prism 2 (apex down): apex pointing downward (inverted), positioned to the
+     right of and below Prism 1. Beam enters through the left face (parallel
+     to Prism 1's output face) and exits through the right face.
+   
+   ## Coordinate system
+   
+       y (up)
+       |    /\           Prism 1 (apex up)
+       |   /  \
+       |  /    \
+       |  ------
+       |
+       |         ------
+       |         \    /   Prism 2 (apex down)
+       |          \  /
+       |           \/
+       +----------------------------> x (right)
+   
+   ## Insertion parameters
+   
+   - `l1` [m]: distance **along the input face** of Prism 1, from the apex to
+     the point where the center-wavelength beam hits the face.
+   - `l2` [m]: distance **along the entry face** of Prism 2, from the apex to
+     the beam incidence point. Only independently specified when using
+     `L_lightcon`; otherwise determined by the ray trace.
+   
+   ## Separation (three options, provide ONE)
+   
+   - `L` (positional, default): apex-to-apex Euclidean distance (Keller/Weiner
+     convention). Same as `L_keller`.
+   - `L_lightcon` (keyword): perpendicular distance between Prism 1 input face
+     and Prism 2 output face (Lightcon convention). Requires both `l1` and `l2`.
+   - `w`, `h` (keyword pair): horizontal / vertical apex displacements,
+     with `h` positive downward.
+   
+   Conversion:  `L_lightcon = w cos(α/2) + h sin(α/2)`,
+                `L_keller   = sqrt(w^2 + h^2)`.
+   
+   ## Dispersion mechanism
+   
+   - Angular dispersion (from separation): negative GDD (anomalous).
+   - Material traversal (from insertions l1, l2): positive GDD (normal).
+   
+   ## Double pass
+   
+       ϕ_double(ω) = 2 ϕ_single(ω)
+   
+   References:
+     A. M. Weiner, "Ultrafast Optics" (Wiley, 2009), Ch. 4
+     U. Keller, "Ultrafast Lasers" (Springer, 2021), Ch. 3
+     R. L. Fork et al., Opt. Lett. 9, 150 (1984)
+   ====================================================================== =#
+
+"""
+    brewster_angle(material, λ; P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Brewster angle (in radians) for `material` at wavelength `λ` (in metres):
+`θ_B = arctan(n(λ))`. At Brewster's angle, p-polarised light has zero
+reflection at the air-material interface.
+
+Keyword arguments `P` (pressure), `T` (temperature), and `lookup` are passed to
+`PhysData.ref_index_fun`.
+
+# Examples
+```jldoctest
+julia> rad2deg(Fields.brewster_angle(:SiO2, 800e-9))
+55.47390378498051
+```
+"""
+function brewster_angle(material, λ; P=1, T=PhysData.roomtemp, lookup=nothing)
+    n = real(PhysData.ref_index_fun(material, P, T; lookup=lookup)(λ))
+    atan(n)
+end
+
+"""
+    mindev_apex(material, λ; P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Apex angle `α` (in radians) for simultaneous minimum deviation and Brewster
+incidence on both surfaces of a prism made of `material` at wavelength `λ`
+(in metres):
+
+    α = π − 2 arctan(n)   [equivalently  2 arctan(1/n)]
+
+This is the standard "Brewster-cut" prism geometry used in ultrafast laser systems.
+
+Keyword arguments `P`, `T`, `lookup` are forwarded to `PhysData.ref_index_fun`.
+
+See also [`brewster_angle`](@ref).
+
+# Examples
+```jldoctest
+julia> rad2deg(Fields.mindev_apex(:SiO2, 800e-9))
+69.05219243003899
+```
+"""
+function mindev_apex(material, λ; P=1, T=PhysData.roomtemp, lookup=nothing)
+    n = real(PhysData.ref_index_fun(material, P, T; lookup=lookup)(λ))
+    2*atan(1/n)
+end
+
+"""
+    _prism_trace(θi, α, n)
+
+Trace a ray through a single prism with apex angle `α` and refractive index `n`.
+The ray enters the first surface at angle of incidence `θi`.
+
+Returns `(θe, valid)` where:
+- `θe`: exit angle from the second surface (angle with respect to the surface normal)
+- `valid`: `false` if total internal reflection occurs at either surface
+
+Internally, Snell's law is applied at each surface:
+- Surface 1: `sin(θi) = n·sin(θr1)` (refraction into prism)
+- Surface 2: `n·sin(α − θr1) = sin(θe)` (refraction out of prism)
+"""
+function _prism_trace(θi, α, n)
+    !isfinite(n) && return (0.0, false)
+    sinθr1 = sin(θi) / n
+    (abs(sinθr1) > 1 || !isfinite(sinθr1)) && return (0.0, false)
+    θr1 = asin(sinθr1)
+    θi2 = α - θr1
+    (θi2 < 0 || !isfinite(θi2)) && return (0.0, false)
+    sinθe = n * sin(θi2)
+    (abs(sinθe) > 1 || !isfinite(sinθe)) && return (0.0, false)
+    θe = asin(sinθe)
+    return (θe, true)
+end
+
+
+# ── Full 2D ray trace through the prism pair ──────────────────────────────
+
+"""
+    _trace_ray(n, α, θi, A1, A2, l1)
+
+Trace a single ray with refractive index `n` through the prism pair defined by
+apex positions `A1` (Prism 1, apex up) and `A2` (Prism 2, apex down), apex angle
+`α`, angle of incidence `θi`, and insertion `l1` (distance along the input face
+of Prism 1 from its apex).
+
+The ray enters Prism 1's input face at distance `l1` from the apex, refracts
+through both prisms, and exits Prism 2's output face.
+
+Returns a `NamedTuple` with fields:
+- `OPL`:       total optical path length A→D (n₁·d₁ + d_free + n₂·d₂)
+- `d1_phys`:   physical path inside Prism 1 (A→B)
+- `d_free`:    free-space path between prisms (B→C)
+- `d2_phys`:   physical path inside Prism 2 (C→D)
+- `l2_actual`: actual insertion into Prism 2 (distance along entry face from apex)
+- `A`, `B`, `C`, `D`: intersection points (2-element vectors)
+- `d_output`:  output beam direction unit vector
+"""
+function _trace_ray(n, α, θi, A1, A2, l1)
+    ha = α / 2
+
+    # Prism 1 faces (apex up)
+    f1_dir = [-sin(ha), -cos(ha)]
+    f2_dir = [ sin(ha), -cos(ha)]
+    f2_n   = [ cos(ha),  sin(ha)]
+
+    # Prism 2 faces (apex down)
+    g1_dir = [-sin(ha),  cos(ha)]
+    g1_n   = [-cos(ha), -sin(ha)]
+    g2_dir = [ sin(ha),  cos(ha)]
+    g2_n   = [ cos(ha), -sin(ha)]
+
+    # === PRISM 1 ===
+    A = A1 + l1 * f1_dir
+
+    sinθ1p = clamp(sin(θi) / n, -1.0, 1.0)
+    θ1p = asin(sinθ1p)
+    n_inw_f1 = [cos(ha), -sin(ha)]
+    t1       = [sin(ha),  cos(ha)]
+    d_refr   = cos(θ1p) * n_inw_f1 + sin(θ1p) * t1
+
+    # Intersect with face 2
+    rhs = A1 - A
+    det_val = d_refr[1] * (-f2_dir[2]) - d_refr[2] * (-f2_dir[1])
+    t_AB = (rhs[1] * (-f2_dir[2]) - rhs[2] * (-f2_dir[1])) / det_val
+    B = A + t_AB * d_refr
+    d1_phys = t_AB
+
+    # Exit from Prism 1
+    θ2p = α - θ1p
+    sinθ_exit = clamp(n * sin(θ2p), -1.0, 1.0)
+    θ_exit = asin(sinθ_exit)
+    tang_f2 = d_refr - dot(d_refr, f2_n) * f2_n
+    tn_f2 = norm(tang_f2)
+    if tn_f2 > 1e-15
+        tang_f2 = tang_f2 / tn_f2
+    end
+    d_exit = cos(θ_exit) * f2_n + sin(θ_exit) * tang_f2
+
+    # === FREE SPACE B → C ===
+    rhs2 = A2 - B
+    det_val2 = d_exit[1] * (-g1_dir[2]) - d_exit[2] * (-g1_dir[1])
+    t_BC = (rhs2[1] * (-g1_dir[2]) - rhs2[2] * (-g1_dir[1])) / det_val2
+    s_C  = (d_exit[1] * rhs2[2] - d_exit[2] * rhs2[1]) / det_val2
+    C = B + t_BC * d_exit
+    d_free = t_BC
+    l2_actual = s_C
+
+    # === PRISM 2 ===
+    cos_inc_2 = -dot(d_exit, g1_n)
+    θ_inc_2 = acos(clamp(cos_inc_2, -1.0, 1.0))
+    sinθ_inc_2p = clamp(sin(θ_inc_2) / n, -1.0, 1.0)
+    θ_inc_2p = asin(sinθ_inc_2p)
+
+    n_inw_g1 = -g1_n
+    tang_g1 = d_exit - dot(d_exit, g1_n) * g1_n
+    tn = norm(tang_g1)
+    if tn > 1e-15
+        tang_g1 = tang_g1 / tn
+    end
+    d_refr2 = cos(θ_inc_2p) * n_inw_g1 + sin(θ_inc_2p) * tang_g1
+
+    # Intersect with exit face of Prism 2
+    rhs3 = A2 - C
+    det_val3 = d_refr2[1] * (-g2_dir[2]) - d_refr2[2] * (-g2_dir[1])
+    t_CD = (rhs3[1] * (-g2_dir[2]) - rhs3[2] * (-g2_dir[1])) / det_val3
+    D = C + t_CD * d_refr2
+    d2_phys = t_CD
+
+    # Exit from Prism 2
+    θ_exit_2p = α - θ_inc_2p
+    sinθ_final = clamp(n * sin(θ_exit_2p), -1.0, 1.0)
+    θ_final = asin(sinθ_final)
+    tang_g2 = d_refr2 - dot(d_refr2, g2_n) * g2_n
+    tn2 = norm(tang_g2)
+    if tn2 > 1e-15
+        tang_g2 = tang_g2 / tn2
+    end
+    d_output = cos(θ_final) * g2_n + sin(θ_final) * tang_g2
+
+    OPL = n * d1_phys + d_free + n * d2_phys
+
+    return (OPL=OPL, d1_phys=d1_phys, d_free=d_free, d2_phys=d2_phys,
+            l2_actual=l2_actual, A=A, B=B, C=C, D=D, d_output=d_output)
+end
+
+
+# ── Geometry conversion helpers ───────────────────────────────────────────
+
+"""
+    _L_lightcon_from_wh(w, h, α)
+
+Lightcon separation from apex displacements:
+`L = w cos(α/2) + h sin(α/2)`.
+"""
+_L_lightcon_from_wh(w, h, α) = w * cos(α/2) + h * sin(α/2)
+
+"""
+    _L_keller_from_wh(w, h)
+
+Keller/Weiner separation (apex-to-apex Euclidean distance):
+`L = sqrt(w² + h²)`.
+"""
+_L_keller_from_wh(w, h) = sqrt(w^2 + h^2)
+
+"""
+    _wh_from_L_lightcon(L_lc, α, θi, n_center, l1, l2)
+
+Compute apex displacements `(w, h)` from the Lightcon-style separation `L_lc`,
+apex angle `α`, angle of incidence `θi`, center-wavelength refractive index
+`n_center`, and insertions `l1`, `l2`.
+
+Traces the center-wavelength ray through Prism 1 and uses the constraint that
+the perpendicular face separation equals `L_lc` and that the beam arrives at
+distance `l2` from Prism 2's apex along its entry face.
+"""
+function _wh_from_L_lightcon(L_lc, α, θi, n_center, l1, l2)
+    ha = α / 2
+
+    f1_dir = [-sin(ha), -cos(ha)]
+    f2_dir = [ sin(ha), -cos(ha)]
+    f2_n   = [ cos(ha),  sin(ha)]
+
+    A1 = [0.0, 0.0]
+    A  = A1 + l1 * f1_dir
+
+    θ1p   = asin(sin(θi) / n_center)
+    n_inw = [ cos(ha), -sin(ha)]
+    t1    = [ sin(ha),  cos(ha)]
+    d_refr = cos(θ1p) * n_inw + sin(θ1p) * t1
+
+    rhs = A1 - A
+    det_val = d_refr[1] * (-f2_dir[2]) - d_refr[2] * (-f2_dir[1])
+    t_AB = (rhs[1] * (-f2_dir[2]) - rhs[2] * (-f2_dir[1])) / det_val
+    B = A + t_AB * d_refr
+
+    θ2p = α - θ1p
+    θ_exit = asin(n_center * sin(θ2p))
+    tang = d_refr - dot(d_refr, f2_n) * f2_n
+    tang = tang / norm(tang)
+    d_exit = cos(θ_exit) * f2_n + sin(θ_exit) * tang
+
+    L_perp = [cos(ha), -sin(ha)]
+    numer = L_lc - dot(B, L_perp) - l2 * sin(α)
+    denom = dot(d_exit, L_perp)
+    t_BC = numer / denom
+
+    C = B + t_BC * d_exit
+    g1_dir = [-sin(ha), cos(ha)]
+    A2 = C - l2 * g1_dir
+
+    return (A2[1], -A2[2])  # (w, h) with h positive downward
+end
+
+"""
+    _wh_from_L_keller(L_k, α, θi, n_center, l1)
+
+Compute apex displacements `(w, h)` from the Keller-style separation `L_k`
+(apex-to-apex Euclidean distance), apex angle `α`, angle of incidence `θi`,
+center-wavelength refractive index `n_center`, and insertion `l1`.
+
+In the Keller/Weiner convention, the line joining the two prism apexes is
+parallel to the center-wavelength beam between the prisms. The Prism 2 apex
+is placed at distance `L_k` along this direction from Prism 1's apex.
+"""
+function _wh_from_L_keller(L_k, α, θi, n_center, l1)
+    ha = α / 2
+
+    # Compute the center-wavelength exit beam direction from Prism 1
+    # (independent of l1 — same refraction angles regardless of where on the face)
+    sinθ1p = clamp(sin(θi) / n_center, -1.0, 1.0)
+    θ1p = asin(sinθ1p)
+    θ2p = α - θ1p
+    sinθ_exit = clamp(n_center * sin(θ2p), -1.0, 1.0)
+    θ_exit = asin(sinθ_exit)
+
+    # Face 2 normal and tangent for Prism 1
+    f2_n = [cos(ha), sin(ha)]
+    n_inw = [cos(ha), -sin(ha)]
+    t1    = [sin(ha),  cos(ha)]
+    d_refr = cos(θ1p) * n_inw + sin(θ1p) * t1
+    tang_f2 = d_refr - dot(d_refr, f2_n) * f2_n
+    tn = norm(tang_f2)
+    if tn > 1e-15
+        tang_f2 = tang_f2 / tn
+    end
+    d_exit = cos(θ_exit) * f2_n + sin(θ_exit) * tang_f2
+
+    # Place Prism 2 apex at distance L_k along the exit beam direction
+    A2 = Float64(L_k) * d_exit
+    return (A2[1], -A2[2])  # (w, h) with h positive downward
+end
+
+
+# ── Phase computation using full ray trace ────────────────────────────────
+
+"""
+    _prism_pair_phase(ω, n_func, α, θi, l1, A1, A2;
+                      double_pass=true, D_ref=nothing, d_input=nothing)
+
+Compute the spectral phase `ϕ(ω)` accumulated through the prism pair using
+full 2D ray tracing.
+
+The prism pair is defined by apex positions `A1` (Prism 1, apex up) and `A2`
+(Prism 2, apex down), apex angle `α`, angle of incidence `θi`, and insertion
+`l1` (distance along the input face of Prism 1 from apex to beam).
+
+For each frequency, the ray is traced through both prisms. The total optical
+path length is corrected to a common output reference plane through the
+center-wavelength exit point, ensuring a self-consistent spectral phase.
+
+If `double_pass=true` (default), the phase is doubled for a retroreflected
+geometry.
+
+# Keywords
+- `D_ref`: fixed reference exit point (2-element vector). If not provided,
+  computed from the center of the valid frequency range. Must be fixed across
+  all evaluations when computing derivatives.
+- `d_input`: input beam direction unit vector. If not provided, computed from
+  `θi` and `α`.
+
+Returns `(ϕ, mask)` where `ϕ` is the phase array and `mask` is a `BitVector`
+indicating which frequencies are valid (no total internal reflection).
+"""
+function _prism_pair_phase(ω, n_func, α, θi, l1, A1, A2;
+                          double_pass=true, D_ref=nothing, d_input=nothing)
+    λ = PhysData.wlfreq.(ω)
+    Nω = length(ω)
+    ϕ = zeros(Nω)
+    mask = trues(Nω)
+
+    ha = α / 2
+
+    # Build TIR mask using fast single-prism trace
+    for i in 1:Nω
+        if !isfinite(λ[i]) || λ[i] <= 0
+            mask[i] = false
+            continue
+        end
+        ni = real(n_func(λ[i]))
+        if !isfinite(ni) || ni <= 0
+            mask[i] = false
+            continue
+        end
+        θe1, valid1 = _prism_trace(θi, α, ni)
+        if !valid1
+            mask[i] = false
+            continue
+        end
+        _, valid2 = _prism_trace(θe1, α, ni)
+        if !valid2
+            mask[i] = false
+            continue
+        end
+    end
+
+    valid_idx = findall(mask)
+    if isempty(valid_idx)
+        return ϕ, mask
+    end
+
+    # Compute reference point D_ref if not provided
+    if isnothing(D_ref)
+        mid_idx = valid_idx[length(valid_idx) ÷ 2 + 1]
+        n_ref = real(n_func(λ[mid_idx]))
+        ref_res = _trace_ray(n_ref, α, θi, A1, A2, l1)
+        D_ref = ref_res.D
+    end
+
+    # Input beam direction (determined by θi and face 1 geometry; same for all ω)
+    if isnothing(d_input)
+        n_inw_f1 = [cos(ha), -sin(ha)]
+        t1_tang  = [sin(ha),  cos(ha)]
+        d_input  = cos(θi) * n_inw_f1 + sin(θi) * t1_tang
+    end
+
+    pass_factor = double_pass ? 2.0 : 1.0
+
+    for i in valid_idx
+        ni = real(n_func(λ[i]))
+        res = _trace_ray(ni, α, θi, A1, A2, l1)
+        # Correct to common output reference plane through D_ref
+        correction = dot(D_ref - res.D, d_input)
+        OPL_total = res.OPL + correction
+        ϕ[i] = pass_factor * ω[i] / PhysData.c * OPL_total
+    end
+
+    return ϕ, mask
+end
+
+"""
+    _prism_apex_positions(α, θi, n_center, l1, l2;
+                          L=nothing, L_lightcon=nothing, w=nothing, h=nothing)
+
+Determine the Prism 2 apex position `(w, h)` plus the resolved Prism 1 and
+Prism 2 apex coordinates `A1`, `A2` from the user-supplied geometry option.
+
+Exactly one geometry option must be provided:
+- `L` (apex-to-apex, Keller convention)
+- `L_lightcon` (perpendicular face separation, requires both `l1` and `l2`)
+- `w` and `h` (direct apex displacements)
+
+Returns `(w, h, A1, A2)`.
+"""
+function _prism_apex_positions(α, θi, n_center, l1, l2;
+                               L=nothing, L_lightcon=nothing,
+                               w=nothing, h=nothing)
+    A1 = [0.0, 0.0]
+    if L_lightcon !== nothing
+        w_calc, h_calc = _wh_from_L_lightcon(
+            Float64(L_lightcon), α, θi, n_center, Float64(l1), Float64(l2))
+    elseif w !== nothing && h !== nothing
+        w_calc, h_calc = Float64(w), Float64(h)
+    elseif L !== nothing
+        w_calc, h_calc = _wh_from_L_keller(Float64(L), α, θi, n_center, Float64(l1))
+    else
+        error("Must provide one of: L (apex-to-apex), L_lightcon, or (w, h)")
+    end
+    A2 = [w_calc, -h_calc]
+    return (w_calc, h_calc, A1, A2)
+end
+
+"""
+    prism_pair_GDD(λ, material, α, θi; double_pass=true,
+                   P=1, T=PhysData.roomtemp, lookup=nothing)
+
+Group-delay dispersion per unit Keller separation (s²/m) of a prism pair at
+wavelength `λ` (in metres), for prism `material`, apex angle `α`, and angle
+of incidence `θi` (all in radians). No prism insertion (`l1 = l2 = 0`).
+
+By default returns the **double-pass** GDD (set `double_pass=false` for single).
+The result is typically negative (anomalous dispersion from angular dispersion).
+
+Uses full 2D ray tracing internally; the result includes all orders of the
+geometry and material dispersion.
+
+# Examples
+```jldoctest
+julia> α = Fields.mindev_apex(:SiO2, 800e-9);
+
+julia> θi = Fields.brewster_angle(:SiO2, 800e-9);
+
+julia> Fields.prism_pair_GDD(800e-9, :SiO2, α, θi) < 0  # negative GDD
+true
+```
+"""
+function prism_pair_GDD(λ, material, α, θi; double_pass=true,
+                        P=1, T=PhysData.roomtemp, lookup=nothing)
+    n_func = PhysData.ref_index_fun(material, P, T; lookup=lookup)
+    ω0 = wlfreq(λ)
+    n_center = real(n_func(λ))
+    # Use L_keller = 1 m, l1 = 0 for per-unit-separation GDD
+    _, _, A1, A2 = _prism_apex_positions(α, θi, n_center, 0.0, 0.0; L=1.0)
+    # Pre-compute fixed reference point at λ for consistent derivatives
+    ref_res = _trace_ray(n_center, α, θi, A1, A2, 0.0)
+    D_ref_fixed = ref_res.D
+    ha = α / 2
+    d_input_fixed = cos(θi) * [cos(ha), -sin(ha)] + sin(θi) * [sin(ha), cos(ha)]
+    function ϕ_at(ω_val)
+        ϕ_arr, mask = _prism_pair_phase([ω_val], n_func, α, θi, 0.0, A1, A2;
+                                         double_pass=double_pass,
+                                         D_ref=D_ref_fixed, d_input=d_input_fixed)
+        mask[1] ? ϕ_arr[1] : 0.0
+    end
+    Maths.derivative(ϕ_at, ω0, 2)
+end
+
+"""
+    prop_prisms!(Eω, ω, material, α, L, θi, l1=0.0, l2=0.0, λ0=nothing;
+                 L_lightcon=nothing, w=nothing, h=nothing, double_pass=true,
+                 P=1, T=PhysData.roomtemp, lookup=nothing)
+    prop_prisms!(Eω, grid, material, α, L, θi, l1=0.0, l2=0.0, λ0=nothing; ...)
+
+Apply the spectral phase from a prism pair compressor to the frequency-domain
+field `Eω`, computed by full 2D ray tracing.
+
+# Geometry
+
+The prism pair consists of two identical prisms with apex angle `α` in an
+anti-parallel (apex-up / apex-down) configuration. The spectral phase is
+computed from the wavelength-dependent optical path length through both
+prisms and the free-space gap between them.
+
+## Separation (provide ONE)
+
+- **`L`** (positional): apex-to-apex Euclidean distance in metres (Keller/Weiner
+  convention). The beam insertion into Prism 2 is determined by the ray trace
+  (matched to `l1` at the center wavelength).
+- **`L_lightcon`** (keyword): perpendicular distance between Prism 1's input
+  face and Prism 2's output face (Lightcon convention). Requires both `l1`
+  and `l2` to be specified.
+- **`w`, `h`** (keyword pair): horizontal and vertical apex displacements
+  (h positive downward).
+
+Conversion: `L_lightcon = w cos(α/2) + h sin(α/2)`,
+            `L_keller = sqrt(w² + h²)`.
+
+## Insertion
+
+- `l1`: distance along the input face of Prism 1, from apex to beam (metres).
+  Default `0.0` (beam grazes apex, no glass traversed).
+- `l2`: distance along the entry face of Prism 2, from apex to beam (metres).
+  Default `0.0`. Only used when `L_lightcon` is specified.
+
+# Arguments
+- `Eω`: frequency-domain field (modified in place)
+- `ω` or `grid`: angular frequency axis (rad/s) or an `AbstractGrid`
+- `material`: prism material as a `Symbol` (e.g. `:SiO2`, `:BK7`, `:CaF2`)
+- `α`: prism apex angle (radians); use [`mindev_apex`](@ref) for Brewster-cut
+- `L`: apex-to-apex separation (metres); see Geometry section for alternatives
+- `θi`: angle of incidence on Prism 1 input face (radians); use
+  [`brewster_angle`](@ref) for Brewster incidence
+- `l1`, `l2`: prism insertions (metres)
+- `λ0`: if given (metres), overall phase and group delay at `λ0` are removed
+
+# Keyword arguments
+- `L_lightcon`: Lightcon-style separation (overrides `L`)
+- `w`, `h`: direct apex displacements (override `L`)
+- `double_pass`: if `true` (default), double the phase for retroreflected geometry
+- `P`, `T`, `lookup`: forwarded to `PhysData.ref_index_fun`
+
+Frequency components with total internal reflection are set to zero.
+
+See also [`prop_prisms`](@ref), [`brewster_angle`](@ref), [`mindev_apex`](@ref),
+[`prism_pair_GDD`](@ref), [`optcomp_prisms`](@ref).
+"""
+function prop_prisms!(Eω, ω, material, α, L, θi, l1=0.0, l2=0.0, λ0=nothing;
+                      L_lightcon=nothing, w=nothing, h=nothing, double_pass=true,
+                      P=1, T=PhysData.roomtemp, lookup=nothing)
+    n_func = PhysData.ref_index_fun(material, P, T; lookup=lookup)
+
+    # Determine center wavelength for geometry setup
+    λ_geom = isnothing(λ0) ? PhysData.wlfreq(ω[length(ω) ÷ 2 + 1]) : λ0
+    n_center = real(n_func(λ_geom))
+
+    # Determine apex positions from whichever geometry option was provided
+    Larg = (L_lightcon !== nothing || (w !== nothing && h !== nothing)) ? nothing : L
+    _, _, A1, A2 = _prism_apex_positions(α, θi, n_center, l1, l2;
+                                          L=Larg, L_lightcon=L_lightcon, w=w, h=h)
+
+    # Compute a fixed D_ref and d_input at the geometry center wavelength,
+    # used consistently for both the main phase array and any λ0 correction
+    ref_res = _trace_ray(n_center, α, θi, A1, A2, Float64(l1))
+    D_ref_fixed = ref_res.D
+    ha = α / 2
+    d_input_fixed = cos(θi) * [cos(ha), -sin(ha)] + sin(θi) * [sin(ha), cos(ha)]
+
+    ϕ, mask = _prism_pair_phase(ω, n_func, α, θi, l1, A1, A2;
+                                 double_pass=double_pass,
+                                 D_ref=D_ref_fixed, d_input=d_input_fixed)
+
+    if !isnothing(λ0)
+        ω0 = wlfreq(λ0)
+        function ϕ_at(ω_val)
+            ϕ_s, m_s = _prism_pair_phase([ω_val], n_func, α, θi, l1, A1, A2;
+                                          double_pass=double_pass,
+                                          D_ref=D_ref_fixed, d_input=d_input_fixed)
+            m_s[1] ? ϕ_s[1] : 0.0
+        end
+        ϕ0 = ϕ_at(ω0)
+        dϕdω = Maths.derivative(ϕ_at, ω0, 1)
+        ϕ[mask] .-= ϕ0 .+ dϕdω .* (ω[mask] .- ω0)
+    end
+    transfer = zeros(ComplexF64, length(ω))
+    transfer[mask] .= exp.(-1im .* ϕ[mask])
+    Eω .*= transfer
+    Eω
+end
+
+prop_prisms!(Eω, grid::Grid.AbstractGrid, material, α, L, θi, l1=0.0, l2=0.0,
+             λ0=nothing; kwargs...) = prop_prisms!(
+    Eω, grid.ω, material, α, L, θi, l1, l2, λ0; kwargs...)
+
+"""
+    prop_prisms(Eω, args...; kwargs...)
+
+Return a copy of `Eω` with the prism pair spectral phase applied.
+For arguments, see [`prop_prisms!`](@ref).
+"""
+prop_prisms(Eω, args...; kwargs...) = prop_prisms!(copy(Eω), args...; kwargs...)
+
+
+"""
+    optcomp_prisms(Eω, grid, material, α, θi, l1, l2, min_separation, max_separation;
+                   λ0=nothing, double_pass=true, P=1, T=PhysData.roomtemp, lookup=nothing)
+    optcomp_prisms(Eω, grid, material, α, θi, l1=0.0, l2=0.0;
+                   λ0=nothing, double_pass=true, bounds_factor=3, ...)
+
+Maximise peak power by compression through a prism pair compressor.
+
+Returns `(L_opt, Eω_compressed)` where `L_opt` is the optimum apex-to-apex
+(Keller) prism separation in metres.
+
+With explicit bounds `min_separation` and `max_separation`, the optimiser
+searches directly within that range. Without bounds, [`optcomp_taylor`](@ref)
+estimates the required GDD and [`prism_pair_GDD`](@ref) converts it to an
+estimated separation; the search range is then `L_est / bounds_factor` to
+`L_est * bounds_factor`.
+
+See also [`prop_prisms!`](@ref), [`brewster_angle`](@ref), [`mindev_apex`](@ref).
+"""
+function optcomp_prisms(Eω::AbstractVecOrMat, grid, material, α, θi, l1, l2,
+                        min_separation, max_separation;
+                        λ0=nothing, double_pass=true,
+                        P=1, T=PhysData.roomtemp, lookup=nothing)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
+
+    function f(L)
+        Eωp = copy(Eωnorm)
+        prop_prisms!(Eωp, grid.ω, material, α, L, θi, l1, l2, λ0;
+                     double_pass=double_pass, P=P, T=T, lookup=lookup)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1/maximum(Itp)
+    end
+
+    res = Optim.optimize(f, min_separation, max_separation)
+    res.minimizer, prop_prisms(Eω, grid, material, α, res.minimizer, θi, l1, l2, λ0;
+                               double_pass=double_pass, P=P, T=T, lookup=lookup)
+end
+
+function optcomp_prisms(Eω::AbstractVecOrMat, grid, material, α, θi, l1=0.0, l2=0.0;
+                        λ0=nothing, double_pass=true, bounds_factor=3,
+                        P=1, T=PhysData.roomtemp, lookup=nothing)
+    if isnothing(λ0)
+        Eω1 = Eω isa AbstractVector ? Eω : @view Eω[:, 1]
+        λc = wlfreq(grid.ω[argmax(abs.(Eω1))])
+    else
+        λc = λ0
+    end
+    ϕs, _ = optcomp_taylor(Eω, grid, λc; order=2)
+    GDD_needed = ϕs[3]
+    GDD_per_L = prism_pair_GDD(λc, material, α, θi; double_pass=double_pass,
+                                P=P, T=T, lookup=lookup)
+    if !isfinite(GDD_per_L) || GDD_per_L == 0
+        throw(ArgumentError(
+            "prism pair GDD per unit separation is zero or non-finite "
+            * "(material=$material, α=$α, θi=$θi); cannot estimate separation "
+            * "automatically. Use the explicit (min_separation, max_separation) "
+            * "method instead."))
+    end
+    L_est = abs(GDD_needed / GDD_per_L)
+    L_est = max(L_est, 1e-4)
+    min_separation = max(0.0, L_est / bounds_factor)
+    max_separation = L_est * bounds_factor
+    optcomp_prisms(Eω, grid, material, α, θi, l1, l2,
+                   min_separation, max_separation;
+                   λ0=λ0, double_pass=double_pass, P=P, T=T, lookup=lookup)
+end
+
+function optcomp_prisms(Eω, args...; kwargs...)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    dout = zeros(size(cidcs))
+    for ci in cidcs
+        di, Eωi = optcomp_prisms(Eω[:, :, ci], args...; kwargs...)
+        out[:, :, ci] .= Eωi
+        dout[ci] = di
+    end
+    dout, out
+end
+
 
 """
     optcomp_taylor(Eω, grid, λ0; order=2)
@@ -912,7 +1725,6 @@ function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
     EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
     ItFTL = _It(iFT(EωFTL, grid), grid)
-    target = 1/maximum(ItFTL)
 
     Eωnorm = Eω ./ sqrt(maximum(ItFTL))
 
@@ -944,6 +1756,84 @@ function optcomp_material(Eω, args...; kwargs...)
     end
     dout, out
 end
+
+
+"""
+    optcomp_gratings(Eω, grid, Λ, m, θi, min_separation, max_separation; λ0=nothing)
+    optcomp_gratings(Eω, grid, Λ, m, θi; λ0=nothing, bounds_factor=3)
+
+Maximise the peak power of the field `Eω` by compression through a four grating
+compressor with grating period `Λ` (in metres), diffraction order `m` (dimensionless
+integer) and angle of incidence `θi` (in radians). The optimum grating separation (in
+metres) is returned.
+
+If `min_separation` and `max_separation` are given, the optimiser searches within these
+bounds directly. If they are omitted, [`optcomp_taylor`](@ref) is used to estimate the
+required GDD and the Treacy formula ([`grating_GDD`](@ref)) converts this to an estimated
+grating separation; the search bounds are then set to `L_est / bounds_factor` and
+`L_est * bounds_factor`.
+
+If the central wavelength `λ0` (in metres) is given, the overall phase and group delay
+at `λ0` are removed from the grating phase (see [`prop_gratings!`](@ref)).
+"""
+function optcomp_gratings(Eω::AbstractVecOrMat, grid, Λ, m, θi,
+                          min_separation, max_separation; λ0=nothing)
+    τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
+    EωFTL = abs.(Eω) .* exp.(-1im .* grid.ω .* τ)
+    ItFTL = _It(iFT(EωFTL, grid), grid)
+
+    Eωnorm = Eω ./ sqrt(maximum(ItFTL))
+
+    function f(L)
+        # L is the grating separation
+        Eωp = copy(Eωnorm)
+        prop_gratings!(Eωp, grid.ω, Λ, L, m, θi, λ0)
+        Itp = _It(iFT(Eωp, grid), grid)
+        1/maximum(Itp)
+    end
+
+    res = Optim.optimize(f, min_separation, max_separation)
+    res.minimizer, prop_gratings(Eω, grid, Λ, res.minimizer, m, θi, λ0)
+end
+
+function optcomp_gratings(Eω::AbstractVecOrMat, grid, Λ, m, θi;
+                          λ0=nothing, bounds_factor=3)
+    # Determine central wavelength for Taylor estimate
+    if isnothing(λ0)
+        Eω1 = Eω isa AbstractVector ? Eω : @view Eω[:, 1]
+        λc = wlfreq(grid.ω[argmax(abs.(Eω1))])
+    else
+        λc = λ0
+    end
+    # Use Taylor expansion to estimate the required GDD
+    ϕs, _ = optcomp_taylor(Eω, grid, λc; order=2)
+    GDD_needed = ϕs[3]
+    GDD_per_L = grating_GDD(λc, Λ, m, θi)
+    if !isfinite(GDD_per_L) || GDD_per_L == 0
+        throw(ArgumentError(
+            "grating GDD per unit separation is zero or non-finite "
+            * "(Λ=$Λ, m=$m, θi=$θi); cannot estimate separation automatically. "
+            * "Use the explicit (min_separation, max_separation) method instead."))
+    end
+    L_est = abs(GDD_needed / GDD_per_L)
+    L_est = max(L_est, 1e-4) # at least 0.1 mm to avoid degenerate bounds
+    min_separation = max(0.0, L_est / bounds_factor)
+    max_separation = L_est * bounds_factor
+    optcomp_gratings(Eω, grid, Λ, m, θi, min_separation, max_separation; λ0)
+end
+
+function optcomp_gratings(Eω, args...; kwargs...)
+    out = similar(Eω)
+    cidcs = CartesianIndices(size(Eω)[3:end])
+    dout = zeros(size(cidcs))
+    for ci in cidcs
+        di, Eωi = optcomp_gratings(Eω[:, :, ci], args...; kwargs...)
+        out[:, :, ci] .= Eωi
+        dout[ci] = di
+    end
+    dout, out
+end
+
 
 """
     optfield_cep(Eω, grid)
