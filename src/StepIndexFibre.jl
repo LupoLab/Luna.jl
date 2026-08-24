@@ -163,11 +163,11 @@ function char_HE(radius, k0, ncore, nclad, n, neff)
     char_LHS(n, u) - char_RHS(ncore, nclad, n, w) + R(ncore, nclad, n, u, w, neff)
 end
 
-function char_TE(radius, k0, ncore, nclad, neff)
+function char_TM(radius, k0, ncore, nclad, neff)
     char_HE(radius, k0, ncore, nclad, 0, neff)
 end
 
-function char_TM(radius, k0, ncore, nclad, neff)
+function char_TE(radius, k0, ncore, nclad, neff)
     char_EH(radius, k0, ncore, nclad, 0, neff)
 end
 
@@ -202,6 +202,10 @@ end
 function findneff(radius, k0, ncore, nclad, n, m, mode=:HE, pts=100)
     char = make_char(radius, k0, ncore, nclad, n, mode)
     roots = find_zeros(char, nclad, ncore, no_pts=pts)
+    r=[nclad;roots]
+	t1=char.(roots-diff(r)/3*2)
+	t2=char.(roots-diff(r)/3)
+	roots=roots[abs.(t2).<abs.(t1)]
     roots[end - (m - 1)]
 end
 
