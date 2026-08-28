@@ -24,6 +24,8 @@ import Luna.PhysData: wlfreq
     @test Modes.neff(arm, 2.5e15) == 0.9999193518567425
     arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w, loss=0.5)
     @test Modes.neff(arm, 2.5e15) ≈ 0.9999193518567425 + 0.5*1.87925966056515e-6im
+    arm = Antiresonant.ZeisbergerMode(a, :Air, 0, (ω; z) -> 1.45; wallthickness=w, loss=ω -> 0.5)
+    @test Modes.neff(arm, 2.5e15) ≈ 0.9999193518567425 + 0.5*1.87925966056515e-6im
     @test_throws ArgumentError Antiresonant.ZeisbergerMode(a, :Air, 0; wallthickness=w, loss=0.5im)
 end
 
@@ -55,6 +57,10 @@ end
     m0 = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
                                         loss=false)
     @test all(Modes.α.(m0, wlfreq.(λ)) .== 0)
+
+    mfun = Antiresonant.VincettiMode(Rco; wallthickness=t, tube_radius=r_ext, Ntubes=N, cladn,
+                                        loss=ω -> scale)
+    @test Modes.α.(mfun, wlfreq.(λ)) ≈ Modes.α.(msc, wlfreq.(λ))
 
     @test Modes.neff(m, wlfreq(1030e-9)) ≈ 0.9998598623672965 + 3.4579455755137454e-8im
 

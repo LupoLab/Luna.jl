@@ -7,7 +7,7 @@ using Reexport
 @reexport using Luna.Modes
 import Luna: Maths, Grid
 import Luna.PhysData: c, ε_0, μ_0, ref_index_fun, roomtemp, densityspline, sellmeier_gas
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, modeinfo
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, modeinfo, wraptype
 import Luna.LinearOps: make_linop, conj_clamp, neff_grid, neff_β_grid
 import Luna.PhysData: wlfreq, roomtemp
 import Luna.Utils: subscript
@@ -36,18 +36,23 @@ struct MarcatiliMode{Ta, Tcore, Tclad, LT} <: AbstractMode
     coren::Tcore # callable, returns (possibly complex) core ref index as function of ω
     cladn::Tclad # callable, returns (possibly complex) cladding ref index as function of ω
     model::Symbol # if :full, includes complete influence of complex cladding ref index
-    loss::LT # Val{true}() or Val{false}() - whether to include the loss
+    loss::LT # Val{true}(), Val{false}(), a Real (scaling factor) or a Function ω -> scaling factor
     aeff_intg::Float64 # Pre-calculated integral fraction for effective area
 end
 
 function show(io::IO, m::MarcatiliMode)
     a = radius_string(m)
-    loss = "loss=" * (m.loss == Val(true) ? "true" : "false")
+    loss = "loss=" * lossstring(m.loss)
     model = "model="*string(m.model)
     angle = "ϕ=$(m.ϕ/π)π"
     out = "MarcatiliMode{"*join([mode_string(m), a, loss, model, angle], ", ")*"}"
     print(io, out)
 end
+
+lossstring(::Val{true}) = "true"
+lossstring(::Val{false}) = "false"
+lossstring(loss::Real) = string(loss)
+lossstring(::Function) = "function"
 
 mode_string(m::MarcatiliMode) = string(m.kind)*subscript(m.n)*subscript(m.m)
 radius_string(m::MarcatiliMode{<:Number, Tco, Tcl, LT}) where {Tco, Tcl, LT} = "a=$(m.a)"
@@ -55,7 +60,12 @@ radius_string(m::MarcatiliMode) = "a(z=0)=$(radius(m, 0))"
 
 modeinfo(m::MarcatiliMode) = Dict(:kind => m.kind, :n => m.n, :m => m.m,
                                   :radius => radius(m, 0), :ϕ => m.ϕ, :model => m.model,
-                                  :loss => m.loss == Val(true))
+                                  :loss => losslabel(m.loss))
+
+losslabel(::Val{true}) = true
+losslabel(::Val{false}) = false
+losslabel(loss::Real) = loss
+losslabel(::Function) = true
 
 """
     MarcatiliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
@@ -75,7 +85,11 @@ Create a MarcatiliMode.
 - `model::Symbol=:full` : If `:full`, use the complete Marcatili model which takes into
                           account the dispersive influence of the cladding refractive index.
                           If `:reduced`, use the simplified model common in the literature
-- `loss::Bool=true` : Whether to include loss.
+- `loss::Union{Bool, Real, Function}=true` : Controls the propagation loss.
+  - `Bool`: enable (`true`) or disable (`false`) loss completely.
+  - `Real`: constant factor scaling the modal loss.
+  - `Function`: callable `f(ω)` returning a factor (as a function of angular frequency
+    `ω`) which scales the modal loss.
 
 """
 function MarcatiliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
@@ -83,7 +97,7 @@ function MarcatiliMode(a, n, m, kind, ϕ, coren, cladn; model=:full, loss=true)
     aeff_intg = Aeff_Jintg(n, get_unm(n, m, kind), kind)
     MarcatiliMode(a, n, m, kind, get_unm(n, m, kind), ϕ,
                    chkzkwarg(coren), chkzkwarg(cladn),
-                   model, Val(loss), aeff_intg)
+                   model, wraptype(loss), aeff_intg)
 end
 
 """
@@ -185,6 +199,29 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, ω, εco, vn, a) where
     end
 end
 
+# m.loss is a Real (constant scaling factor) or Function (ω -> scaling factor):
+# compute the full complex neff, as for Val{true}, then scale its imaginary
+# (loss) part by the given factor
+lossfactor(loss::Real, ω) = loss
+lossfactor(loss::Function, ω) = loss(ω)
+
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, LT}, ω, εco, vn, a
+              ) where {Ta, Tcl, Tco, LT<:Union{Real, Function}}
+    s = lossfactor(m.loss, ω)
+    if m.model == :full
+        k = ω/c
+        n = sqrt(complex(εco - (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2))
+        nr, ni = real(n), s*imag(n)
+        return (nr < 1e-3) ? (1e-3 + im*clamp(ni, 0, Inf)) : (nr + im*ni)
+    elseif m.model == :reduced
+        nr = 1 + (εco - 1)/2 - c^2*m.unm^2/(2*ω^2*a^2)
+        ni = s*(c^3*m.unm^2)/(a^3*ω^3)*vn
+        return nr + im*ni
+    else
+        error("model must be :full or :reduced")
+    end
+end
+
 function neff_wg(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, ω; z=0) where {Ta, Tcl, Tco}
     εcl = m.cladn(ω, z=z)^2
     vn = get_vn(εcl, m.kind)
@@ -213,7 +250,24 @@ function neff_wg(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, ω; z=0) where {Ta,
     end
 end
 
-function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg) where {Ta, Tcl, Tco}
+# for a Real/Function loss, always compute the full complex waveguide term (as for
+# Val{true}); the scaling by the loss factor is applied afterwards in neff(m, εco, nwg, ω)
+function neff_wg(m::MarcatiliMode{Ta, Tco, Tcl, LT}, ω; z=0
+                  ) where {Ta, Tcl, Tco, LT<:Union{Real, Function}}
+    εcl = m.cladn(ω, z=z)^2
+    vn = get_vn(εcl, m.kind)
+    a = radius(m, z)
+    if m.model == :full
+        k = ω/c
+        return (m.unm/(k*a))^2*(1 - im*vn/(k*a))^2
+    elseif m.model == :reduced
+        return c^2*m.unm^2/(2*ω^2*a^2) + im*(c^3*m.unm^2)/(a^3*ω^3)*vn
+    else
+        error("model must be :full or :reduced")
+    end
+end
+
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg, ω) where {Ta, Tcl, Tco}
     if m.model == :full
         return sqrt(complex(εco - nwg))
     elseif m.model == :reduced
@@ -223,7 +277,7 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{true}}, εco, nwg) where {Ta, T
     end
 end
 
-function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, Tcl, Tco}
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg, ω) where {Ta, Tcl, Tco}
     if m.model == :full
         return real(sqrt(complex(εco - nwg)))
     elseif m.model == :reduced
@@ -231,6 +285,19 @@ function neff(m::MarcatiliMode{Ta, Tco, Tcl, Val{false}}, εco, nwg) where {Ta, 
     else
         error("model must be :full or :reduced")
     end
+end
+
+function neff(m::MarcatiliMode{Ta, Tco, Tcl, LT}, εco, nwg, ω
+              ) where {Ta, Tcl, Tco, LT<:Union{Real, Function}}
+    s = lossfactor(m.loss, ω)
+    if m.model == :full
+        n = sqrt(complex(εco - nwg))
+    elseif m.model == :reduced
+        n = complex(1 + (εco - 1)/2 - nwg)
+    else
+        error("model must be :full or :reduced")
+    end
+    return real(n) + im*s*imag(n)
 end
 
 function get_vn(εcl, kind)
@@ -351,7 +418,7 @@ function neff_β_grid(grid,
         nwg[iω] = neff_wg(mode, grid.ω[iω]; z=0)
     end
     _neff = let nwg=nwg, ω=grid.ω, mode=mode
-        _neff(iω; z) = neff(mode, mode.coren(ω[iω], z=z)^2, nwg[iω])
+        _neff(iω; z) = neff(mode, mode.coren(ω[iω], z=z)^2, nwg[iω], ω[iω])
     end
     _β = let nwg=nwg, ω=grid.ω, _neff=_neff
         _β(iω; z) = ω[iω]/c*real(_neff(iω; z=z))
@@ -374,7 +441,7 @@ function neff_grid(grid, modes::FixedCoreCollection, λ0; ref_mode=1)
         end
     end
     _neff = let nwg=nwg, ω=grid.ω, modes=modes
-        _neff(iω, iim; z) = neff(modes[iim], modes[iim].coren(ω[iω], z=z)^2, nwg[iω, iim])
+        _neff(iω, iim; z) = neff(modes[iim], modes[iim].coren(ω[iω], z=z)^2, nwg[iω, iim], ω[iω])
     end
     _neff
 end

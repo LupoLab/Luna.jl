@@ -9,7 +9,7 @@ import Memoize: @memoize
 import LinearAlgebra: mul!
 import DSP: unwrap
 
-export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg
+export dimlimits, neff, β, α, losslength, transmission, dB_per_m, dispersion, zdw, field, Exy, Aeff, @delegated, @arbitrary, chkzkwarg, wraptype
 
 """
     AbstractMode
@@ -263,6 +263,20 @@ function chkzkwarg(func)
         end
     end
 end
+
+"""
+    wraptype(loss)
+
+Normalise a `loss` argument (as accepted by mode constructors) for use as a type
+parameter. `Bool` is wrapped as `Val{true}()`/`Val{false}()` so that dispatch on the loss
+type is compile-time; `Real` (constant scaling factor) and `Function` (frequency-dependent
+scaling factor, called as `loss(ω)`) are passed through unchanged.
+"""
+wraptype(loss::Bool) = Val(loss)
+wraptype(loss::Real) = loss
+wraptype(loss::Function) = loss
+wraptype(loss) = throw(
+    ArgumentError("loss has to be a Bool, Real, or Function, not $(typeof(loss))"))
 
 """
     overlap(m::AbstractMode, r, E; dim)

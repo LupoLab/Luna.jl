@@ -5,12 +5,12 @@ import Printf: @sprintf
 import Luna: Capillary
 import Luna.PhysData: c, wlfreq, ref_index_fun
 @reexport using Luna.Modes
-import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α, chkzkwarg
+import Luna.Modes: AbstractMode, dimlimits, neff, field, Aeff, N, α, chkzkwarg, wraptype
 
 struct ZeisbergerMode{mT<:Capillary.MarcatiliMode, LT} <: AbstractMode
     m::mT
     wallthickness::Float64
-    loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
+    loss::LT # Val{true}(), Val{false}(), a Real (scaling factor), or a Function (ω -> scaling factor)
 end
 
 """
@@ -19,8 +19,9 @@ end
 Create a capillary-like mode with the effective index given by eq. (15) in [1].
 
 `wallthickness` (mandatory kwarg) sets the thickness of the anti-resonant struts and
-`loss` (optional, defaults to `true`) can be either a `Bool` (to switch on/off loss
-completely) or a `Real` (to up/down-scale the loss given by the model).
+`loss` (optional, defaults to `true`) can be a `Bool` (to switch on/off loss
+completely), a `Real` (to up/down-scale the loss given by the model), or a `Function`
+`f(ω)` returning a scaling factor as a function of angular frequency `ω`.
  Other kwargs are passed on to the constructor of a [`Capillary.MarcatiliMode`](@ref).
 
 [1] Zeisberger, M., Schmidt, M.A. Analytic model for the complex effective index of the
@@ -35,11 +36,6 @@ end
 function ZeisbergerMode(m::Capillary.MarcatiliMode; wallthickness, loss=true)
     ZeisbergerMode(m, wallthickness, wraptype(loss))
 end
-
-wraptype(loss::Bool) = Val(loss)
-wraptype(loss::Real) = loss
-wraptype(loss) = throw(
-    ArgumentError("loss has to be a Bool or Real, not $(typeof(loss))"))
 
 # Effective index is given by eq (15) in [1]
 neff(m::ZeisbergerMode, ω; z=0) = _neff(m.m, ω, m.wallthickness, m.loss; z=z)
@@ -68,7 +64,7 @@ function _neff(m::Capillary.MarcatiliMode, ω, wallthickness, loss; z=0)
             C = m.unm^4/8 + 2*m.unm^2*ϵ^2/(ϵ - 1)/tan(ϕ)^2
             D = m.unm^3*ϵ^2*(1+1/tan(ϕ)^2)/(ϵ - 1)
         end
-        return __neff(A, B, C, D, σ, nco, loss)
+        return __neff(A, B, C, D, σ, nco, loss, ω)
     else
         if m.kind == :EH
             s = 1
@@ -82,15 +78,17 @@ function _neff(m::Capillary.MarcatiliMode, ω, wallthickness, loss; z=0)
             + (m.unm^2/4*(2+m.m*s)*(ϵ+1)^2/(ϵ-1)
             - m.unm^4*(ϵ-1)/(8*m.m))*1/tan(ϕ)^2)
         D = m.unm^3/2 * (ϵ^2+1)/(ϵ-1) * (1 + 1/tan(ϕ)^2)
-        __neff(A, B, C, D, σ, nco, loss)
+        __neff(A, B, C, D, σ, nco, loss, ω)
     end
 end
 
 #= If ncl and nco are real, the type of neff depends on whether loss is included.
     Despatching on the type makes sure the type can be inferred by the compiler =#
-__neff(A, B, C, D, σ, nco, loss::Val{true}) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*D*σ^4)
-__neff(A, B, C, D, σ, nco, loss::Val{false}) = real(nco*(1 - A*σ^2 - B*σ^3 - C*σ^4))
-__neff(A, B, C, D, σ, nco, loss::Number) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss*D*σ^4)
+__neff(A, B, C, D, σ, nco, loss::Val{true}, ω) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*D*σ^4)
+__neff(A, B, C, D, σ, nco, loss::Val{false}, ω) = real(nco*(1 - A*σ^2 - B*σ^3 - C*σ^4))
+__neff(A, B, C, D, σ, nco, loss::Real, ω) = nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss*D*σ^4)
+__neff(A, B, C, D, σ, nco, loss::Function, ω) =
+    nco*(1 - A*σ^2 - B*σ^3 - C*σ^4 + 1im*loss(ω)*D*σ^4)
 
 
 struct VincettiMode{mT<:Capillary.MarcatiliMode, Tclad, LT} <: AbstractMode
@@ -100,7 +98,7 @@ struct VincettiMode{mT<:Capillary.MarcatiliMode, Tclad, LT} <: AbstractMode
     Ntubes::Int # number of tubes
     cladn::Tclad # cladding refractive index (constant, defaults to 1.45)
     Nterms::Int # number of terms (cladding modes) to include in the sum
-    loss::LT # Val{true}(), Val{false}() or a number (scaling factor)
+    loss::LT # Val{true}(), Val{false}(), a Real (scaling factor), or a Function (ω -> scaling factor)
 end
 
 """
@@ -120,7 +118,9 @@ to `Capillary.MarcatiliMode` but with the following additions/changes as keyword
 - `cladn` : refractive index of the resonators as a function of (ω; z). Defaults
             to the refractive index of silica (SiO2).
 - `Nterms` : number of resonator dielectric modes to include in the model. Defaults to 8.
-- `loss` : can be `true` or `false` to switch loss on/off, or a `Real` to scale the loss.
+- `loss` : can be `true` or `false` to switch loss on/off, a `Real` to scale the loss, or
+           a `Function` `f(ω)` returning a scaling factor as a function of angular
+           frequency `ω`.
 
 To specify the gap between resonators, calculate the core radius with [`getRco(r_ext, N, δ)`](@ref)
 or calculate the external radius of the resonators with [`getr_ext(Rco, N, δ)`](@ref).
@@ -157,7 +157,8 @@ neff(m::VincettiMode, ω; z=0) = neff_real(m, ω; z) + 1im*c/ω*α(m, ω; z)
 
 α(m::VincettiMode{mT, cT, Val{true}}, ω; z=0) where {mT, cT} = log(10)/10 * CL(m, ω; z)
 α(m::VincettiMode{mT, cT, Val{false}}, ω; z=0) where {mT, cT} = zero(ω)
-α(m::VincettiMode{mT, cT, <:Number}, ω; z=0) where {mT, cT} = m.loss * log(10)/10 * CL(m, ω; z)
+α(m::VincettiMode{mT, cT, <:Real}, ω; z=0) where {mT, cT} = m.loss * log(10)/10 * CL(m, ω; z)
+α(m::VincettiMode{mT, cT, <:Function}, ω; z=0) where {mT, cT} = m.loss(ω) * log(10)/10 * CL(m, ω; z)
 
 # All other mode properties are identical to a MarcatiliMode
 for fun in (:field, :N, :dimlimits)

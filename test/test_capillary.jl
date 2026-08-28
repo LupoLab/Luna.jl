@@ -16,6 +16,44 @@ import Luna.PhysData: wlfreq
     @test Capillary.dB_per_m(m, ω) ≈ 8*Capillary.dB_per_m(Capillary.MarcatiliMode(2a, :HeB, 1.0, model=:reduced), ω)
 end
 
+@testset "loss scaling/function" begin
+    λ = 800e-9
+    ω = wlfreq(λ)
+    a = 125e-6
+    for model in (:full, :reduced)
+        mtrue = Capillary.MarcatiliMode(a, :HeB, 1.0, model=model, loss=true)
+        mfalse = Capillary.MarcatiliMode(a, :HeB, 1.0, model=model, loss=false)
+        mhalf = Capillary.MarcatiliMode(a, :HeB, 1.0, model=model, loss=0.5)
+        mfun = Capillary.MarcatiliMode(a, :HeB, 1.0, model=model, loss=ω -> 0.5)
+
+        ntrue = Modes.neff(mtrue, ω)
+        nfalse = Modes.neff(mfalse, ω)
+        nhalf = Modes.neff(mhalf, ω)
+        nfun = Modes.neff(mfun, ω)
+
+        @test imag(nfalse) == 0
+        @test real(nhalf) ≈ real(ntrue)
+        @test imag(nhalf) ≈ 0.5*imag(ntrue)
+        @test nfun ≈ nhalf
+        @test isreal(nfalse)
+    end
+
+    # loss=1 should be identical to loss=true
+    mtrue = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:full, loss=true)
+    mone = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:full, loss=1.0)
+    @test Modes.neff(mtrue, ω) ≈ Modes.neff(mone, ω)
+
+    # a fixed-radius mode also goes through the cached neff_grid/neff_β_grid path
+    grid = Grid.RealGrid(15e-2, λ, (160e-9, 3000e-9), 1e-12)
+    mhalf = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:full, loss=0.5)
+    mfun = Capillary.MarcatiliMode(a, :HeB, 1.0, model=:full, loss=ω -> 0.5)
+    _neffh, _βh = Capillary.neff_β_grid(grid, mhalf, λ)
+    _nefff, _βf = Capillary.neff_β_grid(grid, mfun, λ)
+    iω = findfirst(grid.sidx)
+    @test _neffh(iω; z=0) ≈ _nefff(iω; z=0)
+    @test _neffh(iω; z=0) ≈ Modes.neff(mhalf, grid.ω[iω])
+end
+
 @testset "normalisation" begin
     # Copied definitions from Modes.jl to force manual calculation of Aeff and N
     # these also return the integration error to make comparisons easier
