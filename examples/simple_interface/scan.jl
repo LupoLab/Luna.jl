@@ -1,5 +1,4 @@
-using Luna
-import PyPlot: plt
+using Luna, CairoMakie
 
 # Fixed parameters:
 a = 125e-6
@@ -39,42 +38,46 @@ end
     Processing.Common(λ), Iλ[:, end], zstat, edens, max_peakpower
 end
 
-fig, axs = plt.subplots(1, length(pressures))
-fig.set_size_inches(8, 2)
+# Plot output spectra as a function of energy for each pressure
+fig = Figure(size=(1200, 300))
 for (pidx, pressure) in enumerate(pressures)
-    ax = axs[pidx]
-    global img = ax.pcolormesh(λ*1e9, energies*1e6, 10*Maths.log10_norm(Iλ[:, :, pidx])')
-    img.set_clim(-40, 0)
-    ax.set_xlabel("Wavelength (nm)")
-    ax.set_ylabel("Energy (μJ)")
-    ax.set_title("Pressure: $pressure bar")
-    ax.set_xlim(100, 1200)
+    ax = Axis(fig[1, pidx];
+        xlabel="Wavelength (nm)", ylabel="Energy (μJ)",
+        title="Pressure: $pressure bar")
+    data = 10 * Maths.log10_norm(Iλ[:, :, pidx])
+    hm = heatmap!(ax, λ * 1e9, energies * 1e6, data;
+        colorrange=(-40, 0), colormap=:viridis, rasterize=3)
+    xlims!(ax, 100, 1200)
+    if pidx == length(pressures)
+        Colorbar(fig[1, pidx+1], hm; label="Energy density (dB)")
+    end
 end
-plt.colorbar(img, ax=axs, label="Energy density (dB)")
+fig
 
-fig, axs = plt.subplots(1, length(pressures))
-fig.set_size_inches(8, 2)
+# Plot electron density evolution for each pressure
 cols = Plotting.cmap_colours(length(energies))
 edmax = maximum(maximum.(edens))
+fig2 = Figure(size=(1200, 300))
 for (pidx, pressure) in enumerate(pressures)
-    ax = axs[pidx]
+    ax = Axis(fig2[1, pidx];
+        xlabel="Distance (m)", ylabel="Electron density (cm⁻³)",
+        title="Pressure: $pressure bar")
     for eidx in eachindex(energies)
-        ax.plot(zstat[eidx, pidx], 1e-6edens[eidx, pidx], color=cols[eidx],
-                linewidth=1, alpha=0.8)
+        lines!(ax, zstat[eidx, pidx], 1e-6 * edens[eidx, pidx];
+            color=cols[eidx], linewidth=1)
     end
-    ax.set_xlabel("Distance (m)")
-    ax.set_ylabel("Electron density (cm\$^{-3}\$)")
-    ax.set_ylim(0, 1.1e-6edmax)
-    ax.set_xlim(0, flength)
-    ax.set_title("Pressure: $pressure bar")
+    ylims!(ax, 0, 1.1e-6 * edmax)
+    xlims!(ax, 0, flength)
 end
+fig2
 
-fig = plt.figure()
+# Plot maximum peak power vs energy for each pressure
+fig3 = Figure()
+ax = Axis(fig3[1, 1]; xlabel="Energy (μJ)", ylabel="Maximum peak power (W)")
 for (pidx, pressure) in enumerate(pressures)
-    plt.plot(energies*1e6, max_peakpower[:, pidx], label="$pressure bar")
+    lines!(ax, energies * 1e6, max_peakpower[:, pidx]; label="$pressure bar")
 end
-plt.xlim(1e6.*extrema(energies))
-plt.ylim_ymin=0
-plt.xlabel("Energy (μJ)")
-plt.ylabel("Maximum peak power (W)")
-plt.legend()
+xlims!(ax, 1e6 .* extrema(energies)...)
+ylims!(ax, low=0)
+axislegend(ax)
+fig3

@@ -14,6 +14,6 @@ power = 10000.0
 output = prop_gnlse(γ, flength, βs; λ0, τfwhm, power, pulseshape=:sech, λlims=(400e-9, 2400e-9), trange=12.5e-12, ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15)
 
 ##
-Plotting.pygui(true)
+
 Plotting.prop_2D(output, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
 Plotting.spec_1D(output, range(0.0, 1.0, length=5).*flength, λrange=(400e-9, 1300e-9))

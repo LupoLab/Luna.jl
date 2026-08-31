@@ -1,4 +1,3 @@
 # Plotting.jl
-```@autodocs
-Modules = [Plotting]
-```
+
+See the [Plotting guide](../plotting.md) for detailed usage instructions and examples.

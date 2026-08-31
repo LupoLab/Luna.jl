@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 a = 13e-6
 gas = :Ar
@@ -38,6 +38,6 @@ output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop!, transform, FT, output)
 
 ##
-Plotting.pygui(true)
+
 Plotting.stats(output)
 Plotting.prop_2D(output)

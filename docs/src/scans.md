@@ -3,8 +3,7 @@ Luna comes with a flexible interface to run, save and process scans over any par
 
 **First**, define the fixed parameters (those which are not being scanned over):
 ```julia
-using Luna
-import PyPlot: plt
+using Luna, CairoMakie
 
 a = 125e-6
 flength = 3
@@ -99,21 +98,23 @@ julia> size(λ)
 ```
 With this data, we can now plot the energy-pressure scan:
 ```julia
-fig, axs = plt.subplots(1, length(pressures))
-fig.set_size_inches(8, 2)
+fig = Figure(size=(1200, 300))
 for (pidx, pressure) in enumerate(pressures)
-    ax = axs[pidx]
-    global img = ax.pcolormesh(λ*1e9, energies*1e6, 10*Maths.log10_norm(Iλ[:, :, pidx])')
-    img.set_clim(-40, 0)
-    ax.set_xlabel("Wavelength (nm)")
-    ax.set_ylabel("Energy (μJ)")
-    ax.set_title("Pressure: $pressure bar")
-    ax.set_xlim(100, 1200)
+    ax = Axis(fig[1, pidx];
+        xlabel="Wavelength (nm)", ylabel="Energy (μJ)",
+        title="Pressure: $pressure bar")
+    data = 10 * Maths.log10_norm(Iλ[:, :, pidx])
+    hm = heatmap!(ax, λ * 1e9, energies * 1e6, data;
+        colorrange=(-40, 0), colormap=:viridis, rasterize=3)
+    xlims!(ax, 100, 1200)
+    if pidx == length(pressures)
+        Colorbar(fig[1, pidx+1], hm; label="Energy density (dB)")
+    end
 end
-plt.colorbar(img, ax=axs, label="Energy density (dB)")
+fig
 ```
 which will produce this figure:
-![Scan spectra](assets/scan_spectrum.png)
+![Scan spectra](assets/scan_spectrum.svg)
 
 Some outputs from the function may not have the same length for each simulation. For example, the length of propagation statistics arrays depends on how many steps were required in the simulation. To deal with this, we can use [`Processing.VarLength`](@ref). Rather than a single multi-dimensional array like `Iλ`, `scanproc` will place the results into an array of arrays:
 ```julia

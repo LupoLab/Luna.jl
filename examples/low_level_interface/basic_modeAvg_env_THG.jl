@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 a = 13e-6
 gas = :Ar
@@ -41,7 +41,7 @@ output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 import FFTW
-import PyPlot: pygui, plt
+import PythonPlot: pygui, pyplot
 
 ω = grid.ω
 t = grid.t
@@ -65,22 +65,22 @@ for ii = 1:size(Etout, 2)
 end
 
 pygui(true)
-plt.figure()
-plt.pcolormesh(FFTW.fftshift(ω, 1)./2π.*1e-15, zout, transpose(FFTW.fftshift(Ilog, 1)))
-plt.clim(-15, 0)
-plt.xlim(0.19, 1.9)
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(FFTW.fftshift(ω, 1)./2π.*1e-15, zout, transpose(FFTW.fftshift(Ilog, 1)))
+pyplot.clim(-15, 0)
+pyplot.xlim(0.19, 1.9)
+pyplot.colorbar()
 
-plt.figure()
-plt.pcolormesh(t*1e15, zout, transpose(It))
-plt.colorbar()
-plt.xlim(-30, 30)
+pyplot.figure()
+pyplot.pcolormesh(t*1e15, zout, transpose(It))
+pyplot.colorbar()
+pyplot.xlim(-30, 30)
 
-plt.figure()
-plt.plot(zout.*1e2, energy.*1e6)
-plt.xlabel("Distance [cm]")
-plt.ylabel("Energy [μJ]")
+pyplot.figure()
+pyplot.plot(zout.*1e2, energy.*1e6)
+pyplot.xlabel("Distance [cm]")
+pyplot.ylabel("Energy [μJ]")
 
-plt.figure()
-plt.plot(t*1e15, abs2.(Et[:, 121]))
-plt.xlim(-20, 20)
+pyplot.figure()
+pyplot.plot(t*1e15, abs2.(Et[:, 121]))
+pyplot.xlim(-20, 20)

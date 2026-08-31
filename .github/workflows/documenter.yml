@@ -25,3 +25,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
         run: julia --project=docs/ docs/make.jl
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-preview
+          path: docs/build

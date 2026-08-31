@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 import StaticArrays: SMatrix, SVector
 import LinearAlgebra: mul!, ldiv!
 
@@ -61,7 +61,7 @@ linop = LinearOps.make_const_linop(grid, modes, λ0)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 import FFTW
-import PyPlot:pygui, plt
+import PythonPlot: pygui, pyplot
 
 ω = FFTW.fftshift(grid.ω)
 t = grid.t
@@ -82,17 +82,17 @@ for i = 1:Eoutd[3]
 end
 
 pygui(true)
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(S[3,:,:]./S[1,:,:],1))
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(S[3,:,:]./S[1,:,:],1))
+pyplot.colorbar()
 
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(S[2,:,:]./S[1,:,:],1))
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(S[2,:,:]./S[1,:,:],1))
+pyplot.colorbar()
 
-plt.figure()
-plt.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(elip,1))
-plt.colorbar()
+pyplot.figure()
+pyplot.pcolormesh(zout, ω./2π.*1e-15, FFTW.fftshift(elip,1))
+pyplot.colorbar()
 
 Etout = FFTW.ifft(Eout, 1)
 It = abs2.(Etout)
@@ -102,14 +102,14 @@ Ilog = FFTW.fftshift(log10.(Maths.normbymax(abs2.(Eout))), 1)
 
 
 for i = 1:nmodes
-    plt.figure()
-    plt.subplot(121)
-    plt.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
-    plt.clim(-6, 0)
-    plt.xlim(0,2.0)
-    plt.colorbar()
-    plt.subplot(122)
-    plt.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
-    plt.xlim(-30.0,100.0)
-    plt.colorbar()
+    pyplot.figure()
+    pyplot.subplot(121)
+    pyplot.pcolormesh(ω./2π.*1e-15, zout, transpose(Ilog[:,i,:]))
+    pyplot.clim(-6, 0)
+    pyplot.xlim(0,2.0)
+    pyplot.colorbar()
+    pyplot.subplot(122)
+    pyplot.pcolormesh(t.*1e15, zout, transpose(It[:,i,:]))
+    pyplot.xlim(-30.0,100.0)
+    pyplot.colorbar()
 end
