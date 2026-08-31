@@ -332,14 +332,16 @@ real-valued field (rFFT normalisation). When `nmodes > 1`, returns an `(nω, nmo
 with independent noise per mode for multimode propagation.
 
 Unlike [`ShotNoise`](@ref), which is added to the input field at `z = 0`, this noise field
-is intended to be injected into the **nonlinear operator** at every propagation step via the
-`noise_field` keyword argument. The dispersion operator does not act on this noise,
-preventing artificial FWM phase-matching — the key advantage over the traditional shot-noise
-approach.
+is intended to be injected into the **nonlinear operator** at every propagation step. It is
+never added to the propagating field, which is what keeps the saved spectrum free of a noise
+floor.
 
-The noise field is generated once before propagation and held constant throughout. Different
-random seeds (via `rng`) produce different noise realisations for ensemble/shot-to-shot
-statistics.
+The field returned here is the `z = 0` draw. Bundle it with
+[`LinearOps.unitary_phase`](@ref Luna.LinearOps.unitary_phase) into a
+[`NonlinearRHS.ModifiedNoise`](@ref Luna.NonlinearRHS.ModifiedNoise), which advances it along
+`z` under the unitary (dispersion-only) part of the linear operator. It is drawn once and
+never re-randomised, so results remain step-size independent. Different random seeds (via
+`rng`) produce different noise realisations for ensemble/shot-to-shot statistics.
 
 # References
 - Chen & Wise, "A simple accurate way to model noise-seeded ultrafast nonlinear processes",
