@@ -1,8 +1,10 @@
-import Test: @test, @testset, @test_throws
+import Test: @test, @testset, @test_throws, @test_logs
 using Luna
 import HDF5
 using Distributed
+import Logging
 import Logging: with_logger, NullLogger
+import FileWatching.Pidfile: mkpidlock
 
 @testset "Chunking" begin
     function contains_all_unique(chunks, x)
@@ -207,7 +209,7 @@ end
         @test count(i2 .== scanidx) == 1
     end
     h = string(hash(scanname); base=16)
-    qfile = joinpath(Utils.cachedir(), "qfile_$h.h5")
+    qfile = "qfile_$h.h5" # queue files are stored in the current working directory
     @test !isfile(qfile) # check that scan completed fully and removed the queue file
     rmprocs(ps)
 end
@@ -250,6 +252,155 @@ end
     rm(td; recursive=true)
 end
 end # if ~("GITHUB_ACTIONS" in keys(ENV))
+
+##
+@testset "queue scan recovery: abandoned point without lock file" begin
+    mktempdir() do td
+        qfile = joinpath(td, "qfile_recovery.h5")
+        v = collect(1:6)
+        # fabricate a queue file from a crashed run: point 3 is marked as in progress but
+        # there is no lock file for it--its worker is long dead
+        HDF5.h5open(qfile, "cw") do file
+            qdata = zeros(Int, length(v))
+            qdata[3] = 1
+            file["qdata"] = qdata
+        end
+        scan = Scan("scantest_queue_recovery", Scans.QueueExec(0, qfile); var=v)
+        idcs_run = Int[]
+        fscan = (scanidx, vi) -> push!(idcs_run, scanidx)
+        # recovering a point with no lock file is silent (@info only, no warnings)
+        @test_logs min_level=Logging.Warn runscan(fscan, scan)
+        @test sort(idcs_run) == v # point 3 was re-run along with all the others
+        @test !isfile(qfile)      # queue file removed at the end
+        @test isempty(readdir(td)) # no leftover lock files
+    end
+end
+
+##
+@testset "queue scan: point in progress in a live worker is not re-run" begin
+    mktempdir() do td
+        qfile = joinpath(td, "qfile_live.h5")
+        v = collect(1:6)
+        HDF5.h5open(qfile, "cw") do file
+            qdata = zeros(Int, length(v))
+            qdata[3] = 1
+            file["qdata"] = qdata
+        end
+        # simulate a live worker on this machine holding the lock file for point 3
+        lk = mkpidlock(qfile * "_item3_lock")
+        scan = Scan("scantest_queue_live", Scans.QueueExec(0, qfile); var=v)
+        idcs_run = Int[]
+        fscan = (scanidx, vi) -> push!(idcs_run, scanidx)
+        # this worker runs the free points and exits with an @info (not a warning--this is
+        # how every multi-worker scan ends for all but the last worker)
+        @test_logs (:info, r"Exiting scan") match_mode=:any runscan(fscan, scan)
+        @test sort(idcs_run) == [1, 2, 4, 5, 6] # point 3 was NOT re-run
+        @test isfile(qfile)                     # queue file NOT deleted
+        HDF5.h5open(qfile) do file
+            @test read(file["qdata"])[3] == 1   # still marked as in progress
+        end
+        # the other worker finishes cleanly: releasing the lock deletes its file, so a
+        # re-run picks up point 3 immediately--no waiting for staleness
+        close(lk)
+        @test_logs min_level=Logging.Warn runscan(fscan, scan)
+        @test count(==(3), idcs_run) == 1
+        @test length(idcs_run) == length(v)
+        @test !isfile(qfile)
+        @test isempty(readdir(td))
+    end
+end
+
+##
+@testset "queue scan: warn when nothing can be run but the scan is unfinished" begin
+    mktempdir() do td
+        qfile = joinpath(td, "qfile_warn.h5")
+        v = collect(1:4)
+        # everything done except point 3, which is held by a worker on another machine
+        # (or a worker which died less than stale_age ago--indistinguishable)
+        HDF5.h5open(qfile, "cw") do file
+            file["qdata"] = [2, 2, 1, 2]
+        end
+        open(qfile * "_item3_lock", "w") do io
+            write(io, "1 some.other.host") # pidfile format is "pid hostname"
+        end
+        scan = Scan("scantest_queue_warn", Scans.QueueExec(0, qfile); var=v)
+        idcs_run = Int[]
+        fscan = (scanidx, vi) -> push!(idcs_run, scanidx)
+        # the reported bug: a worker which finds nothing to do while the scan is
+        # unfinished must say so loudly instead of exiting silently
+        @test_logs (:warn, r"Exiting scan without having run any scan points") match_mode=:any runscan(fscan, scan)
+        @test isempty(idcs_run)
+        @test isfile(qfile) # queue file kept: the scan is not finished
+    end
+end
+
+##
+@testset "queue scan: stale lock file of unverifiable worker is taken over" begin
+    mktempdir() do td
+        qfile = joinpath(td, "qfile_stale.h5")
+        v = collect(1:4)
+        HDF5.h5open(qfile, "cw") do file
+            qdata = zeros(Int, length(v))
+            qdata[2] = 1
+            file["qdata"] = qdata
+        end
+        # fabricate the lock file of a worker which died on another machine; it can never
+        # be verified as dead, so its point is only re-run once the lock file has not
+        # been refreshed for longer than 5*stale_age
+        open(qfile * "_item2_lock", "w") do io
+            write(io, "1 some.other.host")
+        end
+        idcs_run = Int[]
+        fscan = (scanidx, vi) -> push!(idcs_run, scanidx)
+        # with the default stale_age (600 s) the lock cannot go stale during this test,
+        # however slow the machine: this worker runs the other points and leaves point 2
+        # alone
+        scan = Scan("scantest_queue_stale", Scans.QueueExec(0, qfile); var=v)
+        runscan(fscan, scan)
+        @test sort(idcs_run) == [1, 3, 4]
+        @test isfile(qfile)
+        HDF5.h5open(qfile) do file
+            @test read(file["qdata"])[2] == 1 # still marked as in progress
+        end
+        # with a tiny stale_age, the lock file (never refreshed since its creation above)
+        # is now long stale, so point 2 is taken over and re-run
+        sleep(2) # make sure the lock file is older than 5*stale_age = 1 second
+        scan = Scan("scantest_queue_stale", Scans.QueueExec(0, qfile; stale_age=0.2); var=v)
+        # (Pidfile itself warns when taking over a stale lock file, so don't assert logs)
+        runscan(fscan, scan)
+        @test count(==(2), idcs_run) == 1
+        @test sort(idcs_run) == v
+        @test !isfile(qfile)
+        @test isempty(readdir(td))
+    end
+end
+
+##
+if Sys.isunix() # the impossibly-large-pid trick only marks a pid as dead on unix
+@testset "queue scan: lock file of provably dead worker is removed immediately" begin
+    mktempdir() do td
+        qfile = joinpath(td, "qfile_deadpid.h5")
+        v = collect(1:4)
+        HDF5.h5open(qfile, "cw") do file
+            qdata = zeros(Int, length(v))
+            qdata[2] = 1
+            file["qdata"] = qdata
+        end
+        # a pid which cannot exist, on THIS machine: the fast path removes the lock file
+        # immediately instead of waiting for it to go stale (stale_age is 600 here)
+        open(qfile * "_item2_lock", "w") do io
+            write(io, "4000000000 $(gethostname())")
+        end
+        scan = Scan("scantest_queue_deadpid", Scans.QueueExec(0, qfile); var=v)
+        idcs_run = Int[]
+        fscan = (scanidx, vi) -> push!(idcs_run, scanidx)
+        @test_logs min_level=Logging.Warn runscan(fscan, scan)
+        @test sort(idcs_run) == v
+        @test !isfile(qfile)
+        @test isempty(readdir(td))
+    end
+end
+end # Sys.isunix()
 
 ##
 @testset "automatic ScanHDF5Output in prop_capillary scan" begin
