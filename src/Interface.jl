@@ -1,7 +1,7 @@
 module Interface
 using Luna
 import Luna.PhysData: wlfreq, roomtemp
-import Luna: Grid, Modes, Output, Fields
+import Luna: Grid, Modes, Output, Fields, Boundaries
 import Random: AbstractRNG, GLOBAL_RNG
 import Logging: @info, @debug
 
@@ -354,12 +354,32 @@ If `raman` is `true`, then the following options apply:
 - `filename`: Can be used to to overwrite the scan name when running a parameter scan.
     The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
+- `boundary::Symbol=:rate`: How the absorbing boundaries at the edges of the frequency and
+    time windows are applied. `:rate` treats them as an absorption rate per unit distance,
+    so the total absorption depends only on the propagation distance and not on how many
+    steps the solver took. `:legacy` reproduces the historical behaviour, in which the
+    windows were applied once per accepted step and the result therefore depended on
+    `rtol`. `:none` disables them. See [`Luna.run`](@ref).
+- `boundary_N::Real`: Absorber strength, expressed as the number of times the historical
+    window profile is applied over the whole propagation length.
+- `boundary_length`: Absorber reference length in metres, overriding `boundary_N`.
+- `tcollar::Real`: Minimum width of the temporal absorber collar, as a fraction of the time
+    window.
 """
 function prop_capillary(args...; status_period=5, kwargs...)
     Eω, grid, linop, transform, FT, output = prop_capillary_args(args...; kwargs...)
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period,
+             boundary_kwargs(kwargs)...)
     output
 end
+
+#= Pick the absorbing-boundary options out of the user's keyword arguments so they can be
+   forwarded to Luna.run. They are declared on the *_args functions rather than here so that
+   there is one set of defaults and so that saveargs records them; whatever the user did not
+   pass simply falls through to Luna.run's own defaults. =#
+boundary_kwargs(kwargs) = NamedTuple(
+    k => v for (k, v) in pairs(kwargs)
+    if k in (:boundary, :boundary_N, :boundary_length, :tcollar))
 
 """
     prop_capillary_args(radius, flength, gas, pressure; λ0, λlims, trange, kwargs...)
@@ -385,7 +405,9 @@ function prop_capillary_args(radius, flength, gas, pressure;
                         PPT_options=Dict{Symbol, Any}(), preionfrac=0.0,
                         rotation=true, vibration=true, temperature=roomtemp,
                         saveN=201, filepath=nothing,
-                        scan=nothing, scanidx=nothing, filename=nothing)
+                        scan=nothing, scanidx=nothing, filename=nothing,
+                        boundary=:rate, boundary_N=Boundaries.DEFAULT_N,
+                        boundary_length=nothing, tcollar=Boundaries.DEFAULT_TCOLLAR)
 
     # do we have energy in the orthogonal polarisation states, or just the fundamental?
     # if so, we need to treat double the number of modes
@@ -420,7 +442,8 @@ function prop_capillary_args(radius, flength, gas, pressure;
     saveargs(output; radius, flength, gas, pressure, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
         shotnoise, modes, model, loss, raman, kerr, plasma, PPT_options,
-        temperature, saveN, filepath, filename)
+        temperature, saveN, filepath, filename,
+        boundary, boundary_N, boundary_length, tcollar)
 
     return Eω, grid, linop, transform, FT, output
 end
@@ -970,10 +993,22 @@ Note that the current GNLSE model is single mode only.
 - `filename`: Can be used to to overwrite the scan name when running a parameter scan.
     The running `scanidx` will be appended to this filename. Ignored if no `scan` is given.
 - `status_period::Number`: Interval (in seconds) between printed status updates.
+- `boundary::Symbol=:rate`: How the absorbing boundaries at the edges of the frequency and
+    time windows are applied. `:rate` treats them as an absorption rate per unit distance,
+    so the total absorption depends only on the propagation distance and not on how many
+    steps the solver took. `:legacy` reproduces the historical behaviour, in which the
+    windows were applied once per accepted step and the result therefore depended on
+    `rtol`. `:none` disables them. See [`Luna.run`](@ref).
+- `boundary_N::Real`: Absorber strength, expressed as the number of times the historical
+    window profile is applied over the whole propagation length.
+- `boundary_length`: Absorber reference length in metres, overriding `boundary_N`.
+- `tcollar::Real`: Minimum width of the temporal absorber collar, as a fraction of the time
+    window.
 """
 function prop_gnlse(args...; status_period=5, kwargs...)
     Eω, grid, linop, transform, FT, output = prop_gnlse_args(args...; kwargs...)
-    Luna.run(Eω, grid, linop, transform, FT, output; status_period)
+    Luna.run(Eω, grid, linop, transform, FT, output; status_period,
+             boundary_kwargs(kwargs)...)
     output
 end
 
@@ -996,7 +1031,9 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
                         loss=0.0, raman=true, fr=0.18,
                         ramanmodel=:sdo, τ1=12.2e-15, τ2=32e-15,
                         saveN=201, filepath=nothing,
-                        scan=nothing, scanidx=nothing, filename=nothing)
+                        scan=nothing, scanidx=nothing, filename=nothing,
+                        boundary=:rate, boundary_N=Boundaries.DEFAULT_N,
+                        boundary_length=nothing, tcollar=Boundaries.DEFAULT_TCOLLAR)
     envelope = true
     thg = false
     polarisation=:linear
@@ -1044,7 +1081,8 @@ function prop_gnlse_args(γ, flength, βs; λ0, λlims, trange,
     saveargs(output; γ, flength, βs, λlims, trange, envelope, thg, δt,
         λ0, τfwhm, τw, ϕ, power, energy, pulseshape, polarisation, propagator, pulses,
         shotnoise, shock, loss, raman, ramanmodel, fr, τ1, τ2,
-        saveN, filepath, filename)
+        saveN, filepath, filename,
+        boundary, boundary_N, boundary_length, tcollar)
 
     return Eω, grid, linop, transform, FT, output
 end

@@ -1,3 +1,14 @@
+"""
+    Grid
+
+The sampling grids on which `Luna` solves the propagation equation: the time and frequency
+axes, the oversampled axes used for the nonlinear polarisation, and the apodisation windows
+which go with them.
+
+A grid also carries `sidx`, the indices of the frequency axis which are inside the
+simulation band, and the profiles `ωwin`, `twin` and `towin` from which
+[`Boundaries`](@ref Luna.Boundaries) derives the absorbing boundaries.
+"""
 module Grid
 import Logging
 import FFTW
