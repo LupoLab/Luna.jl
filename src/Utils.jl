@@ -89,7 +89,12 @@ function loadFFTwisdom()
     if isfile(fpath)
         Logging.@info("Found FFTW wisdom at $fpath")
         mkpidlock(lockpath; stale_age=600) do
-            FFTW.import_wisdom(fpath)
+            try
+                FFTW.import_wisdom(fpath)
+            catch
+                Logging.@info("FFTW wisdom at $fpath is incompatible and has been deleted.")
+                rm(fpath)
+            end
         end
     else
         Logging.@info("No FFTW wisdom found")

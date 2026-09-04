@@ -413,7 +413,7 @@ function prop_capillary_args(radius, flength, gas, pressure;
     inputs, noise_field = makenoise(grid, mode_s, inputs, shotnoise, rng)
     linop, Eω, transform, FT = setup(grid, mode_s, density, resp, inputs, pol,
                                      radial_integral_rtol, const_linop(radius, pressure);
-                                     noise_field)
+                                     noise_field, thg)
     stats = Stats.default(grid, Eω, mode_s, linop, transform; gas=gas, stats_kwargs...)
     output = makeoutput(grid, saveN, stats, filepath, scan, scanidx, filename)
 
@@ -832,10 +832,20 @@ function _add_input_shotnoise(inputs, modes, rng)
     (inputs..., [(mode=ii, fields=(Fields.ShotNoise(rng),)) for ii in eachindex(modes)]...)
 end
 
+#=
+For envelope grids the `thg` flag must also be passed to the linear operator, which then
+uses a reference frame transparent to the carrier-mixing THG response (see
+`LinearOps.getω0`). For real grids the linops take no `thg` choice (`thg` only selects
+the response), so no keyword is passed.
+=#
+linopkw(grid::Grid.RealGrid, thg) = NamedTuple()
+linopkw(grid::Grid.EnvGrid, thg) = (; thg)
+
 function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol,
-               c::Val{true}; noise_field=nothing)
+               c::Val{true}; noise_field=nothing, thg=LinearOps.thg_default(grid))
     @info("Using mode-averaged propagation.")
-    linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ)
+    linop, βfun!, _, _ = LinearOps.make_const_linop(grid, mode, grid.referenceλ;
+                                                    linopkw(grid, thg)...)
 
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
                                    βfun!, z -> Modes.Aeff(mode, z=z); noise_field)
@@ -843,9 +853,10 @@ function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, 
 end
 
 function setup(grid, mode::Modes.AbstractMode, density, responses, inputs, pol, rtol,
-               c::Val{false}; noise_field=nothing)
+               c::Val{false}; noise_field=nothing, thg=LinearOps.thg_default(grid))
     @info("Using mode-averaged propagation.")
-    linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ)
+    linop, βfun! = LinearOps.make_linop(grid, mode, grid.referenceλ;
+                                        linopkw(grid, thg)...)
 
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs,
                                    βfun!, z -> Modes.Aeff(mode, z=z); noise_field)
@@ -857,20 +868,20 @@ needfull(modes) = !all(modes) do mode
 end
 
 function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{true};
-               noise_field=nothing)
+               noise_field=nothing, thg=LinearOps.thg_default(grid))
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
-    linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ)
+    linop = LinearOps.make_const_linop(grid, modes, grid.referenceλ; linopkw(grid, thg)...)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
                                    pol ? :xy : :y; full=nf, rtol, noise_field)
     linop, Eω, transform, FT
 end
 
 function setup(grid, modes, density, responses, inputs, pol, rtol, c::Val{false};
-               noise_field=nothing)
+               noise_field=nothing, thg=LinearOps.thg_default(grid))
     nf = needfull(modes)
     @info(nf ? "Using full 2-D modal integral." : "Using radial modal integral.")
-    linop = LinearOps.make_linop(grid, modes, grid.referenceλ)
+    linop = LinearOps.make_linop(grid, modes, grid.referenceλ; linopkw(grid, thg)...)
     Eω, transform, FT = Luna.setup(grid, density, responses, inputs, modes,
                                    pol ? :xy : :y; full=nf, rtol, noise_field)
     linop, Eω, transform, FT

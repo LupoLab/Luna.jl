@@ -4,15 +4,26 @@ import Hankel
 import Luna: Modes, Grid, PhysData, Maths
 import Luna.PhysData: wlfreq, c, crystal_internal_angle
 
-getω0(grid::Grid.EnvGrid) = grid.ω0
-getω0(grid::Grid.RealGrid) = 0.0
+#=
+Reference (carrier) frequency ω0 for the linear-operator frame, in which the total phase
+subtracted from the propagation constant is β1*(ω - ω0) + β0:
+- `thg=false` (envelope grids only): ω0 = grid.ω0 and β0 is the propagation constant at the
+  carrier, so the envelope is phase-stationary at the carrier. Only appropriate when no
+  carrier-mixing nonlinearity (THG, χ⁽²⁾) is present: the constant frame phase β0 - β1*ω0
+  appears as a spurious phase mismatch in carrier-mixing processes.
+- `thg=true`: there is no carrier reference (ω0 = 0, β0 = 0), so the subtracted phase is
+  β1*ω—strictly linear in the absolute frequency, i.e. a pure time shift, which is
+  transparent to all instantaneous nonlinear responses including carrier-mixing ones.
+The single-argument forms give the historical defaults.
+=#
+getω0(grid::Grid.EnvGrid, thg=false) = thg ? 0.0 : grid.ω0
+getω0(grid::Grid.RealGrid, thg=true) = 0.0
 
 #=================================================#
 #===============    FREE SPACE     ===============#
 #=================================================#
 
-function fill_linop_matrix!(out, grid, β1::Number, βref::Number, k2, kperp2, idcs)
-    ω0 = getω0(grid)
+function fill_linop_matrix!(out, grid, β1::Number, βref::Number, ω0::Number, k2, kperp2, idcs)
     for ii in idcs
         for ip in axes(k2, 2)
             for iω in eachindex(grid.ω)
@@ -48,7 +59,7 @@ end
 
 
 """
-    make_const_linop(grid, xygrid, n, β1, β0)
+    make_const_linop(grid, xygrid, n, β1, β0, ω0=getω0(grid))
 
 Low-level constructor for a constant (z-invariant) free-space linear operator.
 
@@ -58,16 +69,20 @@ Arguments:
 - `n`: refractive-index table on `grid.ω`, with one column per polarisation
 - `β1`: inverse reference-frame velocity
 - `β0`: reference wavevector offset (typically zero for `RealGrid` and optional for `EnvGrid`)
+- `ω0`: reference frequency of the frame; the total subtracted phase is `β1*(ω - ω0) + β0`.
+    Defaults to `grid.ω0` for `EnvGrid` (co-rotating frame) and `0` for `RealGrid`; pass `0`
+    (with `β0 = 0`) for the pure time-shift frame required by carrier-mixing nonlinearities
+    (see `getω0`).
 
 The output has shape `(Nω, Npol, N⊥...)`, where `N⊥...` matches the transverse grid.
 """
 function make_const_linop(grid::Grid.AbstractGrid,
                           xygrid::Union{Grid.FreeGrid, Grid.Free2DGrid, Hankel.QDHT},
-                          n::AbstractVecOrMat, β1::Number, β0::Number)
+                          n::AbstractVecOrMat, β1::Number, β0::Number, ω0::Number=getω0(grid))
     kperp2, idcs = transverse_k2(xygrid)
     k2 = @. (n*grid.ω/c)^2
     out = zeros(ComplexF64, (length(grid.ω), size(n, 2), size(idcs)...))
-    fill_linop_matrix!(out, grid, β1, β0, k2, kperp2, idcs)
+    fill_linop_matrix!(out, grid, β1, β0, ω0, k2, kperp2, idcs)
     return out
 end
 
@@ -87,7 +102,10 @@ Build a constant free-space operator from a refractive-index function `nfun`.
 
 `nfun(λ)` must return either a scalar index (single polarisation) or a vector/tuple of indices
 (e.g. both x and y polarisation). For `EnvGrid`, `thg=false` subtracts the reference propagation
-constant at `grid.ω0`; `thg=true` keeps the full phase.
+constant at `grid.ω0` (envelope phase-stationary at the carrier, but **not** transparent to
+carrier-mixing nonlinearities); `thg=true` subtracts only the group delay `β1*ω`, which is a
+pure time shift and keeps the phase bookkeeping of carrier-mixing responses
+(`Kerr_env_thg`, [`Luna.Nonlinear.Chi2Env`](@ref)) exact.
 """
 function make_const_linop(grid::Grid.AbstractGrid,
                           xygrid::Union{Grid.FreeGrid, Grid.Free2DGrid, Hankel.QDHT},
@@ -103,19 +121,28 @@ function make_const_linop(grid::Grid.AbstractGrid,
     end
     β1 = PhysData.dispersion_func(1, λ -> nfun(λ)[end])(grid.referenceλ)
     β0 = getβ0_n(grid, nfun, thg)
-    make_const_linop(grid, xygrid, n, β1, β0)
+    make_const_linop(grid, xygrid, n, β1, β0, getω0(grid, thg))
 end
 
 """
-    make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
+    make_const_linop(grid, xygrid::Grid.FreeGrid, nfuns::Tuple)
 
 Constant full-3D free-space operator for crystal optics with two polarisation branches.
 
 `nfuns = (nfunx, nfuny)`, where `nfunx(λ, δθ)` is the refractive index for x-polarisation
 and `nfuny(λ)` is the refractive index for y-polarisation. The reference frame velocity
 is calculated from `nfuny(λ)`.
+
+For both `RealGrid` and `EnvGrid`, the phase subtracted is `β1*ω`—strictly linear in the
+absolute frequency, i.e. a pure time shift. Note that for `EnvGrid` this differs from the
+other envelope operators, which additionally subtract the residual carrier phase `β0 - β1*ω0`
+at `grid.ω0` (`thg=false`): a constant frame phase is not transparent to carrier-mixing
+nonlinearities such as [`Luna.Nonlinear.Chi2Env`](@ref)—it appears as a spurious phase mismatch
+in e.g. second-harmonic generation—so these operators subtract the group delay only. The
+envelope therefore acquires a residual global phase rotation `(β0 - β1*ω0)z`, which does
+not affect intensities or spectra.
 """
-function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
+function make_const_linop(grid::Grid.AbstractGrid, xygrid::Grid.FreeGrid, nfuns::Tuple)
     nfunx, nfuny = nfuns
     # here nfunx(λ, δθ) also takes the angle and returns n_x(λ, θ)
     # nfuny(λ) just takes wavelength
@@ -129,14 +156,24 @@ function make_const_linop(grid::Grid.RealGrid, xygrid::Grid.FreeGrid, nfuns::Tup
                 δθ = crystal_internal_angle(nfunx, grid.ω[iω], kxi)
                 nx = nfunx(wlfreq(grid.ω[iω]), δθ)
                 for (iky, kyi) in enumerate(xygrid.ky)
+                    kperp2 = kxi^2 + kyi^2
                     k_xpol = nx*grid.ω[iω]/c
-                    βsq_xpol = k_xpol^2 - kxi^2 - kyi^2
-                    β_xpol = βsq_xpol < 0 ? -min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
-                    out[iω, 1, ikx, iky] = -im*(β_xpol - β1*grid.ω[iω])
+                    βsq_xpol = k_xpol^2 - kperp2
+                    if βsq_xpol < 0
+                        # negative βsq -> evanescent fields -> attenuation
+                        out[iω, 1, ikx, iky] = (-im*(-β1*grid.ω[iω])
+                                                - min(sqrt(abs(βsq_xpol)), 200))
+                    else
+                        out[iω, 1, ikx, iky] = -im*(sqrt(βsq_xpol) - β1*grid.ω[iω])
+                    end
 
-                    βsq_ypol = ksq_ypol - kxi^2 - kyi^2
-                    β_ypol = βsq_ypol < 0 ? -min(sqrt(abs(βsq_ypol)), 200) : sqrt(βsq_ypol)
-                    out[iω, 2, ikx, iky] = -im*(β_ypol - β1*grid.ω[iω])
+                    βsq_ypol = ksq_ypol - kperp2
+                    if βsq_ypol < 0
+                        out[iω, 2, ikx, iky] = (-im*(-β1*grid.ω[iω])
+                                                - min(sqrt(abs(βsq_ypol)), 200))
+                    else
+                        out[iω, 2, ikx, iky] = -im*(sqrt(βsq_ypol) - β1*grid.ω[iω])
+                    end
                 end
             end
         end
@@ -146,13 +183,15 @@ end
 
 
 """
-    make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
+    make_const_linop(grid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
 
 Constant free-space operator for 2D (`x-z`) crystal propagation with two polarisations.
 
-`nfuns = (nfunx, nfuny)` follows the same convention as the full-3D overload.
+`nfuns = (nfunx, nfuny)` follows the same convention as the full-3D overload, as does
+the reference frame (`β1*ω` from `nfuny`, a pure time shift, for both `RealGrid` and
+`EnvGrid`—see the full-3D overload for why).
 """
-function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
+function make_const_linop(grid::Grid.AbstractGrid, xgrid::Grid.Free2DGrid, nfuns::Tuple)
     nfunx, nfuny = nfuns
     # here nfunx(λ, δθ) also takes the angle and returns n_x(λ, θ)
     # nfuny(λ) just takes wavelength
@@ -167,12 +206,21 @@ function make_const_linop(grid::Grid.RealGrid, xgrid::Grid.Free2DGrid, nfuns::Tu
                 nx = nfunx(wlfreq(grid.ω[iω]), δθ)
                 k_xpol = nx*grid.ω[iω]/c
                 βsq_xpol = k_xpol^2 - kxi^2
-                β_xpol = βsq_xpol < 0 ? -min(sqrt(abs(βsq_xpol)), 200) : sqrt(βsq_xpol)
-                out[iω, 1, ik] = -im*(β_xpol - β1*grid.ω[iω])
+                if βsq_xpol < 0
+                    # negative βsq -> evanescent fields -> attenuation
+                    out[iω, 1, ik] = (-im*(-β1*grid.ω[iω])
+                                      - min(sqrt(abs(βsq_xpol)), 200))
+                else
+                    out[iω, 1, ik] = -im*(sqrt(βsq_xpol) - β1*grid.ω[iω])
+                end
 
                 βsq_ypol = ksq_ypol - kxi^2
-                β_ypol = βsq_ypol < 0 ? -min(sqrt(abs(βsq_ypol)), 200) : sqrt(βsq_ypol)
-                out[iω, 2, ik] = -im*(β_ypol - β1*grid.ω[iω])
+                if βsq_ypol < 0
+                    out[iω, 2, ik] = (-im*(-β1*grid.ω[iω])
+                                      - min(sqrt(abs(βsq_ypol)), 200))
+                else
+                    out[iω, 2, ik] = -im*(sqrt(βsq_ypol) - β1*grid.ω[iω])
+                end
             end
         end
     end
@@ -201,6 +249,7 @@ function make_linop(grid::Grid.AbstractGrid,
     np = length(nfun(ωfirst; z=0)) # 1 if single ref index, 2 if nx, ny
     k2 = zeros(Float64, (length(grid.ω), np))
     nfunλ(z) = λ -> nfun(wlfreq(λ); z)[end]
+    ω0 = getω0(grid, thg)
     function linop!(out, z)
         β1 = PhysData.dispersion_func(1, nfunλ(z))(grid.referenceλ)
         β0 = getβ0_n(grid, nfunλ(z), thg)
@@ -209,7 +258,7 @@ function make_linop(grid::Grid.AbstractGrid,
                 k2[ii, :] .= (nfun(grid.ω[ii]; z) .* grid.ω[ii] ./ c).^2
             end
         end
-        fill_linop_matrix!(out, grid, β1, β0, k2, kperp2, idcs)
+        fill_linop_matrix!(out, grid, β1, β0, ω0, k2, kperp2, idcs)
     end
 end
 
@@ -242,8 +291,8 @@ See also [`αlim!`](@ref).
 """
 conj_clamp(n, ω) = clamp(real(n), 1e-3, Inf) - im*clamp(imag(n), 0, 3000*c/ω)
 
-function make_const_linop(grid::Grid.AbstractGrid, βfun!, αfun!, β1::Number, β0::Number)
-    ω0 = getω0(grid)
+function make_const_linop(grid::Grid.AbstractGrid, βfun!, αfun!, β1::Number, β0::Number,
+                          ω0::Number=getω0(grid))
     β = similar(grid.ω)
     βfun!(β, 0)
     α = similar(grid.ω)
@@ -254,6 +303,7 @@ function make_const_linop(grid::Grid.AbstractGrid, βfun!, αfun!, β1::Number, 
     return linop
 end
 
+# see getω0 for the reference-phase conventions
 getβ0_mode(grid::Grid.RealGrid, mode, λ0, thg) = 0.0
 getβ0_mode(grid::Grid.EnvGrid, mode, λ0, thg) = thg ? 0.0 : Modes.β(mode, wlfreq(λ0))
 
@@ -261,7 +311,8 @@ getβ0_mode(grid::Grid.EnvGrid, mode, λ0, thg) = thg ? 0.0 : Modes.β(mode, wlf
     make_const_linop(grid, mode, λ0)
 
 Make constant linear operator for mode-averaged propagation in mode `mode` with a reference
-wavelength `λ0`.
+wavelength `λ0`. For the meaning of `thg` on an `EnvGrid` see
+[`make_const_linop(grid, xygrid, nfun)`](@ref).
 """
 function make_const_linop(grid::Grid.AbstractGrid, mode::Modes.AbstractMode, λ0;
                           thg::Bool=thg_default(grid))
@@ -279,7 +330,7 @@ function make_const_linop(grid::Grid.AbstractGrid, mode::Modes.AbstractMode, λ0
     function αfun!(out, z)
         out .= αconst
     end
-    make_const_linop(grid, βfun!, αfun!, β1, β0), βfun!, β1, αfun!
+    make_const_linop(grid, βfun!, αfun!, β1, β0, getω0(grid, thg)), βfun!, β1, αfun!
 end
 
 
@@ -305,15 +356,16 @@ end
 Create z-dependent mode-averaged linear-operator closures.
 
 For `RealGrid`, returns `(linop!, βfun!)`; for `EnvGrid`, `thg=false` additionally
-subtracts the reference phase at `λ0`.
+subtracts the reference phase at `λ0` while `thg=true` subtracts the group delay `β1*ω`
+(see [`make_const_linop(grid, xygrid, nfun)`](@ref)).
 """
 function make_linop(grid::Grid.RealGrid, mode::Modes.AbstractMode, λ0)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff, β = neff_β_grid(grid, mode, λ0)
-    linop! = let neff=neff, ω=grid.ω, mode=mode, ω0=wlfreq(λ0)
+    linop! = let neff=neff, ω=grid.ω, mode=mode, λ0=λ0
         function linop!(out, z)
             fill!(out, 0.0)
-            β1 = Modes.dispersion(mode, 1, ω0, z=z)::Float64
+            β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
             for iω in sidcs
                 nc = conj_clamp(neff(iω; z=z), ω[iω])
                 out[iω] = -im*(ω[iω]/c*nc - ω[iω]*β1)
@@ -334,19 +386,15 @@ end
 function make_linop(grid::Grid.EnvGrid, mode::Modes.AbstractMode, λ0; thg=false)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff, β = neff_β_grid(grid, mode, λ0)
-    linop! = let neff=neff, ω=grid.ω, mode=mode, ω0=wlfreq(λ0), sidcs=sidcs
+    # see getω0 for the reference-phase conventions
+    linop! = let neff=neff, ω=grid.ω, mode=mode, λ0=λ0, ω0=getω0(grid, thg), sidcs=sidcs
         function linop!(out, z)
             fill!(out, 0.0)
-            β1 = Modes.dispersion(mode, 1, ω0, z=z)::Float64
-            if !thg
-                βref = Modes.β(mode, ω0, z=z)
-            end
+            β1 = Modes.dispersion(mode, 1, wlfreq(λ0), z=z)::Float64
+            βref = thg ? 0.0 : Modes.β(mode, wlfreq(λ0), z=z)
             for iω in sidcs
                 nc = conj_clamp(neff(iω; z=z), ω[iω])
-                out[iω] = -im*(ω[iω]/c*nc - (ω[iω] - grid.ω0)*β1)
-                if !thg
-                    out[iω] -= -im*βref
-                end
+                out[iω] = -im*(ω[iω]/c*nc - (ω[iω] - ω0)*β1 - βref)
             end
         end
     end
@@ -391,11 +439,9 @@ end
 
 function make_const_linop(grid::Grid.EnvGrid, modes::Modes.ModeCollection, λ0; ref_mode=1, thg=false)
     β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0))
-    if thg
-        βref = 0.0
-    else
-        βref = Modes.β(modes[ref_mode], wlfreq(λ0))
-    end
+    # see getω0 for the reference-phase conventions
+    ω0 = getω0(grid, thg)
+    βref = thg ? 0.0 : Modes.β(modes[ref_mode], wlfreq(λ0))
     nmodes = length(modes)
     linops = zeros(ComplexF64, length(grid.ω), nmodes)
     for i = 1:nmodes
@@ -404,7 +450,7 @@ function make_const_linop(grid::Grid.EnvGrid, modes::Modes.ModeCollection, λ0; 
         βconst[.!grid.sidx] .= 1
         α = Modes.α.(modes[i], grid.ω)
         αlim!(α)
-        linops[:,i] = -im.*(βconst .- (grid.ω .- grid.ω0).*β1 .- βref) .- α./2
+        linops[:,i] = -im.*(βconst .- (grid.ω .- ω0).*β1 .- βref) .- α./2
     end
     linops
 end
@@ -430,14 +476,15 @@ end
 Create a z-dependent multimode linear-operator closure `linop!(out, z)`.
 
 The output is filled in-place with shape `(Nω, Nmodes)`. For `EnvGrid`, setting
-`thg=false` subtracts the reference phase of `modes[ref_mode]` at `λ0`.
+`thg=false` subtracts the reference phase of `modes[ref_mode]` at `λ0`, while `thg=true`
+subtracts the group delay `β1*ω` (see [`make_const_linop(grid, xygrid, nfun)`](@ref)).
 """
 function make_linop(grid::Grid.RealGrid, modes::Modes.ModeCollection, λ0; ref_mode=1)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
-    linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
+    linop! = let neff=neff, ω=grid.ω, modes=modes, λ0=λ0, ref_mode=ref_mode
         function linop!(out, z)
-            β1 = Modes.dispersion(modes[ref_mode], 1, ω0, z=z)::Float64
+            β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
             fill!(out, 0.0)
             for i in eachindex(modes)
                 for iω in sidcs
@@ -452,20 +499,16 @@ end
 function make_linop(grid::Grid.EnvGrid, modes::Modes.ModeCollection, λ0; ref_mode=1, thg=false)
     sidcs = (1:length(grid.ω))[grid.sidx]
     neff = neff_grid(grid, modes, λ0; ref_mode=ref_mode)
-    linop! = let neff=neff, ω=grid.ω, modes=modes, ω0=wlfreq(λ0), ref_mode=ref_mode
+    # see getω0 for the reference-phase conventions
+    linop! = let neff=neff, ω=grid.ω, modes=modes, λ0=λ0, ω0=getω0(grid, thg), ref_mode=ref_mode
         function linop!(out, z)
-            β1 = Modes.dispersion(modes[ref_mode], 1, ω0, z=z)::Float64
+            β1 = Modes.dispersion(modes[ref_mode], 1, wlfreq(λ0), z=z)::Float64
             fill!(out, 0.0)
-            if !thg
-                βref = Modes.β(modes[ref_mode], ω0, z=z)
-            end
+            βref = thg ? 0.0 : Modes.β(modes[ref_mode], wlfreq(λ0), z=z)
             for i in eachindex(modes)
                 for iω in sidcs
                     nc = conj_clamp(neff(iω, i; z=z), ω[iω])
-                    out[iω, i] = -im*(ω[iω]/c*nc - (ω[iω] - grid.ω0)*β1)
-                    if !thg
-                        out[iω, i] -= -im*βref
-                    end
+                    out[iω, i] = -im*(ω[iω]/c*nc - (ω[iω] - ω0)*β1 - βref)
                 end
             end
         end

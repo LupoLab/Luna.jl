@@ -436,4 +436,32 @@ end
 end
 
 ##
+#=
+THG in a gas-filled capillary (mode-averaged): real and envelope fields must agree.
+This tests the full envelope+thg chain through prop_capillary: the thg=true grid, the
+Kerr_env_thg response, and the carrier-transparent (group-delay-only) linear operator
+reference frame, which prop_capillary passes through to LinearOps. With a frame that
+subtracts a constant carrier phase instead, the THG term acquires a spurious phase
+mismatch 2β1ω0 and the third harmonic (almost) vanishes.
+=#
+@testset "THG: real vs envelope" begin
+    args = (125e-6, 1e-3, :Ar, 2)
+    kwargs = (λ0=800e-9, energy=1e-6, τfwhm=20e-15, trange=100e-15,
+              λlims=(220e-9, 2000e-9), shotnoise=false, plasma=false, raman=false,
+              thg=true, saveN=3)
+    or = prop_capillary(args...; envelope=false, kwargs...)
+    oe = prop_capillary(args...; envelope=true, kwargs...)
+
+    etot_r = Processing.energy(or)[end]
+    etot_e = Processing.energy(oe)[end]
+    @test etot_r ≈ etot_e rtol=1e-6
+
+    thgband = (240e-9, 300e-9)
+    ethg_r = Processing.energy(or; bandpass=thgband)[end]
+    ethg_e = Processing.energy(oe; bandpass=thgband)[end]
+    @test ethg_r > 1e5*eps(etot_r) # THG was actually generated
+    @test ethg_r ≈ ethg_e rtol=0.05
+end
+
+##
 Logging.global_logger(old_logger)

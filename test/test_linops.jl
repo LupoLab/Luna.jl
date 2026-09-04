@@ -51,6 +51,66 @@ pressure = 1
     end
 end
 
+@testset "free space birefringent (tuple nfuns)" begin
+    rgrid = Grid.RealGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+    egrid = Grid.EnvGrid(1, 800e-9, (400e-9, 2000e-9), 0.2e-12)
+    xygrid = Grid.FreeGrid(R, Nx, R, Ny)
+    xgrid = Grid.Free2DGrid(R, Nx)
+
+    #=
+    Isotropic index: the tuple (crystal) path must match the generic vector-nfun path.
+    The tuple path always subtracts β1*ω (a pure time shift, transparent to carrier-mixing
+    nonlinearities), whereas the generic path subtracts β1*(ω - ω0) + β0—so for EnvGrid the
+    two differ by the constant frame phase β1*ω0 - β0.
+    =#
+    nfunλ = PhysData.ref_index_fun(gas, pressure)
+    nfunx = (λ, δθ=0.0) -> real(nfunλ(λ))
+    nfuny = λ -> real(nfunλ(λ))
+    nfun = (λ; z=0.0) -> (real(nfunλ(λ)), real(nfunλ(λ)))
+
+    @testset "isotropic: $(typeof(grid)), $(typeof(sg)), thg = $thg" for sg in (xgrid, xygrid),
+                                                              thg in (false, true),
+                                                              grid in (rgrid, egrid)
+        if grid isa Grid.RealGrid && ~thg
+            continue
+        end
+        linop = LinearOps.make_const_linop(grid, sg, (nfunx, nfuny))
+        linopv = LinearOps.make_const_linop(grid, sg, nfun, thg)
+        @test size(linop) == size(linopv)
+        β1 = PhysData.dispersion_func(1, nfuny)(grid.referenceλ)
+        ω0 = LinearOps.getω0(grid, thg)
+        β0 = LinearOps.getβ0_n(grid, λ -> nfun(λ), thg)
+        offset = im*(β1*ω0 - β0) # 0 for RealGrid and for EnvGrid with thg=true
+        # the tuple path only fills frequencies within grid.sidx
+        sel = ntuple(_ -> Colon(), ndims(linop) - 1)
+        @test all(isapprox.(linop[grid.sidx, sel...], linopv[grid.sidx, sel...] .+ offset;
+                            atol=1e-3, rtol=0))
+    end
+
+    # for an envelope grid the phase subtracted is β1*ω: check the referencing directly
+    # for the y polarisation at kperp = 0
+    linop = LinearOps.make_const_linop(egrid, xgrid, (nfunx, nfuny))
+    ik0 = argmin(abs.(xgrid.kx))
+    β1 = PhysData.dispersion_func(1, nfuny)(egrid.referenceλ)
+    for iω in (argmin(abs.(egrid.ω .- egrid.ω0)), findfirst(egrid.sidx))
+        ωi = egrid.ω[iω]
+        expected = -(nfuny(PhysData.wlfreq(ωi))*ωi/PhysData.c - β1*ωi)
+        @test isapprox(imag(linop[iω, 2, ik0]), expected; atol=1e-6, rtol=0)
+        @test real(linop[iω, 2, ik0]) == 0
+    end
+
+    # real birefringent crystal on an envelope grid
+    θ = deg2rad(29.2)
+    bbogrid = Grid.EnvGrid(200e-6, 800e-9, (250e-9, 2e-6), 120e-15; thg=true)
+    bboxgrid = Grid.Free2DGrid(80e-6, 32)
+    nfuns = PhysData.ref_index_fun_xy(:BBO, θ)
+    linop = LinearOps.make_const_linop(bbogrid, bboxgrid, nfuns)
+    @test size(linop) == (length(bbogrid.ω), 2, length(bboxgrid.kx))
+    @test all(isfinite, linop)
+    # birefringence: the two polarisations see different indices
+    @test any(linop[bbogrid.sidx, 1, :] .!= linop[bbogrid.sidx, 2, :])
+end
+
 @testset "equivalence for fast z-dependent linops" begin
 a = 125e-6
 L = 1

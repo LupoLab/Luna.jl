@@ -750,9 +750,7 @@ Calculate the reciprocal-domain (ω-kx-ky-space) nonlinear response due to the f
 and place the result in `nl`.
 """
 function (t::TransFree)(nl, Eωk, z)
-    fill!(t.Eωo, 0)
-    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx, ky) -> (t, x, y)
+    to_time!(t.Eto, Eωk, t.Eωo, t.FT) # transform (ω, kx, ky) -> (t, x, y)
     # Modified shot-noise: compute field+noise in separate buffer (Et_nl) so the
     # propagating field (Eto) is never contaminated.
     if !isnothing(t.Et_noise)
@@ -762,8 +760,7 @@ function (t::TransFree)(nl, Eωk, z)
         Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs)
     end
     @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x, y) -> (ω, kx, ky)
-    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform (t, x, y) -> (ω, kx, ky)
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 
@@ -941,13 +938,10 @@ and place the result in `nl`.
 """
 function (t::TransFree2D)(nl, Eωk, z)
     # TODO: this can probably be combined with the case for TransFree
-    fill!(t.Eωo, 0)
-    copy_scale!(t.Eωo, Eωk, length(t.grid.ω), t.scale)
-    ldiv!(t.Eto, t.FT, t.Eωo) # transform (ω, kx) -> (t, x)
+    to_time!(t.Eto, Eωk, t.Eωo, t.FT) # transform (ω, kx) -> (t, x)
     Et_to_Pt!(t.Pto, t.Eto, t.resp, t.densityfun(z), t.idcs) # add up responses
     @. t.Pto *= t.grid.towin # apodisation
-    mul!(t.Pωo, t.FT, t.Pto) # transform (t, x) -> (ω, kx)
-    copy_scale!(nl, t.Pωo, length(t.grid.ω), 1/t.scale)
+    to_freq!(nl, t.Pωo, t.Pto, t.FT) # transform (t, x) -> (ω, kx)
     nl .*= t.grid.ωwin .* (-im.*t.grid.ω)./(2 .* t.normfun(z))
 end
 

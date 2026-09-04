@@ -156,6 +156,108 @@ function field_products!(Enl, Ec)
     Enl[6] = 2*Ec[1]*Ec[2]
 end
 
+struct Chi2Env{χT}
+    χ2::χT
+    toCrystal::RotMatrix3{Float64}
+    toLab::RotMatrix3{Float64}
+    χ2_toLab::χT # combined matrix to multiply by toLab * χ2
+    C::Vector{ComplexF64} # carrier phase exp(iω0t) on the (oversampled) time grid
+    Al::Vector{ComplexF64} # envelope in the lab frame
+    Ac::Vector{ComplexF64} # envelope in the crystal frame
+    Anl::Vector{ComplexF64} # combined SFG+DFG envelope products in the crystal frame
+    Pl::Vector{ComplexF64} # polarisation envelope in the lab frame
+end
+
+"""
+    Chi2Env(θ, ϕ, χ2, ω0, t)
+
+Construct a second-order nonlinear polarisation response for complex envelope,
+two-component electric fields in the lab frame. Envelope counterpart of
+[`Chi2Field`](@ref).
+
+`θ` and `ϕ` (radians) define the crystal orientation relative to the lab frame.
+`χ2` must be a 3×6 second-order susceptibility tensor in contracted notation,
+with column order `[xx, yy, zz, yz, xz, xy]`. `ω0` is the carrier frequency and `t`
+the time axis on which the response is evaluated—for propagation simulations these
+must be `grid.ω0` and `grid.to` (the oversampled time axis) of a `Grid.EnvGrid`.
+
+The response includes both the sum-frequency term (``ω + ω → 2ω``, carrying the phase
+factor ``e^{+iω_0t}``) and the difference-frequency term (``2ω - ω → ω``, back-conversion,
+carrying ``e^{-iω_0t}``), see [`env_products!`](@ref). Optical-rectification content near
+zero absolute frequency lies outside the frequency window and is removed by the grid
+apodisation. Note that the grid must contain the second harmonic—use
+`Grid.EnvGrid(...; thg=true)` or wavelength limits reaching below `λ0/2`.
+
+!!! warning
+    The linear operator must use a reference frame which is transparent to carrier-mixing
+    nonlinearities, i.e. one whose subtracted phase is strictly linear in the absolute
+    frequency (a pure time shift), like the crystal operators
+    `LinearOps.make_const_linop(grid, xgrid, nfuns::Tuple)`. Envelope operators which
+    subtract the carrier phase `β0` at `grid.ω0` (`thg=false`) introduce a spurious phase
+    mismatch `β0 - β1ω_0` into χ⁽²⁾ processes.
+
+The returned callable adds \$ε_0 P_{NL}\$ to `out` when invoked as
+`response(out, E, ρ)`. Note that the density `ρ` is ignored.
+"""
+function Chi2Env(θ, ϕ, χ2, ω0, t)
+    toCrystal = RotMatrix(RotZY(-ϕ, -θ)) # RotMatrix converts to static matrix
+    toLab = RotMatrix(RotYZ(θ, ϕ))
+    χ2 = SMatrix{3, 6}(χ2) # just χ2
+    χ2_toLab = SMatrix{3, 6}(toLab * χ2) # χ2 and coordinate transform in one step
+    C = exp.(1im*ω0.*t)
+    sv3 = zeros(ComplexF64, 3)
+    sv6 = zeros(ComplexF64, 6)
+    Chi2Env(χ2, toCrystal, toLab, χ2_toLab, C, sv3, copy(sv3), sv6, copy(sv3))
+end
+
+function (c::Chi2Env)(out, E, ρ)
+    size(E, 2) == 2 || error("Chi2Env requires a two-component (Nt×2) envelope field")
+    length(c.C) == size(E, 1) || error(
+        "Chi2Env carrier phase array does not match the field length. "
+        * "The response must be constructed with the oversampled time axis `grid.to`.")
+    for i in axes(E, 1)
+        cp = 0.5*c.C[i] # ½exp(iω0t): sum-frequency (ω + ω → 2ω)
+        cm = conj(c.C[i]) # exp(-iω0t): difference-frequency (2ω - ω → ω)
+        @inbounds c.Al[1] = E[i, 1]
+        @inbounds c.Al[2] = E[i, 2]
+        # note c.Al[3] (Az in the lab frame) is always zero here
+        mul!(c.Ac, c.toCrystal, c.Al) # transform to crystal frame
+        @inbounds env_products!(c.Anl, c.Ac, cp, cm) # calculate nonlinear products
+        mul!(c.Pl, c.χ2_toLab, c.Anl) # multiply by χ2 tensor and transform to lab frame
+        @inbounds out[i, 1] += ε_0*c.Pl[1]
+        @inbounds out[i, 2] += ε_0*c.Pl[2]
+    end
+end
+
+"""
+    env_products!(Anl, Ac, cp, cm)
+
+Fill the contracted second-order envelope-product vector `Anl` from crystal-frame
+envelope components `Ac`. Envelope counterpart of [`field_products!`](@ref).
+
+With the real field given by ``E_j = \\mathrm{Re}[A_j e^{iω_0t}]``, the envelope of each
+second-order product is
+
+``(E_jE_k)_{env} = \\frac{1}{2}A_jA_k e^{+iω_0t} + \\frac{1}{2}(A_jA_k^* + A_j^*A_k)e^{-iω_0t}``
+
+where the first (sum-frequency) and second (difference-frequency) terms enter here via
+`cp` = ``\\frac{1}{2}e^{+iω_0t}`` and `cm` = ``e^{-iω_0t}`` at the current time sample.
+
+The output ordering is `[xx, yy, zz, yz, xz, xy]` with mixed terms multiplied by 2,
+matching the 3x6 `χ2` tensor column order used by [`Chi2Env`](@ref).
+
+Both `Anl` and `Ac` are mutated/read in place and are expected to have length 6
+and 3, respectively.
+"""
+function env_products!(Anl, Ac, cp, cm)
+    Anl[1] = cp*Ac[1]^2 + cm*abs2(Ac[1])
+    Anl[2] = cp*Ac[2]^2 + cm*abs2(Ac[2])
+    Anl[3] = cp*Ac[3]^2 + cm*abs2(Ac[3])
+    Anl[4] = 2*(cp*Ac[2]*Ac[3] + cm*real(Ac[2]*conj(Ac[3])))
+    Anl[5] = 2*(cp*Ac[1]*Ac[3] + cm*real(Ac[1]*conj(Ac[3])))
+    Anl[6] = 2*(cp*Ac[1]*Ac[2] + cm*real(Ac[1]*conj(Ac[2])))
+end
+
 "Response type for cumtrapz-based plasma polarisation, adapted from:
 M. Geissler, G. Tempea, A. Scrinzi, M. Schnürer, F. Krausz, and T. Brabec, Physical Review Letters 83, 2930 (1999)."
 struct PlasmaCumtrapz{R, EType, tType}
