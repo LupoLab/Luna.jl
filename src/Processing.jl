@@ -821,6 +821,68 @@ envelope(grid::RealGrid, Eω) = Maths.hilbert(FFTW.irfft(Eω, length(grid.t), 1)
 envelope(grid::EnvGrid, Eω) = FFTW.ifft(Eω, 1) .* exp.(im.*grid.ω0.*grid.t)
 
 """
+    withnoise(output)
+    withnoise(output, transform)
+
+Return `output["Eω"]` with the modified shot-noise background restored, i.e.
+`A_s'(z) + A_noise(z)`, ready to be passed to the array methods of [`energy`](@ref),
+[`getIω`](@ref) and friends.
+
+The modified shot-noise model (`shotnoise=:modified`) deliberately excludes the noise field
+from the propagating spectrum, so power read straight from `Eω` is low by construction
+wherever the generated signal is at or below the vacuum level — most obviously when comparing
+against a `shotnoise=:input` run. Restoring the background makes the two models directly
+comparable.
+
+The single-argument method reconstructs the noise from data saved in `output` and therefore
+requires the simulation to have been run with `save_noise=true`. The two-argument method
+takes the `transform` returned by e.g.
+[`prop_capillary_args`](@ref Luna.Interface.prop_capillary_args) and works without it.
+
+!!! note
+    The paper subtracts `P_noise` after restoration because it wants the *generated* power.
+    If the quantity being compared already includes the seed — as it does when comparing
+    against a `:input` run — subtracting again double-counts.
+
+# Examples
+```julia
+out = prop_capillary(a, L, gas, P; ..., shotnoise=:modified, save_noise=true)
+E = Processing.energy(Processing.makegrid(out), Processing.withnoise(out); bandpass=band)
+```
+"""
+function withnoise(output)
+    haskey(output, "noise_field") || error(
+        "output contains no noise field: withnoise requires shotnoise=:modified")
+    haskey(output, "noise_phase") || error(
+        "output contains no \"noise_phase\": re-run with save_noise=true, or pass the "*
+        "transform as a second argument")
+    Eω = output["Eω"]
+    Eω0 = output["noise_field"]
+    Φ = output["noise_phase"]
+    _addnoise(Eω, Eω0, Φ)
+end
+
+function withnoise(output, transform)
+    noise = hasfield(typeof(transform), :noise) ? transform.noise : nothing
+    isnothing(noise) && error(
+        "transform has no noise field: withnoise requires shotnoise=:modified")
+    Eω = output["Eω"]
+    zs = output["z"]
+    Φ = zeros(Float64, (size(noise.Eω0)..., length(zs)))
+    d = ndims(Φ)
+    for (i, z) in enumerate(zs)
+        noise.phase(selectdim(Φ, d, i), z)
+    end
+    _addnoise(Eω, noise.Eω0, Φ)
+end
+
+function _addnoise(Eω, Eω0, Φ)
+    size(Φ) == size(Eω) || error(
+        "saved noise phase has size $(size(Φ)) but Eω has size $(size(Eω))")
+    @. Eω + Eω0 * cis(Φ)
+end
+
+"""
     makegrid(output)
 
 Create an `AbstractGrid` from the `"grid"` dictionary saved in `output`.
