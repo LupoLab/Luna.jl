@@ -247,7 +247,7 @@ end
     time_bandwidth(grid, Eω; bandpass=nothing, oversampling=1)
 
 Extract the time-bandwidth product, after bandpassing if required. The TBP
-is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of 
+is defined here as ΔfΔt where Δx is the FWHM of x. (In this definition, the TBP of
 a perfect Gaussian pulse is ≈0.44). If `oversampling` > 1, the time-domain field is
 oversampled before extracting the FWHM.
 """
@@ -595,8 +595,8 @@ end
 """
     getEω(output[, zslice])
 
-Get frequency-domain modal field from `output` with correct normalisation (i.e. 
-`abs2.(Eω)`` gives angular-frequency spectral energy density in J/(rad/s)).
+Get frequency-domain modal field from `output` with correct normalisation (i.e.
+`abs2.(Eω)` gives angular-frequency spectral energy density in J/(rad/s)).
 """
 getEω(output::AbstractOutput, args...) = getEω(makegrid(output), output, args...)
 getEω(grid, output) = getEω(grid, output["Eω"])
@@ -626,38 +626,40 @@ fftnorm(grid::EnvGrid) = Maths.fftnorm(grid.t[2] - grid.t[1])
 
 
 """
-    getφ(grid, Eω)
-    getφ(ω, Eω, τ)
+    spectral_phase(grid, Eω)
+    spectral_phase(ω, Eω, τ)
 
 Extract the unwrapped spectral phase from the field `Eω`, subtracting the linear phase ramp corresponding
-to a pulse in the middle of the time window defined by the `grid`. 
+to a pulse in the middle of the time window defined by the `grid`.
 """
-function getφ(grid::AbstractGrid, Eω)
+function spectral_phase(grid::AbstractGrid, Eω)
     ω = grid.ω
     t = grid.t
     τ = length(t) * (t[2] - t[1])/2 # middle of time window
-    getφ(ω, Eω, τ)
+    spectral_phase(ω, Eω, τ)
 end
 
-function getφ(ω::AbstractVector, Eω, τ)
+function spectral_phase(ω::AbstractVector, Eω, τ)
     φ = unwrap(angle.(Eω); dims=1)
     φ .- ω*τ
 end
 
 """
-    getφ(output, args...)
+    spectral_phase(output, args...)
 
 Extract the frequency-domain `Eω` from the `output` (additional `args...` are passed to `getEω`) and
 extract the spectral phase, subtracting the linear phase ramp corresponding
 to a pulse in the middle of the time window defined by the frequency grid.
 """
-function getφ(output, args...)
+function spectral_phase(output, args...)
     ω, Eω = getEω(output, args...)
     grid = makegrid(output)
     t = grid.t
     τ = length(t) * (t[2] - t[1])/2 # middle of time window
-    getφ(ω, Eω, τ)
+    spectral_phase(ω, Eω, τ)
 end
+
+Base.@deprecate getφ(args...) spectral_phase(args...) false
 
 """
     getEt(output[, zslice]; kwargs...)
@@ -721,7 +723,7 @@ If `relative` is `true`, `width` is relative bandwidth instead of the wavelength
 `ndims` determines how many dimensions of the array to sum over. For a field array with size
 `(Nω, N1, N2, ...)`, the first dimension is always assumed to be frequency. `ndim=1` means
 each field to be analysed is 1-dimensional, so the window iterates over all of `(N1, N2, ...)`.
-`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be 
+`ndim=2` means each field to be analysed is 2-dimensional, `(Nω, N1)` in size, and will be
 summed over its second dimension before finding the central frequency. The window iterates
 over all other dimensions, `(N2, ...)`.
 
@@ -765,7 +767,7 @@ end
     PeakWindow(width, λmin, λmax; relative=false, ndims=1)
 
 An [`AutoWindow`](@ref) which uses the peak of the spectral energy density as the central
-frequency. 
+frequency.
 """
 function PeakWindow(width, λmin, λmax; relative=false, ndims=1)
     ω0fun = (ω, Iω) ->  ω[argmax(Iω)]
@@ -776,7 +778,7 @@ end
     CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
 
 An [`AutoWindow`](@ref) which uses the centroid (centre of mass or first moment) of the
-spectral energy density as the central frequency. Before calculating the centroid, the 
+spectral energy density as the central frequency. Before calculating the centroid, the
 SED is raised to the `power` given.
 """
 function CentroidWindow(width, λmin, λmax; relative=false, ndims=1, power=1)
@@ -1015,7 +1017,7 @@ function getEtxy(Etm, modes, xs::Tuple{AbstractVector, AbstractVector}, z; compo
             @views Modes.to_space!(Etxy[:, x1idx, x2idx, :], Etm[.., 1], (x1i, x2i), tospace; z)
         end
     end
-    Etxy    
+    Etxy
 end
 
 function polarisation_components(output)

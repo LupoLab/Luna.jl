@@ -27,10 +27,19 @@ import LinearAlgebra: norm
     @test isapprox(Polarisation.ellipticity(Polarisation.Stokes(QWP*h)), 1.0)
     QWP = Polarisation.rotate(Polarisation.WP(π/2), -π/4)
     @test isapprox(Polarisation.ellipticity(Polarisation.Stokes(QWP*h)), 1.0)
-    
+
     QWP = Polarisation.rotate(Polarisation.WP(π/2), π/4)
     C = QWP*h
     L = Polarisation.LP()*C
     @test norm(Polarisation.Stokes(L, normalise=true) - [1; 1; 0; 0]) < 1e-15
     @test isapprox(Polarisation.Stokes(L)[1], 0.5)
+
+    # Test QWP at π/8 produces elliptical polarization with correct ellipse angle and ellipticity
+    QWP = Polarisation.rotate(Polarisation.WP(π/2), π/8)
+    E = QWP*h
+    S = Polarisation.Stokes(E)
+    A, B, ellipse_angle, h_ellipse = Polarisation.ellipse(S)
+    ell = Polarisation.ellipticity(S)
+    @test isapprox(ellipse_angle, π/8, atol=1e-10)
+    @test isapprox(ell, tan(π/8), atol=1e-10)
 end

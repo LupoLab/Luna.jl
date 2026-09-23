@@ -138,7 +138,7 @@ function (p::PulseField)(grid, FT)
         Pt = It(Et, grid)
         Et .*= sqrt(p.power)/sqrt(maximum(Pt))
     end
-        
+
     FT * Et
 end
 
@@ -233,7 +233,7 @@ contain 3 columns:
 """
 function DataField(fpath; energy, ϕ=Float64[], λ0=NaN)
     dat = readdlm(fpath, ' ')
-    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3]; energy, ϕ)
+    DataField(dat[:, 1]*2π, dat[:, 2], dat[:, 3]; energy, ϕ, λ0)
 end
 
 """
@@ -525,7 +525,7 @@ function int2D(field1, field2, lowerlim, upperlim)
     end
     val
 end
-    
+
 function normalised_field(fieldfunc, rmax)
     scale = 1.0/sqrt(int2D(fieldfunc, fieldfunc, (0.0, 0.0), (rmax, 2π)))
     return let scale=scale, fieldfunc=fieldfunc
@@ -543,7 +543,7 @@ end
     coupled_field(i, mode, E, fieldfunc; energy, kwargs...)
 
 Create an element of an input field tuple (for use in `Luna.setup`) based on coupling
-field `E` into a `mode`. The index `i` species the mode index. The temporal fields are 
+field `E` into a `mode`. The index `i` specifies the mode index. The temporal fields are
 initialised using `fieldfunc` (e.g. one of `GaussField`, `SechField` etc.) with the
 same keyword arguments.
 """
@@ -648,7 +648,7 @@ function energyfuncs(grid::Grid.RealGrid, xygrid::Grid.FreeGrid)
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
     function energy_t(Et)
         Eta = Maths.hilbert(Et)
-        return  prefac_t * sum(abs2.(Eta)) 
+        return  prefac_t * sum(abs2.(Eta))
     end
 
     δω = grid.ω[2] - grid.ω[1]
@@ -669,7 +669,7 @@ function energyfuncs(grid::Grid.EnvGrid, xygrid::Grid.FreeGrid)
     δt = grid.t[2] - grid.t[1]
     prefac_t = PhysData.c*PhysData.ε_0/2 * δx * δy * δt
     function energy_t(Et)
-        return  prefac_t * sum(abs2.(Et)) 
+        return  prefac_t * sum(abs2.(Et))
     end
 
     δω = grid.ω[2] - grid.ω[1]
@@ -854,7 +854,7 @@ prop_mode(Eω, args...) = prop_mode!(copy(Eω), args...)
     optcomp_taylor(Eω, grid, λ0; order=2)
 
 Maximise the peak power of the field `Eω` by adding Taylor-expanded spectral phases up to
-order `order`. 
+order `order`.
 """
 function optcomp_taylor(Eω::AbstractVecOrMat, grid, λ0; order=2, boundfac=8)
     τ = length(grid.t) * (grid.t[2] - grid.t[1])/2
@@ -904,7 +904,7 @@ _It(Et::AbstractMatrix, grid) = dropdims(sum(It(Et, grid); dims=2); dims=2)
 """
     optcomp_material(Eω, grid, material, λ0; kwargs...)
 
-Maximise the peak power of the field `Eω` by linear propagation through the `material`. 
+Maximise the peak power of the field `Eω` by linear propagation through the `material`.
 Keyword arguments `kwargs` are the same as for [`prop_material`](@ref).
 """
 function optcomp_material(Eω::AbstractVecOrMat, grid, material, λ0,
