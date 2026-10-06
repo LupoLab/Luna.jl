@@ -56,7 +56,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [compat]
 ArgParse = "1"
 BlackBoxOptim = "0.6"
-CSV = "0.9, 0.10"
+CSV = "0.9, 0.10, 1.1"
 Conda = "1"
 CoolProp = "0.1, 0.2"
 Cubature = "1.5.1"
