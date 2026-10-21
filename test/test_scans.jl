@@ -32,7 +32,7 @@ end
 # that runs such a scan, so the tests are self-isolating and leave no litter.
 function clear_queue_state(scanname)
     qf = Scans._default_queuefile(scanname)
-    for f in (qf, qf*"_lock", Scans._donefile(qf))
+    for f in (qf, qf*"_lock", Scans._donefile(qf), Scans._noworkfile(qf))
         rm(f; force=true)
     end
 end
@@ -423,6 +423,12 @@ if !Sys.iswindows()
                          remotehostname="login1.pri.dmog.alces.network")
     @test ssh2.hostname == "dmog.hw.ac.uk"
     @test ssh2.remotehostname == "login1.pri.dmog.alces.network"
+    # auxiliary files default to none and are passed through
+    @test ssh.files == String[]
+    ssh3 = Scans.SSHExec(ex2, "dmog.hw.ac.uk", "scans";
+                         files=["/tmp/data.txt"], remotehostname="login1")
+    @test ssh3.files == ["/tmp/data.txt"]
+    @test ssh3.remotehostname == "login1"
 
     # Validation: ncores must be >= 1
     @test_throws ArgumentError Scans.SlurmExec("/tmp/test.jl", 0)

@@ -302,14 +302,16 @@ the scan's completion marker (`qfile_*.done`) appears; the final respawn in each
 the queue drained and exits. The generated job script looks like:
 ```bash
 DONEFILE="qfile_<hash>.done"
+NOWORKFILE="qfile_<hash>.nowork"
 for i in $(seq 1 2); do
     (
-        until [ -f "$DONEFILE" ]; do
+        until [ -f "$DONEFILE" ] || [ -f "$NOWORKFILE" ]; do
             "/path/to/julia" --heap-size-hint=40G … "script.jl" --queue --maxpoints 1 || sleep 10
         done
     ) &
 done
 wait
+"/path/to/julia" --heap-size-hint=40G … "script.jl" --queue --maxpoints 1
 ```
 The `--heap-size-hint` derived from `memory` is divided by `instances` (all instances share
 one `--mem` cgroup), and `#SBATCH --cpus-per-task` defaults to `instances * nthreads`. Size
