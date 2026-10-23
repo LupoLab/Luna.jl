@@ -16,6 +16,14 @@ end
     @test PhysData.ref_index(:SiO2, PhysData.eV_to_m(0.91018)) ≈ 1.44621
     @test real(PhysData.ref_index(:SiO2, PhysData.eV_to_m(121.6))) ≈ 0.9865
     @test imag(PhysData.ref_index(:SiO2, PhysData.eV_to_m(121.6))) ≈ 0.0085
+    # CH4, N2O and SF6 use the He et al. (ACP 21, 14927, 2021) refractivity fit, which is
+    # referenced to 1 atm and 288.15 K. At that state n - 1 must equal the fit itself.
+    @test real(PhysData.ref_index(:CH4, 800e-9, PhysData.atm/PhysData.bar, 288.15)) - 1 ≈ 4.161530433349878e-4 rtol=1e-6
+    @test real(PhysData.ref_index(:N2O, 800e-9, PhysData.atm/PhysData.bar, 288.15)) - 1 ≈ 4.730584716366409e-4 rtol=1e-6
+    @test real(PhysData.ref_index(:SF6, 800e-9, PhysData.atm/PhysData.bar, 288.15)) - 1 ≈ 7.230228780000065e-4 rtol=1e-6
+    for g in (:CH4, :N2O, :SF6)
+        @test 1 < real(PhysData.ref_index(g, 800e-9)) < 1.001
+    end
 end
 
 @testset "Function equivalence" begin
