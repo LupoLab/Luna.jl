@@ -133,9 +133,12 @@ end
 Sellmeier expansion for CH4, SF6 and N2O from Atmospheric Chemistry and Physics 2021, 21 (19), 14927–14940.
 https://doi.org/10.5194/acp-21-14927-2021.
 
+The fit gives the refractivity `(n - 1)*1e8 = A + B/(C - ν²)` with ν the wavenumber in cm⁻¹,
+at the reference density `dens`. Like [`γ_Peck`](@ref) and [`γ_Zhang`](@ref), this returns the
+single-particle susceptibility `(n² - 1)/dens`, not the refractive index.
 """
 function γ_QuanfuHe(A, B, C, dens)
-    return μm -> complex((1 + 1e-8*(A + B/(C - (1e4/μm)^2))))/dens
+    return μm -> ((1 + 1e-8*(A + B/(C - (1e4/μm)^2)))^2 - 1)/dens
 end
 
 """
