@@ -639,10 +639,7 @@ function spectral_phase(grid::AbstractGrid, Eω)
     spectral_phase(ω, Eω, τ)
 end
 
-function spectral_phase(ω::AbstractVector, Eω, τ)
-    φ = unwrap(angle.(Eω); dims=1)
-    φ .- ω*τ
-end
+spectral_phase(ω::AbstractVector, Eω, τ) = unwrap(angle.(Eω .* exp.(1im .* ω .* τ)); dims=1)
 
 """
     spectral_phase(output, args...)
