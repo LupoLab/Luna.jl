@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 a = 13e-6
 gas = :H2
@@ -35,7 +35,7 @@ output = Output.MemoryOutput(0, grid.zmax, 201, statsfun)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 ##
-Plotting.pygui(true)
+
 Plotting.stats(output)
 Plotting.prop_2D(output)
 Plotting.time_1D(output, range(0,flength,length=5), trange=(-0.5e-12, 2e-12))

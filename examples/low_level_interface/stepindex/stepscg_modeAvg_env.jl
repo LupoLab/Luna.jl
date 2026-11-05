@@ -1,6 +1,6 @@
 # supercontinuum in strand of silica in air
 
-using Luna
+using Luna, PythonPlot
 
 # single mode fibre at 1030 nm
 a = 1.25e-6
@@ -31,7 +31,7 @@ output = Output.MemoryOutput(0, grid.zmax, 201)
 Luna.run(Eω, grid, linop, transform, FT, output)
 
 ##
-Plotting.pygui(true)
+
 #Plotting.stats(output)
 Plotting.prop_2D(output, :λ, dBmin=-40.0,  λrange=(400e-9, 1300e-9), trange=(-1e-12, 5e-12))
 #Plotting.time_1D(output, [0.0, 2.5, 5.0], trange=(-5e-12, 5e-12))
