@@ -54,6 +54,7 @@ include("Output.jl")
 include("Maths.jl")
 include("PhysData.jl")
 include("Grid.jl")
+include("Boundaries.jl")
 include("Modes.jl")
 include("Fields.jl")
 include("RK45.jl")
@@ -85,7 +86,7 @@ makefilename = Scans.makefilename
 addvariable! = Scans.addvariable!
 
 export Utils, Scans, Output, Maths, PhysData, Grid, RK45, Modes, Capillary, RectModes,
-       Nonlinear, Ionisation, NonlinearRHS, LinearOps, Stats, Polarisation,
+       Nonlinear, Ionisation, NonlinearRHS, LinearOps, Boundaries, Stats, Polarisation,
        Tools, Plotting, Raman, Antiresonant, Fields, Processing, Interface, SFA,
        prop_capillary, prop_gnlse, Pulses, Scan, runscan, makefilename, addvariable!,
        StepIndexFibre, SimpleFibre
@@ -363,21 +364,47 @@ sym2string(other) = other
 
 save_modeinfo_maybe(output, t) = nothing
 
+"""
+    run(Eω, grid, linop, transform, FT, output; kwargs...)
+
+Run the propagation.
+
+# Absorbing boundaries
+- `boundary::Symbol=:rate`: how the absorbing boundaries at the edges of the frequency and
+    time windows are applied.
+    - `:rate` applies them as an absorption *coefficient per unit distance*: the spectral
+      absorber is folded into `linop` (so the propagator applies it exactly) and the
+      temporal absorber is applied to the field as `exp(-α_t Δz/2)`, `α` being a power
+      coefficient as it is elsewhere in Luna. The total absorption over a distance depends
+      only on that distance, not on how many steps the solver took.
+    - `:legacy` reproduces the historical behaviour — multiplying the solution by
+      `grid.ωwin` and `grid.twin` after every accepted step. This makes the cumulative
+      absorption depend on the step count and hence on `rtol`, and tightening the tolerance
+      approaches a hard truncation at the edge of the flat region rather than the taper the
+      profiles describe. Provided only to reproduce older results.
+    - `:none` disables the absorbers. The nonlinear polarisation is still band-limited in
+      `NonlinearRHS` and the field is still band-limited once at the start, but nothing
+      stops energy wrapping around the time window or piling up at the edge of the
+      frequency window.
+- `boundary_N::Real=$(Boundaries.DEFAULT_N)`: absorber strength, expressed as the number of
+    times the historical window profile is applied over the whole propagation length. The
+    reference length is `ℓ = zmax/boundary_N`.
+- `boundary_length=nothing`: reference length `ℓ` in metres, overriding `boundary_N`.
+- `tcollar::Real=$(Boundaries.DEFAULT_TCOLLAR)`: width of the temporal absorber collar as a
+    fraction of the time window. Only used if it is wider than the collar `grid.twin`
+    already has (which can be nearly zero, depending on how `trange` rounds up).
+
+See [`Luna.Boundaries`](@ref) for the rationale.
+"""
 function run(Eω, grid,
              linop, transform, FT, output;
              min_dz=0, max_dz=grid.zmax/2, init_dz=1e-4, z0=0.0,
              rtol=1e-6, atol=1e-10, safety=0.9, norm=RK45.weaknorm,
-             status_period=1)
+             status_period=1,
+             boundary=:rate, boundary_N=Boundaries.DEFAULT_N, boundary_length=nothing,
+             tcollar=Boundaries.DEFAULT_TCOLLAR)
 
     Et = FT \ Eω
-
-    function stepfun(Eω, z, dz, interpolant)
-        Eω .*= grid.ωwin
-        ldiv!(Et, FT, Eω)
-        Et .*= grid.twin
-        mul!(Eω, FT, Et)
-        output(Eω, z, dz, interpolant)
-    end
 
     # check_cache does nothing except for HDF5Outputs
     Eωc, zc, dzc = Output.check_cache(output, Eω, z0, init_dz)
@@ -386,8 +413,27 @@ function run(Eω, grid,
         Eω, z0, init_dz = Eωc, zc, dzc
     end
 
+    #= NOTE: this must come after check_cache, which can move z0 and init_dz: the temporal
+       absorber measures the distance it is applied over from z0. =#
+    absorber = Boundaries.setup(boundary, grid, linop, Et, FT, output, z0,
+                                max_dz, init_dz;
+                                N=boundary_N, ℓ=boundary_length, collar=tcollar)
+    stepfun = absorber.stepfun
+    linop, max_dz, init_dz = absorber.linop, absorber.max_dz, absorber.init_dz
+
+    #= Band-limit the field once, here, rather than after every step. `NonlinearRHS` zeroes
+       the nonlinear polarisation outside `grid.sidx` and the linear operator is zero there,
+       so nothing can put anything back; all this removes is the numerical dust the input
+       transform leaves outside the band. Not for :legacy, which must reproduce the
+       historical scheme exactly -- its per-step `ωwin` multiply does the same job from the
+       first step anyway. =#
+    boundary === :legacy || (Eω[.!grid.sidx, ntuple(_ -> :, ndims(Eω) - 1)...] .= 0)
+
     output(Grid.to_dict(grid), group="grid")
-    output(simtype(grid, transform, linop), group="simulation_type")
+    st = simtype(grid, transform, linop)
+    st["boundary"] = string(boundary)
+    boundary === :rate && (st["boundary_length"] = string(absorber.ℓ))
+    output(st, group="simulation_type")
     save_modeinfo_maybe(output, transform)
 
     flush(stderr) # flush std error once before starting to show setup steps

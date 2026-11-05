@@ -18,6 +18,27 @@ E(t, \mathbf{r}_\perp, z)  = \int_{-\infty}^{\infty} \mathrm{d}\omega \mathcal{T
 ```
 where ``\mathcal{T}_\perp^{-1}`` is simply the inverse of ``\mathcal{T}_\perp`` so transforms from transverse reciprocal space to real space. The chief difference between variations of the UPPE implemented in `Luna` is the definition of ``\mathbf{k}_\perp`` and ``\mathcal{T}_\perp``, that is, the choice of [Modal decompositions](@ref) of the field.
 
+## Absorbing boundaries
+
+Both the frequency and the time axes are finite and periodic (they are sampled for FFTs), so energy which reaches the edge of either window does not leave the simulation — it wraps around, and the result is wrong. `Luna` therefore applies absorbing boundaries at the edges of both windows. These matter whenever the spectrum or the pulse genuinely reaches the edge of the grid: soliton self-compression, modulation instability, or a dispersive wave walking out of the time window.
+
+The absorbers are defined by an absorption **coefficient per unit propagation distance** ``\alpha``, so that propagating a distance ``L`` attenuates by a fixed factor no matter how the solver subdivides that distance. As everywhere else in `Luna`, ``\alpha`` is a *power* coefficient: the power falls as ``\mathrm{e}^{-\alpha L}``, the field as ``\mathrm{e}^{-\alpha L/2}``, and a linear operator carries ``-\alpha/2``. The coefficient is derived from the apodisation profiles ``W`` built by [`Grid`](@ref Grid) as
+```math
+\alpha(x) = -\frac{2\log W(x)}{\ell}\,,
+```
+where the reference length ``\ell`` is the distance over which the historical profile is applied to the field exactly once, i.e. ``\mathrm{e}^{-\alpha\ell/2} = W``. By default ``\ell = z_\mathrm{max}/N`` with ``N`` set by `boundary_N`, i.e. the profile is applied ``N`` times over the whole propagation.
+
+Because the adaptive stepper has to resolve ``\ell`` for the absorber to behave itself, `Luna.run` reduces `max_dz` to ``\ell`` if it is larger, and says so in the log. In practice this changes nothing — it asks for at least ``N`` steps over the propagation, and real runs take far more.
+
+The spectral absorber is diagonal in ``\omega``, so it is simply an imaginary part of ``k(\omega)`` and is added to the linear operator ``\mathcal{L}``. The interaction-picture propagator then applies it *exactly*, over whatever sub-interval the adaptive stepper chooses, at no extra cost. The temporal absorber is diagonal in ``t`` and so cannot ride the propagator; it is applied as a factor ``\mathrm{e}^{-\alpha(t)\Delta z/2}`` to the field after each accepted step. Because these factors telescope, the total absorption over a distance is again independent of the step layout.
+
+!!! note "Change in behaviour"
+    Before this scheme was introduced, the absorbing boundaries were applied by multiplying the solution by the fixed profile ``W`` once per accepted step. The cumulative absorption was then ``W^N`` with ``N`` the number of steps — a number the adaptive controller derives from `rtol`. The consequence was that the solution depended on the tolerance: tightening `rtol` increased the absorption. Nor does tightening it recover the intended taper — at typical step counts ``W^N`` is a brick wall at the edge of the flat region rather than a taper, and that brick wall is the limit the old scheme approaches. It is what eroded genuine spectral wings. Results from that scheme can be reproduced with `boundary=:legacy`, and the absorbers can be switched off entirely with `boundary=:none`. See [`Luna.run`](@ref) and [`Boundaries`](@ref Boundaries.Boundaries).
+
+Because an absorbing boundary is doing its job silently, `Luna.run` also reports when it starts to matter: the temporal absorber keeps a running total of what it removes, and warns once if that exceeds a thousandth of the pulse. That is a measurement of what was actually absorbed rather than a prediction from the dispersion — on a grid running to several microns the largest group delays belong to the band edges, which carry nothing but shot noise, so a prediction would warn on almost every run. Seeing the warning means light is genuinely reaching the edge of the time window; if that is not intended, widen `trange`.
+
+Note that this is separate from the band-limiting of the nonlinear polarisation which happens inside [`NonlinearRHS`](@ref NonlinearRHS): that is part of the definition of the equation being solved, and is applied to ``P_\mathrm{nl}`` rather than to the field.
+
 ## A note on sign conventions
 In optics, a plane wave is usually written as
 ```math
