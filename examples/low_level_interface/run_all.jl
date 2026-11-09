@@ -1,7 +1,7 @@
 using Luna
 Luna.set_fftw_mode(:estimate)
 import Logging: @warn, disable_logging, Info
-import PyPlot: plt
+import PythonPlot: pyplot
 
 disable_logging(Info) # disable progress logging to avoid filling the shell window
 
@@ -14,7 +14,7 @@ function run(item)
             bt = catch_backtrace()
             @warn sprint(showerror, e, bt)
         finally
-            plt.close("all")
+            pyplot.close("all")
         end
     elseif isdir(item)
         for iitem in readdir(item)

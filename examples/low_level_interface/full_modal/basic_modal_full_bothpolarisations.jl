@@ -1,4 +1,4 @@
-using Luna
+using Luna, PythonPlot
 
 a = 13e-6
 gas = :Ar
@@ -41,6 +41,6 @@ linop = LinearOps.make_const_linop(grid, modes, λ0)
 
 Luna.run(Eω, grid, linop, transform, FT, output)
 
-Plotting.pygui(true)
+
 Plotting.stats(output)
 Plotting.prop_2D(output)

@@ -1,5 +1,4 @@
-using Luna
-import PyPlot: plt
+using Luna, PythonPlot
 
 #= In this example we simulate degenerate four-wave mixing between a circularly polarised
 pump pulse at 400 nm and a seed pulse at 800 nm to generate a circularly polarised idler
@@ -48,12 +47,12 @@ Iλequal = dropdims(sum(Iλequal; dims=2); dims=(2, 3))
 Iλopposite = dropdims(sum(Iλopposite; dims=2); dims=(2, 3))
 
 # plot the result
-plt.figure()
-plt.plot(λ*1e9, Iλequal*1e-3, label="Equal helicity")
-plt.plot(λ*1e9, Iλopposite*1e-3, label="Opposite helicity")
-plt.xlim(200, 950)
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("Spectral energy density (μJ/nm)")
-plt.ylim(ymin=0)
-plt.legend()
+pyplot.figure()
+pyplot.plot(λ*1e9, Iλequal*1e-3, label="Equal helicity")
+pyplot.plot(λ*1e9, Iλopposite*1e-3, label="Opposite helicity")
+pyplot.xlim(200, 950)
+pyplot.xlabel("Wavelength (nm)")
+pyplot.ylabel("Spectral energy density (μJ/nm)")
+pyplot.ylim(ymin=0)
+pyplot.legend()
 

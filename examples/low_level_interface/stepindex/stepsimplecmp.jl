@@ -1,6 +1,6 @@
 using Luna
 using Luna.PhysData: Polynomials
-import PyPlot: plt
+import PythonPlot: pyplot
 
 a = 1.25e-6
 flength = 15e-2
@@ -42,12 +42,12 @@ p = Polynomials.fit(1e-15*(ωs .- ω0), βs, order)
 βcoeffs = p.coeffs .* 1e-15 .^ (collect(0:order)) .* factorial.(0:order)
 
 s = SimpleFibre.SimpleMode(ω0, βcoeffs)
-plt.figure()
-plt.plot(ωs .- ω0, Modes.β_ret.(m, ωs; λ0), label="Full")
-plt.plot(ωs .- ω0, Modes.β_ret(s, ωs; λ0), "--", label="Polynomial fit")
-plt.legend()
-plt.xlabel("ω-ω0 (rad/s)")
-plt.ylabel("β (1/m)")
+pyplot.figure()
+pyplot.plot(ωs .- ω0, Modes.β_ret.(m, ωs; λ0), label="Full")
+pyplot.plot(ωs .- ω0, Modes.β_ret(s, ωs; λ0), "--", label="Polynomial fit")
+pyplot.legend()
+pyplot.xlabel("ω-ω0 (rad/s)")
+pyplot.ylabel("β (1/m)")
 
 N0, n0, n2 = Tools.getN0n0n2(ω0, :SiO2)
 γ = Tools.getγ(ω0, m, n2)
@@ -76,11 +76,11 @@ Plotting.prop_2D(outputs)
 ##
 λ, Iλm = Processing.getIω(outputm, :λ, flength)
 _, Iλs = Processing.getIω(outputs, :λ, flength)
-plt.figure()
-plt.semilogy(1e9λ, Iλm, label="step-index mode")
-plt.semilogy(1e9λ, Iλs, "--",  label="GNLSE approximation")
-plt.legend()
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("SED (a.u.)")
+pyplot.figure()
+pyplot.semilogy(1e9λ, Iλm, label="step-index mode")
+pyplot.semilogy(1e9λ, Iλs, "--",  label="GNLSE approximation")
+pyplot.legend()
+pyplot.xlabel("Wavelength (nm)")
+pyplot.ylabel("SED (a.u.)")
 
 # close but not exact. This is because we cannot fully cancel the frequency dependence of neff.
