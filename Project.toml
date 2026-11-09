@@ -1,6 +1,6 @@
 name = "Luna"
 uuid = "30eb0fb0-5147-11e9-3356-d75b018717ce"
-version = "0.6.2"
+version = "0.6.3"
 authors = ["chrisbrahms <38351086+chrisbrahms@users.noreply.github.com>"]
 
 [deps]
@@ -102,4 +102,4 @@ StaticArrays = "1"
 Statistics = "1.9"
 Test = "1.9"
 Unitful = "1"
-julia = "1.9"
+julia = "1.10"
