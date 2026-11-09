@@ -3,6 +3,7 @@ import Luna.Capillary: besselj, get_unm
 import Luna.Modes: hquadrature
 import Test: @test, @testset, @test_throws
 import Logging
+import Random
 
 logger = Logging.SimpleLogger(stdout, Logging.Warn)
 old_logger = Logging.global_logger(logger)
@@ -433,6 +434,18 @@ end
     Raman400(Pto400, t300.Eto, ρ)
     @test Pto300 ≠ Pto400
     @test Pto300 == Pto300_2
+end
+
+@testset "shot noise rng" begin
+    args = (1.0, 0.1, [-1e-26]) # γ, flength, βs
+    kw = (λ0=800e-9, λlims=(400e-9, 2000e-9), trange=1e-12, τfwhm=30e-15, energy=1e-9)
+    Eω1 = Interface.prop_gnlse_args(args...; kw..., rng=Random.MersenneTwister(1))[1]
+    Eω2 = Interface.prop_gnlse_args(args...; kw..., rng=Random.MersenneTwister(1))[1]
+    Eω3 = Interface.prop_gnlse_args(args...; kw..., rng=Random.MersenneTwister(2))[1]
+    Eω0 = Interface.prop_gnlse_args(args...; kw..., shotnoise=false)[1]
+    @test Eω1 == Eω2
+    @test Eω1 != Eω3
+    @test Eω1 != Eω0
 end
 
 ##
