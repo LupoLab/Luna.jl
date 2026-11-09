@@ -12,3 +12,4 @@ docs/build
 .vscode/spellright.dict
 .DS_Store
 deps/build.log
+qfile_*
