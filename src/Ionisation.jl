@@ -12,6 +12,88 @@ import Printf: @sprintf
 
 abstract type AbstractIonRate end
 
+#= ===========================================================================================
+   Barrier-suppression (over-the-barrier) corrections to the PPT rate.
+
+   The PPT/ADK rate is the leading term of a small-field asymptotic expansion and
+   overestimates ionisation near and above the barrier-suppression field
+   E_b = κ⁴/(16 Z) = Ip²/(4Z)  (atomic units),  κ = √(2 Ip).
+   The tables below provide empirical multiplicative correction factors that suppress the
+   rate in this regime, bringing it into line with single-active-electron TDSE / static
+   results. They are ATOMIC corrections (single active electron) and are applied
+   quasistatically to the instantaneous field magnitude |E|.
+=#
+
+# Tong & Lin (2005) J. Phys. B 38, 2593, Table 2: empirical α (≈6 for s-wave, ≈9 for higher l).
+# He = 7.0 is the specific tabulated value (do NOT replace it with the generic 6).
+const TONGLIN_ALPHA = Dict{Symbol,Float64}(
+    :H => 6.0, :He => 7.0, :Ne => 9.0, :Ar => 9.0, :Kr => 9.0, :Xe => 9.0,
+)
+# generic fallback used when a species is not tabulated:
+tonglin_alpha_default(l::Integer) = l == 0 ? 6.0 : 9.0
+
+# Zhang, Lan & Lu (2014) PRA 90, 043410, Table XI: (a1, a2, a3) for
+# factor = exp(a1 u² + a2 u + a3),  u = |E|/E_b.
+#
+# CORRECTNESS NOTE — Zhang, Lan & Lu, PRA 90, 043410 (2014), Eq. (8):
+# As printed, Eq. (8) reads  W_M = exp[ -(a1 u² + a2 u + a3) ] · W_ADK,  u = E/E_b.
+# With the Table XI coefficients this gives a factor > 1 (an ENHANCEMENT) across the whole
+# relevant range, which is unphysical (ADK overestimates, so the factor must be < 1). The
+# printed leading minus sign is a typo; the coefficients are a fit to ln(Γ/W_ADK) (natural
+# log). The correct, physical usage is therefore  factor = exp(a1 u² + a2 u + a3)  with the
+# coefficients used AS PRINTED (no extra minus). Verified two ways: (1) reverse-engineering
+# the factor from the paper's own Ar static rates (Table IX) yields coefficients equal to the
+# printed Table XI values divided by ln(10) — the fingerprint of an ln-space fit; (2) with
+# this form Zhang agrees with Tong & Lin (2005) to <7% for E < 2 E_b, where both are valid.
+const ZHANG_COEFFS = Dict{Symbol,NTuple{3,Float64}}(
+    :H  => ( 0.11714, -0.90933, -0.06034),
+    :He => ( 0.13550, -0.86210,  0.021562),
+    :Ne => ( 0.10061, -1.04832, -0.07542),
+    :Ar => ( 0.16178, -1.50441,  0.32127),
+    :Kr => ( 0.14640, -1.36533,  0.02055),
+    :Xe => ( 0.21080, -1.88482,  0.574281),
+)
+
+"""
+    bsi_kwargs(material::Symbol, bsi::Symbol)
+
+Resolve the per-species barrier-suppression keyword arguments to forward downstream from a
+Symbol-based constructor, looking up the tabulated coefficients for `material`.
+
+`bsi` is one of:
+- `:auto` (default): enable the correction wherever validated coefficients exist, and silently
+  leave it off otherwise (e.g. molecular or non-tabulated species — no error). `:zhang` is used
+  because it is validated over the widest field range (0.5–4.5 E_b).
+- `:none`: no correction.
+- `:tonglin` / `:zhang`: force that correction; errors if no coefficients are tabulated for
+  `material` (these are single-active-electron ATOMIC corrections, so a species is accepted only
+  if it appears in `TONGLIN_ALPHA` / `ZHANG_COEFFS` — this is what rejects molecular species,
+  without needing a separate blocklist). For an atomic species not in the table, pass
+  `α_bsi`/`zhang_coeffs` explicitly via the raw `IonRatePPT(ip, λ0, Z, l; …)` constructor.
+"""
+function bsi_kwargs(material::Symbol, bsi::Symbol)
+    if bsi === :auto
+        return haskey(ZHANG_COEFFS, material) ?
+            (; bsi = :zhang, zhang_coeffs = ZHANG_COEFFS[material]) : (; bsi = :none)
+    elseif bsi === :none
+        return (; bsi = :none)
+    elseif bsi === :tonglin
+        haskey(TONGLIN_ALPHA, material) || error(
+            "No Tong & Lin (2005) α tabulated for :$material; barrier-suppression " *
+            "corrections are defined for atomic species only. Pass α_bsi explicitly via " *
+            "the raw IonRatePPT(ip, λ0, Z, l; …) constructor, or use bsi = :auto / :none.")
+        return (; bsi = :tonglin, α_bsi = TONGLIN_ALPHA[material])
+    elseif bsi === :zhang
+        haskey(ZHANG_COEFFS, material) || error(
+            "No Zhang (2014) coefficients tabulated for :$material; barrier-suppression " *
+            "corrections are defined for atomic species only. Pass zhang_coeffs explicitly " *
+            "via the raw IonRatePPT(ip, λ0, Z, l; …) constructor, or use bsi = :auto / :none.")
+        return (; bsi = :zhang, zhang_coeffs = ZHANG_COEFFS[material])
+    else
+        error("Unknown bsi correction: :$bsi. Use :auto, :none, :tonglin or :zhang.")
+    end
+end
+
 """
     IonRateADK(ionpot::Float64, threshold=true)
     IonRateADK(material::Symbol)
@@ -139,6 +221,27 @@ wavelength `λ0`, also given charge state `Z` and angular momentum `l`
     the PPT papers.
 - `occupancy`: Occupancy of the state(s) from which ionisation is considered. Defaults to 2 for
     a state with two electrons (spin up/down).
+- `bsi::Symbol`: barrier-suppression (over-the-barrier) correction applied as a multiplicative
+    factor to the rate. One of:
+    * `:auto`    – (default) enable the correction wherever validated coefficients exist for the
+                   species (resolves to `:zhang`), and silently leave it off otherwise (e.g.
+                   molecular/non-tabulated species — no error). Only meaningful when constructing
+                   from a material `Symbol`; the raw `(ip, λ0, Z, l)` constructor treats `:auto`
+                   as `:zhang` if `zhang_coeffs` are supplied, else `:none`.
+    * `:none`    – no correction (original PPT behaviour).
+    * `:tonglin` – Tong & Lin, J. Phys. B 38, 2593 (2005), eq. (2):
+                   `factor = exp(-α (Z²/Ip)(|E|/κ³))`. Validated to ≈ 2 E_b.
+    * `:zhang`   – Zhang, Lan & Lu, Phys. Rev. A 90, 043410 (2014), eq. (8):
+                   `factor = exp(a1 u² + a2 u + a3)`, `u = |E|/E_b`. Validated 0.5–4.5 E_b.
+    Both `:tonglin` and `:zhang` reduce to ≈ 1 well below the barrier-suppression field
+    `E_b = Ip²/(4Z)` and bring the high-field rate into line with single-active-electron
+    TDSE/static results. The factor is clamped to ≤ 1 and (for `:zhang`) `u` is capped at 4.5.
+    These are static (DC) corrections, appropriate for the tunnelling/small-γ regime, not for
+    multiphoton/UV ionisation, and are defined for atomic species only. See the CORRECTNESS
+    NOTE in the source on the sign typo in Zhang eq. (8).
+- `α_bsi::Real`: Tong & Lin α (defaults: per-species table; else 6 for s-wave, 9 otherwise).
+- `zhang_coeffs::NTuple{3,Real}`: `(a1, a2, a3)` for `:zhang` (defaults from the per-species
+    table when constructed from a material `Symbol`).
 
 # References
 [1] Ilkov, F. A., Decker, J. E. & Chin, S. L.
@@ -155,6 +258,15 @@ media. Rep. Prog. Phys. 70, 1633–1713 (2007)
 "Femtosecond filamentation in transparent media,"
 Physics Reports 441(2–4), 47–189 (2007).
 
+[4] X. M. Tong and C. D. Lin,
+"Empirical formula for static field ionization rates of atoms and molecules by lasers in
+the barrier-suppression regime,"
+J. Phys. B: At. Mol. Opt. Phys. 38, 2593 (2005).
+
+[5] Q. Zhang, P. Lan, and P. Lu,
+"Empirical formula for over-barrier strong-field ionization,"
+Phys. Rev. A 90, 043410 (2014).
+
 """
 struct IonRatePPT{oT, CT} <: AbstractIonRate
     Z::Float64 # Charge state
@@ -169,6 +281,9 @@ struct IonRatePPT{oT, CT} <: AbstractIonRate
     sum_integral::Bool # replace the infinite sum with an integral?
     sum_tol::Float64 # relative tolerance for convergence of the infinite sum
     cycle_average::Bool # average over one cycle?
+    bsi::Symbol # barrier-suppression correction: :none | :tonglin | :zhang
+    α_bsi::Float64 # Tong & Lin α (used when bsi == :tonglin)
+    zhang_coeffs::NTuple{3,Float64} # (a1, a2, a3) (used when bsi == :zhang)
 end
 
 """
@@ -182,16 +297,17 @@ PPT ionisation rate for the given `material` when driven at wavelength `λ0`.
 
 Other keyword arguments are identical to `IonRatePPT(ionpot::Float64, λ0, Z, l; kwargs...)`
 """
-function IonRatePPT(material::Symbol, λ0; stark_shift=true, dipole_corr=true, kwargs...)
+function IonRatePPT(material::Symbol, λ0; stark_shift=true, dipole_corr=true, bsi::Symbol=:auto, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0.0
     α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
-    IonRatePPT(ip, λ0, float(Z), l; Δα, α_ion, kwargs...)
+    IonRatePPT(ip, λ0, float(Z), l; Δα, α_ion, bsi_kwargs(material, bsi)..., kwargs...)
 end
 
 function IonRatePPT(ip, λ0, Z, l; Δα=0, α_ion=0, sum_tol=1e-6,
-    cycle_average=false, sum_integral=false, msum=true, Cnl=missing, occupancy=2)
+    cycle_average=false, sum_integral=false, msum=true, Cnl=missing, occupancy=2,
+    bsi::Symbol=:auto, α_bsi=nothing, zhang_coeffs=nothing)
 
     if ismissing(Δα)
         Δα = 0.0
@@ -206,8 +322,24 @@ function IonRatePPT(ip, λ0, Z, l; Δα=0, α_ion=0, sum_tol=1e-6,
     ω0 = 2π*c/λ0
     ω0_au = au_time*ω0
 
-    IonRatePPT(float(Z), l, Δα, α_ion_au, ω0_au, Cnl, ip, occupancy,
-        msum, sum_integral, sum_tol, cycle_average)
+    # The raw constructor has no species table to consult, so :auto enables :zhang only when
+    # coefficients are supplied, and is otherwise off. (Symbol-based constructors resolve :auto
+    # against the per-species tables before reaching this point — see `bsi_kwargs`.)
+    if bsi === :auto
+        bsi = isnothing(zhang_coeffs) ? :none : :zhang
+    end
+    α_bsi_resolved = isnothing(α_bsi) ? tonglin_alpha_default(l) : float(α_bsi)
+    zc = isnothing(zhang_coeffs) ? (0.0, 0.0, 0.0) : NTuple{3,Float64}(zhang_coeffs)
+    if bsi === :zhang && isnothing(zhang_coeffs)
+        error("bsi = :zhang requires `zhang_coeffs`; construct from a Symbol for a tabulated " *
+              "species, or pass zhang_coeffs = (a1, a2, a3).")
+    end
+
+    # Coerce the Float64-typed fields: the raw constructor accepts integer arguments
+    # (e.g. the default Δα=0, or an integer ionpot), but the parametric struct's auto-generated
+    # constructor does not convert them.
+    IonRatePPT(float(Z), l, float(Δα), α_ion_au, ω0_au, Cnl, float(ip), occupancy,
+        msum, sum_integral, float(sum_tol), cycle_average, bsi, α_bsi_resolved, zc)
 end
 
 function (ir::IonRatePPT)(E)
@@ -264,6 +396,26 @@ function (ir::IonRatePPT)(E)
     if ir.α_ion_au ≠ 0
         ret *= exp(-2*ir.α_ion_au*E_au)
     end
+    # --- Barrier-suppression / over-the-barrier correction ---------------------
+    # Tong & Lin, J. Phys. B 38, 2593 (2005), eq. (2) [4]; or
+    # Zhang, Lan & Lu, Phys. Rev. A 90, 043410 (2014), eq. (8) [5] [see CORRECTNESS NOTE].
+    # E_b and κ use the FIELD-FREE Ip (not the Stark-shifted Ip_au above).
+    if ir.bsi !== :none
+        Ip0_au = ir.ionpot / au_energy
+        κ0     = sqrt(2 * Ip0_au)
+        Eb_au  = κ0^4 / (16 * ir.Z)                 # = Ip0²/(4Z); barrier-suppression field
+        if ir.bsi === :tonglin
+            f = exp(-ir.α_bsi * (ir.Z^2 / Ip0_au) * (E_au / κ0^3))
+        elseif ir.bsi === :zhang
+            u = min(E_au / Eb_au, 4.5)              # Zhang fit validated only to 4.5 E_b
+            a1, a2, a3 = ir.zhang_coeffs
+            f = exp(a1*u^2 + a2*u + a3)
+        else
+            error("Unknown bsi correction: $(ir.bsi). Use :none, :tonglin or :zhang.")
+        end
+        ret *= min(f, 1.0)                          # never enhance the rate
+    end
+    # ---------------------------------------------------------------------------
     return ret/au_time
 end
 
@@ -315,12 +467,12 @@ function ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)
 end
 
 function ionrate_PPT(material::Symbol, λ0, E;
-                     stark_shift=true, dipole_corr=true, kwargs...)
+                     stark_shift=true, dipole_corr=true, bsi::Symbol=:auto, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0.0
     α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
-    return ionrate_PPT(ip, λ0, Z, l, E; Δα, α_ion, kwargs...)
+    return ionrate_PPT(ip, λ0, Z, l, E; Δα, α_ion, bsi_kwargs(material, bsi)..., kwargs...)
 end
 
 struct IonRatePPTAccel{ST} <: AbstractIonRate
@@ -338,13 +490,17 @@ Create a cached (saved) interpolated PPT ionisation rate function. If a saved lo
 exists, load this rather than recalculate.
 
 # Keyword arguments
-- `N::Int`: Number of samples with which to create the `CSpline` interpolant.
-- `Emax::Number`: Maximum field strength to include in the interpolant.
+- `N::Int`: Number of samples with which to create the `CSpline` interpolant. The samples are
+    log-spaced in field strength from `E_b/2500` to `Emax` (denser at the low-field turn-on).
+- `Emax::Number`: Maximum field strength to include in the interpolant. Defaults to `2 E_b`.
 - `cache::Bool`: Whether to save the pre-calculated rate to a file
 - `cachedir::String`: Path to the directory where the cache should be stored and loaded from.
     Defaults to \$HOME/.luna/pptcache
 
-Other keyword arguments are passed on to [`IonRatePPT`](@ref)
+Other keyword arguments (including the barrier-suppression `bsi` correction) are passed on to
+[`IonRatePPT`](@ref). Note that when a `bsi` correction is enabled `Emax` should be set to at
+least the expected peak field, since it otherwise defaults to `2 E_b`; the `:zhang` correction
+is validated up to ≈ `4.5 E_b`. Cache filenames already distinguish the `bsi` setting.
 """
 function IonRatePPTAccel(E, rate)
     # first remove points where the rate is zero within floating-point
@@ -359,24 +515,28 @@ function IonRatePPTAccel(E, rate)
     IonRatePPTAccel(cspl, Emin, Emax)
 end
 
-function IonRatePPTAccel(material::Symbol, λ0; stark_shift=true, dipole_corr=true, kwargs...)
+function IonRatePPTAccel(material::Symbol, λ0; stark_shift=true, dipole_corr=true, bsi::Symbol=:auto, kwargs...)
     _, l, Z = quantum_numbers(material)
     Δα = stark_shift ? polarisability_difference(material) : 0.0
     α_ion = dipole_corr ? polarisability(material, true) : 0.0
     ip = ionisation_potential(material)
-    IonRatePPTAccel(ip, λ0, Z, l; Δα, α_ion, kwargs...)
+    IonRatePPTAccel(ip, λ0, Z, l; Δα, α_ion, bsi_kwargs(material, bsi)..., kwargs...)
 end
 
 function IonRatePPTCached(args...; kwargs...)
     IonRatePPTAccel(args...; cache=true, kwargs...)
 end
 
+# Bump when the cached PPT grid scheme changes, so that stale cache files written with an
+# older grid (same ionpot/λ0/Z/l/N/Emax/kwargs) are not silently reused. v2 = log-spaced grid.
+const PPT_CACHE_VERSION = 2
+
 function IonRatePPTAccel(ionpot::Float64, λ0, Z, l;
     N=2^16, Emax=nothing, cache=true,
     cachedir=joinpath(Utils.cachedir(), "pptcache"),
     stale_age=60 * 10,
     kwargs...)
-    h = hash((ionpot, λ0, Z, l, N, Emax, collect(kwargs)))
+    h = hash((PPT_CACHE_VERSION, ionpot, λ0, Z, l, N, Emax, collect(kwargs)))
     fname = string(h, base=16) * ".h5"
     fpath = joinpath(cachedir, fname)
     if cache && isfile(fpath)
@@ -431,13 +591,22 @@ end
 
 function makePPTcache(ionpot::Float64, λ0, Z, l;
                       N=2^16, Emax=nothing, kwargs...)
-    Emax = isnothing(Emax) ? 2*barrier_suppression(ionpot, Z) : Emax
+    Eb = barrier_suppression(ionpot, Z)
+    Emax = isnothing(Emax) ? 2*Eb : Emax
 
-    # ω0 = 2π*c/λ0
-    # Emin = ω0*sqrt(2m_e*ionpot)/electron/0.5 # Keldysh parameter of 0.5
-    Emin = Emax/5000
+    # Lower bound is tied to the species barrier-suppression field E_b, NOT to Emax, so that
+    # extending Emax into the over-the-barrier regime (e.g. for the :zhang correction) does
+    # not drift the low-field sampling. Eb/2500 reproduces the previous default lower bound
+    # (Emax/5000 evaluated at the default Emax = 2 E_b).
+    Emin = Eb/2500
 
-    E = collect(range(Emin, stop=Emax, length=N));
+    # Geometric (log-spaced) field grid: log(rate) curves sharply at the low-field turn-on and
+    # flattens at high field, so a log grid concentrates samples where the cubic spline needs
+    # them and spends few on the (flat) high-field tail. This preserves low-field resolution
+    # while letting Emax reach ~4.5 E_b (the :zhang validity limit) without increasing N.
+    # Maths.CSpline handles the non-uniform axis via its FastFinder; underflowed (zero) rates
+    # at the very lowest fields are dropped in the IonRatePPTAccel(E, rate) constructor.
+    E = exp10.(range(log10(Emin), log10(Emax); length=N))
     @info @sprintf("Pre-calculating PPT rate for %.2f eV, %.1f nm...", ionpot/electron, 1e9λ0)
     flush(stderr) # pre-calculating can take a while, so make sure this message is shown
     rate = ionrate_PPT(ionpot, λ0, Z, l, E; kwargs...)

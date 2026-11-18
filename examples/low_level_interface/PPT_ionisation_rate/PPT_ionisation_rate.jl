@@ -10,10 +10,11 @@ this_folder = dirname(@__FILE__)
 ## Ilkov et al
 k = collect(range(10, stop=12, length=50))
 E = 10 .^ k
-# ppt = Ionisation.ionrate_PPT(:He, 10.6e-6, E)
-ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-6, stark_shift=false)
-ppt_cycavg_rough = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-4, stark_shift=false)
-ppt_cycavg_intg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_integral=true, stark_shift=false)
+# bsi=:none keeps these the bare PPT rate, for comparison with the (bare-PPT) literature data
+# ppt = Ionisation.ionrate_PPT(:He, 10.6e-6, E; bsi=:none)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-6, stark_shift=false, bsi=:none)
+ppt_cycavg_rough = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_tol=1e-4, stark_shift=false, bsi=:none)
+ppt_cycavg_intg = Ionisation.ionrate_PPT(:He, 10.6e-6, E, cycle_average=true, sum_integral=true, stark_shift=false, bsi=:none)
 adk = Ionisation.ionrate_ADK(:He, E)
 
 dat = readdlm(joinpath(this_folder, "Ilkov_PPT_He.csv"), ',') # ionrate [1/s] vs field [V/cm]
@@ -37,8 +38,8 @@ plt.title("He ionisation at 10.6 μm (Stark shift off, divided by 2)")
 dat = readdlm(joinpath(this_folder, "Chang_PPT.csv"), ',') # ionrate [1/fs] vs intensity [1e14 W/cm^2]
 intensity = range(0.1, 25; length=100) * 1e18 # W/m^2
 E = Tools.intensity_to_field.(intensity)
-ppt = Ionisation.ionrate_PPT(:He, 390e-9, E)
-ppt_cycavg = Ionisation.ionrate_PPT(:He, 390e-9, E, cycle_average=true)
+ppt = Ionisation.ionrate_PPT(:He, 390e-9, E; bsi=:none)
+ppt_cycavg = Ionisation.ionrate_PPT(:He, 390e-9, E, cycle_average=true, bsi=:none)
 adk = Ionisation.ionrate_ADK(:He, E)
 
 s = sortperm(dat[:, 1])
@@ -86,11 +87,11 @@ intensity = 10 .^ k .* 1e4 # W/m^2
 E = Tools.intensity_to_field.(intensity)
 λ0 = 800e-9
 gas = :Ar
-# ppt = Ionisation.ionrate_PPT(gas, λ0, E)
+# ppt = Ionisation.ionrate_PPT(gas, λ0, E; bsi=:none)
 sum_tol = 1e-5
-ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol)
-ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol, msum=false)
-ppt_cycavg_msum_nostark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, stark_shift=false)
+ppt_cycavg = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol, bsi=:none)
+ppt_cycavg_m0 = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, sum_tol, msum=false, bsi=:none)
+ppt_cycavg_msum_nostark = Ionisation.ionrate_PPT(gas, λ0, E; cycle_average=true, stark_shift=false, bsi=:none)
 
 s = sortperm(dat[:, 1])
 
@@ -117,7 +118,7 @@ ppt = zeros((length(E), length(sum_tol)))
 gas = :He
 λ0 = 1800e-9
 for (idx, sti) in enumerate(sum_tol)
-    ppt[:, idx] .= Ionisation.ionrate_PPT(gas, λ0, E; sum_tol=sti)
+    ppt[:, idx] .= Ionisation.ionrate_PPT(gas, λ0, E; sum_tol=sti, bsi=:none)
 end
 ##
 cols = plt.get_cmap().(collect(range(0, 0.8, length(sum_tol))))

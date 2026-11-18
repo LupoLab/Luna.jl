@@ -38,6 +38,11 @@ end
     include(joinpath(testdir, "test_ionisation.jl"))
 end
 
+@testset "Ionisation BSI" begin
+    @info("================= test_ionisation_bsi.jl")
+    include(joinpath(testdir, "test_ionisation_bsi.jl"))
+end
+
 @testset "Output" begin
     @info("================= test_output.jl")
     include(joinpath(testdir, "test_output.jl"))
