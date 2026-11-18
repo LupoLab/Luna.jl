@@ -10,7 +10,7 @@ p = Tools.params(300e-6, 10e-15, 800e-9, m, :HeB, P=0.4)
 @test isapprox(p.zdw, 378.8e-9, rtol=1e-2)
 @test isapprox(p.P0/p.Pcr, 0.0398, rtol=2e-2)
 # test backup zdw method
-p = Tools.capillary_params(6e-9, 20e-15, 800e-9, 14e-6, :Kr, P=15.0)
+p = Tools.capillary_params(6e-9, 20e-15, 800e-9, 14e-6, :KrB, P=15.0)
 @test isapprox(p.zdw, 7.693023014958748e-7, rtol=1e-7)
 end
 
