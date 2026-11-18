@@ -15,6 +15,7 @@ makedocs(
         ],
         "The simple interface" => "interface.md",
         "Parameter scans" => "scans.md",
+        "Post-processing & compression" => "postprocessing.md",
         "Modules" => [
             "$(split(fi, ".")[1]).jl" => "modules/$fi" for fi in readdir(modulesdir)
         ],
